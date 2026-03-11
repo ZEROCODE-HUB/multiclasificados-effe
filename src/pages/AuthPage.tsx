@@ -1,10 +1,21 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import authBg from "@/assets/auth-bg.jpg";
-import { Link, useNavigate } from "react-router-dom";
-import { Megaphone, Search, ArrowRight } from "lucide-react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Eye, EyeOff, Megaphone, Search } from "lucide-react";
 
 const AuthPage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<"login" | "register">(
+    searchParams.get("tab") === "register" ? "register" : "login"
+  );
+  const [role, setRole] = useState<string>("");
+  const [showPassword, setShowPassword] = useState(false);
 
   return (
     <div className="min-h-screen flex">
@@ -29,75 +40,160 @@ const AuthPage = () => {
         </div>
       </div>
 
-      {/* Right side - Demo access */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 md:p-12 bg-background">
+      {/* Right side - Auth forms */}
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 md:p-12 bg-background overflow-y-auto">
         <div className="w-full max-w-md">
-          <Link to="/" className="block mb-10">
-            <span className="text-2xl font-extrabold text-primary">
+          <Link to="/" className="block mb-8">
+            <span className="text-xl font-extrabold text-primary">
               eFFe<span className="text-secondary"> Multi</span>clasificados
             </span>
           </Link>
 
-          <h1 className="text-2xl font-bold text-foreground mb-2">
-            Explora la plataforma
-          </h1>
-          <p className="text-muted-foreground mb-8">
-            Selecciona un perfil demo para conocer las funcionalidades de cada rol.
-          </p>
-
-          <div className="space-y-4">
-            {/* Demo Anunciante */}
+          {/* Tab toggle */}
+          <div className="flex bg-muted rounded-lg p-1 mb-6">
             <button
-              onClick={() => navigate("/dashboard/anunciante")}
-              className="w-full group relative overflow-hidden rounded-xl border-2 border-secondary/30 hover:border-secondary p-6 text-left transition-all duration-300 hover:shadow-lg hover:shadow-secondary/10 bg-card"
+              onClick={() => setActiveTab("login")}
+              className={`flex-1 py-2.5 text-sm font-medium rounded-md transition-colors ${activeTab === "login" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
             >
-              <div className="flex items-start gap-4">
-                <div className="p-3 rounded-xl bg-secondary/10 text-secondary group-hover:bg-secondary group-hover:text-secondary-foreground transition-colors">
-                  <Megaphone size={28} />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-bold text-foreground mb-1">Demo Anunciante</h3>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Publica avisos, gestiona tus listados, revisa postulaciones y mensajes de interesados.
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <span className="text-xs px-2 py-1 rounded-full bg-secondary/10 text-secondary font-medium">Publicar avisos</span>
-                    <span className="text-xs px-2 py-1 rounded-full bg-secondary/10 text-secondary font-medium">Mensajes</span>
-                    <span className="text-xs px-2 py-1 rounded-full bg-secondary/10 text-secondary font-medium">Estadísticas</span>
-                  </div>
-                </div>
-                <ArrowRight className="text-muted-foreground group-hover:text-secondary transition-colors mt-1" size={20} />
-              </div>
+              Iniciar sesión
             </button>
-
-            {/* Demo Buscador */}
             <button
-              onClick={() => navigate("/dashboard/buscador")}
-              className="w-full group relative overflow-hidden rounded-xl border-2 border-primary/30 hover:border-primary p-6 text-left transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 bg-card"
+              onClick={() => setActiveTab("register")}
+              className={`flex-1 py-2.5 text-sm font-medium rounded-md transition-colors ${activeTab === "register" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
             >
-              <div className="flex items-start gap-4">
-                <div className="p-3 rounded-xl bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-                  <Search size={28} />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-bold text-foreground mb-1">Demo Buscador</h3>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Explora avisos, guarda favoritos, contacta anunciantes y gestiona tus búsquedas.
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary font-medium">Buscar avisos</span>
-                    <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary font-medium">Favoritos</span>
-                    <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary font-medium">Contactar</span>
-                  </div>
-                </div>
-                <ArrowRight className="text-muted-foreground group-hover:text-primary transition-colors mt-1" size={20} />
-              </div>
+              Registrarse
             </button>
           </div>
 
-          <p className="text-xs text-muted-foreground text-center mt-8">
-            Este es un prototipo de demostración. Los datos mostrados son ficticios.
-          </p>
+          {activeTab === "login" ? (
+            <div className="space-y-4 animate-fade-in">
+              <div>
+                <Label htmlFor="email">Correo electrónico</Label>
+                <Input id="email" type="email" placeholder="tu@correo.com" className="mt-1" />
+              </div>
+              <div>
+                <Label htmlFor="password">Contraseña</Label>
+                <div className="relative mt-1">
+                  <Input id="password" type={showPassword ? "text" : "password"} placeholder="••••••••" />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+                  <Checkbox />
+                  Recordarme
+                </label>
+                <a href="#" className="text-sm text-secondary hover:underline">¿Olvidaste tu contraseña?</a>
+              </div>
+              <Button className="w-full" size="lg">Iniciar sesión</Button>
+
+              <div className="relative my-4">
+                <div className="absolute inset-0 flex items-center"><div className="w-full border-t" /></div>
+                <div className="relative flex justify-center text-xs"><span className="bg-background px-2 text-muted-foreground">o continuar con</span></div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Button variant="outline" className="w-full">
+                  <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                  Google
+                </Button>
+                <Button variant="outline" className="w-full">
+                  <svg className="w-4 h-4 mr-2" fill="#1877F2" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                  Facebook
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4 animate-fade-in">
+              <div>
+                <Label>Tipo de cuenta</Label>
+                <Select value={role} onValueChange={setRole}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Selecciona tu rol" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="anunciante">Anunciante</SelectItem>
+                    <SelectItem value="buscador">Buscador</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="fullName">Nombre completo</Label>
+                <Input id="fullName" placeholder="Juan Pérez" className="mt-1" />
+              </div>
+              <div>
+                <Label htmlFor="regEmail">Correo electrónico</Label>
+                <Input id="regEmail" type="email" placeholder="tu@correo.com" className="mt-1" />
+              </div>
+              <div>
+                <Label htmlFor="phone">Teléfono</Label>
+                <div className="flex gap-2 mt-1">
+                  <span className="flex items-center px-3 bg-muted rounded-md text-sm text-muted-foreground border">+51</span>
+                  <Input id="phone" placeholder="999 888 777" className="flex-1" />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="regPassword">Contraseña</Label>
+                <Input id="regPassword" type="password" placeholder="Mínimo 8 caracteres" className="mt-1" />
+              </div>
+
+              {role === "anunciante" && (
+                <div className="space-y-4 pt-2 border-t animate-fade-in">
+                  <p className="text-sm font-medium text-secondary">Datos de empresa</p>
+                  <div>
+                    <Label htmlFor="razon">Razón social</Label>
+                    <Input id="razon" placeholder="Mi Empresa SAC" className="mt-1" />
+                  </div>
+                  <div>
+                    <Label htmlFor="ruc">RUC / DNI</Label>
+                    <Input id="ruc" placeholder="20123456789" className="mt-1" />
+                  </div>
+                  <div>
+                    <Label htmlFor="address">Dirección</Label>
+                    <Input id="address" placeholder="Av. Principal 123, Lima" className="mt-1" />
+                  </div>
+                </div>
+              )}
+
+              <label className="flex items-start gap-2 text-sm text-muted-foreground cursor-pointer">
+                <Checkbox className="mt-0.5" />
+                <span>Acepto los <a href="#" className="text-secondary hover:underline">términos y condiciones</a> y la <a href="#" className="text-secondary hover:underline">política de privacidad</a></span>
+              </label>
+
+              <Button className="w-full" size="lg">Crear cuenta</Button>
+            </div>
+          )}
+
+          {/* Demo buttons */}
+          <div className="mt-6 pt-4 border-t border-dashed">
+            <p className="text-xs text-muted-foreground text-center mb-3">Acceso rápido de demostración</p>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 gap-2 border-secondary/40 text-secondary hover:bg-secondary/10 hover:text-secondary"
+                onClick={() => navigate("/dashboard/anunciante")}
+              >
+                <Megaphone size={14} />
+                Demo Anunciante
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 gap-2 border-primary/40 text-primary hover:bg-primary/10 hover:text-primary"
+                onClick={() => navigate("/dashboard/buscador")}
+              >
+                <Search size={14} />
+                Demo Buscador
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
