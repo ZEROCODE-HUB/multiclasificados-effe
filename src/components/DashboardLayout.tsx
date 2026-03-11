@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   Sidebar,
   SidebarContent,
@@ -22,22 +21,42 @@ import {
   Users,
   Settings,
   LogOut,
-  ChevronLeft,
+  Search,
+  Heart,
+  Bell,
+  BarChart3,
+  Star,
 } from "lucide-react";
 
-const menuItems = [
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-  { title: "Publicar aviso", url: "/dashboard/publicar", icon: PlusCircle },
-  { title: "Mis avisos", url: "/dashboard/avisos", icon: ClipboardList },
-  { title: "Mensajes", url: "/dashboard/mensajes", icon: MessageSquare },
-  { title: "Postulaciones", url: "/dashboard/postulaciones", icon: Users },
-  { title: "Configuración", url: "/dashboard/configuracion", icon: Settings },
+const advertiserMenu = [
+  { title: "Dashboard", url: "/dashboard/anunciante", icon: LayoutDashboard },
+  { title: "Publicar aviso", url: "/dashboard/anunciante/publicar", icon: PlusCircle },
+  { title: "Mis avisos", url: "/dashboard/anunciante/avisos", icon: ClipboardList },
+  { title: "Mensajes", url: "/dashboard/anunciante/mensajes", icon: MessageSquare },
+  { title: "Postulaciones", url: "/dashboard/anunciante/postulaciones", icon: Users },
+  { title: "Estadísticas", url: "/dashboard/anunciante/estadisticas", icon: BarChart3 },
+  { title: "Configuración", url: "/dashboard/anunciante/configuracion", icon: Settings },
 ];
 
-function AppSidebar() {
+const seekerMenu = [
+  { title: "Inicio", url: "/dashboard/buscador", icon: LayoutDashboard },
+  { title: "Buscar avisos", url: "/dashboard/buscador/buscar", icon: Search },
+  { title: "Favoritos", url: "/dashboard/buscador/favoritos", icon: Heart },
+  { title: "Mis búsquedas", url: "/dashboard/buscador/busquedas", icon: Star },
+  { title: "Mensajes", url: "/dashboard/buscador/mensajes", icon: MessageSquare },
+  { title: "Alertas", url: "/dashboard/buscador/alertas", icon: Bell },
+  { title: "Configuración", url: "/dashboard/buscador/configuracion", icon: Settings },
+];
+
+interface DashboardLayoutProps {
+  children: React.ReactNode;
+  role: "anunciante" | "buscador";
+}
+
+function AppSidebar({ role }: { role: "anunciante" | "buscador" }) {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
-  const location = useLocation();
+  const menuItems = role === "anunciante" ? advertiserMenu : seekerMenu;
 
   return (
     <Sidebar collapsible="icon" className="border-r-0">
@@ -53,7 +72,9 @@ function AppSidebar() {
           </Link>
         </div>
         <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-foreground/50">Menú principal</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-sidebar-foreground/50">
+            {role === "anunciante" ? "Panel Anunciante" : "Panel Buscador"}
+          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {menuItems.map((item) => (
@@ -61,7 +82,7 @@ function AppSidebar() {
                   <SidebarMenuButton asChild>
                     <NavLink
                       to={item.url}
-                      end={item.url === "/dashboard"}
+                      end={item.url === `/dashboard/${role}`}
                       className="text-sidebar-foreground/80 hover:bg-sidebar-accent"
                       activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
                     >
@@ -79,9 +100,9 @@ function AppSidebar() {
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton asChild>
-                <Link to="/" className="text-sidebar-foreground/60 hover:text-sidebar-foreground">
+                <Link to="/auth" className="text-sidebar-foreground/60 hover:text-sidebar-foreground">
                   <LogOut className="mr-2 h-4 w-4" />
-                  {!collapsed && <span>Cerrar sesión</span>}
+                  {!collapsed && <span>Cambiar rol</span>}
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -92,18 +113,25 @@ function AppSidebar() {
   );
 }
 
-export function DashboardLayout({ children }: { children: React.ReactNode }) {
+export function DashboardLayout({ children, role }: DashboardLayoutProps) {
+  const isAdvertiser = role === "anunciante";
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
-        <AppSidebar />
+        <AppSidebar role={role} />
         <div className="flex-1 flex flex-col">
           <header className="h-14 flex items-center border-b bg-card px-4 gap-4">
             <SidebarTrigger />
-            <span className="text-sm font-medium text-muted-foreground">Panel de Anunciante</span>
+            <span className="text-sm font-medium text-muted-foreground">
+              {isAdvertiser ? "Panel de Anunciante" : "Panel de Buscador"}
+            </span>
             <div className="ml-auto flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-secondary-foreground text-sm font-bold">
-                JM
+              <span className="text-xs text-muted-foreground hidden md:inline">
+                {isAdvertiser ? "Juan Mendoza" : "Ana García"}
+              </span>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${isAdvertiser ? "bg-secondary text-secondary-foreground" : "bg-primary text-primary-foreground"}`}>
+                {isAdvertiser ? "JM" : "AG"}
               </div>
             </div>
           </header>

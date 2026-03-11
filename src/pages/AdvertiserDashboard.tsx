@@ -2,30 +2,27 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { advertiserStats, featuredListings } from "@/data/mockData";
-import { ClipboardList, AlertTriangle, MessageSquare, Eye, TrendingUp, Users } from "lucide-react";
+import { ClipboardList, AlertTriangle, MessageSquare, Eye, Users, TrendingUp, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Link } from "react-router-dom";
 
 const statCards = [
   { label: "Avisos activos", value: advertiserStats.activeListings, icon: ClipboardList, color: "text-secondary" },
   { label: "Por vencer", value: advertiserStats.expiringListings, icon: AlertTriangle, color: "text-warning" },
-  { label: "Mensajes no leídos", value: advertiserStats.unreadMessages, icon: MessageSquare, color: "text-primary" },
+  { label: "Mensajes", value: advertiserStats.unreadMessages, icon: MessageSquare, color: "text-primary" },
   { label: "Vistas totales", value: advertiserStats.totalViews, icon: Eye, color: "text-success" },
   { label: "Postulaciones", value: advertiserStats.applicationsReceived, icon: Users, color: "text-secondary" },
 ];
 
-const DashboardPage = () => {
+const AdvertiserDashboard = () => {
   return (
-    <DashboardLayout>
+    <DashboardLayout role="anunciante">
       <div className="space-y-6 animate-fade-in">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground">¡Hola, Juan!</h1>
-            <p className="text-muted-foreground">Aquí tienes un resumen de tu actividad.</p>
+            <p className="text-muted-foreground">Aquí tienes un resumen de tu actividad como anunciante.</p>
           </div>
-          <Link to="/dashboard/publicar">
-            <Button variant="hero">Publicar aviso</Button>
-          </Link>
+          <Button variant="hero" size="lg">Publicar aviso</Button>
         </div>
 
         {/* Stats */}
@@ -48,7 +45,7 @@ const DashboardPage = () => {
         {/* Recent listings */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Avisos recientes</CardTitle>
+            <CardTitle className="text-lg">Mis avisos recientes</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -73,7 +70,7 @@ const DashboardPage = () => {
           </CardContent>
         </Card>
 
-        {/* Messages preview */}
+        {/* Messages & Applications */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
@@ -125,9 +122,28 @@ const DashboardPage = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* Performance chart placeholder */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <BarChart3 size={20} className="text-secondary" />
+              Rendimiento de avisos
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-48 flex items-center justify-center bg-muted/50 rounded-lg border border-dashed border-border">
+              <div className="text-center text-muted-foreground">
+                <TrendingUp size={40} className="mx-auto mb-2 text-secondary/40" />
+                <p className="text-sm font-medium">Gráfico de rendimiento</p>
+                <p className="text-xs">Vistas, clics y contactos de los últimos 30 días</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </DashboardLayout>
   );
 };
 
-export default DashboardPage;
+export default AdvertiserDashboard;
