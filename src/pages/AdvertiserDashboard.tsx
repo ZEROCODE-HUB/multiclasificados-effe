@@ -2,40 +2,51 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { advertiserStats, featuredListings } from "@/data/mockData";
-import { ClipboardList, AlertTriangle, MessageSquare, Eye, Users, TrendingUp, BarChart3 } from "lucide-react";
+import { ClipboardList, AlertTriangle, MessageSquare, Eye, Users, TrendingUp, BarChart3, PlusCircle, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ListingRow } from "@/components/ListingRow";
+import { Link } from "react-router-dom";
 
 const statCards = [
-  { label: "Avisos activos", value: advertiserStats.activeListings, icon: ClipboardList, color: "text-secondary" },
-  { label: "Por vencer", value: advertiserStats.expiringListings, icon: AlertTriangle, color: "text-warning" },
-  { label: "Mensajes", value: advertiserStats.unreadMessages, icon: MessageSquare, color: "text-primary" },
-  { label: "Vistas totales", value: advertiserStats.totalViews, icon: Eye, color: "text-success" },
-  { label: "Postulaciones", value: advertiserStats.applicationsReceived, icon: Users, color: "text-secondary" },
+  { label: "Avisos activos", value: advertiserStats.activeListings, icon: ClipboardList, accent: "bg-primary/10 text-primary" },
+  { label: "Por vencer", value: advertiserStats.expiringListings, icon: AlertTriangle, accent: "bg-warning/15 text-warning" },
+  { label: "Mensajes", value: advertiserStats.unreadMessages, icon: MessageSquare, accent: "bg-secondary/15 text-secondary" },
+  { label: "Vistas totales", value: advertiserStats.totalViews, icon: Eye, accent: "bg-success/15 text-success" },
+  { label: "Postulaciones", value: advertiserStats.applicationsReceived, icon: Users, accent: "bg-primary/10 text-primary" },
 ];
 
 const AdvertiserDashboard = () => {
   return (
     <DashboardLayout role="anunciante">
-      <div className="space-y-6 animate-fade-in">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">¡Hola, Juan!</h1>
-            <p className="text-muted-foreground">Aquí tienes un resumen de tu actividad como anunciante.</p>
+      <div className="space-y-5 md:space-y-6 animate-fade-in">
+        {/* Greeting banner */}
+        <div className="relative overflow-hidden rounded-2xl gradient-hero text-primary-foreground p-5 md:p-7">
+          <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-secondary/30 blur-3xl" />
+          <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <p className="text-[11px] uppercase tracking-widest text-secondary font-bold mb-1">Bienvenido</p>
+              <h1 className="text-xl md:text-3xl font-extrabold">¡Hola, Juan!</h1>
+              <p className="text-primary-foreground/70 text-sm md:text-base mt-1">
+                Resumen de tu actividad como anunciante.
+              </p>
+            </div>
+            <Button variant="hero" size="lg" className="gap-2 self-start sm:self-auto">
+              <PlusCircle size={18} /> Publicar aviso
+            </Button>
           </div>
-          <Button variant="hero" size="lg">Publicar aviso</Button>
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
           {statCards.map((stat) => (
-            <Card key={stat.label}>
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className={`p-2 rounded-lg bg-muted ${stat.color}`}>
-                  <stat.icon size={20} />
+            <Card key={stat.label} className="border-l-4 border-l-secondary/60 hover:border-l-secondary hover:shadow-md transition-all">
+              <CardContent className="p-3 md:p-4 flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${stat.accent}`}>
+                  <stat.icon size={18} />
                 </div>
-                <div>
-                  <p className="text-2xl font-bold text-foreground">{stat.value.toLocaleString()}</p>
-                  <p className="text-xs text-muted-foreground">{stat.label}</p>
+                <div className="min-w-0">
+                  <p className="text-xl md:text-2xl font-extrabold text-foreground leading-none">{stat.value.toLocaleString()}</p>
+                  <p className="text-[11px] md:text-xs text-muted-foreground mt-1 truncate">{stat.label}</p>
                 </div>
               </CardContent>
             </Card>
@@ -44,27 +55,20 @@ const AdvertiserDashboard = () => {
 
         {/* Recent listings */}
         <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Mis avisos recientes</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between gap-2 pb-3">
+            <CardTitle className="text-base md:text-lg flex items-center gap-2">
+              <ClipboardList size={18} className="text-secondary" /> Mis avisos recientes
+            </CardTitle>
+            <Link to="/dashboard/anunciante/avisos">
+              <Button variant="ghost" size="sm" className="text-secondary gap-1 text-xs">
+                Ver todos <ArrowRight size={14} />
+              </Button>
+            </Link>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
               {featuredListings.slice(0, 4).map((listing) => (
-                <div key={listing.id} className="flex items-center gap-4 p-3 rounded-lg hover:bg-muted transition-colors">
-                  <img src={listing.imageUrl} alt={listing.title} className="w-16 h-12 object-cover rounded" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-foreground truncate">{listing.title}</p>
-                    <p className="text-xs text-muted-foreground">{listing.location} · {listing.date}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-xs">{listing.views} vistas</Badge>
-                    <Badge className="bg-success text-success-foreground">Activo</Badge>
-                  </div>
-                  <div className="hidden md:flex gap-1">
-                    <Button variant="ghost" size="sm">Editar</Button>
-                    <Button variant="ghost" size="sm">Pausar</Button>
-                  </div>
-                </div>
+                <ListingRow key={listing.id} listing={listing} status="Activo" />
               ))}
             </div>
           </CardContent>

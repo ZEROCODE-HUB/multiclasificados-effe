@@ -1,8 +1,9 @@
 import { Link, useLocation } from "react-router-dom";
+import { useState } from "react";
 import { NavLink } from "@/components/NavLink";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import {
-  LayoutDashboard,
+  Home,
   PlusCircle,
   ClipboardList,
   MessageSquare,
@@ -14,14 +15,16 @@ import {
   Bell,
   BarChart3,
   Star,
+  Menu,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
 type MenuItem = { title: string; url: string; icon: LucideIcon };
 
 const advertiserMenu: MenuItem[] = [
-  { title: "Dashboard", url: "/dashboard/anunciante", icon: LayoutDashboard },
+  { title: "Inicio", url: "/dashboard/anunciante", icon: Home },
   { title: "Publicar aviso", url: "/dashboard/anunciante/publicar", icon: PlusCircle },
   { title: "Mis avisos", url: "/dashboard/anunciante/avisos", icon: ClipboardList },
   { title: "Mensajes", url: "/dashboard/anunciante/mensajes", icon: MessageSquare },
@@ -31,7 +34,7 @@ const advertiserMenu: MenuItem[] = [
 ];
 
 const seekerMenu: MenuItem[] = [
-  { title: "Inicio", url: "/dashboard/buscador", icon: LayoutDashboard },
+  { title: "Inicio", url: "/dashboard/buscador", icon: Home },
   { title: "Buscar avisos", url: "/dashboard/buscador/buscar", icon: Search },
   { title: "Favoritos", url: "/dashboard/buscador/favoritos", icon: Heart },
   { title: "Mis búsquedas", url: "/dashboard/buscador/busquedas", icon: Star },
@@ -39,6 +42,16 @@ const seekerMenu: MenuItem[] = [
   { title: "Alertas", url: "/dashboard/buscador/alertas", icon: Bell },
   { title: "Configuración", url: "/dashboard/buscador/configuracion", icon: Settings },
 ];
+
+// Items NOT shown in the mobile bottom nav (so hamburger surfaces them)
+const advertiserOverflowUrls = new Set([
+  "/dashboard/anunciante/postulaciones",
+  "/dashboard/anunciante/configuracion",
+]);
+const seekerOverflowUrls = new Set([
+  "/dashboard/buscador/busquedas",
+  "/dashboard/buscador/configuracion",
+]);
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -126,7 +139,7 @@ export function DashboardLayout({ children, role }: DashboardLayoutProps) {
         {/* Header */}
         <header className="sticky top-0 z-30 h-14 lg:h-16 flex items-center bg-card/95 backdrop-blur-md border-b px-4 lg:px-8 gap-3">
           <Link to="/" className="lg:hidden flex items-center gap-2">
-            <div className="w-8 h-8 rounded-md gradient-secondary flex items-center justify-center text-secondary-foreground font-extrabold text-sm">
+            <div className="w-8 h-8 rounded-md gradient-secondary flex items-center justify-center text-secondary-foreground font-extrabold text-sm shadow-sm">
               eF
             </div>
           </Link>
@@ -136,8 +149,11 @@ export function DashboardLayout({ children, role }: DashboardLayoutProps) {
             </p>
             <h2 className="text-base font-bold text-foreground leading-none">{currentTitle}</h2>
           </div>
-          <div className="lg:hidden flex-1">
-            <h2 className="text-sm font-bold text-foreground">{currentTitle}</h2>
+          <div className="lg:hidden flex-1 min-w-0">
+            <h2 className="text-sm font-bold text-foreground truncate">{currentTitle}</h2>
+            <p className="text-[10px] uppercase tracking-wider text-secondary font-bold leading-none">
+              {isAdvertiser ? "Anunciante" : "Buscador"}
+            </p>
           </div>
 
           <div className="ml-auto flex items-center gap-2 lg:gap-4">
@@ -154,6 +170,8 @@ export function DashboardLayout({ children, role }: DashboardLayoutProps) {
             >
               {isAdvertiser ? "JM" : "AG"}
             </div>
+            {/* Hamburger - mobile only, top right */}
+            <MobileHamburger role={role} menuItems={menuItems} />
           </div>
         </header>
 
@@ -162,8 +180,84 @@ export function DashboardLayout({ children, role }: DashboardLayoutProps) {
         </main>
       </div>
 
-      {/* Mobile bottom nav */}
+      {/* Mobile bottom nav (5 primary items only) */}
       <MobileBottomNav role={role} />
     </div>
+  );
+}
+
+function MobileHamburger({ role, menuItems }: { role: "anunciante" | "buscador"; menuItems: MenuItem[] }) {
+  const [open, setOpen] = useState(false);
+  const { pathname } = useLocation();
+  const homeUrl = `/dashboard/${role}`;
+  const overflowSet = role === "anunciante" ? advertiserOverflowUrls : seekerOverflowUrls;
+
+  return (
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild>
+        <button
+          aria-label="Abrir menú"
+          className="lg:hidden w-9 h-9 flex items-center justify-center rounded-md bg-primary/5 hover:bg-primary/10 text-primary transition-colors"
+        >
+          <Menu size={20} />
+        </button>
+      </SheetTrigger>
+      <SheetContent side="right" className="w-80 p-0 bg-sidebar text-sidebar-foreground border-l-0">
+        <SheetHeader className="p-5 border-b border-sidebar-border/40 text-left">
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-lg gradient-secondary flex items-center justify-center text-secondary-foreground font-extrabold">
+              eF
+            </div>
+            <div>
+              <SheetTitle className="text-sidebar-foreground text-sm">
+                eFFe<span className="text-sidebar-primary"> Multi</span>
+              </SheetTitle>
+              <p className="text-[10px] uppercase tracking-widest text-sidebar-foreground/50">
+                Panel {role === "anunciante" ? "Anunciante" : "Buscador"}
+              </p>
+            </div>
+          </div>
+        </SheetHeader>
+
+        <div className="p-3 flex flex-col gap-0.5">
+          <p className="px-3 py-2 text-[10px] uppercase tracking-widest font-semibold text-sidebar-foreground/40">
+            Navegación
+          </p>
+          {menuItems.map((item) => {
+            const active = item.url === homeUrl ? pathname === item.url : pathname.startsWith(item.url);
+            const isOverflow = overflowSet.has(item.url);
+            return (
+              <Link
+                key={item.url}
+                to={item.url}
+                onClick={() => setOpen(false)}
+                className={`flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors ${
+                  active
+                    ? "bg-sidebar-accent text-sidebar-primary"
+                    : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+                }`}
+              >
+                <item.icon size={18} />
+                <span className="flex-1">{item.title}</span>
+                {isOverflow && (
+                  <span className="text-[9px] uppercase tracking-wider text-secondary font-bold">Extra</span>
+                )}
+              </Link>
+            );
+          })}
+
+          <div className="border-t border-sidebar-border/40 my-3" />
+
+          <Link
+            to="/auth"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-secondary hover:bg-secondary/10 transition-colors"
+          >
+            <LogOut size={18} />
+            Cambiar rol / Salir
+          </Link>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
