@@ -6,7 +6,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import authBg from "@/assets/auth-bg.jpg";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Eye, EyeOff, Megaphone, Search } from "lucide-react";
+import { Eye, EyeOff, Megaphone, Search, ShieldCheck, Sparkles } from "lucide-react";
+
+const Logo = ({ className = "" }: { className?: string }) => (
+  <span className={`text-xl font-extrabold tracking-tight ${className}`}>
+    eFFe<span className="text-secondary"> Multi</span>clasificados
+  </span>
+);
 
 const AuthPage = () => {
   const navigate = useNavigate();
@@ -18,15 +24,11 @@ const AuthPage = () => {
   const [showPassword, setShowPassword] = useState(false);
 
   return (
-    <div className="min-h-screen flex">
-      {/* Left side - Full background image with overlay */}
+    <div className="min-h-screen flex flex-col lg:flex-row">
+      {/* Left side - hidden on mobile */}
       <div className="hidden lg:flex lg:w-1/2 relative items-center justify-center p-12">
-        <img
-          src={authBg}
-          alt="Marketplace profesional"
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-        <div className="absolute inset-0 bg-primary/60" />
+        <img src={authBg} alt="Marketplace profesional" className="absolute inset-0 w-full h-full object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/85 via-primary/70 to-primary/90" />
         <div className="relative z-10 text-center max-w-lg">
           <h2 className="text-4xl font-extrabold text-primary-foreground mb-4 uppercase tracking-tight">
             eFFe Multiclasificados
@@ -37,29 +39,61 @@ const AuthPage = () => {
           <p className="text-primary-foreground/60 text-sm">
             Miles de oportunidades te esperan. Ingresa como anunciante o buscador para explorar.
           </p>
+          <div className="mt-8 grid grid-cols-2 gap-3 text-left">
+            <div className="bg-card/10 backdrop-blur-sm border border-white/20 rounded-xl p-4">
+              <ShieldCheck className="text-secondary mb-2" size={20} />
+              <p className="text-primary-foreground text-sm font-semibold">Anunciantes verificados</p>
+              <p className="text-primary-foreground/60 text-xs">Compra y vende con confianza.</p>
+            </div>
+            <div className="bg-card/10 backdrop-blur-sm border border-white/20 rounded-xl p-4">
+              <Sparkles className="text-secondary mb-2" size={20} />
+              <p className="text-primary-foreground text-sm font-semibold">Experiencia premium</p>
+              <p className="text-primary-foreground/60 text-xs">Diseñada para tu comodidad.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile hero banner */}
+      <div className="lg:hidden relative h-44 flex items-center justify-center overflow-hidden">
+        <img src={authBg} alt="" className="absolute inset-0 w-full h-full object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/70 via-primary/80 to-background" />
+        <div className="relative z-10 text-center px-6">
+          <Link to="/" className="inline-flex flex-col items-center">
+            <div className="w-12 h-12 rounded-xl gradient-secondary flex items-center justify-center text-secondary-foreground font-extrabold mb-2 shadow-lg">
+              eF
+            </div>
+            <Logo className="text-primary-foreground" />
+          </Link>
+          <p className="text-primary-foreground/80 text-xs mt-2">
+            Tu marketplace de confianza
+          </p>
         </div>
       </div>
 
       {/* Right side - Auth forms */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 md:p-12 bg-background overflow-y-auto">
-        <div className="w-full max-w-md">
-          <Link to="/" className="block mb-8">
-            <span className="text-xl font-extrabold text-primary">
-              eFFe<span className="text-secondary"> Multi</span>clasificados
-            </span>
+      <div className="flex-1 flex items-start lg:items-center justify-center p-4 sm:p-6 lg:p-12 bg-background overflow-y-auto -mt-6 lg:mt-0 z-10">
+        <div className="w-full max-w-md bg-card lg:bg-transparent rounded-2xl lg:rounded-none shadow-xl lg:shadow-none border lg:border-0 p-5 sm:p-6 lg:p-0">
+          {/* Desktop logo - centered */}
+          <Link to="/" className="hidden lg:flex justify-center mb-8">
+            <Logo className="text-primary" />
           </Link>
 
           {/* Tab toggle */}
           <div className="flex bg-muted rounded-lg p-1 mb-6">
             <button
               onClick={() => setActiveTab("login")}
-              className={`flex-1 py-2.5 text-sm font-medium rounded-md transition-colors ${activeTab === "login" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
+              className={`flex-1 py-2.5 text-sm font-semibold rounded-md transition-all ${
+                activeTab === "login" ? "bg-card text-primary shadow-sm" : "text-muted-foreground"
+              }`}
             >
               Iniciar sesión
             </button>
             <button
               onClick={() => setActiveTab("register")}
-              className={`flex-1 py-2.5 text-sm font-medium rounded-md transition-colors ${activeTab === "register" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
+              className={`flex-1 py-2.5 text-sm font-semibold rounded-md transition-all ${
+                activeTab === "register" ? "bg-card text-primary shadow-sm" : "text-muted-foreground"
+              }`}
             >
               Registrarse
             </button>
@@ -95,7 +129,7 @@ const AuthPage = () => {
 
               <div className="relative my-4">
                 <div className="absolute inset-0 flex items-center"><div className="w-full border-t" /></div>
-                <div className="relative flex justify-center text-xs"><span className="bg-background px-2 text-muted-foreground">o continuar con</span></div>
+                <div className="relative flex justify-center text-xs"><span className="bg-card lg:bg-background px-2 text-muted-foreground">o continuar con</span></div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -135,7 +169,7 @@ const AuthPage = () => {
                 <Label htmlFor="phone">Teléfono</Label>
                 <div className="flex gap-2 mt-1">
                   <span className="flex items-center px-3 bg-muted rounded-md text-sm text-muted-foreground border">+51</span>
-                  <Input id="phone" placeholder="999 888 777" className="flex-1" />
+                  <Input id="phone" placeholder="999 888 777" className="flex-1 min-w-0" />
                 </div>
               </div>
               <div>
@@ -154,16 +188,12 @@ const AuthPage = () => {
                     <Label htmlFor="ruc">RUC / DNI</Label>
                     <Input id="ruc" placeholder="20123456789" className="mt-1" />
                   </div>
-                  <div>
-                    <Label htmlFor="address">Dirección</Label>
-                    <Input id="address" placeholder="Av. Principal 123, Lima" className="mt-1" />
-                  </div>
                 </div>
               )}
 
               <label className="flex items-start gap-2 text-sm text-muted-foreground cursor-pointer">
                 <Checkbox className="mt-0.5" />
-                <span>Acepto los <a href="#" className="text-secondary hover:underline">términos y condiciones</a> y la <a href="#" className="text-secondary hover:underline">política de privacidad</a></span>
+                <span>Acepto los <a href="#" className="text-secondary hover:underline">términos</a> y la <a href="#" className="text-secondary hover:underline">política de privacidad</a></span>
               </label>
 
               <Button className="w-full" size="lg">Crear cuenta</Button>
@@ -173,24 +203,24 @@ const AuthPage = () => {
           {/* Demo buttons */}
           <div className="mt-6 pt-4 border-t border-dashed">
             <p className="text-xs text-muted-foreground text-center mb-3">Acceso rápido de demostración</p>
-            <div className="flex gap-3">
+            <div className="flex gap-2 sm:gap-3">
               <Button
                 variant="outline"
                 size="sm"
-                className="flex-1 gap-2 border-secondary/40 text-secondary hover:bg-secondary/10 hover:text-secondary"
+                className="flex-1 min-w-0 gap-1.5 border-secondary/40 text-secondary hover:bg-secondary/10 hover:text-secondary"
                 onClick={() => navigate("/dashboard/anunciante")}
               >
-                <Megaphone size={14} />
-                Demo Anunciante
+                <Megaphone size={14} className="flex-shrink-0" />
+                <span className="truncate">Demo Anunciante</span>
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                className="flex-1 gap-2 border-primary/40 text-primary hover:bg-primary/10 hover:text-primary"
+                className="flex-1 min-w-0 gap-1.5 border-primary/40 text-primary hover:bg-primary/10 hover:text-primary"
                 onClick={() => navigate("/dashboard/buscador")}
               >
-                <Search size={14} />
-                Demo Buscador
+                <Search size={14} className="flex-shrink-0" />
+                <span className="truncate">Demo Buscador</span>
               </Button>
             </div>
           </div>

@@ -64,9 +64,9 @@ const AdvertiserPublish = () => (
               <p className="text-xs text-muted-foreground mt-1">Máximo 10 imágenes, 5MB cada una</p>
             </div>
           </div>
-          <div className="flex gap-3 pt-2">
-            <Button variant="hero" size="lg" className="flex-1">Publicar aviso</Button>
-            <Button variant="outline" size="lg">Guardar borrador</Button>
+          <div className="flex flex-col sm:flex-row gap-3 pt-2">
+            <Button variant="hero" size="lg" className="w-full sm:flex-1">Publicar aviso</Button>
+            <Button variant="outline" size="lg" className="w-full sm:w-auto">Guardar borrador</Button>
           </div>
         </CardContent>
       </Card>

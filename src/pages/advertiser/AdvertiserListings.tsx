@@ -5,6 +5,7 @@ import { featuredListings } from "@/data/mockData";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ListingRow } from "@/components/ListingRow";
 import { PlusCircle } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const AdvertiserListings = () => (
   <DashboardLayout role="anunciante">
@@ -14,9 +15,11 @@ const AdvertiserListings = () => (
           <h1 className="text-2xl md:text-3xl font-extrabold text-foreground">Mis avisos</h1>
           <p className="text-sm text-muted-foreground">Gestiona todos tus avisos publicados.</p>
         </div>
-        <Button variant="hero" className="gap-2 self-start sm:self-auto">
-          <PlusCircle size={16} /> Nuevo aviso
-        </Button>
+        <Link to="/dashboard/anunciante/publicar" className="self-start sm:self-auto">
+          <Button variant="hero" className="gap-2">
+            <PlusCircle size={16} /> Nuevo aviso
+          </Button>
+        </Link>
       </div>
 
       <Tabs defaultValue="activos">
