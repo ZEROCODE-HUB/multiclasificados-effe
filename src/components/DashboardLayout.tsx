@@ -108,7 +108,10 @@ export function DashboardLayout({ children, role }: DashboardLayoutProps) {
         </div>
 
         <div className="mt-auto p-4 border-t border-sidebar-border/40">
-          <div className="flex items-center gap-3 mb-3">
+          <Link
+            to={`/dashboard/${role}/configuracion`}
+            className="flex items-center gap-3 mb-3 p-2 -m-2 rounded-lg hover:bg-sidebar-accent/60 transition-colors"
+          >
             <div
               className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold ${
                 isAdvertiser ? "bg-secondary text-secondary-foreground" : "bg-sidebar-primary text-sidebar-primary-foreground"
@@ -120,11 +123,9 @@ export function DashboardLayout({ children, role }: DashboardLayoutProps) {
               <p className="text-sm font-medium text-sidebar-foreground truncate">
                 {isAdvertiser ? "Juan Mendoza" : "Ana García"}
               </p>
-              <p className="text-[10px] text-sidebar-foreground/50 truncate">
-                {isAdvertiser ? "Cuenta Pro" : "Cuenta gratuita"}
-              </p>
+              <p className="text-[10px] text-sidebar-foreground/50 truncate">Ver mi perfil</p>
             </div>
-          </div>
+          </Link>
           <Link to="/auth">
             <Button variant="ghost" size="sm" className="w-full justify-start text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/60">
               <LogOut size={14} />
@@ -163,13 +164,15 @@ export function DashboardLayout({ children, role }: DashboardLayoutProps) {
             <span className="hidden md:inline text-sm text-muted-foreground">
               {isAdvertiser ? "Juan Mendoza" : "Ana García"}
             </span>
-            <div
-              className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shadow-sm ${
+            <Link
+              to={`/dashboard/${role}/configuracion`}
+              className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shadow-sm hover:ring-2 hover:ring-secondary/40 transition ${
                 isAdvertiser ? "bg-secondary text-secondary-foreground" : "bg-primary text-primary-foreground"
               }`}
+              aria-label="Mi perfil"
             >
               {isAdvertiser ? "JM" : "AG"}
-            </div>
+            </Link>
             {/* Hamburger - mobile only, top right */}
             <MobileHamburger role={role} menuItems={menuItems} />
           </div>
@@ -221,30 +224,28 @@ function MobileHamburger({ role, menuItems }: { role: "anunciante" | "buscador";
 
         <div className="p-3 flex flex-col gap-0.5">
           <p className="px-3 py-2 text-[10px] uppercase tracking-widest font-semibold text-sidebar-foreground/40">
-            Navegación
+            Más opciones
           </p>
-          {menuItems.map((item) => {
-            const active = item.url === homeUrl ? pathname === item.url : pathname.startsWith(item.url);
-            const isOverflow = overflowSet.has(item.url);
-            return (
-              <Link
-                key={item.url}
-                to={item.url}
-                onClick={() => setOpen(false)}
-                className={`flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors ${
-                  active
-                    ? "bg-sidebar-accent text-sidebar-primary"
-                    : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
-                }`}
-              >
-                <item.icon size={18} />
-                <span className="flex-1">{item.title}</span>
-                {isOverflow && (
-                  <span className="text-[9px] uppercase tracking-wider text-secondary font-bold">Extra</span>
-                )}
-              </Link>
-            );
-          })}
+          {menuItems
+            .filter((item) => overflowSet.has(item.url))
+            .map((item) => {
+              const active = pathname.startsWith(item.url);
+              return (
+                <Link
+                  key={item.url}
+                  to={item.url}
+                  onClick={() => setOpen(false)}
+                  className={`flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors ${
+                    active
+                      ? "bg-sidebar-accent text-sidebar-primary"
+                      : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+                  }`}
+                >
+                  <item.icon size={18} />
+                  <span className="flex-1">{item.title}</span>
+                </Link>
+              );
+            })}
 
           <div className="border-t border-sidebar-border/40 my-3" />
 
