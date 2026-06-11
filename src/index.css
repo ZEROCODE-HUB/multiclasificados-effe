@@ -88,9 +88,14 @@
   }
   body {
     @apply bg-background text-foreground font-sans;
+    line-height: 1.65;
   }
   h1, h2, h3, h4, h5, h6 {
     @apply font-heading;
+    line-height: 1.2;
+  }
+  a, button, [role="button"] {
+    transition: all 0.2s ease;
   }
 }
 
@@ -108,5 +113,28 @@
     background: linear-gradient(135deg, hsl(24 95% 53%), hsl(24 95% 60%));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+  }
+  .bg-dot-pattern {
+    background-image: radial-gradient(rgba(255,255,255,0.10) 1px, transparent 1px);
+    background-size: 22px 22px;
+    animation: dot-drift 40s linear infinite;
+  }
+  @keyframes dot-drift {
+    from { background-position: 0 0; }
+    to   { background-position: 220px 220px; }
+  }
+  .hero-search-focus:focus-within {
+    box-shadow: 0 0 0 4px rgba(255,255,255,0.18), 0 16px 40px -12px rgba(0,0,0,0.45);
+    border-color: rgba(255,255,255,0.5);
+  }
+  .card-lift {
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+  }
+  .card-lift:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 16px 32px -14px rgba(0,0,0,0.20);
+  }
+  .listing-shadow {
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
   }
 }
