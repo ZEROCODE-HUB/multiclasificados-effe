@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import authBg from "@/assets/auth-bg.jpg";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Eye, EyeOff, Megaphone, Search, ShieldCheck, Sparkles } from "lucide-react";
+import { Eye, EyeOff, Megaphone, Search, ShieldCheck, Sparkles, Shield, Crown } from "lucide-react";
 
 const Logo = ({ className = "" }: { className?: string }) => (
   <span className={`text-xl font-extrabold tracking-tight ${className}`}>
@@ -203,24 +203,26 @@ const AuthPage = () => {
           {/* Demo buttons */}
           <div className="mt-6 pt-4 border-t border-dashed">
             <p className="text-xs text-muted-foreground text-center mb-3">Acceso rápido de demostración</p>
-            <div className="flex gap-2 sm:gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1 min-w-0 gap-1.5 border-secondary/40 text-secondary hover:bg-secondary/10 hover:text-secondary"
-                onClick={() => navigate("/dashboard/anunciante")}
-              >
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="outline" size="sm" className="min-w-0 gap-1.5 border-secondary/40 text-secondary hover:bg-secondary/10 hover:text-secondary"
+                onClick={() => navigate("/dashboard/anunciante")}>
                 <Megaphone size={14} className="flex-shrink-0" />
-                <span className="truncate">Demo Anunciante</span>
+                <span className="truncate">Anunciante</span>
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1 min-w-0 gap-1.5 border-primary/40 text-primary hover:bg-primary/10 hover:text-primary"
-                onClick={() => navigate("/dashboard/buscador")}
-              >
+              <Button variant="outline" size="sm" className="min-w-0 gap-1.5 border-primary/40 text-primary hover:bg-primary/10 hover:text-primary"
+                onClick={() => navigate("/dashboard/buscador")}>
                 <Search size={14} className="flex-shrink-0" />
-                <span className="truncate">Demo Buscador</span>
+                <span className="truncate">Buscador</span>
+              </Button>
+              <Button variant="outline" size="sm" className="min-w-0 gap-1.5 border-primary/60 bg-primary/5 text-primary hover:bg-primary/15"
+                onClick={() => navigate("/dashboard/admin")}>
+                <Shield size={14} className="flex-shrink-0" />
+                <span className="truncate">Administrador</span>
+              </Button>
+              <Button variant="outline" size="sm" className="min-w-0 gap-1.5 border-secondary/60 bg-gradient-to-r from-secondary/10 to-primary/10 text-secondary hover:from-secondary/20 hover:to-primary/20"
+                onClick={() => navigate("/dashboard/superadmin")}>
+                <Crown size={14} className="flex-shrink-0" />
+                <span className="truncate">Super Admin</span>
               </Button>
             </div>
           </div>
