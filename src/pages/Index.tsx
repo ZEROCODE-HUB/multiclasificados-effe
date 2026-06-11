@@ -2,6 +2,7 @@ import { Navbar } from "@/components/Navbar";
 import { HeroSearch } from "@/components/HeroSearch";
 import { CategoryGrid } from "@/components/CategoryGrid";
 import { ListingCard } from "@/components/ListingCard";
+import { CountUp } from "@/components/CountUp";
 import { featuredListings } from "@/data/mockData";
 import heroBg from "@/assets/hero-bg.jpg";
 import { ArrowRight, ShieldCheck, Zap, Users, Award, CheckCircle2, Star, TrendingUp } from "lucide-react";
