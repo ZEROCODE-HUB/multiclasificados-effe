@@ -7,12 +7,12 @@ export function CategoryGrid() {
         <a
           key={cat.id}
           href={`/buscar?cat=${cat.id}`}
-          className="flex flex-col items-center gap-2 p-4 bg-card rounded-lg border hover:border-secondary hover:shadow-md transition-all group cursor-pointer"
+          className="flex flex-col items-center gap-3 p-5 bg-card rounded-xl border listing-shadow card-lift hover:border-secondary/40 group cursor-pointer"
         >
-          <div className="w-12 h-12 rounded-full bg-accent flex items-center justify-center group-hover:bg-secondary/10 transition-colors">
-            <cat.icon className="w-6 h-6 text-accent-foreground group-hover:text-secondary transition-colors" />
+          <div className="w-14 h-14 rounded-full bg-accent/80 flex items-center justify-center group-hover:bg-accent transition-colors">
+            <cat.icon className="w-7 h-7 text-accent-foreground group-hover:text-secondary transition-colors" />
           </div>
-          <span className="text-xs font-medium text-foreground text-center">{cat.name}</span>
+          <span className="text-xs font-semibold text-foreground text-center leading-tight">{cat.name}</span>
           <span className="text-xs text-muted-foreground">{cat.count.toLocaleString()}</span>
         </a>
       ))}
