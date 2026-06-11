@@ -1,5 +1,16 @@
 import { categories } from "@/data/mockData";
 
+const images: Record<string, string> = {
+  inmuebles: "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=400&h=400&fit=crop",
+  vehiculos: "https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=400&h=400&fit=crop",
+  empleos: "https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=400&h=400&fit=crop",
+  tecnologia: "https://images.unsplash.com/photo-1518770660439-4636190af475?w=400&h=400&fit=crop",
+  moda: "https://images.unsplash.com/photo-1445205170230-053b83016050?w=400&h=400&fit=crop",
+  servicios: "https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?w=400&h=400&fit=crop",
+  educacion: "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=400&h=400&fit=crop",
+  salud: "https://images.unsplash.com/photo-1556228720-195a672e8a03?w=400&h=400&fit=crop",
+};
+
 export function CategoryGrid() {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4">
@@ -7,13 +18,19 @@ export function CategoryGrid() {
         <a
           key={cat.id}
           href={`/buscar?cat=${cat.id}`}
-          className="flex flex-col items-center gap-3 p-5 bg-card rounded-xl border listing-shadow card-lift hover:border-secondary/40 group cursor-pointer"
+          className="group relative overflow-hidden rounded-xl bg-card border listing-shadow card-lift cursor-pointer aspect-square"
         >
-          <div className="w-14 h-14 rounded-full bg-accent/80 flex items-center justify-center group-hover:bg-accent transition-colors">
-            <cat.icon className="w-7 h-7 text-accent-foreground group-hover:text-secondary transition-colors" />
+          <img
+            src={images[cat.id]}
+            alt={cat.name}
+            loading="lazy"
+            className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-primary/95 via-primary/40 to-transparent" />
+          <div className="absolute inset-0 flex flex-col justify-end p-3 text-primary-foreground">
+            <p className="text-sm font-bold leading-tight">{cat.name}</p>
+            <p className="text-[11px] opacity-80">{cat.count.toLocaleString()} avisos</p>
           </div>
-          <span className="text-xs font-semibold text-foreground text-center leading-tight">{cat.name}</span>
-          <span className="text-xs text-muted-foreground">{cat.count.toLocaleString()}</span>
         </a>
       ))}
     </div>
