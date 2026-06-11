@@ -91,11 +91,16 @@ const Index = () => {
               <HeroSearch />
 
               {/* Trust strip */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8 mt-12 pt-8 border-t border-primary-foreground/15">
-                {trustStats.map((s) => (
-                  <div key={s.label} className="text-center">
-                    <p className="text-2xl md:text-3xl font-extrabold text-secondary">{s.value}</p>
-                    <p className="text-xs md:text-sm text-primary-foreground/70 mt-1">{s.label}</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-0 mt-12 pt-8 border-t border-primary-foreground/15">
+                {trustStats.map((s, i) => (
+                  <div
+                    key={s.label}
+                    className={`text-center px-2 ${i > 0 ? "md:border-l border-primary-foreground/15" : ""}`}
+                  >
+                    <p className="text-2xl md:text-3xl font-extrabold text-secondary">
+                      <CountUp value={s.value} />
+                    </p>
+                    <p className="text-xs md:text-sm text-primary-foreground/70 mt-2">{s.label}</p>
                   </div>
                 ))}
               </div>
@@ -124,11 +129,14 @@ const Index = () => {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-8">
             {benefits.map((b) => (
-              <div key={b.title} className="bg-card rounded-2xl p-6 md:p-8 border shadow-sm hover:shadow-lg transition-shadow">
-                <div className="w-12 h-12 rounded-xl gradient-secondary flex items-center justify-center text-secondary-foreground mb-5 shadow-md">
-                  <b.icon size={22} />
+              <div
+                key={b.title}
+                className="group bg-card rounded-2xl p-6 md:p-8 border shadow-sm card-lift border-l-4 border-l-transparent hover:border-l-secondary"
+              >
+                <div className="w-12 h-12 md:w-[48px] md:h-[48px] rounded-xl gradient-secondary flex items-center justify-center text-secondary-foreground mb-5 shadow-md">
+                  <b.icon size={24} />
                 </div>
-                <h3 className="text-lg font-bold text-foreground mb-2">{b.title}</h3>
+                <h3 className="text-lg font-bold text-foreground mb-3">{b.title}</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">{b.desc}</p>
               </div>
             ))}
