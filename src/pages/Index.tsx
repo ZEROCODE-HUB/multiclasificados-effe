@@ -173,13 +173,19 @@ const Index = () => {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 max-w-5xl mx-auto">
             {steps.map((step, i) => (
-              <div key={step.n} className="relative bg-primary-foreground/5 backdrop-blur-sm rounded-2xl p-6 md:p-8 border border-primary-foreground/10">
-                <span className="absolute -top-4 left-6 text-5xl md:text-6xl font-extrabold text-secondary/40 leading-none">
+              <div
+                key={step.n}
+                className="relative bg-primary-foreground/[0.06] backdrop-blur-md rounded-2xl p-6 md:p-8 border border-primary-foreground/15 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] overflow-hidden"
+              >
+                <span
+                  className="absolute top-2 right-4 font-extrabold text-secondary/20 leading-none select-none pointer-events-none"
+                  style={{ fontSize: "80px" }}
+                >
                   {step.n}
                 </span>
-                <div className="pt-6">
-                  <h3 className="text-lg md:text-xl font-bold mb-2">{step.title}</h3>
-                  <p className="text-sm text-primary-foreground/70 leading-relaxed">{step.desc}</p>
+                <div className="relative pt-4">
+                  <h3 className="text-lg md:text-xl font-bold mb-3">{step.title}</h3>
+                  <p className="text-sm text-primary-foreground/75 leading-relaxed">{step.desc}</p>
                 </div>
               </div>
             ))}
@@ -202,22 +208,25 @@ const Index = () => {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-6">
           {testimonials.map((t) => (
-            <div key={t.name} className="bg-card border rounded-2xl p-6 md:p-7 shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex gap-0.5 mb-3 text-secondary">
-                {Array.from({ length: t.rating }).map((_, i) => (
-                  <Star key={i} size={16} fill="currentColor" />
-                ))}
+            <div key={t.name} className="bg-card border rounded-2xl p-6 md:p-7 listing-shadow card-lift">
+              <div className="flex items-center gap-2 mb-4 text-secondary">
+                <div className="flex gap-0.5">
+                  {Array.from({ length: t.rating }).map((_, i) => (
+                    <Star key={i} size={16} fill="currentColor" />
+                  ))}
+                </div>
+                <span className="text-sm font-semibold text-foreground">{t.rating.toFixed(1)}</span>
               </div>
-              <p className="text-sm md:text-base text-foreground leading-relaxed mb-5">
+              <p className="text-sm md:text-base text-foreground leading-relaxed mb-6">
                 "{t.quote}"
               </p>
               <div className="flex items-center gap-3 pt-4 border-t">
-                <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-sm">
-                  {t.name.charAt(0)}
+                <div className="w-11 h-11 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-base shadow-sm">
+                  {t.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-foreground">{t.name}</p>
-                  <p className="text-xs text-muted-foreground">{t.role}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{t.role}</p>
                 </div>
               </div>
             </div>
@@ -228,6 +237,13 @@ const Index = () => {
       {/* CTA */}
       <section className="container mx-auto px-4 pb-14 md:pb-20">
         <div className="relative overflow-hidden rounded-3xl gradient-hero p-8 md:p-14 text-center">
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background:
+                "radial-gradient(ellipse at center, hsl(24 95% 53% / 0.05) 0%, transparent 60%)",
+            }}
+          />
           <div className="absolute inset-0 opacity-10">
             <div className="absolute -top-20 -right-20 w-80 h-80 rounded-full bg-secondary blur-3xl" />
             <div className="absolute -bottom-20 -left-20 w-80 h-80 rounded-full bg-accent blur-3xl" />
@@ -256,11 +272,11 @@ const Index = () => {
       </section>
 
       {/* Footer */}
-      <footer className="bg-primary text-primary-foreground py-12 md:py-16">
+      <footer className="bg-primary text-primary-foreground py-16 md:py-24">
         <div className="container mx-auto px-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 md:gap-10 mb-10">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 md:gap-10 mb-12">
             <div className="md:col-span-1">
-              <div className="flex items-center gap-2 mb-4">
+              <div className="flex items-center gap-2 mb-5">
                 <div className="w-9 h-9 rounded-lg gradient-secondary flex items-center justify-center text-secondary-foreground font-extrabold">
                   eF
                 </div>
@@ -273,8 +289,8 @@ const Index = () => {
               </p>
             </div>
             <div>
-              <h4 className="font-semibold mb-4 text-sm uppercase tracking-wider text-secondary">Plataforma</h4>
-              <ul className="space-y-2.5 text-sm text-primary-foreground/70">
+              <h4 className="font-semibold mb-5 uppercase text-secondary" style={{ fontSize: "13px", letterSpacing: "0.08em" }}>Plataforma</h4>
+              <ul className="space-y-3 text-sm text-primary-foreground/70">
                 <li><Link to="/buscar" className="hover:text-secondary transition-colors">Explorar avisos</Link></li>
                 <li><Link to="/auth" className="hover:text-secondary transition-colors">Publicar aviso</Link></li>
                 <li><Link to="/auth" className="hover:text-secondary transition-colors">Planes Pro</Link></li>
@@ -282,8 +298,8 @@ const Index = () => {
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold mb-4 text-sm uppercase tracking-wider text-secondary">Empresa</h4>
-              <ul className="space-y-2.5 text-sm text-primary-foreground/70">
+              <h4 className="font-semibold mb-5 uppercase text-secondary" style={{ fontSize: "13px", letterSpacing: "0.08em" }}>Empresa</h4>
+              <ul className="space-y-3 text-sm text-primary-foreground/70">
                 <li><a href="#" className="hover:text-secondary transition-colors">Acerca de</a></li>
                 <li><a href="#" className="hover:text-secondary transition-colors">Contacto</a></li>
                 <li><a href="#" className="hover:text-secondary transition-colors">Términos y condiciones</a></li>
@@ -291,15 +307,15 @@ const Index = () => {
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold mb-4 text-sm uppercase tracking-wider text-secondary">Contacto</h4>
-              <ul className="space-y-2.5 text-sm text-primary-foreground/70">
+              <h4 className="font-semibold mb-5 uppercase text-secondary" style={{ fontSize: "13px", letterSpacing: "0.08em" }}>Contacto</h4>
+              <ul className="space-y-3 text-sm text-primary-foreground/70">
                 <li className="flex items-center gap-2"><CheckCircle2 size={14} className="text-secondary" /> info@effemulticlasificados.pe</li>
                 <li className="flex items-center gap-2"><CheckCircle2 size={14} className="text-secondary" /> +51 1 234 5678</li>
                 <li className="flex items-center gap-2"><CheckCircle2 size={14} className="text-secondary" /> Lima, Perú</li>
               </ul>
             </div>
           </div>
-          <div className="border-t border-primary-foreground/15 pt-6 flex flex-col sm:flex-row gap-3 justify-between items-center text-sm text-primary-foreground/50">
+          <div className="border-t border-white/15 pt-8 flex flex-col sm:flex-row gap-3 justify-between items-center text-sm text-primary-foreground/50">
             <span>© 2026 eFFe Multiclasificados. Todos los derechos reservados.</span>
             <span className="flex items-center gap-2">
               <ShieldCheck size={14} className="text-secondary" /> Plataforma verificada y segura
