@@ -72,6 +72,7 @@ const Index = () => {
           className="absolute inset-0 w-full h-full object-cover opacity-25"
           fetchPriority="high"
         />
+        <div className="absolute inset-0 bg-dot-pattern opacity-60" />
         <div className="absolute inset-0 bg-gradient-to-b from-primary/90 via-primary/70 to-primary/95" />
         <Navbar />
         <div className="relative z-10 flex-1 flex items-center">
