@@ -1,35 +1,51 @@
 import { categories } from "@/data/mockData";
+import { ArrowUpRight } from "lucide-react";
 
 const images: Record<string, string> = {
-  inmuebles: "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=400&h=400&fit=crop",
-  vehiculos: "https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=400&h=400&fit=crop",
-  empleos: "https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=400&h=400&fit=crop",
-  tecnologia: "https://images.unsplash.com/photo-1518770660439-4636190af475?w=400&h=400&fit=crop",
-  moda: "https://images.unsplash.com/photo-1445205170230-053b83016050?w=400&h=400&fit=crop",
-  servicios: "https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?w=400&h=400&fit=crop",
-  educacion: "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=400&h=400&fit=crop",
-  salud: "https://images.unsplash.com/photo-1556228720-195a672e8a03?w=400&h=400&fit=crop",
+  inmuebles: "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800&h=600&fit=crop",
+  vehiculos: "https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=800&h=600&fit=crop",
+  empleos: "https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=800&h=600&fit=crop",
+  tecnologia: "https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&h=600&fit=crop",
+  moda: "https://images.unsplash.com/photo-1445205170230-053b83016050?w=800&h=600&fit=crop",
+  servicios: "https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?w=800&h=600&fit=crop",
+  educacion: "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=800&h=600&fit=crop",
+  salud: "https://images.unsplash.com/photo-1556228720-195a672e8a03?w=800&h=600&fit=crop",
 };
 
 export function CategoryGrid() {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4">
-      {categories.map((cat) => (
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-px bg-border border border-border rounded-2xl overflow-hidden shadow-sm">
+      {categories.map((cat, i) => (
         <a
           key={cat.id}
           href={`/buscar?cat=${cat.id}`}
-          className="group relative overflow-hidden rounded-xl bg-card border listing-shadow card-lift cursor-pointer aspect-square"
+          className="group relative bg-card hover:bg-card transition-colors cursor-pointer overflow-hidden"
         >
-          <img
-            src={images[cat.id]}
-            alt={cat.name}
-            loading="lazy"
-            className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-primary/95 via-primary/40 to-transparent" />
-          <div className="absolute inset-0 flex flex-col justify-end p-3 text-primary-foreground">
-            <p className="text-sm font-bold leading-tight">{cat.name}</p>
-            <p className="text-[11px] opacity-80">{cat.count.toLocaleString()} avisos</p>
+          <div className="relative aspect-[4/3] overflow-hidden">
+            <img
+              src={images[cat.id]}
+              alt={cat.name}
+              loading="lazy"
+              className="absolute inset-0 w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700 group-hover:scale-[1.08]"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-primary/95 via-primary/30 to-transparent" />
+            {/* Index marker */}
+            <span className="absolute top-3 left-4 text-[10px] font-bold text-primary-foreground/60 tracking-widest">
+              0{i + 1}
+            </span>
+            {/* Hover arrow */}
+            <div className="absolute top-3 right-3 w-8 h-8 rounded-full bg-secondary text-secondary-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all duration-300">
+              <ArrowUpRight size={14} />
+            </div>
+            {/* Footer info */}
+            <div className="absolute bottom-0 left-0 right-0 p-4 text-primary-foreground">
+              <div className="flex items-center gap-2 mb-1">
+                <cat.icon size={14} className="text-secondary" />
+                <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-secondary">Categoría</span>
+              </div>
+              <h3 className="text-lg md:text-xl font-extrabold tracking-tight leading-tight">{cat.name}</h3>
+              <p className="text-[11px] text-primary-foreground/70 mt-1">{cat.count.toLocaleString()} avisos activos</p>
+            </div>
           </div>
         </a>
       ))}
