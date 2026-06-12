@@ -64,48 +64,63 @@ const testimonials = [
 const Index = () => {
   return (
     <div className="min-h-screen bg-background">
-      {/* Hero */}
-      <section className="relative min-h-[640px] md:min-h-[720px] flex flex-col gradient-hero overflow-hidden">
+      {/* Hero — Premium editorial (Volvo style) */}
+      <section className="relative min-h-[680px] md:min-h-[780px] flex flex-col gradient-hero overflow-hidden">
         <img
           src={heroBg}
           alt="Marketplace profesional eFFe Multiclasificados"
-          className="absolute inset-0 w-full h-full object-cover opacity-25"
+          className="absolute inset-0 w-full h-full object-cover opacity-40"
           fetchPriority="high"
         />
-        <div className="absolute inset-0 bg-dot-pattern opacity-60" />
-        <div className="absolute inset-0 bg-gradient-to-b from-primary/90 via-primary/70 to-primary/95" />
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/85 via-primary/75 to-primary/95" />
+        <div className="absolute inset-0 bg-gradient-to-r from-primary/70 via-transparent to-primary/40" />
+        <div className="absolute inset-0 bg-dot-pattern opacity-30" />
+
         <Navbar />
+
         <div className="relative z-10 flex-1 flex items-center">
           <div className="container mx-auto px-4 py-16 md:py-24">
-            <div className="max-w-3xl mx-auto text-center">
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-secondary/15 border border-secondary/30 text-secondary text-xs font-semibold mb-6 backdrop-blur-sm">
-                <Award size={14} />
-                <span>Plataforma N°1 de clasificados profesionales en Perú</span>
+            <div className="max-w-4xl">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="h-px w-12 bg-secondary" />
+                <span className="text-secondary uppercase tracking-[0.28em] font-bold text-[11px]">
+                  Multiclasificados eFFe · Perú
+                </span>
               </div>
-              <h1 className="text-3xl sm:text-4xl md:text-6xl font-extrabold text-primary-foreground mb-5 tracking-tight leading-[1.05]">
-                El marketplace donde <span className="text-gradient">los negocios suceden</span>
-              </h1>
-              <p className="text-primary-foreground/80 text-base md:text-xl mb-10 max-w-2xl mx-auto leading-relaxed">
-                Miles de oportunidades verificadas en inmuebles, vehículos, empleos y servicios. Compra, vende y conecta con la confianza de una plataforma profesional.
-              </p>
-              <HeroSearch />
 
-              {/* Trust strip */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-0 mt-12 pt-8 border-t border-primary-foreground/15">
+              <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-[88px] font-extrabold text-primary-foreground mb-6 tracking-tight leading-[0.92] uppercase">
+                Donde los <br className="hidden sm:block" />
+                negocios <span className="text-secondary">suceden.</span>
+              </h1>
+
+              <p className="text-primary-foreground/75 text-base md:text-lg mb-10 max-w-xl leading-relaxed font-light">
+                Miles de oportunidades verificadas en inmuebles, vehículos, maquinaria, empleos y servicios. La plataforma profesional para tus operaciones en Perú.
+              </p>
+
+              <div className="max-w-3xl">
+                <HeroSearch />
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-0 mt-12 pt-8 border-t border-primary-foreground/15 max-w-3xl">
                 {trustStats.map((s, i) => (
                   <div
                     key={s.label}
-                    className={`text-center px-2 ${i > 0 ? "md:border-l border-primary-foreground/15" : ""}`}
+                    className={`px-2 ${i > 0 ? "md:border-l border-primary-foreground/15 md:pl-6" : ""}`}
                   >
-                    <p className="text-2xl md:text-3xl font-extrabold text-secondary">
+                    <p className="text-2xl md:text-3xl font-extrabold text-secondary tracking-tight">
                       <CountUp value={s.value} />
                     </p>
-                    <p className="text-xs md:text-sm text-primary-foreground/70 mt-2">{s.label}</p>
+                    <p className="text-[11px] md:text-xs text-primary-foreground/65 mt-2 uppercase tracking-wider">{s.label}</p>
                   </div>
                 ))}
               </div>
             </div>
           </div>
+        </div>
+
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 hidden md:flex flex-col items-center gap-2 text-primary-foreground/50 text-[10px] uppercase tracking-widest">
+          <span>Explorar</span>
+          <div className="w-px h-8 bg-primary-foreground/30 animate-pulse" />
         </div>
       </section>
 
