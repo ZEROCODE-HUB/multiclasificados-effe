@@ -163,19 +163,106 @@ const Index = () => {
       <section className="container mx-auto px-4 py-14 md:py-20">
         <div className="flex items-end justify-between mb-8 md:mb-10 gap-4 flex-wrap">
           <div>
-            <p className="text-xs uppercase tracking-widest font-bold text-secondary mb-2">Destacados</p>
-            <h2 className="text-2xl md:text-4xl font-bold text-foreground">Avisos destacados de la semana</h2>
+            <p className="text-xs uppercase tracking-[0.2em] font-bold text-secondary mb-2">Destacados</p>
+            <h2 className="text-3xl md:text-5xl font-extrabold text-foreground tracking-tight uppercase">Avisos de la semana</h2>
           </div>
-          <Link to="/buscar">
-            <Button variant="outline" className="gap-2">
-              Ver todos <ArrowRight size={16} />
-            </Button>
+          <Link to="/buscar" className="text-xs font-bold uppercase tracking-[0.2em] text-primary border-b-2 border-secondary pb-1 hover:text-secondary transition-colors">
+            Ver todo el catálogo →
           </Link>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
-          {featuredListings.map((listing) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-10">
+          {featuredListings.slice(0, 8).map((listing) => (
             <ListingCard key={listing.id} listing={listing} />
           ))}
+        </div>
+      </section>
+
+      {/* Map teaser */}
+      <section className="bg-primary text-primary-foreground relative overflow-hidden">
+        <div className="absolute inset-0 opacity-20">
+          <img
+            src="https://images.unsplash.com/photo-1524661135-423995f22d0b?w=1600&h=600&fit=crop"
+            alt="Mapa de Perú"
+            className="w-full h-full object-cover"
+            loading="lazy"
+          />
+        </div>
+        <div className="absolute inset-0 bg-gradient-to-r from-primary via-primary/80 to-primary/40" />
+        <div className="relative container mx-auto px-4 py-16 md:py-24 grid md:grid-cols-2 gap-10 items-center">
+          <div>
+            <div className="flex items-center gap-3 mb-5">
+              <div className="h-px w-10 bg-secondary" />
+              <span className="text-secondary uppercase tracking-[0.25em] font-bold text-[10px]">Nuevo · Próximamente</span>
+            </div>
+            <h2 className="text-3xl md:text-5xl font-extrabold tracking-tight uppercase mb-5">
+              Explora avisos <span className="text-secondary">en el mapa</span>
+            </h2>
+            <p className="text-primary-foreground/75 text-base md:text-lg max-w-md leading-relaxed mb-7 font-light">
+              Encuentra inmuebles, empleos, vehículos y servicios cerca de ti con vista geográfica interactiva tipo Airbnb y Zillow.
+            </p>
+            <Link to="/buscar">
+              <Button variant="hero" size="lg" className="gap-2">
+                Probar búsqueda <ArrowRight size={16} />
+              </Button>
+            </Link>
+          </div>
+          <div className="relative aspect-[4/3] rounded-2xl overflow-hidden border border-primary-foreground/15 shadow-2xl">
+            <img
+              src="https://images.unsplash.com/photo-1569336415962-a4bd9f69cd83?w=900&h=700&fit=crop"
+              alt="Vista de mapa con pines de avisos"
+              className="w-full h-full object-cover"
+              loading="lazy"
+            />
+            {/* Floating pins */}
+            {[
+              { x: "20%", y: "30%", price: "US$ 285K" },
+              { x: "55%", y: "45%", price: "S/ 4,500" },
+              { x: "70%", y: "65%", price: "US$ 22.5K" },
+              { x: "35%", y: "70%", price: "S/ 1,200" },
+            ].map((p, i) => (
+              <div
+                key={i}
+                className="absolute -translate-x-1/2 -translate-y-1/2 px-3 py-1.5 rounded-full bg-secondary text-secondary-foreground text-xs font-bold shadow-lg ring-4 ring-secondary/20"
+                style={{ left: p.x, top: p.y }}
+              >
+                {p.price}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Recently published */}
+      <section className="container mx-auto px-4 py-14 md:py-20">
+        <div className="flex items-end justify-between mb-8 md:mb-10 gap-4 flex-wrap">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] font-bold text-secondary mb-2">Recién publicados</p>
+            <h2 className="text-3xl md:text-5xl font-extrabold text-foreground tracking-tight uppercase">Lo más nuevo</h2>
+          </div>
+          <Link to="/buscar?sort=new" className="text-xs font-bold uppercase tracking-[0.2em] text-primary border-b-2 border-secondary pb-1 hover:text-secondary transition-colors">
+            Ver más recientes →
+          </Link>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-10">
+          {featuredListings.slice(0, 4).reverse().map((listing) => (
+            <ListingCard key={`new-${listing.id}`} listing={listing} />
+          ))}
+        </div>
+      </section>
+
+      {/* Brand trust strip */}
+      <section className="border-y bg-muted/30">
+        <div className="container mx-auto px-4 py-10">
+          <p className="text-center text-[10px] uppercase tracking-[0.3em] font-bold text-muted-foreground mb-6">
+            Empresas que confían en nosotros
+          </p>
+          <div className="flex flex-wrap justify-center items-center gap-x-12 gap-y-4 opacity-60">
+            {["FERREYROS", "VOLVO", "RIMAC", "BCP", "INTERBANK", "ENTEL", "BACKUS"].map((b) => (
+              <span key={b} className="font-black text-base md:text-lg tracking-widest text-primary/70">
+                {b}
+              </span>
+            ))}
+          </div>
         </div>
       </section>
 
