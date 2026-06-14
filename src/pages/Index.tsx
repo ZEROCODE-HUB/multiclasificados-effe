@@ -265,7 +265,7 @@ const Index = () => {
           <div>
             <div className="flex items-center gap-3 mb-5">
               <div className="h-px w-10 bg-secondary" />
-              <span className="text-secondary uppercase tracking-[0.25em] font-bold text-[10px]">Nuevo · Próximamente</span>
+              <span className="text-secondary uppercase tracking-[0.25em] font-bold text-[10px]">Búsqueda geográfica</span>
             </div>
             <h2 className="text-3xl md:text-5xl font-extrabold tracking-tight uppercase mb-5">
               Explora avisos <span className="text-secondary">en el mapa</span>
