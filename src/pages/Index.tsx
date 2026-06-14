@@ -1,11 +1,12 @@
 import { Navbar } from "@/components/Navbar";
+import { BrandMark } from "@/components/BrandMark";
 import { HeroSearch } from "@/components/HeroSearch";
 import { CategoryGrid } from "@/components/CategoryGrid";
 import { ListingCard } from "@/components/ListingCard";
 import { CountUp } from "@/components/CountUp";
 import { featuredListings } from "@/data/mockData";
 import heroBg from "@/assets/hero-bg.jpg";
-import { ArrowRight, ShieldCheck, Zap, Users, Award, CheckCircle2, Star, TrendingUp } from "lucide-react";
+import { ArrowRight, BadgeCheck, Gem, Headset, Star, TrendingUp, CheckCircle2, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
@@ -18,19 +19,28 @@ const trustStats = [
 
 const benefits = [
   {
-    icon: ShieldCheck,
+    icon: BadgeCheck,
+    eyebrow: "Confianza",
     title: "Anunciantes verificados",
-    desc: "Validamos cada cuenta de empresa con RUC para una experiencia segura y confiable.",
+    desc: "Validamos cada empresa con RUC y revisión manual para que solo conectes con cuentas reales y operativas.",
+    metric: "100%",
+    metricLabel: "Cuentas auditadas",
   },
   {
-    icon: Zap,
-    title: "Publicación inmediata",
-    desc: "Tu aviso visible en menos de 2 minutos con herramientas profesionales de difusión.",
+    icon: Gem,
+    eyebrow: "Experiencia premium",
+    title: "Visibilidad de alto impacto",
+    desc: "Tu aviso vive en una plataforma profesional con presentación editorial pensada para convertir más rápido.",
+    metric: "3.2x",
+    metricLabel: "Más visualizaciones",
   },
   {
-    icon: TrendingUp,
-    title: "Estadísticas en tiempo real",
-    desc: "Mide vistas, contactos y conversiones con un panel claro y accionable.",
+    icon: Headset,
+    eyebrow: "Soporte humano",
+    title: "Asesoría dedicada",
+    desc: "Un equipo real acompaña tus operaciones de principio a fin, con respuesta el mismo día hábil.",
+    metric: "24/7",
+    metricLabel: "Acompañamiento",
   },
 ];
 
@@ -67,62 +77,96 @@ const Index = () => {
       {/* Header — distinct white bar above hero */}
       <Navbar />
 
-      {/* Hero — Premium editorial (Volvo style) with reduced overlay so the image breathes */}
-      <section className="relative min-h-[640px] md:min-h-[760px] flex flex-col gradient-hero overflow-hidden">
+      {/* Hero — Premium editorial, dos columnas balanceadas */}
+      <section className="relative min-h-[640px] md:min-h-[820px] flex flex-col gradient-hero overflow-hidden">
         <img
           src={heroBg}
-          alt="Marketplace profesional eFFe Multiclasificados"
-          className="absolute inset-0 w-full h-full object-cover opacity-60"
+          alt="Marketplace profesional EFFE Multiclasificados"
+          className="absolute inset-0 w-full h-full object-cover opacity-70"
           fetchPriority="high"
         />
-        {/* Lighter overlays so the background image stays visible */}
-        <div className="absolute inset-0 bg-gradient-to-b from-primary/65 via-primary/55 to-primary/85" />
-        <div className="absolute inset-0 bg-gradient-to-r from-primary/60 via-transparent to-transparent" />
-        <div className="absolute inset-0 bg-dot-pattern opacity-20" />
+        {/* Overlays más ligeros para dejar respirar la imagen */}
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/45 via-primary/40 to-primary/75" />
+        <div className="absolute inset-0 bg-gradient-to-r from-primary/55 via-primary/20 to-transparent" />
+        <div className="absolute inset-0 bg-dot-pattern opacity-15" />
 
         <div className="relative z-10 flex-1 flex items-center">
-          <div className="container mx-auto px-4 md:px-6 py-20 md:py-32">
-            <div className="max-w-4xl">
-              <div className="flex items-center gap-3 mb-8">
-                <div className="h-px w-12 bg-secondary" />
-                <span className="text-secondary uppercase tracking-[0.28em] font-bold text-[11px]">
-                  Multiclasificados eFFe · Perú
-                </span>
+          <div className="container mx-auto px-4 md:px-6 py-24 md:py-36 lg:py-40">
+            <div className="grid lg:grid-cols-12 gap-12 items-center">
+              {/* Columna izquierda: branding + buscador */}
+              <div className="lg:col-span-7 xl:col-span-7">
+                <div className="flex items-center gap-3 mb-8">
+                  <div className="h-px w-12 bg-secondary" />
+                  <span className="text-secondary uppercase tracking-[0.32em] font-bold text-[11px]">
+                    Plataforma profesional · Perú
+                  </span>
+                </div>
+
+                {/* Branding hero: MULTICLASIFICADOS arriba, EFFE — PERÚ debajo */}
+                <h1 className="mb-8 leading-[0.9]">
+                  <span className="block text-primary-foreground/90 font-bold uppercase tracking-[0.32em] text-sm md:text-lg lg:text-xl mb-2 md:mb-3">
+                    Multiclasificados
+                  </span>
+                  <span className="block text-primary-foreground font-extrabold uppercase tracking-tight text-[68px] sm:text-[88px] md:text-[112px] lg:text-[136px]">
+                    EFFE
+                    <span className="text-secondary"> · </span>
+                    <span className="text-secondary">PERÚ</span>
+                  </span>
+                </h1>
+
+                {/* Tagline premium */}
+                <p className="text-primary-foreground text-xl md:text-2xl lg:text-3xl mb-3 font-light leading-snug tracking-tight">
+                  Donde los <span className="italic text-secondary font-normal">negocios</span> suceden.
+                </p>
+                <p className="text-primary-foreground/80 text-sm md:text-base mb-10 max-w-xl leading-relaxed font-light">
+                  Miles de oportunidades verificadas en inmuebles, vehículos, maquinaria, empleos y servicios.
+                </p>
+
+                <div className="max-w-3xl">
+                  <HeroSearch />
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-0 mt-12 pt-8 border-t border-primary-foreground/20 max-w-3xl">
+                  {trustStats.map((s, i) => (
+                    <div
+                      key={s.label}
+                      className={`px-2 ${i > 0 ? "md:border-l border-primary-foreground/15 md:pl-6" : ""}`}
+                    >
+                      <p className="text-2xl md:text-3xl font-extrabold text-secondary tracking-tight">
+                        <CountUp value={s.value} />
+                      </p>
+                      <p className="text-[11px] md:text-xs text-primary-foreground/70 mt-2 uppercase tracking-wider">{s.label}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
 
-              <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-[88px] font-extrabold text-primary-foreground mb-8 tracking-tight leading-[0.92] uppercase">
-                Donde los <br className="hidden sm:block" />
-                negocios <span className="text-secondary">suceden.</span>
-              </h1>
-
-              <p className="text-primary-foreground/85 text-base md:text-lg mb-12 max-w-xl leading-relaxed font-light">
-                Miles de oportunidades verificadas en inmuebles, vehículos, maquinaria, empleos y servicios. La plataforma profesional para tus operaciones en Perú.
-              </p>
-
-              <div className="max-w-3xl">
-                <HeroSearch />
-              </div>
-
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-0 mt-14 pt-8 border-t border-primary-foreground/20 max-w-3xl">
-                {trustStats.map((s, i) => (
-                  <div
-                    key={s.label}
-                    className={`px-2 ${i > 0 ? "md:border-l border-primary-foreground/15 md:pl-6" : ""}`}
-                  >
-                    <p className="text-2xl md:text-3xl font-extrabold text-secondary tracking-tight">
-                      <CountUp value={s.value} />
-                    </p>
-                    <p className="text-[11px] md:text-xs text-primary-foreground/70 mt-2 uppercase tracking-wider">{s.label}</p>
+              {/* Columna derecha: collage editorial (solo desktop) */}
+              <div className="hidden lg:flex lg:col-span-5 xl:col-span-5 relative h-[560px]">
+                <div className="absolute inset-0 grid grid-cols-6 grid-rows-6 gap-3">
+                  <div className="col-span-4 row-span-4 overflow-hidden border border-white/20 shadow-2xl">
+                    <img src={featuredListings[0]?.imageUrl} alt="" className="w-full h-full object-cover" />
                   </div>
-                ))}
+                  <div className="col-span-2 row-span-3 overflow-hidden border border-white/20 shadow-2xl bg-secondary/90 flex flex-col justify-end p-4">
+                    <p className="text-[10px] uppercase tracking-widest text-secondary-foreground/80 font-bold mb-1">Hoy</p>
+                    <p className="text-secondary-foreground font-extrabold text-2xl leading-tight">8,200+ avisos activos</p>
+                  </div>
+                  <div className="col-span-2 row-span-3 overflow-hidden border border-white/20 shadow-2xl">
+                    <img src={featuredListings[1]?.imageUrl} alt="" className="w-full h-full object-cover" />
+                  </div>
+                  <div className="col-span-3 row-span-2 overflow-hidden border border-white/20 shadow-2xl">
+                    <img src={featuredListings[2]?.imageUrl} alt="" className="w-full h-full object-cover" />
+                  </div>
+                  <div className="col-span-3 row-span-2 overflow-hidden border border-white/20 shadow-2xl bg-primary-foreground/10 backdrop-blur-md flex items-center justify-center">
+                    <div className="text-center px-3">
+                      <BadgeCheck className="mx-auto text-secondary mb-2" size={28} />
+                      <p className="text-primary-foreground text-xs uppercase tracking-widest font-bold">100% Verificados</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 hidden md:flex flex-col items-center gap-2 text-primary-foreground/60 text-[10px] uppercase tracking-widest">
-          <span>Explorar</span>
-          <div className="w-px h-8 bg-primary-foreground/40 animate-pulse" />
         </div>
       </section>
 
@@ -136,27 +180,54 @@ const Index = () => {
         <CategoryGrid />
       </section>
 
-      {/* Benefits */}
-      <section className="bg-muted/40 border-y">
-        <div className="container mx-auto px-4 py-14 md:py-20">
-          <div className="text-center max-w-2xl mx-auto mb-10 md:mb-14">
-            <p className="text-xs uppercase tracking-widest font-bold text-secondary mb-2">Por qué elegirnos</p>
-            <h2 className="text-2xl md:text-4xl font-bold text-foreground">
-              La plataforma profesional para tus operaciones
+      {/* Benefits — rediseño premium */}
+      <section className="bg-muted/30 border-y">
+        <div className="container mx-auto px-4 py-16 md:py-24">
+          <div className="text-center max-w-2xl mx-auto mb-12 md:mb-16">
+            <p className="text-xs uppercase tracking-[0.28em] font-bold text-secondary mb-3">Por qué elegirnos</p>
+            <h2 className="text-3xl md:text-5xl font-extrabold text-foreground tracking-tight uppercase">
+              Construido para <span className="text-secondary">operadores</span> serios
             </h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-8">
-            {benefits.map((b) => (
-              <div
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
+            {benefits.map((b, i) => (
+              <article
                 key={b.title}
-                className="group bg-card rounded-2xl p-6 md:p-8 border shadow-sm card-lift border-l-4 border-l-transparent hover:border-l-secondary"
+                className="group relative bg-card border border-border overflow-hidden transition-all duration-300 hover:border-secondary/50 hover:shadow-2xl hover:-translate-y-1"
               >
-                <div className="w-12 h-12 md:w-[48px] md:h-[48px] rounded-xl gradient-secondary flex items-center justify-center text-secondary-foreground mb-5 shadow-md">
-                  <b.icon size={24} />
+                {/* Barra superior decorativa */}
+                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-secondary via-secondary/80 to-primary opacity-0 group-hover:opacity-100 transition-opacity" />
+
+                <div className="p-7 md:p-9">
+                  {/* Número grande + ícono */}
+                  <div className="flex items-start justify-between mb-7">
+                    <div className="relative w-16 h-16 bg-primary text-primary-foreground flex items-center justify-center shadow-lg">
+                      <b.icon size={28} strokeWidth={1.8} />
+                      <span className="absolute -bottom-1.5 -right-1.5 w-6 h-6 bg-secondary text-secondary-foreground text-[10px] font-extrabold flex items-center justify-center">
+                        {String(i + 1).padStart(2, "0")}
+                      </span>
+                    </div>
+                    <span className="text-[10px] uppercase tracking-[0.22em] font-bold text-muted-foreground self-end">
+                      {b.eyebrow}
+                    </span>
+                  </div>
+
+                  <h3 className="text-xl md:text-2xl font-extrabold text-foreground mb-3 tracking-tight leading-tight">
+                    {b.title}
+                  </h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed mb-7">
+                    {b.desc}
+                  </p>
+
+                  {/* Métrica */}
+                  <div className="pt-5 border-t border-border flex items-baseline gap-3">
+                    <span className="text-3xl font-extrabold text-secondary tracking-tight">{b.metric}</span>
+                    <span className="text-[11px] uppercase tracking-widest text-muted-foreground font-semibold">
+                      {b.metricLabel}
+                    </span>
+                  </div>
                 </div>
-                <h3 className="text-lg font-bold text-foreground mb-3">{b.title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{b.desc}</p>
-              </div>
+              </article>
             ))}
           </div>
         </div>
@@ -195,7 +266,7 @@ const Index = () => {
           <div>
             <div className="flex items-center gap-3 mb-5">
               <div className="h-px w-10 bg-secondary" />
-              <span className="text-secondary uppercase tracking-[0.25em] font-bold text-[10px]">Nuevo · Próximamente</span>
+              <span className="text-secondary uppercase tracking-[0.25em] font-bold text-[10px]">Búsqueda geográfica</span>
             </div>
             <h2 className="text-3xl md:text-5xl font-extrabold tracking-tight uppercase mb-5">
               Explora avisos <span className="text-secondary">en el mapa</span>
@@ -381,13 +452,8 @@ const Index = () => {
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 md:gap-10 mb-12">
             <div className="md:col-span-1">
-              <div className="flex items-center gap-2 mb-5">
-                <div className="w-9 h-9 rounded-lg gradient-secondary flex items-center justify-center text-secondary-foreground font-extrabold">
-                  eF
-                </div>
-                <span className="text-lg font-extrabold">
-                  eFFe<span className="text-secondary"> Multi</span>
-                </span>
+              <div className="mb-5">
+                <BrandMark size="lg" variant="light" asLink={false} />
               </div>
               <p className="text-primary-foreground/70 text-sm leading-relaxed">
                 La plataforma líder de avisos clasificados en Perú. Conectamos personas y negocios de manera simple, segura y profesional.

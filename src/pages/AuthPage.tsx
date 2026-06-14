@@ -8,17 +8,19 @@ import authBg from "@/assets/auth-bg.jpg";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Eye, EyeOff, Megaphone, Search, ShieldCheck, Sparkles, Shield, Crown } from "lucide-react";
 
-const Logo = ({ className = "" }: { className?: string }) => (
-  <span className={`text-xl font-extrabold tracking-tight ${className}`}>
-    eFFe<span className="text-secondary"> Multi</span>clasificados
-  </span>
-);
+import { BrandMark } from "@/components/BrandMark";
 
 const AuthPage = () => {
   const navigate = useNavigate();
   const enterDemo = (role: "anunciante" | "buscador" | "admin" | "superadmin") => {
     import("@/hooks/useSession").then(({ setSession }) => setSession(role));
-    navigate(`/dashboard/${role}`);
+    // Perfil único: Anunciante/Buscador aterrizan en la home post-login
+    // Admin / Superadmin mantienen su panel propio
+    if (role === "admin" || role === "superadmin") {
+      navigate(`/dashboard/${role}`);
+    } else {
+      navigate("/");
+    }
   };
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<"login" | "register">(
@@ -34,9 +36,9 @@ const AuthPage = () => {
         <img src={authBg} alt="Marketplace profesional" className="absolute inset-0 w-full h-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-br from-primary/85 via-primary/70 to-primary/90" />
         <div className="relative z-10 text-center max-w-lg">
-          <h2 className="text-4xl font-extrabold text-primary-foreground mb-4 uppercase tracking-tight">
-            eFFe Multiclasificados
-          </h2>
+          <div className="mb-4">
+            <BrandMark size="xl" variant="light" asLink={false} />
+          </div>
           <p className="text-primary-foreground/90 text-lg mb-2">
             La plataforma donde comprar, vender y conectar es más fácil que nunca.
           </p>
@@ -63,12 +65,9 @@ const AuthPage = () => {
         <img src={authBg} alt="" className="absolute inset-0 w-full h-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-b from-primary/70 via-primary/80 to-background" />
         <div className="relative z-10 text-center px-6">
-          <Link to="/" className="inline-flex flex-col items-center">
-            <div className="w-12 h-12 rounded-xl gradient-secondary flex items-center justify-center text-secondary-foreground font-extrabold mb-2 shadow-lg">
-              eF
-            </div>
-            <Logo className="text-primary-foreground" />
-          </Link>
+          <div className="inline-flex flex-col items-center">
+            <BrandMark size="lg" variant="light" asLink={false} />
+          </div>
           <p className="text-primary-foreground/80 text-xs mt-2">
             Tu marketplace de confianza
           </p>
@@ -80,7 +79,7 @@ const AuthPage = () => {
         <div className="w-full max-w-md bg-card lg:bg-transparent rounded-2xl lg:rounded-none shadow-xl lg:shadow-none border lg:border-0 p-5 sm:p-6 lg:p-0">
           {/* Desktop logo - centered */}
           <Link to="/" className="hidden lg:flex justify-center mb-8">
-            <Logo className="text-primary" />
+            <BrandMark size="lg" asLink={false} />
           </Link>
 
           {/* Tab toggle */}

@@ -6,10 +6,10 @@ import { categories } from "@/data/mockData";
 
 export function HeroSearch() {
   return (
-    <div className="bg-card/95 backdrop-blur-sm rounded-2xl p-3 md:p-3 shadow-xl max-w-3xl w-full mx-auto hero-search-focus border border-white/20 transition-all">
+    <div className="bg-card/95 backdrop-blur-sm rounded-none p-2 shadow-2xl max-w-3xl w-full hero-search-focus border border-white/20 transition-all">
       <div className="flex flex-col md:flex-row gap-2 md:gap-0 md:items-stretch">
         <Select>
-          <SelectTrigger className="md:w-48 h-[52px] border-0 md:border-0 bg-transparent focus:ring-0 focus:ring-offset-0">
+          <SelectTrigger className="md:w-48 h-[52px] border-0 bg-transparent focus:ring-0 focus:ring-offset-0 rounded-none">
             <SelectValue placeholder="Categoría" />
           </SelectTrigger>
           <SelectContent>
@@ -23,10 +23,10 @@ export function HeroSearch() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
           <Input
             placeholder="¿Qué estás buscando?"
-            className="pl-10 h-[52px] border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-base"
+            className="pl-10 h-[52px] border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-base rounded-none"
           />
         </div>
-        <Button variant="hero" size="lg" className="h-[52px] px-8">
+        <Button variant="hero" size="lg" className="h-[52px] px-8 rounded-none">
           Buscar
         </Button>
       </div>
