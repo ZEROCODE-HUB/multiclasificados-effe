@@ -16,6 +16,10 @@ const Logo = ({ className = "" }: { className?: string }) => (
 
 const AuthPage = () => {
   const navigate = useNavigate();
+  const enterDemo = (role: "anunciante" | "buscador" | "admin" | "superadmin") => {
+    import("@/hooks/useSession").then(({ setSession }) => setSession(role));
+    navigate(`/dashboard/${role}`);
+  };
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<"login" | "register">(
     searchParams.get("tab") === "register" ? "register" : "login"
@@ -205,22 +209,22 @@ const AuthPage = () => {
             <p className="text-xs text-muted-foreground text-center mb-3">Acceso rápido de demostración</p>
             <div className="grid grid-cols-2 gap-2">
               <Button variant="outline" size="sm" className="min-w-0 gap-1.5 border-secondary/40 text-secondary hover:bg-secondary/10 hover:text-secondary"
-                onClick={() => navigate("/dashboard/anunciante")}>
+                onClick={() => enterDemo("anunciante")}>
                 <Megaphone size={14} className="flex-shrink-0" />
                 <span className="truncate">Anunciante</span>
               </Button>
               <Button variant="outline" size="sm" className="min-w-0 gap-1.5 border-primary/40 text-primary hover:bg-primary/10 hover:text-primary"
-                onClick={() => navigate("/dashboard/buscador")}>
+                onClick={() => enterDemo("buscador")}>
                 <Search size={14} className="flex-shrink-0" />
                 <span className="truncate">Buscador</span>
               </Button>
               <Button variant="outline" size="sm" className="min-w-0 gap-1.5 border-primary/60 bg-primary/5 text-primary hover:bg-primary/15"
-                onClick={() => navigate("/dashboard/admin")}>
+                onClick={() => enterDemo("admin")}>
                 <Shield size={14} className="flex-shrink-0" />
                 <span className="truncate">Administrador</span>
               </Button>
               <Button variant="outline" size="sm" className="min-w-0 gap-1.5 border-secondary/60 bg-gradient-to-r from-secondary/10 to-primary/10 text-secondary hover:from-secondary/20 hover:to-primary/20"
-                onClick={() => navigate("/dashboard/superadmin")}>
+                onClick={() => enterDemo("superadmin")}>
                 <Crown size={14} className="flex-shrink-0" />
                 <span className="truncate">Super Admin</span>
               </Button>
