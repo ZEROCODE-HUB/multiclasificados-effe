@@ -4,6 +4,7 @@ import {
   Search, Menu, X, MapPin, Bell, Heart, MessageSquare, PlusCircle, ChevronDown,
   User, LogIn, UserPlus, LayoutDashboard, Settings, LogOut, ClipboardList,
   BarChart3, Users, Star, CreditCard, Shield,
+  type LucideIcon,
 } from "lucide-react";
 import { useState } from "react";
 import { categories } from "@/data/mockData";
@@ -17,7 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { clearSession, useSession, type SessionRole } from "@/hooks/useSession";
 
-type AccountItem = { label: string; icon: React.ComponentType<{ size?: number; className?: string }>; to: string };
+type AccountItem = { label: string; icon: LucideIcon; to: string };
 
 const accountMenus: Record<"anunciante" | "buscador", { label: string; items: AccountItem[] }> = {
   anunciante: {
