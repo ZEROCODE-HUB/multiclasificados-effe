@@ -1,0 +1,57 @@
+import { useEffect, useState } from "react";
+
+export type SessionRole = "anunciante" | "buscador" | "admin" | "superadmin";
+
+export interface Session {
+  role: SessionRole;
+  name: string;
+  initials: string;
+}
+
+const KEY = "effe_session";
+
+const defaultsByRole: Record<SessionRole, { name: string; initials: string }> = {
+  anunciante: { name: "Juan Mendoza", initials: "JM" },
+  buscador: { name: "Ana García", initials: "AG" },
+  admin: { name: "Admin eFFe", initials: "AE" },
+  superadmin: { name: "Super Admin", initials: "SA" },
+};
+
+export function getSession(): Session | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as Session;
+  } catch {
+    return null;
+  }
+}
+
+export function setSession(role: SessionRole) {
+  const s: Session = { role, ...defaultsByRole[role] };
+  localStorage.setItem(KEY, JSON.stringify(s));
+  window.dispatchEvent(new Event("effe-session"));
+  return s;
+}
+
+export function clearSession() {
+  localStorage.removeItem(KEY);
+  window.dispatchEvent(new Event("effe-session"));
+}
+
+export function useSession(): Session | null {
+  const [session, setSessionState] = useState<Session | null>(() => getSession());
+
+  useEffect(() => {
+    const sync = () => setSessionState(getSession());
+    window.addEventListener("effe-session", sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener("effe-session", sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
+
+  return session;
+}
