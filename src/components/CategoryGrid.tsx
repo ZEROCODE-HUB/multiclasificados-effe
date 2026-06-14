@@ -14,7 +14,7 @@ const images: Record<string, string> = {
 
 export function CategoryGrid() {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-px bg-border border border-border rounded-2xl overflow-hidden shadow-sm">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-px bg-border border border-border overflow-hidden shadow-sm">
       {categories.map((cat, i) => (
         <a
           key={cat.id}
