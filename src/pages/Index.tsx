@@ -5,7 +5,7 @@ import { ListingCard } from "@/components/ListingCard";
 import { CountUp } from "@/components/CountUp";
 import { featuredListings } from "@/data/mockData";
 import heroBg from "@/assets/hero-bg.jpg";
-import { ArrowRight, ShieldCheck, Zap, Users, Award, CheckCircle2, Star, TrendingUp } from "lucide-react";
+import { ArrowRight, BadgeCheck, Gem, Headset, Star, TrendingUp } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
@@ -18,19 +18,28 @@ const trustStats = [
 
 const benefits = [
   {
-    icon: ShieldCheck,
+    icon: BadgeCheck,
+    eyebrow: "Confianza",
     title: "Anunciantes verificados",
-    desc: "Validamos cada cuenta de empresa con RUC para una experiencia segura y confiable.",
+    desc: "Validamos cada empresa con RUC y revisión manual para que solo conectes con cuentas reales y operativas.",
+    metric: "100%",
+    metricLabel: "Cuentas auditadas",
   },
   {
-    icon: Zap,
-    title: "Publicación inmediata",
-    desc: "Tu aviso visible en menos de 2 minutos con herramientas profesionales de difusión.",
+    icon: Gem,
+    eyebrow: "Experiencia premium",
+    title: "Visibilidad de alto impacto",
+    desc: "Tu aviso vive en una plataforma profesional con presentación editorial pensada para convertir más rápido.",
+    metric: "3.2x",
+    metricLabel: "Más visualizaciones",
   },
   {
-    icon: TrendingUp,
-    title: "Estadísticas en tiempo real",
-    desc: "Mide vistas, contactos y conversiones con un panel claro y accionable.",
+    icon: Headset,
+    eyebrow: "Soporte humano",
+    title: "Asesoría dedicada",
+    desc: "Un equipo real acompaña tus operaciones de principio a fin, con respuesta el mismo día hábil.",
+    metric: "24/7",
+    metricLabel: "Acompañamiento",
   },
 ];
 
