@@ -231,6 +231,9 @@ const Index = () => {
           </div>
         </div>
       </section>
+
+      {/* Featured Listings */}
+      <section className="container mx-auto px-4 py-14 md:py-20">
         <div className="flex items-end justify-between mb-8 md:mb-10 gap-4 flex-wrap">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] font-bold text-secondary mb-2">Destacados</p>
