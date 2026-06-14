@@ -65,12 +65,9 @@ const AuthPage = () => {
         <img src={authBg} alt="" className="absolute inset-0 w-full h-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-b from-primary/70 via-primary/80 to-background" />
         <div className="relative z-10 text-center px-6">
-          <Link to="/" className="inline-flex flex-col items-center">
-            <div className="w-12 h-12 rounded-xl gradient-secondary flex items-center justify-center text-secondary-foreground font-extrabold mb-2 shadow-lg">
-              eF
-            </div>
-            <Logo className="text-primary-foreground" />
-          </Link>
+          <div className="inline-flex flex-col items-center">
+            <BrandMark size="lg" variant="light" asLink={false} />
+          </div>
           <p className="text-primary-foreground/80 text-xs mt-2">
             Tu marketplace de confianza
           </p>
@@ -82,7 +79,7 @@ const AuthPage = () => {
         <div className="w-full max-w-md bg-card lg:bg-transparent rounded-2xl lg:rounded-none shadow-xl lg:shadow-none border lg:border-0 p-5 sm:p-6 lg:p-0">
           {/* Desktop logo - centered */}
           <Link to="/" className="hidden lg:flex justify-center mb-8">
-            <Logo className="text-primary" />
+            <BrandMark size="lg" asLink={false} />
           </Link>
 
           {/* Tab toggle */}
