@@ -22,7 +22,7 @@ const statusStyles: Record<string, string> = {
 
 export function ListingRow({ listing, status = "Activo" }: ListingRowProps) {
   return (
-    <div className="group flex flex-col sm:flex-row gap-0 sm:gap-4 bg-card rounded-xl border overflow-hidden hover:shadow-md hover:border-secondary/40 transition-all">
+    <div className="group flex flex-col sm:flex-row gap-0 sm:gap-4 bg-card border border-border overflow-hidden hover:shadow-md hover:border-secondary/40 transition-all">
       {/* Image - prominent on mobile (full width), compact on desktop */}
       <div className="relative w-full sm:w-44 md:w-48 h-44 sm:h-32 flex-shrink-0 overflow-hidden bg-muted">
         <img

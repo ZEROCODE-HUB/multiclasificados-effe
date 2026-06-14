@@ -17,16 +17,16 @@ import { cn } from "@/lib/utils";
 type Item = { title: string; url: string; icon: LucideIcon };
 
 const advertiserPrimary: Item[] = [
-  { title: "Inicio", url: "/dashboard/anunciante", icon: Home },
+  { title: "Inicio", url: "/", icon: Home },
+  { title: "Explorar", url: "/buscar", icon: Search },
   { title: "Publicar", url: "/dashboard/anunciante/publicar", icon: PlusCircle },
-  { title: "Avisos", url: "/dashboard/anunciante/avisos", icon: ClipboardList },
   { title: "Mensajes", url: "/dashboard/anunciante/mensajes", icon: MessageSquare },
-  { title: "Stats", url: "/dashboard/anunciante/estadisticas", icon: BarChart3 },
+  { title: "Mi cuenta", url: "/dashboard/anunciante/avisos", icon: ClipboardList },
 ];
 
 const seekerPrimary: Item[] = [
-  { title: "Inicio", url: "/dashboard/buscador", icon: Home },
-  { title: "Buscar", url: "/dashboard/buscador/buscar", icon: Search },
+  { title: "Inicio", url: "/", icon: Home },
+  { title: "Explorar", url: "/buscar", icon: Search },
   { title: "Favoritos", url: "/dashboard/buscador/favoritos", icon: Heart },
   { title: "Mensajes", url: "/dashboard/buscador/mensajes", icon: MessageSquare },
   { title: "Alertas", url: "/dashboard/buscador/alertas", icon: Bell },
@@ -39,9 +39,7 @@ interface Props {
 export function MobileBottomNav({ role }: Props) {
   const { pathname } = useLocation();
   const primary = role === "anunciante" ? advertiserPrimary : seekerPrimary;
-  const homeUrl = `/dashboard/${role}`;
-
-  const isActive = (url: string) => (url === homeUrl ? pathname === url : pathname.startsWith(url));
+  const isActive = (url: string) => (url === "/" ? pathname === "/" : pathname.startsWith(url));
 
   return (
     <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-primary text-primary-foreground border-t border-primary/40 shadow-[0_-8px_24px_-6px_rgba(0,0,0,0.25)]">
