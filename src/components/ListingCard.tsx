@@ -100,6 +100,6 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
           Ver detalle
         </Button>
       </div>
-    </article>
+    </Link>
   );
 }

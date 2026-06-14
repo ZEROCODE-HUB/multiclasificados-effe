@@ -6,6 +6,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Index from "./pages/Index.tsx";
 import AuthPage from "./pages/AuthPage.tsx";
 import SearchPage from "./pages/SearchPage.tsx";
+import ListingDetail from "./pages/ListingDetail.tsx";
+import MapPage from "./pages/MapPage.tsx";
 import AdvertiserDashboard from "./pages/AdvertiserDashboard.tsx";
 import SeekerDashboard from "./pages/SeekerDashboard.tsx";
 import AdvertiserPublish from "./pages/advertiser/AdvertiserPublish.tsx";
@@ -45,6 +47,8 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<AuthPage />} />
           <Route path="/buscar" element={<SearchPage />} />
+          <Route path="/aviso/:id" element={<ListingDetail />} />
+          <Route path="/mapa" element={<MapPage />} />
 
           {/* Advertiser */}
           <Route path="/dashboard/anunciante" element={<AdvertiserDashboard />} />
