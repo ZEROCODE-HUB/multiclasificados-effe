@@ -8,17 +8,19 @@ import authBg from "@/assets/auth-bg.jpg";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Eye, EyeOff, Megaphone, Search, ShieldCheck, Sparkles, Shield, Crown } from "lucide-react";
 
-const Logo = ({ className = "" }: { className?: string }) => (
-  <span className={`text-xl font-extrabold tracking-tight ${className}`}>
-    eFFe<span className="text-secondary"> Multi</span>clasificados
-  </span>
-);
+import { BrandMark } from "@/components/BrandMark";
 
 const AuthPage = () => {
   const navigate = useNavigate();
   const enterDemo = (role: "anunciante" | "buscador" | "admin" | "superadmin") => {
     import("@/hooks/useSession").then(({ setSession }) => setSession(role));
-    navigate(`/dashboard/${role}`);
+    // Perfil único: Anunciante/Buscador aterrizan en la home post-login
+    // Admin / Superadmin mantienen su panel propio
+    if (role === "admin" || role === "superadmin") {
+      navigate(`/dashboard/${role}`);
+    } else {
+      navigate("/");
+    }
   };
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<"login" | "register">(
