@@ -12,6 +12,7 @@ import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
+import { ListingCard } from "@/components/ListingCard";
 
 const FiltersContent = ({ onApply }: { onApply: () => void }) => {
   const [price, setPrice] = useState([0, 5000]);
