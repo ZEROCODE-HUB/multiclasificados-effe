@@ -63,12 +63,13 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
         </span>
         {/* Favorite */}
         <button
-          onClick={(e) => { e.stopPropagation(); }}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
           className="absolute top-3 right-3 w-8 h-8 bg-white/95 backdrop-blur-sm flex items-center justify-center hover:bg-white hover:scale-110 transition-all shadow-sm"
           aria-label="Guardar en favoritos"
         >
           <Heart size={15} className="text-primary" />
         </button>
+
       </div>
 
       {/* Content — generous spacing */}
