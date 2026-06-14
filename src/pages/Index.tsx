@@ -78,47 +78,37 @@ const Index = () => {
       <Navbar />
 
       {/* Hero — Premium editorial, dos columnas balanceadas */}
-      <section className="relative min-h-[640px] md:min-h-[820px] flex flex-col gradient-hero overflow-hidden">
+      <section className="relative min-h-[460px] md:min-h-[720px] lg:min-h-[780px] flex flex-col gradient-hero overflow-hidden">
         <img
           src={heroBg}
           alt="Marketplace profesional EFFE Multiclasificados"
           className="absolute inset-0 w-full h-full object-cover opacity-70"
           fetchPriority="high"
         />
-        {/* Overlays más ligeros para dejar respirar la imagen */}
         <div className="absolute inset-0 bg-gradient-to-b from-primary/45 via-primary/40 to-primary/75" />
         <div className="absolute inset-0 bg-gradient-to-r from-primary/55 via-primary/20 to-transparent" />
         <div className="absolute inset-0 bg-dot-pattern opacity-15" />
 
         <div className="relative z-10 flex-1 flex items-center">
-          <div className="container mx-auto px-4 md:px-6 py-24 md:py-36 lg:py-40">
-            <div className="grid lg:grid-cols-12 gap-12 items-center">
+          <div className="container mx-auto px-4 md:px-6 py-10 md:py-32 lg:py-40">
+            <div className="grid lg:grid-cols-12 gap-10 lg:gap-12 items-center">
               {/* Columna izquierda: branding + buscador */}
               <div className="lg:col-span-7 xl:col-span-7">
-                <div className="flex items-center gap-3 mb-8">
-                  <div className="h-px w-12 bg-secondary" />
-                  <span className="text-secondary uppercase tracking-[0.32em] font-bold text-[11px]">
-                    Plataforma profesional · Perú
-                  </span>
-                </div>
-
-                {/* Branding hero: MULTICLASIFICADOS arriba, EFFE — PERÚ debajo */}
-                <h1 className="mb-8 leading-[0.9]">
-                  <span className="block text-primary-foreground/90 font-bold uppercase tracking-[0.32em] text-sm md:text-lg lg:text-xl mb-2 md:mb-3">
+                {/* Branding hero: MULTICLASIFICADOS arriba, EFFE debajo */}
+                <h1 className="mb-6 md:mb-8 leading-[0.9]">
+                  <span className="block text-primary-foreground/90 font-bold uppercase tracking-[0.32em] text-xs sm:text-sm md:text-lg lg:text-xl mb-2 md:mb-3">
                     Multiclasificados
                   </span>
-                  <span className="block text-primary-foreground font-extrabold uppercase tracking-tight text-[68px] sm:text-[88px] md:text-[112px] lg:text-[136px]">
+                  <span className="block text-primary-foreground font-extrabold uppercase tracking-tight text-[56px] sm:text-[88px] md:text-[112px] lg:text-[136px]">
                     EFFE
-                    <span className="text-secondary"> · </span>
-                    <span className="text-secondary">PERÚ</span>
                   </span>
                 </h1>
 
-                {/* Tagline premium */}
-                <p className="text-primary-foreground text-xl md:text-2xl lg:text-3xl mb-3 font-light leading-snug tracking-tight">
+                {/* Tagline premium — más grande */}
+                <p className="text-primary-foreground text-2xl sm:text-3xl md:text-4xl lg:text-5xl mb-3 md:mb-4 font-light leading-snug tracking-tight">
                   Donde los <span className="italic text-secondary font-normal">negocios</span> suceden.
                 </p>
-                <p className="text-primary-foreground/80 text-sm md:text-base mb-10 max-w-xl leading-relaxed font-light">
+                <p className="text-primary-foreground/80 text-sm md:text-base mb-7 md:mb-10 max-w-xl leading-relaxed font-light">
                   Miles de oportunidades verificadas en inmuebles, vehículos, maquinaria, empleos y servicios.
                 </p>
 
@@ -126,42 +116,40 @@ const Index = () => {
                   <HeroSearch />
                 </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-0 mt-12 pt-8 border-t border-primary-foreground/20 max-w-3xl">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-0 mt-8 md:mt-12 pt-6 md:pt-8 border-t border-primary-foreground/20 max-w-3xl">
                   {trustStats.map((s, i) => (
                     <div
                       key={s.label}
                       className={`px-2 ${i > 0 ? "md:border-l border-primary-foreground/15 md:pl-6" : ""}`}
                     >
-                      <p className="text-2xl md:text-3xl font-extrabold text-secondary tracking-tight">
+                      <p className="text-xl md:text-3xl font-extrabold text-secondary tracking-tight">
                         <CountUp value={s.value} />
                       </p>
-                      <p className="text-[11px] md:text-xs text-primary-foreground/70 mt-2 uppercase tracking-wider">{s.label}</p>
+                      <p className="text-[10px] md:text-xs text-primary-foreground/70 mt-1 md:mt-2 uppercase tracking-wider">{s.label}</p>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* Columna derecha: collage editorial (solo desktop) */}
+              {/* Columna derecha: una sola tarjeta visual con "avisos activos" (solo desktop) */}
               <div className="hidden lg:flex lg:col-span-5 xl:col-span-5 relative h-[560px]">
-                <div className="absolute inset-0 grid grid-cols-6 grid-rows-6 gap-3">
-                  <div className="col-span-4 row-span-4 overflow-hidden border border-white/20 shadow-2xl">
-                    <img src={featuredListings[0]?.imageUrl} alt="" className="w-full h-full object-cover" />
-                  </div>
-                  <div className="col-span-2 row-span-3 overflow-hidden border border-white/20 shadow-2xl bg-secondary/90 flex flex-col justify-end p-4">
-                    <p className="text-[10px] uppercase tracking-widest text-secondary-foreground/80 font-bold mb-1">Hoy</p>
-                    <p className="text-secondary-foreground font-extrabold text-2xl leading-tight">8,200+ avisos activos</p>
-                  </div>
-                  <div className="col-span-2 row-span-3 overflow-hidden border border-white/20 shadow-2xl">
-                    <img src={featuredListings[1]?.imageUrl} alt="" className="w-full h-full object-cover" />
-                  </div>
-                  <div className="col-span-3 row-span-2 overflow-hidden border border-white/20 shadow-2xl">
-                    <img src={featuredListings[2]?.imageUrl} alt="" className="w-full h-full object-cover" />
-                  </div>
-                  <div className="col-span-3 row-span-2 overflow-hidden border border-white/20 shadow-2xl bg-primary-foreground/10 backdrop-blur-md flex items-center justify-center">
-                    <div className="text-center px-3">
-                      <BadgeCheck className="mx-auto text-secondary mb-2" size={28} />
-                      <p className="text-primary-foreground text-xs uppercase tracking-widest font-bold">100% Verificados</p>
+                <div className="absolute inset-0 border border-white/20 shadow-2xl overflow-hidden">
+                  <img src={featuredListings[0]?.imageUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-gradient-to-b from-primary/20 via-primary/40 to-primary/90" />
+                  <div className="absolute inset-x-0 bottom-0 p-8 text-primary-foreground">
+                    <div className="flex items-center gap-2 mb-3">
+                      <TrendingUp size={16} className="text-secondary" />
+                      <p className="text-[10px] uppercase tracking-[0.32em] text-secondary font-bold">En vivo</p>
                     </div>
+                    <p className="text-6xl xl:text-7xl font-extrabold text-secondary tracking-tight leading-none">
+                      <CountUp value="8,200+" />
+                    </p>
+                    <p className="text-primary-foreground text-lg font-semibold mt-3 uppercase tracking-wider">
+                      Avisos activos
+                    </p>
+                    <p className="text-primary-foreground/70 text-sm mt-2 max-w-xs">
+                      Oportunidades reales publicadas hoy en toda la plataforma.
+                    </p>
                   </div>
                 </div>
               </div>
