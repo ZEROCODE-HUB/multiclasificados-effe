@@ -138,55 +138,10 @@ const SeekerSearch = () => {
           </Select>
         </div>
 
-        <div className="space-y-3">
-          {featuredListings.map((listing) => {
-            const saved = savedIds.has(listing.id);
-            return (
-              <Card key={listing.id} className="rounded-lg hover:shadow-md transition-shadow overflow-hidden">
-                <CardContent className="p-0">
-                  <div className="flex flex-col sm:flex-row">
-                    <img
-                      src={listing.imageUrl}
-                      alt={listing.title}
-                      className="w-full sm:w-52 h-44 sm:h-auto object-cover"
-                    />
-                    <div className="flex-1 p-4 flex flex-col">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <h3 className="font-bold text-foreground leading-tight">{listing.title}</h3>
-                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                            <MapPin size={12} /> {listing.location}
-                          </p>
-                        </div>
-                        <Badge variant="outline" className="capitalize flex-shrink-0 text-[10px]">
-                          {listing.category}
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{listing.description}</p>
-                      <div className="flex items-center justify-between gap-2 mt-auto pt-3">
-                        <p className="text-lg font-extrabold text-primary">
-                          <span className="text-xs text-secondary font-bold mr-1">{listing.currency}</span>
-                          {listing.price.toLocaleString()}
-                        </p>
-                        <div className="flex gap-2">
-                          <Button
-                            variant={saved ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => toggleSave(listing.id, listing.title)}
-                          >
-                            {saved ? "Guardado" : "Guardar"}
-                          </Button>
-                          <Button variant="hero" size="sm" onClick={() => handleContact(listing.title)}>
-                            Contactar
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8">
+          {featuredListings.map((listing) => (
+            <ListingCard key={listing.id} listing={listing} />
+          ))}
         </div>
       </div>
     </DashboardLayout>
