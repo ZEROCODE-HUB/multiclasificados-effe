@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
-  Search, Menu, X, Bell, Heart, MessageSquare, PlusCircle, ChevronDown,
+  Search, Menu, X, Heart, MessageSquare, PlusCircle, ChevronDown,
   User, LogIn, UserPlus, Settings, LogOut, ClipboardList,
   BarChart3, Users, Star, CreditCard, Shield,
 } from "lucide-react";
