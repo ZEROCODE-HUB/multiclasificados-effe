@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import {
   Search, Menu, X, Bell, Heart, MessageSquare, PlusCircle, ChevronDown,
   User, LogIn, UserPlus, Settings, LogOut, ClipboardList,
-  BarChart3, Users, Star, CreditCard, Shield, Home,
+  BarChart3, Users, Star, CreditCard, Shield,
 } from "lucide-react";
 import { useState } from "react";
 import { categories } from "@/data/mockData";
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { clearSession, useSession } from "@/hooks/useSession";
 import { BrandMark } from "@/components/BrandMark";
+import { MobileBottomNav } from "@/components/MobileBottomNav";
 
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -27,6 +28,7 @@ export function Navbar() {
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     navigate(`/buscar${query ? `?q=${encodeURIComponent(query)}` : ""}`);
+    setMobileOpen(false);
   };
 
   const logout = () => {
@@ -37,23 +39,27 @@ export function Navbar() {
   const isUser = session && (session.role === "anunciante" || session.role === "buscador");
   const isAdmin = session && (session.role === "admin" || session.role === "superadmin");
 
-  // Items unificados del menú Mi Cuenta (perfil único, sin "modos")
+  // Items unificados del menú Mi Cuenta
   const accountItems = isUser
     ? [
         { label: "Mis avisos", icon: ClipboardList, to: "/dashboard/anunciante/avisos" },
         { label: "Publicar aviso", icon: PlusCircle, to: "/dashboard/anunciante/publicar" },
         { label: "Postulaciones", icon: Users, to: "/dashboard/anunciante/postulaciones" },
-        { label: "Mensajes", icon: MessageSquare, to: "/dashboard/anunciante/mensajes" },
         { label: "Favoritos", icon: Heart, to: "/dashboard/buscador/favoritos" },
         { label: "Búsquedas guardadas", icon: Star, to: "/dashboard/buscador/busquedas" },
-        { label: "Alertas", icon: Bell, to: "/dashboard/buscador/alertas" },
         { label: "Panel y estadísticas", icon: BarChart3, to: "/dashboard/anunciante/estadisticas" },
         { label: "Pagos y facturación", icon: CreditCard, to: "/dashboard/anunciante/configuracion?tab=pagos" },
         { label: "Configuración", icon: Settings, to: "/dashboard/anunciante/configuracion" },
       ]
     : [];
 
+  // Hamburguesa móvil: ítems que NO están en el bottom nav
+  const mobileOverflow = isUser
+    ? accountItems.filter((i) => !["/dashboard/anunciante/publicar"].includes(i.to))
+    : [];
+
   return (
+    <>
     <header className="w-full z-50 bg-card border-b border-border sticky top-0 shadow-[0_1px_0_0_hsl(var(--border))]">
       <div className="container mx-auto flex items-center gap-4 md:gap-8 h-16 md:h-[76px] px-3 md:px-6">
         <BrandMark size="md" />
@@ -112,10 +118,6 @@ export function Navbar() {
               <Link to="/dashboard/anunciante/mensajes" className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Mensajes">
                 <MessageSquare size={18} />
               </Link>
-              <Link to="/dashboard/buscador/alertas" className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted relative transition-colors" title="Notificaciones">
-                <Bell size={18} />
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-secondary" />
-              </Link>
             </>
           )}
 
@@ -127,9 +129,7 @@ export function Navbar() {
                 {session ? session.initials : <User size={14} />}
               </div>
               <div className="flex flex-col items-start leading-tight">
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">
-                  Mi cuenta
-                </span>
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Mi cuenta</span>
                 <span className="text-xs font-semibold text-foreground -mt-0.5">
                   {session ? session.name.split(" ")[0] : "Ingresar"}
                 </span>
@@ -153,10 +153,10 @@ export function Navbar() {
                 <>
                   <DropdownMenuLabel className="flex items-center gap-2 py-2">
                     <div className="w-9 h-9 bg-secondary text-secondary-foreground flex items-center justify-center text-xs font-bold">
-                      {session.initials}
+                      {session!.initials}
                     </div>
                     <div className="flex flex-col leading-tight">
-                      <span className="text-sm font-semibold text-foreground">{session.name}</span>
+                      <span className="text-sm font-semibold text-foreground">{session!.name}</span>
                       <span className="text-[10px] uppercase tracking-wider text-secondary font-bold">Mi cuenta</span>
                     </div>
                   </DropdownMenuLabel>
@@ -178,17 +178,17 @@ export function Navbar() {
                 <>
                   <DropdownMenuLabel className="flex items-center gap-2 py-2">
                     <div className="w-9 h-9 bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">
-                      {session.initials}
+                      {session!.initials}
                     </div>
                     <div className="flex flex-col leading-tight">
-                      <span className="text-sm font-semibold text-foreground">{session.name}</span>
+                      <span className="text-sm font-semibold text-foreground">{session!.name}</span>
                       <span className="text-[10px] uppercase tracking-wider text-secondary font-bold">
-                        {session.role === "superadmin" ? "Super Admin" : "Administrador"}
+                        {session!.role === "superadmin" ? "Super Admin" : "Administrador"}
                       </span>
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => navigate(`/dashboard/${session.role}`)} className="gap-2 cursor-pointer rounded-none">
+                  <DropdownMenuItem onClick={() => navigate(`/dashboard/${session!.role}`)} className="gap-2 cursor-pointer rounded-none">
                     <Shield size={14} /> Ir al panel admin
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={logout} className="gap-2 cursor-pointer text-destructive rounded-none">
@@ -232,29 +232,38 @@ export function Navbar() {
             </div>
           </form>
           <div className="flex flex-col p-2">
-            <Link to="/" onClick={() => setMobileOpen(false)} className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium hover:bg-muted/50">
-              <Home size={16} className="text-secondary" /> Inicio
-            </Link>
-            {categories.slice(0, 6).map((c) => (
-              <Link key={c.id} to={`/buscar?cat=${c.id}`} onClick={() => setMobileOpen(false)} className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium hover:bg-muted/50">
-                <c.icon size={16} className="text-secondary" />
-                {c.name}
-              </Link>
-            ))}
-            <div className="border-t my-2" />
             {isUser ? (
               <>
-                {accountItems.map((it) => (
-                  <Link key={it.label} to={it.to} onClick={() => setMobileOpen(false)} className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium hover:bg-muted/50">
+                <p className="px-3 py-2 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground">
+                  Mi cuenta
+                </p>
+                {mobileOverflow.map((it) => (
+                  <Link
+                    key={it.label}
+                    to={it.to}
+                    onClick={() => setMobileOpen(false)}
+                    className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium hover:bg-muted/50"
+                  >
                     <it.icon size={16} className="text-muted-foreground" /> {it.label}
                   </Link>
                 ))}
-                <button onClick={() => { logout(); setMobileOpen(false); }} className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/10">
+                <div className="border-t my-2" />
+                <button
+                  onClick={() => { logout(); setMobileOpen(false); }}
+                  className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/10"
+                >
                   <LogOut size={16} /> Cerrar sesión
                 </button>
               </>
             ) : (
               <>
+                <Link to="/" onClick={() => setMobileOpen(false)} className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium hover:bg-muted/50">
+                  Inicio
+                </Link>
+                <Link to="/buscar" onClick={() => setMobileOpen(false)} className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium hover:bg-muted/50">
+                  Explorar
+                </Link>
+                <div className="border-t my-2" />
                 <Link to="/auth?tab=register" onClick={() => setMobileOpen(false)} className="px-3">
                   <Button className="w-full gap-1.5 rounded-none"><PlusCircle size={14} /> Publicar aviso</Button>
                 </Link>
@@ -267,5 +276,7 @@ export function Navbar() {
         </div>
       )}
     </header>
+    <MobileBottomNav />
+    </>
   );
 }

@@ -2,17 +2,14 @@ import { Link, useLocation } from "react-router-dom";
 import {
   Home,
   PlusCircle,
-  ClipboardList,
   MessageSquare,
-  Users,
   Search,
   Heart,
-  Bell,
-  BarChart3,
-  Star,
+  User,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useSession } from "@/hooks/useSession";
 
 type Item = { title: string; url: string; icon: LucideIcon };
 
@@ -21,7 +18,7 @@ const advertiserPrimary: Item[] = [
   { title: "Explorar", url: "/buscar", icon: Search },
   { title: "Publicar", url: "/dashboard/anunciante/publicar", icon: PlusCircle },
   { title: "Mensajes", url: "/dashboard/anunciante/mensajes", icon: MessageSquare },
-  { title: "Mi cuenta", url: "/dashboard/anunciante/avisos", icon: ClipboardList },
+  { title: "Mi cuenta", url: "/dashboard/anunciante", icon: User },
 ];
 
 const seekerPrimary: Item[] = [
@@ -29,17 +26,20 @@ const seekerPrimary: Item[] = [
   { title: "Explorar", url: "/buscar", icon: Search },
   { title: "Favoritos", url: "/dashboard/buscador/favoritos", icon: Heart },
   { title: "Mensajes", url: "/dashboard/buscador/mensajes", icon: MessageSquare },
-  { title: "Alertas", url: "/dashboard/buscador/alertas", icon: Bell },
+  { title: "Mi cuenta", url: "/dashboard/buscador", icon: User },
 ];
 
-interface Props {
-  role: "anunciante" | "buscador";
-}
-
-export function MobileBottomNav({ role }: Props) {
+/** Bottom nav for logged-in seeker/advertiser. Hidden on /auth and for guests/admins. */
+export function MobileBottomNav() {
   const { pathname } = useLocation();
-  const primary = role === "anunciante" ? advertiserPrimary : seekerPrimary;
-  const isActive = (url: string) => (url === "/" ? pathname === "/" : pathname.startsWith(url));
+  const session = useSession();
+
+  if (!session) return null;
+  if (session.role !== "anunciante" && session.role !== "buscador") return null;
+  if (pathname.startsWith("/auth")) return null;
+
+  const primary = session.role === "anunciante" ? advertiserPrimary : seekerPrimary;
+  const isActive = (url: string) => (url === "/" ? pathname === "/" : pathname === url || pathname.startsWith(url + "/"));
 
   return (
     <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-primary text-primary-foreground border-t border-primary/40 shadow-[0_-8px_24px_-6px_rgba(0,0,0,0.25)]">
@@ -52,19 +52,11 @@ export function MobileBottomNav({ role }: Props) {
               to={item.url}
               className={cn(
                 "flex flex-col items-center justify-center gap-1 text-[10px] font-semibold transition-all relative",
-                active
-                  ? "text-secondary"
-                  : "text-primary-foreground/60 hover:text-primary-foreground"
+                active ? "text-secondary" : "text-primary-foreground/60 hover:text-primary-foreground"
               )}
             >
-              {active && (
-                <span className="absolute top-0 h-1 w-12 bg-secondary rounded-b-full shadow-[0_2px_8px_rgba(249,115,22,0.6)]" />
-              )}
-              <item.icon
-                size={active ? 22 : 20}
-                strokeWidth={active ? 2.5 : 2}
-                className={active ? "drop-shadow-[0_2px_6px_rgba(249,115,22,0.5)]" : ""}
-              />
+              {active && <span className="absolute top-0 h-1 w-12 bg-secondary rounded-b-full shadow-[0_2px_8px_rgba(249,115,22,0.6)]" />}
+              <item.icon size={active ? 22 : 20} strokeWidth={active ? 2.5 : 2} />
               <span className="truncate max-w-[60px]">{item.title}</span>
             </Link>
           );

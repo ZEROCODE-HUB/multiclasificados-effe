@@ -1,11 +1,9 @@
 import { AdminLayout } from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Lock, ShieldAlert, Key } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
 
 const SuperSecurity = () => (
   <AdminLayout role="superadmin" title="Seguridad" breadcrumb={["Plataforma", "Seguridad"]}>
@@ -33,9 +31,6 @@ const SuperSecurity = () => (
         {[
           { l: "Autenticación de dos factores (2FA)", d: "Requerir 2FA a todos los administradores", v: true },
           { l: "Bloqueo tras 5 intentos fallidos", d: "Bloquear cuenta por 30 minutos", v: true },
-          { l: "Caducidad de contraseñas", d: "Forzar cambio cada 90 días", v: false },
-          { l: "Lista blanca de IPs", d: "Solo permitir login desde IPs autorizadas", v: false },
-          { l: "Cifrado en reposo", d: "AES-256 sobre datos sensibles", v: true },
         ].map((p) => (
           <div key={p.l} className="flex items-center justify-between gap-4 p-3 rounded-lg hover:bg-muted/50">
             <div>
@@ -45,16 +40,9 @@ const SuperSecurity = () => (
             <Switch defaultChecked={p.v} />
           </div>
         ))}
-      </CardContent>
-    </Card>
-
-    <Card>
-      <CardHeader><CardTitle className="text-base md:text-lg">Política de contraseñas</CardTitle></CardHeader>
-      <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div><Label>Longitud mínima</Label><Input type="number" defaultValue={10} className="mt-1" /></div>
-        <div><Label>Intentos antes de bloqueo</Label><Input type="number" defaultValue={5} className="mt-1" /></div>
-        <div><Label>Tiempo de sesión (min)</Label><Input type="number" defaultValue={60} className="mt-1" /></div>
-        <div className="md:col-span-3 flex justify-end"><Button>Guardar políticas</Button></div>
+        <div className="flex justify-end pt-2">
+          <Button onClick={() => toast({ title: "Políticas guardadas" })}>Guardar políticas</Button>
+        </div>
       </CardContent>
     </Card>
   </AdminLayout>
