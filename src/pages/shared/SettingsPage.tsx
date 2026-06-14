@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -18,7 +17,6 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => (
       <Tabs defaultValue="perfil">
         <TabsList>
           <TabsTrigger value="perfil">Perfil</TabsTrigger>
-          <TabsTrigger value="notificaciones">Notificaciones</TabsTrigger>
           <TabsTrigger value="seguridad">Seguridad</TabsTrigger>
         </TabsList>
 
@@ -65,28 +63,6 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => (
                 </>
               )}
               <Button variant="hero">Guardar cambios</Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="notificaciones">
-          <Card>
-            <CardHeader><CardTitle>Preferencias de notificaciones</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              {[
-                { label: "Nuevos mensajes", desc: "Recibe notificaciones cuando te envíen un mensaje" },
-                { label: "Postulaciones recibidas", desc: "Notificarte cuando alguien postule a tus avisos" },
-                { label: "Avisos por vencer", desc: "Recordatorios de avisos próximos a vencer" },
-                { label: "Promociones", desc: "Ofertas y novedades de la plataforma" },
-              ].map((item, i) => (
-                <div key={i} className="flex items-center justify-between py-2">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{item.label}</p>
-                    <p className="text-xs text-muted-foreground">{item.desc}</p>
-                  </div>
-                  <Switch defaultChecked={i < 3} />
-                </div>
-              ))}
             </CardContent>
           </Card>
         </TabsContent>

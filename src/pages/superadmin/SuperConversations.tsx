@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AdminLayout } from "@/components/AdminLayout";
+import { AdminLayout, AdminRole } from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,12 +20,12 @@ const statusColor: Record<string, string> = {
   Resuelto: "bg-success/15 text-success border-success/30",
 };
 
-const SuperConversations = () => {
+const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: AdminRole }) => {
   const [selected, setSelected] = useState<string | null>(null);
   const item = reportedConversations.find((r) => r.id === selected);
 
   return (
-    <AdminLayout role="superadmin" title="Conversaciones reportadas" breadcrumb={["Plataforma", "Conversaciones"]}>
+    <AdminLayout role={role} title="Conversaciones reportadas" breadcrumb={["Comunicaciones", "Conversaciones"]}>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[calc(100vh-220px)] min-h-[500px]">
         <Card className={`lg:col-span-1 flex flex-col ${selected ? "hidden lg:flex" : "flex"}`}>
           <CardHeader className="space-y-2">

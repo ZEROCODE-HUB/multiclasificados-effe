@@ -1,46 +1,64 @@
 import { AdminLayout } from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, ShieldCheck } from "lucide-react";
+import { ShieldCheck, Crown } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
 
 const roles = [
-  { name: "Super Admin", users: 2, color: "bg-gradient-to-br from-secondary to-primary text-white" },
-  { name: "Administrador", users: 6, color: "bg-secondary text-secondary-foreground" },
-  { name: "Moderador", users: 14, color: "bg-primary text-primary-foreground" },
-  { name: "Soporte", users: 8, color: "bg-accent text-accent-foreground" },
+  {
+    name: "Superadministrador",
+    users: 2,
+    color: "bg-gradient-to-br from-secondary to-primary text-white",
+    icon: Crown,
+    desc: "Acceso total. Define qué puede hacer cada administrador.",
+  },
+  {
+    name: "Administrador",
+    users: 6,
+    color: "bg-secondary text-secondary-foreground",
+    icon: ShieldCheck,
+    desc: "Opera la plataforma según los permisos otorgados por el superadministrador.",
+  },
 ];
 
 const permissions = [
-  { module: "Avisos", view: true, edit: true, approve: true, delete: true },
-  { module: "Usuarios", view: true, edit: true, approve: true, delete: true },
-  { module: "Pagos", view: true, edit: true, approve: false, delete: false },
-  { module: "Configuración", view: true, edit: false, approve: false, delete: false },
-  { module: "Auditoría", view: true, edit: false, approve: false, delete: false },
+  { module: "Gestión de avisos", view: true, edit: true, approve: true, delete: false },
+  { module: "Gestión de usuarios", view: true, edit: true, approve: true, delete: false },
+  { module: "Pagos y planes", view: true, edit: false, approve: false, delete: false },
+  { module: "Configuración comercial", view: true, edit: true, approve: false, delete: false },
+  { module: "Comunicaciones", view: true, edit: true, approve: false, delete: false },
+  { module: "Conversaciones reportadas", view: true, edit: true, approve: true, delete: false },
+  { module: "Reportes", view: true, edit: false, approve: false, delete: false },
+  { module: "Auditoría y logs", view: true, edit: false, approve: false, delete: false },
 ];
 
 const SuperRoles = () => (
   <AdminLayout role="superadmin" title="Roles y permisos" breadcrumb={["Plataforma", "Roles"]}>
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {roles.map((r) => (
-        <Card key={r.name} className="card-lift">
-          <CardContent className="p-4">
-            <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-3 ${r.color}`}>
-              <ShieldCheck size={18} />
+        <Card key={r.name}>
+          <CardContent className="p-5 flex items-start gap-4">
+            <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${r.color}`}>
+              <r.icon size={20} />
             </div>
-            <p className="font-semibold text-sm">{r.name}</p>
-            <p className="text-xs text-muted-foreground">{r.users} usuarios</p>
+            <div className="flex-1">
+              <p className="font-semibold text-base">{r.name}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{r.users} usuarios activos</p>
+              <p className="text-sm text-muted-foreground mt-2">{r.desc}</p>
+            </div>
           </CardContent>
         </Card>
       ))}
     </div>
 
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-base md:text-lg">Matriz de permisos · Moderador</CardTitle>
-        <Button size="sm" className="gap-2"><Plus size={14} /> Crear rol</Button>
+      <CardHeader>
+        <CardTitle className="text-base md:text-lg">Permisos del rol Administrador</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Como Superadministrador, defines qué puede hacer cada administrador en la plataforma.
+        </p>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
@@ -68,7 +86,9 @@ const SuperRoles = () => (
           </Table>
         </div>
         <div className="flex justify-end mt-4">
-          <Button>Guardar cambios</Button>
+          <Button onClick={() => toast({ title: "Permisos actualizados", description: "Los cambios se aplicaron al rol Administrador." })}>
+            Guardar cambios
+          </Button>
         </div>
       </CardContent>
     </Card>

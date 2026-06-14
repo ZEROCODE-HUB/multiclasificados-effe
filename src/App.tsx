@@ -17,7 +17,6 @@ import AdvertiserStats from "./pages/advertiser/AdvertiserStats.tsx";
 import SeekerSearch from "./pages/seeker/SeekerSearch.tsx";
 import SeekerFavorites from "./pages/seeker/SeekerFavorites.tsx";
 import SeekerSearches from "./pages/seeker/SeekerSearches.tsx";
-import SeekerAlerts from "./pages/seeker/SeekerAlerts.tsx";
 import MessagesPage from "./pages/shared/MessagesPage.tsx";
 import SettingsPage from "./pages/shared/SettingsPage.tsx";
 import AdminDashboard from "./pages/admin/AdminDashboard.tsx";
@@ -28,10 +27,8 @@ import AdminCommercial from "./pages/admin/AdminCommercial.tsx";
 import AdminReports from "./pages/admin/AdminReports.tsx";
 import SuperRoles from "./pages/superadmin/SuperRoles.tsx";
 import SuperPlatform from "./pages/superadmin/SuperPlatform.tsx";
-import SuperIntegrations from "./pages/superadmin/SuperIntegrations.tsx";
 import SuperSecurity from "./pages/superadmin/SuperSecurity.tsx";
 import SuperAudit from "./pages/superadmin/SuperAudit.tsx";
-import SuperMonitoring from "./pages/superadmin/SuperMonitoring.tsx";
 import SuperConversations from "./pages/superadmin/SuperConversations.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
@@ -65,7 +62,7 @@ const App = () => (
           <Route path="/dashboard/buscador/favoritos" element={<SeekerFavorites />} />
           <Route path="/dashboard/buscador/busquedas" element={<SeekerSearches />} />
           <Route path="/dashboard/buscador/mensajes" element={<MessagesPage role="buscador" />} />
-          <Route path="/dashboard/buscador/alertas" element={<SeekerAlerts />} />
+          <Route path="/dashboard/buscador/alertas" element={<Navigate to="/dashboard/buscador" replace />} />
           <Route path="/dashboard/buscador/configuracion" element={<SettingsPage role="buscador" />} />
 
           {/* Admin */}
@@ -73,6 +70,7 @@ const App = () => (
           <Route path="/dashboard/admin/avisos" element={<AdminListings role="admin" />} />
           <Route path="/dashboard/admin/usuarios" element={<AdminUsers role="admin" />} />
           <Route path="/dashboard/admin/comunicaciones" element={<AdminCommunications role="admin" />} />
+          <Route path="/dashboard/admin/conversaciones" element={<SuperConversations role="admin" />} />
           <Route path="/dashboard/admin/comercial" element={<AdminCommercial role="admin" />} />
           <Route path="/dashboard/admin/reportes" element={<AdminReports role="admin" />} />
 
@@ -81,15 +79,13 @@ const App = () => (
           <Route path="/dashboard/superadmin/avisos" element={<AdminListings role="superadmin" />} />
           <Route path="/dashboard/superadmin/usuarios" element={<AdminUsers role="superadmin" />} />
           <Route path="/dashboard/superadmin/comunicaciones" element={<AdminCommunications role="superadmin" />} />
+          <Route path="/dashboard/superadmin/conversaciones" element={<SuperConversations role="superadmin" />} />
           <Route path="/dashboard/superadmin/comercial" element={<AdminCommercial role="superadmin" />} />
           <Route path="/dashboard/superadmin/reportes" element={<AdminReports role="superadmin" />} />
           <Route path="/dashboard/superadmin/roles" element={<SuperRoles />} />
           <Route path="/dashboard/superadmin/plataforma" element={<SuperPlatform />} />
-          <Route path="/dashboard/superadmin/integraciones" element={<SuperIntegrations />} />
           <Route path="/dashboard/superadmin/seguridad" element={<SuperSecurity />} />
           <Route path="/dashboard/superadmin/auditoria" element={<SuperAudit />} />
-          <Route path="/dashboard/superadmin/monitoreo" element={<SuperMonitoring />} />
-          <Route path="/dashboard/superadmin/conversaciones" element={<SuperConversations />} />
 
           <Route path="*" element={<NotFound />} />
         </Routes>

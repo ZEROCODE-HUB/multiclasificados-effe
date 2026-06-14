@@ -40,11 +40,20 @@ export function clearSession() {
   window.dispatchEvent(new Event("effe-session"));
 }
 
+function sameSession(a: Session | null, b: Session | null) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.role === b.role && a.name === b.name && a.initials === b.initials;
+}
+
 export function useSession(): Session | null {
   const [session, setSessionState] = useState<Session | null>(() => getSession());
 
   useEffect(() => {
-    const sync = () => setSessionState(getSession());
+    const sync = () => {
+      const next = getSession();
+      setSessionState((prev) => (sameSession(prev, next) ? prev : next));
+    };
     window.addEventListener("effe-session", sync);
     window.addEventListener("storage", sync);
     return () => {

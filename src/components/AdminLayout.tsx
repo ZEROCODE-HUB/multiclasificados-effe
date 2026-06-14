@@ -11,8 +11,6 @@ import {
   ShieldCheck,
   Settings,
   ScrollText,
-  Plug,
-  Activity,
   Lock,
   MessagesSquare,
   Menu,
@@ -34,20 +32,18 @@ const buildMenu = (role: AdminRole): MenuItem[] => {
     { title: "Dashboard", url: `/dashboard/${role}`, icon: LayoutDashboard, group: "Principal" },
     { title: "Gestión de avisos", url: `/dashboard/${role}/avisos`, icon: ClipboardList, group: "Operación" },
     { title: "Gestión de usuarios", url: `/dashboard/${role}/usuarios`, icon: Users, group: "Operación" },
-    { title: "Comunicaciones", url: `/dashboard/${role}/comunicaciones`, icon: Send, group: "Operación" },
     { title: "Config. comercial", url: `/dashboard/${role}/comercial`, icon: Tags, group: "Operación" },
     { title: "Reportes", url: `/dashboard/${role}/reportes`, icon: FileBarChart, group: "Operación" },
+    { title: "Comunicaciones", url: `/dashboard/${role}/comunicaciones`, icon: Send, group: "Comunicaciones" },
+    { title: "Conversaciones", url: `/dashboard/${role}/conversaciones`, icon: MessagesSquare, group: "Comunicaciones" },
   ];
   if (role === "admin") return base;
   return [
     ...base,
     { title: "Roles y permisos", url: `/dashboard/superadmin/roles`, icon: ShieldCheck, group: "Plataforma" },
     { title: "Configuración global", url: `/dashboard/superadmin/plataforma`, icon: Settings, group: "Plataforma" },
-    { title: "Integraciones", url: `/dashboard/superadmin/integraciones`, icon: Plug, group: "Plataforma" },
     { title: "Seguridad", url: `/dashboard/superadmin/seguridad`, icon: Lock, group: "Plataforma" },
     { title: "Auditoría y logs", url: `/dashboard/superadmin/auditoria`, icon: ScrollText, group: "Plataforma" },
-    { title: "Monitoreo", url: `/dashboard/superadmin/monitoreo`, icon: Activity, group: "Plataforma" },
-    { title: "Conversaciones", url: `/dashboard/superadmin/conversaciones`, icon: MessagesSquare, group: "Plataforma" },
   ];
 };
 
@@ -56,7 +52,7 @@ const primaryMobile = (role: AdminRole): MenuItem[] => [
   { title: "Avisos", url: `/dashboard/${role}/avisos`, icon: ClipboardList },
   { title: "Usuarios", url: `/dashboard/${role}/usuarios`, icon: Users },
   { title: "Reportes", url: `/dashboard/${role}/reportes`, icon: FileBarChart },
-  { title: role === "admin" ? "Comercial" : "Monitoreo", url: role === "admin" ? `/dashboard/admin/comercial` : `/dashboard/superadmin/monitoreo`, icon: role === "admin" ? Tags : Activity },
+  { title: "Comunic.", url: `/dashboard/${role}/comunicaciones`, icon: Send },
 ];
 
 interface Props {
@@ -68,7 +64,6 @@ interface Props {
 
 export function AdminLayout({ children, role, title, breadcrumb }: Props) {
   const menu = buildMenu(role);
-  const { pathname } = useLocation();
   const isSuper = role === "superadmin";
   const groups = Array.from(new Set(menu.map((m) => m.group ?? "")));
 
