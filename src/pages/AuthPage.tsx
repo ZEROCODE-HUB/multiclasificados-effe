@@ -36,9 +36,9 @@ const AuthPage = () => {
         <img src={authBg} alt="Marketplace profesional" className="absolute inset-0 w-full h-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-br from-primary/85 via-primary/70 to-primary/90" />
         <div className="relative z-10 text-center max-w-lg">
-          <h2 className="text-4xl font-extrabold text-primary-foreground mb-4 uppercase tracking-tight">
-            eFFe Multiclasificados
-          </h2>
+          <div className="mb-4">
+            <BrandMark size="xl" variant="light" asLink={false} />
+          </div>
           <p className="text-primary-foreground/90 text-lg mb-2">
             La plataforma donde comprar, vender y conectar es más fácil que nunca.
           </p>
