@@ -5,7 +5,7 @@ import { ListingCard } from "@/components/ListingCard";
 import { CountUp } from "@/components/CountUp";
 import { featuredListings } from "@/data/mockData";
 import heroBg from "@/assets/hero-bg.jpg";
-import { ArrowRight, BadgeCheck, Gem, Headset, Star, TrendingUp } from "lucide-react";
+import { ArrowRight, BadgeCheck, Gem, Headset, Star, TrendingUp, CheckCircle2, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
