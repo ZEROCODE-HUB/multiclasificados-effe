@@ -1,4 +1,5 @@
 import { Navbar } from "@/components/Navbar";
+import { BrandMark } from "@/components/BrandMark";
 import { HeroSearch } from "@/components/HeroSearch";
 import { CategoryGrid } from "@/components/CategoryGrid";
 import { ListingCard } from "@/components/ListingCard";
@@ -452,7 +453,7 @@ const Index = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 md:gap-10 mb-12">
             <div className="md:col-span-1">
               <div className="mb-5">
-                <BrandMarkFooter />
+                <BrandMark size="lg" variant="light" asLink={false} />
               </div>
               <p className="text-primary-foreground/70 text-sm leading-relaxed">
                 La plataforma líder de avisos clasificados en Perú. Conectamos personas y negocios de manera simple, segura y profesional.
