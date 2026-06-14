@@ -68,9 +68,6 @@ export function Navbar() {
           <Link to="/buscar" className="px-3 py-2 text-sm font-semibold text-foreground hover:text-secondary transition-colors">
             Explorar
           </Link>
-          <Link to="/mapa" className="px-3 py-2 text-sm font-semibold text-foreground hover:text-secondary transition-colors">
-            Mapa
-          </Link>
 
           <Link to="/auth?tab=register" className="px-3 py-2 text-sm font-semibold text-foreground hover:text-secondary transition-colors">
             Publicar
