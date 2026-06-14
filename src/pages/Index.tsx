@@ -451,13 +451,8 @@ const Index = () => {
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 md:gap-10 mb-12">
             <div className="md:col-span-1">
-              <div className="flex items-center gap-2 mb-5">
-                <div className="w-9 h-9 rounded-lg gradient-secondary flex items-center justify-center text-secondary-foreground font-extrabold">
-                  eF
-                </div>
-                <span className="text-lg font-extrabold">
-                  eFFe<span className="text-secondary"> Multi</span>
-                </span>
+              <div className="mb-5">
+                <BrandMarkFooter />
               </div>
               <p className="text-primary-foreground/70 text-sm leading-relaxed">
                 La plataforma líder de avisos clasificados en Perú. Conectamos personas y negocios de manera simple, segura y profesional.
