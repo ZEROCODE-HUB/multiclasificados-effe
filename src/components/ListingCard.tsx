@@ -1,6 +1,7 @@
 import { MapPin, Heart, ShieldCheck, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
 import type { Listing } from "@/data/mockData";
 
 interface ListingCardProps {
@@ -18,7 +19,7 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
 
   if (layout === "list") {
     return (
-      <div className="flex gap-4 bg-card border border-border p-3 hover:border-secondary/40 hover:shadow-lg transition-all cursor-pointer group">
+      <Link to={`/aviso/${listing.id}`} className="flex gap-4 bg-card border border-border p-3 hover:border-secondary/40 hover:shadow-lg transition-all cursor-pointer group">
         <div className="relative w-40 flex-shrink-0 overflow-hidden bg-muted" style={{ aspectRatio: "4 / 3" }}>
           <img src={listing.imageUrl} alt={listing.title} className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.05]" loading="lazy" />
         </div>
@@ -33,12 +34,14 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
           </div>
           <p className="text-xl font-extrabold text-primary mt-2">{formatPrice(listing.price, listing.currency)}</p>
         </div>
-      </div>
+      </Link>
     );
   }
 
+
   return (
-    <article className="group cursor-pointer flex flex-col bg-card border border-border/70 overflow-hidden transition-all duration-300 hover:border-secondary/40 hover:shadow-xl hover:-translate-y-0.5">
+    <Link to={`/aviso/${listing.id}`} className="group cursor-pointer flex flex-col bg-card border border-border/70 overflow-hidden transition-all duration-300 hover:border-secondary/40 hover:shadow-xl hover:-translate-y-0.5">
+
       {/* Image — taller, near-square for a premium presence */}
       <div className="relative overflow-hidden bg-muted" style={{ aspectRatio: "1 / 1" }}>
         <img
@@ -60,12 +63,13 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
         </span>
         {/* Favorite */}
         <button
-          onClick={(e) => { e.stopPropagation(); }}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
           className="absolute top-3 right-3 w-8 h-8 bg-white/95 backdrop-blur-sm flex items-center justify-center hover:bg-white hover:scale-110 transition-all shadow-sm"
           aria-label="Guardar en favoritos"
         >
           <Heart size={15} className="text-primary" />
         </button>
+
       </div>
 
       {/* Content — generous spacing */}
@@ -97,6 +101,6 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
           Ver detalle
         </Button>
       </div>
-    </article>
+    </Link>
   );
 }
