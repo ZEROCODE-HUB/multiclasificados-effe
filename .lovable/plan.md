@@ -1,91 +1,98 @@
-
 ## Objetivo
-Elevar la plataforma a una experiencia de marketplace premium y consistente (desktop + móvil), eliminando el concepto de "modos" y unificando el branding **EFFE / Multiclasificados**.
+Profesionalizar el panel administrativo (estilo CRM), pulir landing/hero, simplificar navegación móvil y corregir comportamientos varios.
 
 ---
 
-## 1. Branding global — EFFE + Multiclasificados
-- Logo del header pasa a un bloque de dos líneas:
-  - Línea 1 (pequeña, uppercase, tracking ancho): `MULTICLASIFICADOS`
-  - Línea 2 (grande, peso 800): `EFFE`
-- Mismo tratamiento (más grande) en el título del Hero: `MULTICLASIFICADOS` arriba, `EFFE — PERÚ` debajo.
-- Componente reutilizable `BrandMark` para mantener consistencia.
+## Panel administrativo (admin + superadmin)
 
-## 2. Header & top bar
-- **Eliminar** la franja superior "Enviando a Lima, Perú · …" del `Navbar`.
-- Solo queda el header blanco principal.
-- Input de búsqueda del header: bordes rectos (`rounded-none`) en lugar de pill, coherente con el lenguaje cuadrado del resto.
+### 1. Gestión de avisos (`AdminListings`)
+- Banner/toast de confirmación al **aprobar** (igual que rechazo).
+- Habilitar ícono **ojo** → abrir `Dialog` con todos los detalles del aviso (título, descripción, categoría, ubicación, precio, anunciante, fechas, imágenes, estado).
+- Tabla con **paginación**, búsqueda y filtros visibles (look CRM).
+- Aplicar mismos cambios en la vista equivalente del superadmin (compartir componente).
 
-## 3. Hero (landing)
-- Tipografía `MULTICLASIFICADOS / EFFE — PERÚ` más grande y jerárquica.
-- En desktop: layout **2 columnas** — texto + buscador a la izquierda, imagen visual (mockup/foto categoría) a la derecha para balancear. En móvil, una sola columna.
-- Reducir ligeramente el overlay para que se vea más la imagen de fondo.
-- Más aire vertical (padding superior/inferior) para sensación premium.
+### 2. Gestión de usuarios (`AdminUsers`)
+- Acción **activar/suspender** abre `AlertDialog` de confirmación antes de ejecutar.
+- Paginación + filtros consistentes.
 
-## 4. Sección "Por qué elegirnos"
-- Rediseñar las 3 tarjetas: layout con ícono en contenedor cuadrado con gradiente sutil, mejor tipografía, divisor de color, hover refinado.
-- Cambiar íconos genéricos por un set más distintivo (p. ej. `BadgeCheck`, `Sparkles`/`Gem`, `Headset`) con tratamiento custom (badge cuadrado, fondo degradado primary→secondary).
-- Quitar las píldoras "Nuevo · Próximamente" de la sección Mapa del landing.
+### 3. Configuración comercial (`AdminCommercial`)
+- **Categorías**: botón "Nueva" abre dialog (form simple en estado local), íconos editar/borrar funcionales con confirmación.
+- **Planes**: botón "Editar plan" abre dialog editable.
+- **Promociones**: "Nueva" funcional + acciones por promoción (activar/desactivar/eliminar) con `AlertDialog` y toast.
 
-## 5. "Donde los negocios suceden"
-- Tratamiento más premium: tipografía display más fina, kicker uppercase, subrayado/decorador sutil, mejor jerarquía y respiración.
+### 4. Comunicaciones → submódulo "Conversaciones"
+- Mover/duplicar `SuperConversations` como página accesible para admin **bajo Comunicaciones**.
+- En superadmin también reordenar para que "Conversaciones" quede bajo "Comunicaciones" en el sidebar.
 
-## 6. Tarjetas cuadradas en TODO el producto
-- Auditar y reemplazar usos de tarjetas redondeadas por `ListingCard` (estilo cuadrado actual del landing) en:
-  - `SeekerDashboard`, `SeekerSearch`, `SeekerFavorites`
-  - `AdvertiserDashboard`, `AdvertiserListings`
-  - Variante móvil de `ListingCard` y `ListingRow` también con `rounded-none`.
-- Revisar `Card` base donde se use para listados y aplicar override sin radius.
+### 5. Reportes (`AdminReports`)
+- Reemplazar tabs por las categorías solicitadas:
+  - **Dashboard tiempo real**: avisos gratuitos por categoría; avisos con visibilidad (con total cobrado); gratuitos por región + categoría; con visibilidad por región + categoría (con total cobrado).
+  - **Reclamos**: recibidos / pendientes / solucionados con conformidad.
+  - **Pagos, Avisos, Usuarios, Postulaciones**: filtrables (rango fechas, categoría, región) y exportables CSV/Excel/PDF.
+- Charts con datos mock realistas + filtros en cabecera.
 
-## 7. Eliminar "Modo Buscador / Modo Anunciante" — perfil único
-- Quitar el switch de rol del dropdown "Mi Cuenta" y del `useSession` (queda un solo usuario logueado).
-- **Home post-login** = versión personalizada de la landing pública (hero más compacto + grilla de avisos + categorías), no el dashboard.
-- Rutas:
-  - `/` después de login muestra la experiencia de exploración personalizada.
-  - Mantener como áreas de gestión independientes accesibles desde "Mi Cuenta":
-    - **Mis avisos** (publicaciones)
-    - **Mis postulaciones**
-    - **Mensajes**
-    - **Favoritos / Búsquedas guardadas**
-    - **Panel y estadísticas** (fusión del antiguo "Mi panel" — resumen compacto arriba + ítems debajo)
-    - **Configuración**
-- Eliminar `SeekerDashboard` y `AdvertiserDashboard` como pantallas de aterrizaje; redirigir a `/` o a su sección de gestión correspondiente.
-- Admin / Superadmin **no se tocan** (mantienen su sidebar y experiencia).
+### 6. Comunicaciones masivas (`AdminCommunications`)
+- En tab "Masivo" agregar segmentación avanzada para **Buscadores**:
+  - Por perfil, por intereses, por ubicación geográfica (región/ciudad), por avisos activos de anunciantes, factores de match.
+- Checkbox/auto "Incluir en copia a Administradores y Superadministradores".
 
-## 8. Panel y estadísticas (refactor)
-- Renombrar "Mi panel" → **Panel y estadísticas**.
-- Stat cards más pequeñas y compactas (resumen de una fila), debajo los ítems (avisos / actividad) con las tarjetas cuadradas premium.
+### 7. Superadmin → Roles (`SuperRoles`)
+- Dejar **solo dos roles**: Superadministrador y Administrador.
+- El superadmin define permisos granulares sobre lo que el administrador puede hacer (matriz de permisos editable).
+- Eliminar referencias a Moderador y Soporte en UI/datos mock.
 
-## 9. Mobile parity & padding
-- Todas las decisiones estructurales de desktop se replican en móvil (tarjetas cuadradas, branding, jerarquía).
-- Reducir el padding lateral excesivo en vistas de gestión móvil: secciones como "Mis avisos recientes" salen del contenedor blanco — el título queda como `h2` fuera, y las tarjetas usan el ancho disponible con un margen lateral pequeño (`px-3`/`px-4`), sin envoltura tipo `Card` alrededor de la lista.
-- Bottom nav y hamburguesa **se mantienen** en móvil; top nav se mantiene en desktop.
+### 8. Superadmin → limpiar módulos
+- Eliminar página/ruta **Integraciones** (`SuperIntegrations`) y su entrada de sidebar.
+- En **Seguridad** (`SuperSecurity`) eliminar: Lista blanca de IPs, Cifrado en reposo, Política de contraseñas, Monitoreo.
+- Eliminar también `SuperMonitoring` si ya no se referencia.
 
 ---
 
-## Detalles técnicos
+## Landing & navegación
 
-### Archivos a crear
-- `src/components/BrandMark.tsx` — logo Multiclasificados/EFFE reutilizable.
-- `src/components/PostLoginHome.tsx` — home personalizada post-login (reusa secciones del Index).
-- `src/components/SectionHeader.tsx` (opcional) — título de sección fuera-de-contenedor para móvil.
+### 9. Hero (`HeroSearch` / `Index`)
+- Título: `Multiclasificados` + `EFFE` (sin "— PERÚ"; "Perú" no en mayúsculas, simplemente quitar el subtítulo país).
+- Subir tamaño tipográfico de "Donde los negocios suceden".
+- Lado derecho: **un solo card** con métrica "avisos activos" (gráfico/contador). Eliminar el card "100% verificados".
+- Quitar pill/kicker "Plataforma profesional · Perú".
 
-### Archivos a editar
-- `src/components/Navbar.tsx` — eliminar top bar, input rectangular, BrandMark, quitar switch de rol del dropdown, ajustar items de "Mi Cuenta".
-- `src/components/HeroSearch.tsx` (o donde esté el hero) — nueva tipografía + layout 2 col + overlay reducido + más padding.
-- `src/pages/Index.tsx` — sección "Por qué elegirnos" rediseñada; quitar pills "Nuevo · Próximamente"; pulir "Donde los negocios suceden".
-- `src/components/ListingCard.tsx` — asegurar `rounded-none` y consistencia variant list (móvil) sin radios.
-- `src/components/ListingRow.tsx` — alinear estilo cuadrado.
-- `src/components/DashboardLayout.tsx` — reducir paddings móvil (de `px-4` excesivo a `px-3`), permitir secciones fuera de contenedor.
-- `src/pages/SeekerDashboard.tsx` y `AdvertiserDashboard.tsx` — convertir en redirects a `/` (home post-login) o fusionar con "Panel y estadísticas".
-- `src/pages/advertiser/AdvertiserListings.tsx`, `seeker/SeekerFavorites.tsx`, `seeker/SeekerSearch.tsx` — sacar el grid del `Card`, usar `ListingCard` cuadrado, título fuera del contenedor en móvil.
-- `src/App.tsx` — ajustar `/` para servir `PostLoginHome` cuando hay sesión; quitar/redirigir rutas de dashboards si aplica.
-- `src/hooks/useSession.ts` — quitar concepto de cambio de rol (usuario único).
+### 13. Hero móvil + navegación móvil
+- Reducir altura del hero en móvil (menos `min-h`, menos padding vertical).
+- `MobileBottomNav` **siempre visible** cuando hay sesión (en todas las rutas excepto `/auth`).
+- Menú hamburguesa móvil: mostrar **solo secciones que no estén en el bottom nav** (no listar todas las categorías ni duplicar bottom nav).
 
-### No tocar
-- Admin / Superadmin (`AdminLayout`, rutas `/dashboard/admin/*`, `/dashboard/superadmin/*`).
-- Lógica de backend (es solo frontend por ahora).
+### 10. `dashboard/anunciante/configuracion`
+- Quitar bloque de notificaciones por completo.
+
+### 11. Alertas (Seeker)
+- Eliminar `SeekerAlerts`, su ruta y cualquier link/ícono en navbar, dropdown "Mi Cuenta", bottom nav.
+
+### 12. Búsquedas guardadas (`SeekerSearches`)
+- Habilitar botones **Refresh** (re-ejecuta búsqueda, toast) y **Eliminar** (con `AlertDialog` de confirmación + toast).
 
 ---
 
-¿Procedo con la implementación completa o quieres ajustar algún punto antes?
+## Nota general: refrescos espontáneos
+- Auditar `useSession` y eventos `effe-session`: evitar `setState` redundantes que disparen remount.
+- Revisar `<Route>` keys, `useEffect` con dependencias inestables, y cualquier `window.location.href` que debería ser `navigate()` de React Router.
+- Asegurar que cambios de localStorage no rerendericen árboles enteros.
+
+---
+
+## Archivos clave
+- `src/pages/admin/AdminListings.tsx`, `AdminUsers.tsx`, `AdminCommercial.tsx`, `AdminCommunications.tsx`, `AdminReports.tsx`
+- `src/components/AdminLayout.tsx` (añadir ítem "Conversaciones" bajo Comunicaciones)
+- `src/pages/superadmin/SuperConversations.tsx`, `SuperRoles.tsx`, `SuperSecurity.tsx`
+- Eliminar: `SuperIntegrations.tsx`, `SuperMonitoring.tsx`, `seeker/SeekerAlerts.tsx`
+- `src/components/HeroSearch.tsx`, `src/pages/Index.tsx`
+- `src/components/MobileBottomNav.tsx`, `src/components/Navbar.tsx` (menú hamburguesa)
+- `src/pages/shared/SettingsPage.tsx` (o equivalente anunciante)
+- `src/pages/seeker/SeekerSearches.tsx`
+- `src/App.tsx` (rutas: quitar alertas, integraciones, monitoreo; añadir conversaciones admin)
+- `src/hooks/useSession.ts` (estabilizar)
+
+## Sin tocar
+- Backend / persistencia (no hay).
+- Lógica de auth real.
+
+¿Procedo con la implementación completa o ajustamos algún punto antes?
