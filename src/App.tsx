@@ -7,6 +7,7 @@ import Index from "./pages/Index.tsx";
 import AuthPage from "./pages/AuthPage.tsx";
 import SearchPage from "./pages/SearchPage.tsx";
 import ListingDetail from "./pages/ListingDetail.tsx";
+import PlansPage from "./pages/PlansPage.tsx";
 import { Navigate } from "react-router-dom";
 import AdvertiserDashboard from "./pages/AdvertiserDashboard.tsx";
 import SeekerDashboard from "./pages/SeekerDashboard.tsx";
