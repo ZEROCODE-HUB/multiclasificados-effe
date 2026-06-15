@@ -46,7 +46,9 @@ const App = () => (
           <Route path="/auth" element={<AuthPage />} />
           <Route path="/buscar" element={<SearchPage />} />
           <Route path="/aviso/:id" element={<ListingDetail />} />
+          <Route path="/planes" element={<PlansPage />} />
           <Route path="/mapa" element={<Navigate to="/buscar?view=map" replace />} />
+
 
           {/* Advertiser */}
           <Route path="/dashboard/anunciante" element={<AdvertiserDashboard />} />
