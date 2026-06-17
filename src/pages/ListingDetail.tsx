@@ -61,9 +61,81 @@ export default function ListingDetail() {
   );
 
   const [activeImg, setActiveImg] = useState(0);
+  const session = useSession();
 
-  const formatPrice = (price: number, currency: string) =>
-    currency === "USD" ? `US$ ${price.toLocaleString()}` : `S/ ${price.toLocaleString()}`;
+  // Mock phone derived from listing id for stability
+  const phoneNumber = useMemo(() => {
+    const seed = (parseInt(listing.id, 36) || 1) * 7;
+    const last = String(900000000 + (seed % 99999999)).slice(0, 9);
+    return `+51 ${last.slice(0, 3)} ${last.slice(3, 6)} ${last.slice(6)}`;
+  }, [listing.id]);
+
+  const [messageOpen, setMessageOpen] = useState(false);
+  const [phoneOpen, setPhoneOpen] = useState(false);
+  const [quoteOpen, setQuoteOpen] = useState(false);
+  const [phoneRevealed, setPhoneRevealed] = useState(false);
+
+  const [messageText, setMessageText] = useState(
+    `Hola ${listing.advertiser.split(" ")[0]}, estoy interesado en "${listing.title}". ¿Sigue disponible?`,
+  );
+  const [quoteForm, setQuoteForm] = useState({
+    name: session?.name ?? "",
+    email: "",
+    phone: "",
+    quantity: "1",
+    details: "",
+  });
+
+  const requireAuthOrRun = (action: () => void) => {
+    if (!session) {
+      toast({
+        title: "Inicia sesión para continuar",
+        description: "Necesitas una cuenta para contactar al anunciante.",
+      });
+      navigate(`/auth?redirect=/aviso/${listing.id}`);
+      return;
+    }
+    action();
+  };
+
+  const handleSendMessage = () => {
+    if (!messageText.trim()) return;
+    setMessageOpen(false);
+    toast({
+      title: "Mensaje enviado",
+      description: `${listing.advertiser} recibirá tu consulta. Revisa tus conversaciones.`,
+    });
+    setTimeout(() => navigate("/buscador/conversaciones"), 600);
+  };
+
+  const handleRevealPhone = () => {
+    setPhoneRevealed(true);
+    setPhoneOpen(true);
+  };
+
+  const handleCopyPhone = async () => {
+    try {
+      await navigator.clipboard.writeText(phoneNumber);
+      toast({ title: "Teléfono copiado", description: phoneNumber });
+    } catch {
+      toast({ title: "No se pudo copiar", description: phoneNumber });
+    }
+  };
+
+  const handleQuoteSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quoteForm.name || !quoteForm.email) {
+      toast({ title: "Completa nombre y email", description: "Son obligatorios para emitir la cotización." });
+      return;
+    }
+    setQuoteOpen(false);
+    toast({
+      title: "Cotización solicitada",
+      description: `Enviamos tu solicitud a ${listing.advertiser}. Recibirás respuesta en tu correo y conversaciones.`,
+    });
+  };
+
+
 
   const specs = [
     { label: "Categoría", value: category?.name ?? listing.category },
