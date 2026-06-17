@@ -24,8 +24,24 @@ import {
   Clock,
   Building2,
   Users,
+  Copy,
+  Send,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "@/hooks/use-toast";
+import { useSession } from "@/hooks/useSession";
+
 
 export default function ListingDetail() {
   const { id } = useParams();
@@ -45,6 +61,79 @@ export default function ListingDetail() {
   );
 
   const [activeImg, setActiveImg] = useState(0);
+  const session = useSession();
+
+  // Mock phone derived from listing id for stability
+  const phoneNumber = useMemo(() => {
+    const seed = (parseInt(listing.id, 36) || 1) * 7;
+    const last = String(900000000 + (seed % 99999999)).slice(0, 9);
+    return `+51 ${last.slice(0, 3)} ${last.slice(3, 6)} ${last.slice(6)}`;
+  }, [listing.id]);
+
+  const [messageOpen, setMessageOpen] = useState(false);
+  const [phoneOpen, setPhoneOpen] = useState(false);
+  const [quoteOpen, setQuoteOpen] = useState(false);
+  const [phoneRevealed, setPhoneRevealed] = useState(false);
+
+  const [messageText, setMessageText] = useState(
+    `Hola ${listing.advertiser.split(" ")[0]}, estoy interesado en "${listing.title}". ¿Sigue disponible?`,
+  );
+  const [quoteForm, setQuoteForm] = useState({
+    name: session?.name ?? "",
+    email: "",
+    phone: "",
+    quantity: "1",
+    details: "",
+  });
+
+  const requireAuthOrRun = (action: () => void) => {
+    if (!session) {
+      toast({
+        title: "Inicia sesión para continuar",
+        description: "Necesitas una cuenta para contactar al anunciante.",
+      });
+      navigate(`/auth?redirect=/aviso/${listing.id}`);
+      return;
+    }
+    action();
+  };
+
+  const handleSendMessage = () => {
+    if (!messageText.trim()) return;
+    setMessageOpen(false);
+    toast({
+      title: "Mensaje enviado",
+      description: `${listing.advertiser} recibirá tu consulta. Revisa tus conversaciones.`,
+    });
+    setTimeout(() => navigate("/buscador/conversaciones"), 600);
+  };
+
+  const handleRevealPhone = () => {
+    setPhoneRevealed(true);
+    setPhoneOpen(true);
+  };
+
+  const handleCopyPhone = async () => {
+    try {
+      await navigator.clipboard.writeText(phoneNumber);
+      toast({ title: "Teléfono copiado", description: phoneNumber });
+    } catch {
+      toast({ title: "No se pudo copiar", description: phoneNumber });
+    }
+  };
+
+  const handleQuoteSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quoteForm.name || !quoteForm.email) {
+      toast({ title: "Completa nombre y email", description: "Son obligatorios para emitir la cotización." });
+      return;
+    }
+    setQuoteOpen(false);
+    toast({
+      title: "Cotización solicitada",
+      description: `Enviamos tu solicitud a ${listing.advertiser}. Recibirás respuesta en tu correo y conversaciones.`,
+    });
+  };
 
   const formatPrice = (price: number, currency: string) =>
     currency === "USD" ? `US$ ${price.toLocaleString()}` : `S/ ${price.toLocaleString()}`;
@@ -221,16 +310,32 @@ export default function ListingDetail() {
             </div>
 
             <div className="flex flex-col gap-2 pt-2">
-              <Button size="lg" className="w-full gap-2 font-bold uppercase tracking-wider text-xs rounded-none h-12">
+              <Button
+                size="lg"
+                className="w-full gap-2 font-bold uppercase tracking-wider text-xs rounded-none h-12"
+                onClick={() => requireAuthOrRun(() => setMessageOpen(true))}
+              >
                 <MessageSquare size={16} /> Enviar mensaje
               </Button>
-              <Button variant="outline" size="lg" className="w-full gap-2 font-bold uppercase tracking-wider text-xs rounded-none h-12">
-                <Phone size={16} /> Mostrar teléfono
+              <Button
+                variant="outline"
+                size="lg"
+                className="w-full gap-2 font-bold uppercase tracking-wider text-xs rounded-none h-12"
+                onClick={() => requireAuthOrRun(handleRevealPhone)}
+              >
+                <Phone size={16} />
+                {phoneRevealed ? phoneNumber : "Mostrar teléfono"}
               </Button>
-              <Button variant="ghost" size="lg" className="w-full gap-2 font-semibold rounded-none h-11 text-sm">
+              <Button
+                variant="ghost"
+                size="lg"
+                className="w-full gap-2 font-semibold rounded-none h-11 text-sm"
+                onClick={() => requireAuthOrRun(() => setQuoteOpen(true))}
+              >
                 <Mail size={16} /> Solicitar cotización
               </Button>
             </div>
+
 
             <div className="pt-4 border-t border-border space-y-2 text-xs text-muted-foreground">
               <p className="flex items-start gap-2"><ShieldCheck size={14} className="text-secondary mt-0.5 shrink-0" /> Anunciante verificado y avalado por eFFe.</p>
@@ -303,6 +408,136 @@ export default function ListingDetail() {
           ))}
         </div>
       </section>
+
+      {/* Message dialog */}
+      <Dialog open={messageOpen} onOpenChange={setMessageOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Enviar mensaje a {listing.advertiser}</DialogTitle>
+            <DialogDescription>
+              Sobre: <span className="font-medium text-foreground">{listing.title}</span>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Label htmlFor="msg">Tu mensaje</Label>
+            <Textarea
+              id="msg"
+              rows={5}
+              value={messageText}
+              onChange={(e) => setMessageText(e.target.value)}
+              placeholder="Cuéntale al anunciante qué te interesa, fechas, formas de pago…"
+            />
+            <p className="text-xs text-muted-foreground">
+              Tu identidad se compartirá con el anunciante para coordinar la transacción.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setMessageOpen(false)}>Cancelar</Button>
+            <Button onClick={handleSendMessage} className="gap-2">
+              <Send size={14} /> Enviar mensaje
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Phone dialog */}
+      <Dialog open={phoneOpen} onOpenChange={setPhoneOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Teléfono del anunciante</DialogTitle>
+            <DialogDescription>
+              Disponible de lunes a sábado, 9:00 a 19:00. Menciona el código del aviso al llamar.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-md border border-border bg-muted/30 p-5 text-center space-y-2">
+            <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-secondary">
+              {listing.advertiser}
+            </p>
+            <p className="text-2xl font-extrabold text-primary tracking-tight">{phoneNumber}</p>
+            <p className="text-xs text-muted-foreground">Código de aviso: EFFE-{listing.id.padStart(6, "0")}</p>
+          </div>
+          <DialogFooter className="sm:justify-between gap-2">
+            <Button variant="outline" onClick={handleCopyPhone} className="gap-2">
+              <Copy size={14} /> Copiar
+            </Button>
+            <Button asChild className="gap-2">
+              <a href={`tel:${phoneNumber.replace(/\s+/g, "")}`}>
+                <Phone size={14} /> Llamar ahora
+              </a>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quote dialog */}
+      <Dialog open={quoteOpen} onOpenChange={setQuoteOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Solicitar cotización</DialogTitle>
+            <DialogDescription>
+              {listing.advertiser} te enviará una propuesta formal por "{listing.title}".
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleQuoteSubmit} className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="q-name">Nombre completo *</Label>
+                <Input
+                  id="q-name"
+                  value={quoteForm.name}
+                  onChange={(e) => setQuoteForm({ ...quoteForm, name: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="q-email">Email *</Label>
+                <Input
+                  id="q-email"
+                  type="email"
+                  value={quoteForm.email}
+                  onChange={(e) => setQuoteForm({ ...quoteForm, email: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="q-phone">Teléfono</Label>
+                <Input
+                  id="q-phone"
+                  value={quoteForm.phone}
+                  onChange={(e) => setQuoteForm({ ...quoteForm, phone: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="q-qty">Cantidad</Label>
+                <Input
+                  id="q-qty"
+                  type="number"
+                  min={1}
+                  value={quoteForm.quantity}
+                  onChange={(e) => setQuoteForm({ ...quoteForm, quantity: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="q-details">Detalles de la solicitud</Label>
+              <Textarea
+                id="q-details"
+                rows={4}
+                value={quoteForm.details}
+                onChange={(e) => setQuoteForm({ ...quoteForm, details: e.target.value })}
+                placeholder="Especificaciones, plazos, condiciones de entrega o facturación…"
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => setQuoteOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" className="gap-2">
+                <Mail size={14} /> Enviar solicitud
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
+
   );
 }
