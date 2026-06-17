@@ -310,16 +310,32 @@ export default function ListingDetail() {
             </div>
 
             <div className="flex flex-col gap-2 pt-2">
-              <Button size="lg" className="w-full gap-2 font-bold uppercase tracking-wider text-xs rounded-none h-12">
+              <Button
+                size="lg"
+                className="w-full gap-2 font-bold uppercase tracking-wider text-xs rounded-none h-12"
+                onClick={() => requireAuthOrRun(() => setMessageOpen(true))}
+              >
                 <MessageSquare size={16} /> Enviar mensaje
               </Button>
-              <Button variant="outline" size="lg" className="w-full gap-2 font-bold uppercase tracking-wider text-xs rounded-none h-12">
-                <Phone size={16} /> Mostrar teléfono
+              <Button
+                variant="outline"
+                size="lg"
+                className="w-full gap-2 font-bold uppercase tracking-wider text-xs rounded-none h-12"
+                onClick={() => requireAuthOrRun(handleRevealPhone)}
+              >
+                <Phone size={16} />
+                {phoneRevealed ? phoneNumber : "Mostrar teléfono"}
               </Button>
-              <Button variant="ghost" size="lg" className="w-full gap-2 font-semibold rounded-none h-11 text-sm">
+              <Button
+                variant="ghost"
+                size="lg"
+                className="w-full gap-2 font-semibold rounded-none h-11 text-sm"
+                onClick={() => requireAuthOrRun(() => setQuoteOpen(true))}
+              >
                 <Mail size={16} /> Solicitar cotización
               </Button>
             </div>
+
 
             <div className="pt-4 border-t border-border space-y-2 text-xs text-muted-foreground">
               <p className="flex items-start gap-2"><ShieldCheck size={14} className="text-secondary mt-0.5 shrink-0" /> Anunciante verificado y avalado por eFFe.</p>
