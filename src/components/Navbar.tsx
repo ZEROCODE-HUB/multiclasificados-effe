@@ -206,9 +206,16 @@ export function Navbar() {
           </Link>
         </div>
 
+        <Link
+          to={isUser ? "/dashboard/anunciante/publicar" : "/auth?tab=register"}
+          className="md:hidden ml-auto p-2 text-foreground"
+          aria-label="Publicar"
+        >
+          <PlusCircle size={22} />
+        </Link>
         <button
           onClick={() => setMobileOpen(!mobileOpen)}
-          className="md:hidden p-2 ml-auto text-foreground"
+          className="md:hidden p-2 text-foreground"
           aria-label="Menú"
         >
           {mobileOpen ? <X size={24} /> : <Menu size={24} />}
