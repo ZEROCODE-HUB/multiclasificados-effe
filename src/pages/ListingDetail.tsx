@@ -135,7 +135,8 @@ export default function ListingDetail() {
     });
   };
 
-
+  const formatPrice = (price: number, currency: string) =>
+    currency === "USD" ? `US$ ${price.toLocaleString()}` : `S/ ${price.toLocaleString()}`;
 
   const specs = [
     { label: "Categoría", value: category?.name ?? listing.category },
