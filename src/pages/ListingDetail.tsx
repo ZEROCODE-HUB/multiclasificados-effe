@@ -70,19 +70,11 @@ export default function ListingDetail() {
 
   const [messageOpen, setMessageOpen] = useState(false);
   const [phoneOpen, setPhoneOpen] = useState(false);
-  const [quoteOpen, setQuoteOpen] = useState(false);
   const [phoneRevealed, setPhoneRevealed] = useState(false);
 
   const [messageText, setMessageText] = useState(
     `Hola ${listing.advertiser.split(" ")[0]}, estoy interesado en "${listing.title}". ¿Sigue disponible?`,
   );
-  const [quoteForm, setQuoteForm] = useState({
-    name: session?.name ?? "",
-    email: "",
-    phone: "",
-    quantity: "1",
-    details: "",
-  });
 
   const requireAuthOrRun = (action: () => void) => {
     if (!session) {
