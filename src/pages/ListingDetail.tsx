@@ -16,7 +16,6 @@ import {
   Calendar,
   Phone,
   MessageSquare,
-  Mail,
   CheckCircle2,
   ChevronLeft,
   Tag,
