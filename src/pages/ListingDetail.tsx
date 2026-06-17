@@ -112,19 +112,6 @@ export default function ListingDetail() {
     }
   };
 
-  const handleQuoteSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!quoteForm.name || !quoteForm.email) {
-      toast({ title: "Completa nombre y email", description: "Son obligatorios para emitir la cotización." });
-      return;
-    }
-    setQuoteOpen(false);
-    toast({
-      title: "Cotización solicitada",
-      description: `Enviamos tu solicitud a ${listing.advertiser}. Recibirás respuesta en tu correo y conversaciones.`,
-    });
-  };
-
   const formatPrice = (price: number, currency: string) =>
     currency === "USD" ? `US$ ${price.toLocaleString()}` : `S/ ${price.toLocaleString()}`;
 
@@ -234,7 +221,7 @@ export default function ListingDetail() {
               {listing.description} Esta oportunidad ha sido revisada y aprobada por el equipo de eFFe Multiclasificados para garantizar la transparencia de la información, la verificación del anunciante y la disponibilidad del producto o servicio. El anunciante responde dentro de las primeras 4 horas en promedio.
             </p>
             <p className="text-foreground/85 leading-[1.75] text-base mt-4">
-              Si necesitas más fotografías, ficha técnica, ubicación exacta o coordinar una visita / videollamada, utiliza el panel lateral para enviar un mensaje directo. También puedes solicitar una cotización formal con datos fiscales.
+              Si necesitas más fotografías, ficha técnica, ubicación exacta o coordinar una visita / videollamada, utiliza el panel lateral para enviar un mensaje directo.
             </p>
           </section>
 
@@ -316,16 +303,7 @@ export default function ListingDetail() {
                 <Phone size={16} />
                 {phoneRevealed ? phoneNumber : "Mostrar teléfono"}
               </Button>
-              <Button
-                variant="ghost"
-                size="lg"
-                className="w-full gap-2 font-semibold rounded-none h-11 text-sm"
-                onClick={() => requireAuthOrRun(() => setQuoteOpen(true))}
-              >
-                <Mail size={16} /> Solicitar cotización
-              </Button>
             </div>
-
 
             <div className="pt-4 border-t border-border space-y-2 text-xs text-muted-foreground">
               <p className="flex items-start gap-2"><ShieldCheck size={14} className="text-secondary mt-0.5 shrink-0" /> Anunciante verificado y avalado por eFFe.</p>
@@ -458,76 +436,6 @@ export default function ListingDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Quote dialog */}
-      <Dialog open={quoteOpen} onOpenChange={setQuoteOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Solicitar cotización</DialogTitle>
-            <DialogDescription>
-              {listing.advertiser} te enviará una propuesta formal por "{listing.title}".
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleQuoteSubmit} className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="q-name">Nombre completo *</Label>
-                <Input
-                  id="q-name"
-                  value={quoteForm.name}
-                  onChange={(e) => setQuoteForm({ ...quoteForm, name: e.target.value })}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="q-email">Email *</Label>
-                <Input
-                  id="q-email"
-                  type="email"
-                  value={quoteForm.email}
-                  onChange={(e) => setQuoteForm({ ...quoteForm, email: e.target.value })}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="q-phone">Teléfono</Label>
-                <Input
-                  id="q-phone"
-                  value={quoteForm.phone}
-                  onChange={(e) => setQuoteForm({ ...quoteForm, phone: e.target.value })}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="q-qty">Cantidad</Label>
-                <Input
-                  id="q-qty"
-                  type="number"
-                  min={1}
-                  value={quoteForm.quantity}
-                  onChange={(e) => setQuoteForm({ ...quoteForm, quantity: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="q-details">Detalles de la solicitud</Label>
-              <Textarea
-                id="q-details"
-                rows={4}
-                value={quoteForm.details}
-                onChange={(e) => setQuoteForm({ ...quoteForm, details: e.target.value })}
-                placeholder="Especificaciones, plazos, condiciones de entrega o facturación…"
-              />
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => setQuoteOpen(false)}>
-                Cancelar
-              </Button>
-              <Button type="submit" className="gap-2">
-                <Mail size={14} /> Enviar solicitud
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
-
   );
 }
