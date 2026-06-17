@@ -24,8 +24,24 @@ import {
   Clock,
   Building2,
   Users,
+  Copy,
+  Send,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "@/hooks/use-toast";
+import { useSession } from "@/hooks/useSession";
+
 
 export default function ListingDetail() {
   const { id } = useParams();
