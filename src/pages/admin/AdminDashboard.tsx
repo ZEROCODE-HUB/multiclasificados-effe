@@ -148,6 +148,48 @@ const AdminDashboard = ({ role }: Props) => {
         </Card>
       </div>
 
+      {/* Detalle por aviso (vendido / no vendido) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base md:text-lg">Detalle por aviso</CardTitle>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>ID</TableHead>
+                <TableHead>Aviso</TableHead>
+                <TableHead>Categoría</TableHead>
+                <TableHead>Estado venta</TableHead>
+                <TableHead>Comprador</TableHead>
+                <TableHead>Vendedor</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredListings.slice(0, 10).map((l) => {
+                const s = sold[l.id];
+                return (
+                  <TableRow key={l.id}>
+                    <TableCell className="font-mono text-xs">{l.id}</TableCell>
+                    <TableCell className="text-sm font-medium">{l.title}</TableCell>
+                    <TableCell><Badge variant="outline">{l.category}</Badge></TableCell>
+                    <TableCell>
+                      {s ? (
+                        <Badge variant="outline" className="bg-success/10 text-success border-success/30">Vendido</Badge>
+                      ) : (
+                        <Badge variant="outline" className="bg-muted text-muted-foreground">No vendido</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs">{s?.buyer || "—"}</TableCell>
+                    <TableCell className="text-xs">{s?.seller || l.advertiser}</TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
       {/* Recent activity */}
       <Card>
         <CardHeader>
