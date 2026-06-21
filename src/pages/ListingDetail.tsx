@@ -39,6 +39,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { useSession } from "@/hooks/useSession";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { addReport, loadSold, markSold } from "@/lib/pricing";
 
 
 export default function ListingDetail() {
@@ -71,10 +74,33 @@ export default function ListingDetail() {
   const [messageOpen, setMessageOpen] = useState(false);
   const [phoneOpen, setPhoneOpen] = useState(false);
   const [phoneRevealed, setPhoneRevealed] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportReason, setReportReason] = useState("");
+  const [soldState, setSoldState] = useState(() => loadSold()[listing.id]);
 
   const [messageText, setMessageText] = useState(
     `Hola ${listing.advertiser.split(" ")[0]}, estoy interesado en "${listing.title}". ¿Sigue disponible?`,
   );
+
+  const handleReport = () => {
+    if (!reportReason.trim()) return;
+    addReport({
+      listingId: listing.id,
+      listingTitle: listing.title,
+      reason: reportReason.trim(),
+      reportedBy: session?.name || "Usuario anónimo",
+      category: category?.name,
+    });
+    setReportOpen(false);
+    setReportReason("");
+    toast({ title: "Reporte enviado", description: "Nuestro equipo revisará el aviso." });
+  };
+
+  const toggleSold = (who: "buyer" | "seller") => {
+    markSold(listing.id, who, session?.name || (who === "buyer" ? "Comprador" : "Vendedor"));
+    setSoldState(loadSold()[listing.id]);
+    toast({ title: "Marcado como venta concretada", description: who === "buyer" ? "Comprador confirmado." : "Vendedor confirmado." });
+  };
 
   const requireAuthOrRun = (action: () => void) => {
     if (!session) {
@@ -209,7 +235,9 @@ export default function ListingDetail() {
             <div className="flex flex-wrap gap-2 pt-2">
               <Button variant="outline" size="sm" className="gap-2 rounded-full"><Heart size={14} /> Guardar</Button>
               <Button variant="outline" size="sm" className="gap-2 rounded-full"><Share2 size={14} /> Compartir</Button>
-              <Button variant="outline" size="sm" className="gap-2 rounded-full"><Flag size={14} /> Reportar</Button>
+              <Button variant="outline" size="sm" className="gap-2 rounded-full" onClick={() => requireAuthOrRun(() => setReportOpen(true))}>
+                <Flag size={14} /> Reportar
+              </Button>
             </div>
           </section>
 
