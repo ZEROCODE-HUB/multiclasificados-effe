@@ -328,6 +328,47 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
             </DialogContent>
           </Dialog>
         </TabsContent>
+
+        {/* BOLETAS (solo lectura) */}
+        <TabsContent value="boletas" className="pt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base md:text-lg flex items-center gap-2">
+                <FileText size={16} className="text-secondary" /> Boletas generadas
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="overflow-x-auto">
+              {loadInvoices().length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">Aún no se han generado boletas.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>N° Boleta</TableHead>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead>Anunciante</TableHead>
+                      <TableHead>Correo</TableHead>
+                      <TableHead>Aviso</TableHead>
+                      <TableHead className="text-right">Monto</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loadInvoices().map((inv) => (
+                      <TableRow key={inv.id}>
+                        <TableCell className="font-mono text-xs">{inv.number}</TableCell>
+                        <TableCell className="text-xs">{new Date(inv.date).toLocaleDateString("es-PE")}</TableCell>
+                        <TableCell className="text-sm">{inv.advertiser}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{inv.email}</TableCell>
+                        <TableCell className="text-sm font-medium">{inv.listingTitle}</TableCell>
+                        <TableCell className="text-right font-bold">{formatSoles(inv.amount)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
     </AdminLayout>
   );
