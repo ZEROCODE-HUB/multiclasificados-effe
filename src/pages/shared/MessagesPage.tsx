@@ -1,16 +1,18 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Send, Search } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ArrowLeft, Send, Search, CheckCircle2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { loadSold, markSold } from "@/lib/pricing";
 
 const conversations = [
-  { id: 1, name: "María López", listing: "Departamento 3 dormitorios", lastMsg: "Hola, ¿sigue disponible?", time: "Hace 2h", unread: 2 },
-  { id: 2, name: "Carlos Ruiz", listing: "Desarrollador Full Stack", lastMsg: "Me interesa el puesto.", time: "Hace 5h", unread: 0 },
-  { id: 3, name: "Ana Torres", listing: "Toyota Corolla 2024", lastMsg: "¿Puede enviar más fotos?", time: "Ayer", unread: 1 },
-  { id: 4, name: "Pedro Gómez", listing: "iPhone 15 Pro Max", lastMsg: "¿Aceptaría un cambio?", time: "Hace 2 días", unread: 0 },
+  { id: 1, listingId: "AV-10241", name: "María López", listing: "Departamento 3 dormitorios", lastMsg: "Hola, ¿sigue disponible?", time: "Hace 2h", unread: 2 },
+  { id: 2, listingId: "AV-10239", name: "Carlos Ruiz", listing: "Desarrollador Full Stack", lastMsg: "Me interesa el puesto.", time: "Hace 5h", unread: 0 },
+  { id: 3, listingId: "AV-10240", name: "Ana Torres", listing: "Toyota Corolla 2024", lastMsg: "¿Puede enviar más fotos?", time: "Ayer", unread: 1 },
+  { id: 4, listingId: "AV-10238", name: "Pedro Gómez", listing: "iPhone 15 Pro Max", lastMsg: "¿Aceptaría un cambio?", time: "Hace 2 días", unread: 0 },
 ];
 
 const sampleMessages = [
@@ -24,14 +26,32 @@ const sampleMessages = [
 const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
+  const [sold, setSold] = useState(() => loadSold());
+
+  useEffect(() => {
+    const sync = () => setSold(loadSold());
+    window.addEventListener("effe:sold-updated", sync);
+    return () => window.removeEventListener("effe:sold-updated", sync);
+  }, []);
 
   const selected = conversations.find((c) => c.id === selectedId) ?? null;
+  const selectedSold = selected ? sold[selected.listingId] : undefined;
+  const role_side: "buyer" | "seller" = role === "buscador" ? "buyer" : "seller";
+  const selfMarked = selected ? !!(role_side === "buyer" ? selectedSold?.buyer : selectedSold?.seller) : false;
 
   const send = () => {
     if (!draft.trim()) return;
     toast({ title: "Mensaje enviado", description: draft });
     setDraft("");
   };
+
+  const toggleSold = () => {
+    if (!selected) return;
+    markSold(selected.listingId, role_side, role_side === "buyer" ? "Comprador" : selected.name);
+    setSold(loadSold());
+    toast({ title: "Venta marcada como concretada" });
+  };
+
 
   return (
     <DashboardLayout role={role}>

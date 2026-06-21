@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Users, ClipboardList, CheckCircle2, XCircle, DollarSign, FileBarChart, AlertTriangle, ArrowUpRight, Flag } from "lucide-react";
+import { Users, ClipboardList, CheckCircle2, XCircle, DollarSign, ArrowUpRight, Flag } from "lucide-react";
 import { adminKpis, revenueSeries, categoryDistribution, recentActivity, adminListings } from "@/data/adminMockData";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
 import { loadSold, loadReports } from "@/lib/pricing";
