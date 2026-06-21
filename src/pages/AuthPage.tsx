@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 import { Checkbox } from "@/components/ui/checkbox";
 import authBg from "@/assets/auth-bg.jpg";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
@@ -26,7 +26,7 @@ const AuthPage = () => {
   const [activeTab, setActiveTab] = useState<"login" | "register">(
     searchParams.get("tab") === "register" ? "register" : "login"
   );
-  const [role, setRole] = useState<string>("");
+  
   const [showPassword, setShowPassword] = useState(false);
 
   return (
@@ -149,18 +149,6 @@ const AuthPage = () => {
           ) : (
             <div className="space-y-4 animate-fade-in">
               <div>
-                <Label>Tipo de cuenta</Label>
-                <Select value={role} onValueChange={setRole}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Selecciona tu rol" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="anunciante">Anunciante</SelectItem>
-                    <SelectItem value="buscador">Buscador</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
                 <Label htmlFor="fullName">Nombre completo</Label>
                 <Input id="fullName" placeholder="Juan Pérez" className="mt-1" />
               </div>
@@ -180,20 +168,6 @@ const AuthPage = () => {
                 <Input id="regPassword" type="password" placeholder="Mínimo 8 caracteres" className="mt-1" />
               </div>
 
-              {role === "anunciante" && (
-                <div className="space-y-4 pt-2 border-t animate-fade-in">
-                  <p className="text-sm font-medium text-secondary">Datos de empresa</p>
-                  <div>
-                    <Label htmlFor="razon">Razón social</Label>
-                    <Input id="razon" placeholder="Mi Empresa SAC" className="mt-1" />
-                  </div>
-                  <div>
-                    <Label htmlFor="ruc">RUC / DNI</Label>
-                    <Input id="ruc" placeholder="20123456789" className="mt-1" />
-                  </div>
-                </div>
-              )}
-
               <label className="flex items-start gap-2 text-sm text-muted-foreground cursor-pointer">
                 <Checkbox className="mt-0.5" />
                 <span>Acepto los <a href="#" className="text-secondary hover:underline">términos</a> y la <a href="#" className="text-secondary hover:underline">política de privacidad</a></span>
@@ -201,6 +175,7 @@ const AuthPage = () => {
 
               <Button className="w-full" size="lg">Crear cuenta</Button>
             </div>
+
           )}
 
           {/* Demo buttons */}

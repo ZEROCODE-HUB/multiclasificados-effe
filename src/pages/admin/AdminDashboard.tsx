@@ -1,24 +1,55 @@
+import { useEffect, useMemo, useState } from "react";
 import { AdminLayout, AdminRole } from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Users, ClipboardList, Clock, DollarSign, FileBarChart, AlertTriangle, ArrowUpRight } from "lucide-react";
-import { adminKpis, revenueSeries, categoryDistribution, recentActivity } from "@/data/adminMockData";
-import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Users, ClipboardList, CheckCircle2, XCircle, DollarSign, ArrowUpRight, Flag } from "lucide-react";
+import { adminKpis, revenueSeries, categoryDistribution, recentActivity, adminListings } from "@/data/adminMockData";
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
+import { loadSold, loadReports } from "@/lib/pricing";
 
 const COLORS = ["hsl(220 56% 20%)", "hsl(24 95% 53%)", "hsl(166 60% 45%)", "hsl(220 56% 45%)", "hsl(40 95% 55%)", "hsl(220 14% 60%)"];
 
 interface Props { role: AdminRole }
 
 const AdminDashboard = ({ role }: Props) => {
+  const [sold, setSold] = useState(() => loadSold());
+  const [reports, setReports] = useState(() => loadReports());
+  const [catFilter, setCatFilter] = useState<string>("all");
+
+  useEffect(() => {
+    const sync = () => { setSold(loadSold()); setReports(loadReports()); };
+    window.addEventListener("effe:sold-updated", sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener("effe:sold-updated", sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
+
+  const allCats = useMemo(() => Array.from(new Set(adminListings.map((l) => l.category))), []);
+  const filteredListings = useMemo(
+    () => adminListings.filter((l) => catFilter === "all" || l.category === catFilter),
+    [catFilter],
+  );
+  const filteredReports = useMemo(
+    () => reports.filter((r) => catFilter === "all" || r.category === catFilter),
+    [reports, catFilter],
+  );
+  const soldCount = Object.keys(sold).length;
+  const notSold = Math.max(0, filteredListings.length - soldCount);
+
   const kpis = [
-    { label: "Usuarios registrados", value: adminKpis.users.toLocaleString(), icon: Users, trend: "+8.4%", accent: "bg-primary/10 text-primary" },
-    { label: "Avisos activos", value: adminKpis.activeListings.toLocaleString(), icon: ClipboardList, trend: "+3.2%", accent: "bg-secondary/15 text-secondary" },
-    { label: "Pendientes moderación", value: adminKpis.pendingListings, icon: Clock, trend: "+12", accent: "bg-warning/15 text-warning" },
+    { label: "Avisos publicados", value: filteredListings.length.toLocaleString(), icon: ClipboardList, trend: "+3.2%", accent: "bg-secondary/15 text-secondary" },
+    { label: "Vendidos", value: soldCount.toLocaleString(), icon: CheckCircle2, trend: "", accent: "bg-success/15 text-success" },
+    { label: "No vendidos", value: notSold.toLocaleString(), icon: XCircle, trend: "", accent: "bg-warning/15 text-warning" },
+    { label: "Reportados", value: filteredReports.length.toLocaleString(), icon: Flag, trend: "", accent: "bg-destructive/15 text-destructive" },
+    { label: "Usuarios", value: adminKpis.users.toLocaleString(), icon: Users, trend: "+8.4%", accent: "bg-primary/10 text-primary" },
     { label: "Ingresos (S/)", value: adminKpis.revenue.toLocaleString(), icon: DollarSign, trend: "+14.1%", accent: "bg-success/15 text-success" },
-    { label: "Postulaciones", value: adminKpis.applications.toLocaleString(), icon: FileBarChart, trend: "+5.8%", accent: "bg-accent text-accent-foreground" },
-    { label: "Reportes abiertos", value: adminKpis.reportsOpen, icon: AlertTriangle, trend: "-2", accent: "bg-destructive/15 text-destructive" },
   ];
+
 
   return (
     <AdminLayout role={role} title="Panel de control" breadcrumb={["Dashboard"]}>
@@ -37,6 +68,18 @@ const AdminDashboard = ({ role }: Props) => {
             <ArrowUpRight size={18} /> Generar reporte
           </Button>
         </div>
+      </div>
+
+      {/* Category filter */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Filtrar por categoría:</span>
+        <Select value={catFilter} onValueChange={setCatFilter}>
+          <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas las categorías</SelectItem>
+            {allCats.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* KPIs */}
@@ -104,6 +147,48 @@ const AdminDashboard = ({ role }: Props) => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Detalle por aviso (vendido / no vendido) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base md:text-lg">Detalle por aviso</CardTitle>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>ID</TableHead>
+                <TableHead>Aviso</TableHead>
+                <TableHead>Categoría</TableHead>
+                <TableHead>Estado venta</TableHead>
+                <TableHead>Comprador</TableHead>
+                <TableHead>Vendedor</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredListings.slice(0, 10).map((l) => {
+                const s = sold[l.id];
+                return (
+                  <TableRow key={l.id}>
+                    <TableCell className="font-mono text-xs">{l.id}</TableCell>
+                    <TableCell className="text-sm font-medium">{l.title}</TableCell>
+                    <TableCell><Badge variant="outline">{l.category}</Badge></TableCell>
+                    <TableCell>
+                      {s ? (
+                        <Badge variant="outline" className="bg-success/10 text-success border-success/30">Vendido</Badge>
+                      ) : (
+                        <Badge variant="outline" className="bg-muted text-muted-foreground">No vendido</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs">{s?.buyer || "—"}</TableCell>
+                    <TableCell className="text-xs">{s?.seller || l.advertiser}</TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       {/* Recent activity */}
       <Card>

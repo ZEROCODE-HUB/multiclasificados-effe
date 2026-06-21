@@ -39,6 +39,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { useSession } from "@/hooks/useSession";
+import { Checkbox } from "@/components/ui/checkbox";
+import { addReport, loadSold, markSold } from "@/lib/pricing";
 
 
 export default function ListingDetail() {
@@ -71,10 +73,33 @@ export default function ListingDetail() {
   const [messageOpen, setMessageOpen] = useState(false);
   const [phoneOpen, setPhoneOpen] = useState(false);
   const [phoneRevealed, setPhoneRevealed] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportReason, setReportReason] = useState("");
+  const [soldState, setSoldState] = useState(() => loadSold()[listing.id]);
 
   const [messageText, setMessageText] = useState(
     `Hola ${listing.advertiser.split(" ")[0]}, estoy interesado en "${listing.title}". ¿Sigue disponible?`,
   );
+
+  const handleReport = () => {
+    if (!reportReason.trim()) return;
+    addReport({
+      listingId: listing.id,
+      listingTitle: listing.title,
+      reason: reportReason.trim(),
+      reportedBy: session?.name || "Usuario anónimo",
+      category: category?.name,
+    });
+    setReportOpen(false);
+    setReportReason("");
+    toast({ title: "Reporte enviado", description: "Nuestro equipo revisará el aviso." });
+  };
+
+  const toggleSold = (who: "buyer" | "seller") => {
+    markSold(listing.id, who, session?.name || (who === "buyer" ? "Comprador" : "Vendedor"));
+    setSoldState(loadSold()[listing.id]);
+    toast({ title: "Marcado como venta concretada", description: who === "buyer" ? "Comprador confirmado." : "Vendedor confirmado." });
+  };
 
   const requireAuthOrRun = (action: () => void) => {
     if (!session) {
@@ -209,7 +234,9 @@ export default function ListingDetail() {
             <div className="flex flex-wrap gap-2 pt-2">
               <Button variant="outline" size="sm" className="gap-2 rounded-full"><Heart size={14} /> Guardar</Button>
               <Button variant="outline" size="sm" className="gap-2 rounded-full"><Share2 size={14} /> Compartir</Button>
-              <Button variant="outline" size="sm" className="gap-2 rounded-full"><Flag size={14} /> Reportar</Button>
+              <Button variant="outline" size="sm" className="gap-2 rounded-full" onClick={() => requireAuthOrRun(() => setReportOpen(true))}>
+                <Flag size={14} /> Reportar
+              </Button>
             </div>
           </section>
 
@@ -347,6 +374,25 @@ export default function ListingDetail() {
             </Button>
           </div>
 
+          {/* Sale closure */}
+          <div className="bg-card border border-border p-5 space-y-3">
+            <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-secondary">Cierre de venta</p>
+            <p className="text-xs text-muted-foreground">Marca si concretaron la transacción. Ambos lados pueden confirmar.</p>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <Checkbox checked={!!soldState?.buyer} onCheckedChange={() => requireAuthOrRun(() => toggleSold("buyer"))} />
+              <span>Soy el comprador y la venta se concretó</span>
+            </label>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <Checkbox checked={!!soldState?.seller} onCheckedChange={() => requireAuthOrRun(() => toggleSold("seller"))} />
+              <span>Soy el vendedor y la venta se concretó</span>
+            </label>
+            {(soldState?.buyer || soldState?.seller) && (
+              <p className="text-[11px] text-success font-semibold flex items-center gap-1">
+                <CheckCircle2 size={12} /> Venta registrada
+              </p>
+            )}
+          </div>
+
           {/* Safety tips */}
           <div className="bg-muted/30 border border-border p-5 text-xs text-muted-foreground space-y-2">
             <p className="font-bold uppercase tracking-wider text-[10px] text-foreground">Consejos de seguridad</p>
@@ -357,6 +403,7 @@ export default function ListingDetail() {
             </ul>
           </div>
         </aside>
+
       </div>
 
       {/* Related */}
@@ -436,6 +483,33 @@ export default function ListingDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Report dialog */}
+      <Dialog open={reportOpen} onOpenChange={setReportOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reportar aviso</DialogTitle>
+            <DialogDescription>Cuéntanos qué problema observas con "{listing.title}".</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Label htmlFor="reason">Motivo del reporte</Label>
+            <Textarea
+              id="reason"
+              rows={4}
+              value={reportReason}
+              onChange={(e) => setReportReason(e.target.value)}
+              placeholder="Ej: información engañosa, contenido inapropiado, posible estafa…"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setReportOpen(false)}>Cancelar</Button>
+            <Button onClick={handleReport} disabled={!reportReason.trim()} className="gap-2">
+              <Flag size={14} /> Enviar reporte
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+

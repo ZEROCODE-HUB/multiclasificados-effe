@@ -13,10 +13,12 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Trash2, Sparkles, Power } from "lucide-react";
+import { Plus, Pencil, Trash2, Sparkles, Power, FileText } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { categories as initialCategories } from "@/data/mockData";
 import { plans as initialPlans } from "@/data/adminMockData";
 import { toast } from "@/hooks/use-toast";
+import { loadInvoices, formatSoles } from "@/lib/pricing";
 
 interface Cat { id: string; name: string; iconKey?: string }
 interface Plan { id: string; name: string; price: string; listings: number; featured: number; active: number }
@@ -102,6 +104,7 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
           <TabsTrigger value="categorias">Categorías</TabsTrigger>
           <TabsTrigger value="planes">Planes y tarifas</TabsTrigger>
           <TabsTrigger value="promos">Promociones</TabsTrigger>
+          <TabsTrigger value="boletas">Boletas</TabsTrigger>
         </TabsList>
 
         {/* CATEGORÍAS */}
@@ -324,6 +327,47 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+        </TabsContent>
+
+        {/* BOLETAS (solo lectura) */}
+        <TabsContent value="boletas" className="pt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base md:text-lg flex items-center gap-2">
+                <FileText size={16} className="text-secondary" /> Boletas generadas
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="overflow-x-auto">
+              {loadInvoices().length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">Aún no se han generado boletas.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>N° Boleta</TableHead>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead>Anunciante</TableHead>
+                      <TableHead>Correo</TableHead>
+                      <TableHead>Aviso</TableHead>
+                      <TableHead className="text-right">Monto</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loadInvoices().map((inv) => (
+                      <TableRow key={inv.id}>
+                        <TableCell className="font-mono text-xs">{inv.number}</TableCell>
+                        <TableCell className="text-xs">{new Date(inv.date).toLocaleDateString("es-PE")}</TableCell>
+                        <TableCell className="text-sm">{inv.advertiser}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{inv.email}</TableCell>
+                        <TableCell className="text-sm font-medium">{inv.listingTitle}</TableCell>
+                        <TableCell className="text-right font-bold">{formatSoles(inv.amount)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </AdminLayout>

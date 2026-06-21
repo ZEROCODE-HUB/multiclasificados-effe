@@ -1,98 +1,97 @@
-## Objetivo
-Profesionalizar el panel administrativo (estilo CRM), pulir landing/hero, simplificar navegación móvil y corregir comportamientos varios.
+# Plan de actualización — MultiClasificados EFFE
 
----
+Mantengo intactos: roles, navegación, estilo visual y sistema de diseño actuales. Solo se aplican los cambios listados, en los roles indicados.
 
-## Panel administrativo (admin + superadmin)
+## 1. Registro unificado (Buscador / Anunciante)
+- `src/pages/AuthPage.tsx`: eliminar selector de tipo de cuenta y campos de razón social/RUC/DNI en registro. Dejar únicamente: nombre, correo, teléfono, contraseña (+ aceptación de términos). Mantener botones de demo y login intactos.
+- Al registrar, el usuario queda como rol genérico que puede tanto buscar como, al intentar publicar, completar verificación de identidad.
 
-### 1. Gestión de avisos (`AdminListings`)
-- Banner/toast de confirmación al **aprobar** (igual que rechazo).
-- Habilitar ícono **ojo** → abrir `Dialog` con todos los detalles del aviso (título, descripción, categoría, ubicación, precio, anunciante, fechas, imágenes, estado).
-- Tabla con **paginación**, búsqueda y filtros visibles (look CRM).
-- Aplicar mismos cambios en la vista equivalente del superadmin (compartir componente).
+## 2. Flujo de publicación de aviso (Anunciante)
+Reescribir `src/pages/advertiser/AdvertiserPublish.tsx` como wizard de un solo archivo con pasos:
+1. **Popup inicial** "Persona natural / Persona jurídica" → input DNI o RUC + botón "Verificar" (validación simulada de longitud).
+2. **Datos del aviso**: campos actuales (título, categoría, descripción, fotos ordenables ya existentes).
+3. **Duración**: select con 3, 7, 15, 30, 60, 90 días.
+4. **Extras**: checkboxes Imagen 100kb, Imagen 500kb, PDF 100kb, PDF 500kb, Urgente, Destacado, Confidencial.
+5. **Precio dinámico** visible en panel lateral/sticky, recalculado en vivo desde `src/lib/pricing.ts` (nuevo).
+6. **Resumen del aviso** con checkbox "Confirmo que la información es correcta".
+7. **Pago simulado** → publica automáticamente, genera boleta (sección 9), redirige a "Mis avisos".
 
-### 2. Gestión de usuarios (`AdminUsers`)
-- Acción **activar/suspender** abre `AlertDialog` de confirmación antes de ejecutar.
-- Paginación + filtros consistentes.
+Eliminar redirección a `/planes` y el botón "Publicar aviso" del flujo anterior que llevaba a planes. Eliminar la página `src/pages/PlansPage.tsx` y su ruta en `src/App.tsx`. Eliminar cualquier flujo de aprobación previa por administrador.
 
-### 3. Configuración comercial (`AdminCommercial`)
-- **Categorías**: botón "Nueva" abre dialog (form simple en estado local), íconos editar/borrar funcionales con confirmación.
-- **Planes**: botón "Editar plan" abre dialog editable.
-- **Promociones**: "Nueva" funcional + acciones por promoción (activar/desactivar/eliminar) con `AlertDialog` y toast.
+Nota: la duración 3 días no aparece en la tabla de precios; se calculará proporcionalmente (3/7 del precio de 7 días) usando el mismo motor.
 
-### 4. Comunicaciones → submódulo "Conversaciones"
-- Mover/duplicar `SuperConversations` como página accesible para admin **bajo Comunicaciones**.
-- En superadmin también reordenar para que "Conversaciones" quede bajo "Comunicaciones" en el sidebar.
+## 3. Motor de precios (`src/lib/pricing.ts` nuevo)
+Función pura que recibe `{ cantidadAvisos, dias, extras, settings }` y devuelve precio total.
 
-### 5. Reportes (`AdminReports`)
-- Reemplazar tabs por las categorías solicitadas:
-  - **Dashboard tiempo real**: avisos gratuitos por categoría; avisos con visibilidad (con total cobrado); gratuitos por región + categoría; con visibilidad por región + categoría (con total cobrado).
-  - **Reclamos**: recibidos / pendientes / solucionados con conformidad.
-  - **Pagos, Avisos, Usuarios, Postulaciones**: filtrables (rango fechas, categoría, región) y exportables CSV/Excel/PDF.
-- Charts con datos mock realistas + filtros en cabecera.
+```text
+precio(n, d) = base
+             * factorCantidad(n)   // (1 - desc)^(n-1), desc por aviso adicional
+             * factorDias(d)       // duplica precio y aplica % por cada salto
+```
 
-### 6. Comunicaciones masivas (`AdminCommunications`)
-- En tab "Masivo" agregar segmentación avanzada para **Buscadores**:
-  - Por perfil, por intereses, por ubicación geográfica (región/ciudad), por avisos activos de anunciantes, factores de match.
-- Checkbox/auto "Incluir en copia a Administradores y Superadministradores".
+`settings` proviene de localStorage (`effe:pricing-settings`), valores por defecto:
+- base = 16.14
+- descPorAviso = 0.06
+- saltos = {15:0.14, 30:0.13, 60:0.12, 90:0.11}
+- extras = {img100:5, img500:5, pdf100:5, pdf500:5, urgente:10, destacado:15, confidencial:8}
 
-### 7. Superadmin → Roles (`SuperRoles`)
-- Dejar **solo dos roles**: Superadministrador y Administrador.
-- El superadmin define permisos granulares sobre lo que el administrador puede hacer (matriz de permisos editable).
-- Eliminar referencias a Moderador y Soporte en UI/datos mock.
+Función auxiliar `buildMatrix(settings)` que genera la tabla 1–10 avisos × {7,15,30,60,90}.
 
-### 8. Superadmin → limpiar módulos
-- Eliminar página/ruta **Integraciones** (`SuperIntegrations`) y su entrada de sidebar.
-- En **Seguridad** (`SuperSecurity`) eliminar: Lista blanca de IPs, Cifrado en reposo, Política de contraseñas, Monitoreo.
-- Eliminar también `SuperMonitoring` si ya no se referencia.
+## 4. Módulo de Tarifas (Administrador / Superadministrador)
+Nueva página `src/pages/admin/AdminPricing.tsx`:
+- Sección "Parámetros": inputs editables (base, % por aviso adicional, % por cada salto de días, precios de cada extra). Guardar en localStorage.
+- Sección "Matriz calculada": tabla de 10×5 generada por `buildMatrix`, solo lectura, con badge "calculado automáticamente".
+- Sección "Extras": lista editable con precio.
 
----
+Agregar ruta y entrada en `AdminLayout.tsx` (icono `Tags` o `DollarSign`). Visible para admin y superadmin.
 
-## Landing & navegación
+## 5. Conversaciones (Buscador y Anunciante)
+- `src/pages/ListingDetail.tsx`: ya tiene "Enviar mensaje" y "Mostrar teléfono" — mantener.
+- Verificar que `MessagesPage.tsx` esté enlazado tanto desde el menú del Buscador como del Anunciante (`DashboardLayout.tsx`). Añadir entrada "Conversaciones" en el menú lateral del Anunciante si falta.
 
-### 9. Hero (`HeroSearch` / `Index`)
-- Título: `Multiclasificados` + `EFFE` (sin "— PERÚ"; "Perú" no en mayúsculas, simplemente quitar el subtítulo país).
-- Subir tamaño tipográfico de "Donde los negocios suceden".
-- Lado derecho: **un solo card** con métrica "avisos activos" (gráfico/contador). Eliminar el card "100% verificados".
-- Quitar pill/kicker "Plataforma profesional · Perú".
+## 6. Cierre de venta (Buscador y Anunciante)
+- En `MessagesPage.tsx` (vista de conversación) y/o en el detalle del aviso del lado del anunciante, agregar un checkbox "Venta concretada" persistido en localStorage por `listingId`. Ambos lados pueden marcarlo; el aviso se considera vendido cuando ambos lo marcan (o al menos uno, según simulación — usaremos: cualquiera de los dos marca → estado "vendido" para KPIs).
 
-### 13. Hero móvil + navegación móvil
-- Reducir altura del hero en móvil (menos `min-h`, menos padding vertical).
-- `MobileBottomNav` **siempre visible** cuando hay sesión (en todas las rutas excepto `/auth`).
-- Menú hamburguesa móvil: mostrar **solo secciones que no estén en el bottom nav** (no listar todas las categorías ni duplicar bottom nav).
+## 7. Moderación
+- `ListingDetail.tsx`: agregar botón "Reportar" con popup (motivo) → guarda en `localStorage` lista de reportes.
+- `src/pages/admin/AdminListings.tsx`: agregar tab "Reportados" (Tabs shadcn). Acción "Deshabilitar" con popup de motivo → notificación simulada al anunciante (toast + registro local).
+- Eliminar cualquier acción "Aprobar/Rechazar" previa a publicación si existe.
 
-### 10. `dashboard/anunciante/configuracion`
-- Quitar bloque de notificaciones por completo.
+## 8. KPIs (Administrador / Superadministrador)
+Actualizar `src/pages/admin/AdminDashboard.tsx` para mostrar:
+- Total avisos publicados (con filtro por categoría)
+- Vendidos / No vendidos (de localStorage de sección 6)
+- Reportados (filtrable por categoría)
+- Tabla "Detalle por aviso" con comprador/vendedor si fue marcado vendido
 
-### 11. Alertas (Seeker)
-- Eliminar `SeekerAlerts`, su ruta y cualquier link/ícono en navbar, dropdown "Mi Cuenta", bottom nav.
+## 9. Facturación
+- Al confirmar pago en el wizard de publicación, generar registro de boleta (número correlativo, fecha, monto, detalle, correo del anunciante) y guardarlo en localStorage (`effe:invoices`).
+- Mostrar toast: "Boleta enviada a {correo}".
+- Nueva subpágina simple `src/pages/advertiser/AdvertiserInvoices.tsx` con lista de boletas del anunciante.
+- En el panel admin, agregar acceso de solo lectura a las boletas (sub-tab dentro de `AdminCommercial.tsx`).
 
-### 12. Búsquedas guardadas (`SeekerSearches`)
-- Habilitar botones **Refresh** (re-ejecuta búsqueda, toast) y **Eliminar** (con `AlertDialog` de confirmación + toast).
+## Archivos a crear
+- `src/lib/pricing.ts`
+- `src/pages/admin/AdminPricing.tsx`
+- `src/pages/advertiser/AdvertiserInvoices.tsx`
 
----
+## Archivos a editar
+- `src/pages/AuthPage.tsx`
+- `src/pages/advertiser/AdvertiserPublish.tsx`
+- `src/pages/ListingDetail.tsx`
+- `src/pages/admin/AdminListings.tsx`
+- `src/pages/admin/AdminDashboard.tsx`
+- `src/pages/admin/AdminCommercial.tsx`
+- `src/pages/shared/MessagesPage.tsx`
+- `src/components/AdminLayout.tsx`
+- `src/components/DashboardLayout.tsx`
+- `src/components/Navbar.tsx` (quitar enlace a /planes si lo tuviera)
+- `src/App.tsx` (rutas: añadir nuevas, eliminar `/planes`)
 
-## Nota general: refrescos espontáneos
-- Auditar `useSession` y eventos `effe-session`: evitar `setState` redundantes que disparen remount.
-- Revisar `<Route>` keys, `useEffect` con dependencias inestables, y cualquier `window.location.href` que debería ser `navigate()` de React Router.
-- Asegurar que cambios de localStorage no rerendericen árboles enteros.
+## Archivos a eliminar
+- `src/pages/PlansPage.tsx`
 
----
-
-## Archivos clave
-- `src/pages/admin/AdminListings.tsx`, `AdminUsers.tsx`, `AdminCommercial.tsx`, `AdminCommunications.tsx`, `AdminReports.tsx`
-- `src/components/AdminLayout.tsx` (añadir ítem "Conversaciones" bajo Comunicaciones)
-- `src/pages/superadmin/SuperConversations.tsx`, `SuperRoles.tsx`, `SuperSecurity.tsx`
-- Eliminar: `SuperIntegrations.tsx`, `SuperMonitoring.tsx`, `seeker/SeekerAlerts.tsx`
-- `src/components/HeroSearch.tsx`, `src/pages/Index.tsx`
-- `src/components/MobileBottomNav.tsx`, `src/components/Navbar.tsx` (menú hamburguesa)
-- `src/pages/shared/SettingsPage.tsx` (o equivalente anunciante)
-- `src/pages/seeker/SeekerSearches.tsx`
-- `src/App.tsx` (rutas: quitar alertas, integraciones, monitoreo; añadir conversaciones admin)
-- `src/hooks/useSession.ts` (estabilizar)
-
-## Sin tocar
-- Backend / persistencia (no hay).
-- Lógica de auth real.
-
-¿Procedo con la implementación completa o ajustamos algún punto antes?
+## No tocar
+- Sistema de roles existente
+- Colores, tipografías, espaciados, componentes UI (shadcn) ya definidos
+- Cualquier funcionalidad no descrita en los 9 puntos
