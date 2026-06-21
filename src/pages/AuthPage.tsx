@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 import { Checkbox } from "@/components/ui/checkbox";
 import authBg from "@/assets/auth-bg.jpg";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
@@ -26,7 +26,7 @@ const AuthPage = () => {
   const [activeTab, setActiveTab] = useState<"login" | "register">(
     searchParams.get("tab") === "register" ? "register" : "login"
   );
-  const [role, setRole] = useState<string>("");
+  
   const [showPassword, setShowPassword] = useState(false);
 
   return (
