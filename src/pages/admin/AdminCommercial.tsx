@@ -13,10 +13,12 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Trash2, Sparkles, Power } from "lucide-react";
+import { Plus, Pencil, Trash2, Sparkles, Power, FileText } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { categories as initialCategories } from "@/data/mockData";
 import { plans as initialPlans } from "@/data/adminMockData";
 import { toast } from "@/hooks/use-toast";
+import { loadInvoices, formatSoles } from "@/lib/pricing";
 
 interface Cat { id: string; name: string; iconKey?: string }
 interface Plan { id: string; name: string; price: string; listings: number; featured: number; active: number }
@@ -102,6 +104,7 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
           <TabsTrigger value="categorias">Categorías</TabsTrigger>
           <TabsTrigger value="planes">Planes y tarifas</TabsTrigger>
           <TabsTrigger value="promos">Promociones</TabsTrigger>
+          <TabsTrigger value="boletas">Boletas</TabsTrigger>
         </TabsList>
 
         {/* CATEGORÍAS */}
