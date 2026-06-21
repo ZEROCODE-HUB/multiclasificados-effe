@@ -70,6 +70,18 @@ const AdminDashboard = ({ role }: Props) => {
         </div>
       </div>
 
+      {/* Category filter */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Filtrar por categoría:</span>
+        <Select value={catFilter} onValueChange={setCatFilter}>
+          <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas las categorías</SelectItem>
+            {allCats.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
         {kpis.map((k) => (
