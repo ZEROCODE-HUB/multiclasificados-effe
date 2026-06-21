@@ -375,6 +375,25 @@ export default function ListingDetail() {
             </Button>
           </div>
 
+          {/* Sale closure */}
+          <div className="bg-card border border-border p-5 space-y-3">
+            <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-secondary">Cierre de venta</p>
+            <p className="text-xs text-muted-foreground">Marca si concretaron la transacción. Ambos lados pueden confirmar.</p>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <Checkbox checked={!!soldState?.buyer} onCheckedChange={() => requireAuthOrRun(() => toggleSold("buyer"))} />
+              <span>Soy el comprador y la venta se concretó</span>
+            </label>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <Checkbox checked={!!soldState?.seller} onCheckedChange={() => requireAuthOrRun(() => toggleSold("seller"))} />
+              <span>Soy el vendedor y la venta se concretó</span>
+            </label>
+            {(soldState?.buyer || soldState?.seller) && (
+              <p className="text-[11px] text-success font-semibold flex items-center gap-1">
+                <CheckCircle2 size={12} /> Venta registrada
+              </p>
+            )}
+          </div>
+
           {/* Safety tips */}
           <div className="bg-muted/30 border border-border p-5 text-xs text-muted-foreground space-y-2">
             <p className="font-bold uppercase tracking-wider text-[10px] text-foreground">Consejos de seguridad</p>
@@ -385,6 +404,7 @@ export default function ListingDetail() {
             </ul>
           </div>
         </aside>
+
       </div>
 
       {/* Related */}
@@ -464,6 +484,33 @@ export default function ListingDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Report dialog */}
+      <Dialog open={reportOpen} onOpenChange={setReportOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reportar aviso</DialogTitle>
+            <DialogDescription>Cuéntanos qué problema observas con "{listing.title}".</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Label htmlFor="reason">Motivo del reporte</Label>
+            <Textarea
+              id="reason"
+              rows={4}
+              value={reportReason}
+              onChange={(e) => setReportReason(e.target.value)}
+              placeholder="Ej: información engañosa, contenido inapropiado, posible estafa…"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setReportOpen(false)}>Cancelar</Button>
+            <Button onClick={handleReport} disabled={!reportReason.trim()} className="gap-2">
+              <Flag size={14} /> Enviar reporte
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+
