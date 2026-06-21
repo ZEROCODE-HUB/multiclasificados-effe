@@ -7,7 +7,8 @@ import Index from "./pages/Index.tsx";
 import AuthPage from "./pages/AuthPage.tsx";
 import SearchPage from "./pages/SearchPage.tsx";
 import ListingDetail from "./pages/ListingDetail.tsx";
-import PlansPage from "./pages/PlansPage.tsx";
+import AdminPricing from "./pages/admin/AdminPricing.tsx";
+import AdvertiserInvoices from "./pages/advertiser/AdvertiserInvoices.tsx";
 import { Navigate } from "react-router-dom";
 import AdvertiserDashboard from "./pages/AdvertiserDashboard.tsx";
 import SeekerDashboard from "./pages/SeekerDashboard.tsx";
@@ -46,7 +47,7 @@ const App = () => (
           <Route path="/auth" element={<AuthPage />} />
           <Route path="/buscar" element={<SearchPage />} />
           <Route path="/aviso/:id" element={<ListingDetail />} />
-          <Route path="/planes" element={<PlansPage />} />
+          <Route path="/planes" element={<Navigate to="/dashboard/anunciante/publicar" replace />} />
           <Route path="/mapa" element={<Navigate to="/buscar?view=map" replace />} />
 
 
@@ -58,6 +59,7 @@ const App = () => (
           <Route path="/dashboard/anunciante/postulaciones" element={<AdvertiserApplications />} />
           <Route path="/dashboard/anunciante/estadisticas" element={<AdvertiserStats />} />
           <Route path="/dashboard/anunciante/configuracion" element={<SettingsPage role="anunciante" />} />
+          <Route path="/dashboard/anunciante/boletas" element={<AdvertiserInvoices />} />
 
           {/* Seeker */}
           <Route path="/dashboard/buscador" element={<SeekerDashboard />} />
@@ -76,6 +78,7 @@ const App = () => (
           <Route path="/dashboard/admin/conversaciones" element={<SuperConversations role="admin" />} />
           <Route path="/dashboard/admin/comercial" element={<AdminCommercial role="admin" />} />
           <Route path="/dashboard/admin/reportes" element={<AdminReports role="admin" />} />
+          <Route path="/dashboard/admin/tarifas" element={<AdminPricing role="admin" />} />
 
           {/* Super Admin */}
           <Route path="/dashboard/superadmin" element={<AdminDashboard role="superadmin" />} />
@@ -85,6 +88,7 @@ const App = () => (
           <Route path="/dashboard/superadmin/conversaciones" element={<SuperConversations role="superadmin" />} />
           <Route path="/dashboard/superadmin/comercial" element={<AdminCommercial role="superadmin" />} />
           <Route path="/dashboard/superadmin/reportes" element={<AdminReports role="superadmin" />} />
+          <Route path="/dashboard/superadmin/tarifas" element={<AdminPricing role="superadmin" />} />
           <Route path="/dashboard/superadmin/roles" element={<SuperRoles />} />
           <Route path="/dashboard/superadmin/plataforma" element={<SuperPlatform />} />
           <Route path="/dashboard/superadmin/seguridad" element={<SuperSecurity />} />
