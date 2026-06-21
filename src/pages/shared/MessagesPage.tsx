@@ -123,6 +123,17 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
                       <p className="text-xs text-muted-foreground truncate">{selected.listing}</p>
                     </div>
                   </div>
+                  <div className="mt-2 pt-2 border-t flex items-center justify-between gap-2 flex-wrap">
+                    <label className="flex items-center gap-2 text-xs cursor-pointer">
+                      <Checkbox checked={selfMarked} onCheckedChange={toggleSold} />
+                      <span>Marcar venta concretada ({role === "buscador" ? "como comprador" : "como vendedor"})</span>
+                    </label>
+                    {(selectedSold?.buyer && selectedSold?.seller) && (
+                      <span className="text-[11px] text-success font-semibold flex items-center gap-1">
+                        <CheckCircle2 size={11} /> Confirmada por ambos
+                      </span>
+                    )}
+                  </div>
                 </CardHeader>
                 <CardContent className="flex-1 overflow-y-auto p-4 space-y-3 bg-muted/30">
                   {sampleMessages.map((msg, i) => (
