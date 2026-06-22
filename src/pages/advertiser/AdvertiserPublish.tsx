@@ -20,14 +20,26 @@ import { useNavigate } from "react-router-dom";
 import { useSession } from "@/hooks/useSession";
 import { toast } from "@/hooks/use-toast";
 import {
-  loadSettings, totalPrice, priceForDuration, extrasTotal, formatSoles, addInvoice,
-  type ExtrasSelection, type DurationDays, type PricingSettings,
+  loadSettings, priceForDuration, formatSoles, addInvoice,
+  type DurationDays, type PricingSettings, type ExtraPrices,
 } from "@/lib/pricing";
 
 interface PhotoItem { id: string; url: string; name: string; }
 
-const MAX_PHOTOS = 10;
 const DURATIONS: DurationDays[] = [3, 7, 15, 30, 60, 90];
+const QUANTITIES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+// Extras del paquete (cantidad numérica por cada uno)
+type ExtraKey = "img500" | "pdf500" | "urgente" | "destacado" | "confidencial";
+const EXTRA_DEFS: Array<{ key: ExtraKey; label: string; sub?: string; icon: typeof Sparkles }> = [
+  { key: "img500", label: "Segunda imagen por aviso", sub: "hasta 500 KB", icon: ImagePlus },
+  { key: "pdf500", label: "PDF adjunto por aviso", sub: "hasta 500 KB", icon: FileText },
+  { key: "urgente", label: "Marcar como Urgente", icon: Flame },
+  { key: "destacado", label: "Marcar como Destacado", icon: Star },
+  { key: "confidencial", label: "Marcar como Confidencial", icon: EyeOff },
+];
+
+type ExtrasCount = Partial<Record<ExtraKey, number>>;
 
 const DRAFT_KEY = "effe:publish-draft";
 
