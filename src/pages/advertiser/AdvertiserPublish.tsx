@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   ImagePlus, X, ArrowLeft, ArrowRight, Star, Check, MapPin, Tag, FileText, Camera,
-  ShieldCheck, Building2, User, CreditCard, Receipt, Sparkles, Flame, EyeOff,
+  ShieldCheck, Building2, User, CreditCard, Receipt, Sparkles, Flame, EyeOff, Lock, Package, Minus, Plus,
 } from "lucide-react";
 import { categories } from "@/data/mockData";
 import { useEffect, useRef, useState } from "react";
