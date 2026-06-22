@@ -82,11 +82,11 @@ const Index = () => {
         <img
           src={heroBg}
           alt="Marketplace profesional EFFE Multiclasificados"
-          className="absolute inset-0 w-full h-full object-cover opacity-85"
+          className="absolute inset-0 w-full h-full object-cover opacity-80"
           fetchPriority="high"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-blue-500/40 via-blue-600/35 to-blue-900/75" />
-        <div className="absolute inset-0 bg-gradient-to-r from-blue-700/50 via-blue-500/20 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-b from-blue-900/45 via-blue-800/40 to-blue-950/80" />
+        <div className="absolute inset-0 bg-gradient-to-r from-blue-950/60 via-blue-800/30 to-transparent" />
         <div className="absolute inset-0 bg-dot-pattern opacity-15" />
 
         <div className="relative z-10 flex-1 flex items-center">
