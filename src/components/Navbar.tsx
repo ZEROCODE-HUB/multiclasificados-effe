@@ -53,9 +53,14 @@ export function Navbar() {
       ]
     : [];
 
-  // Hamburguesa móvil: ítems que NO están en el bottom nav
+  // Hamburguesa móvil: solo lo NO cubierto por el bottom nav (Inicio, Explorar, Publicar, Mensajes, Mi cuenta)
+  const bottomNavCovered = new Set<string>([
+    "/dashboard/anunciante/publicar",
+    "/dashboard/anunciante", // "Mi cuenta" → Panel
+    "/dashboard/buscador",
+  ]);
   const mobileOverflow = isUser
-    ? accountItems.filter((i) => !["/dashboard/anunciante/publicar"].includes(i.to))
+    ? accountItems.filter((i) => !bottomNavCovered.has(i.to) && i.label !== "Panel y estadísticas")
     : [];
 
   return (
