@@ -34,8 +34,8 @@ const AdvertiserPublish = () => {
   const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Verificación de identidad inicial
-  const [verifyOpen, setVerifyOpen] = useState(true);
+  // Verificación de identidad (se solicita al presionar "Publicar aviso")
+  const [verifyOpen, setVerifyOpen] = useState(false);
   const [personType, setPersonType] = useState<"natural" | "juridica" | "">("");
   const [docNumber, setDocNumber] = useState("");
   const [verified, setVerified] = useState(false);
