@@ -102,9 +102,7 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
       <Tabs defaultValue="categorias">
         <TabsList className="w-full overflow-x-auto justify-start no-scrollbar">
           <TabsTrigger value="categorias">Categorías</TabsTrigger>
-          <TabsTrigger value="planes">Planes y tarifas</TabsTrigger>
-          <TabsTrigger value="promos">Promociones</TabsTrigger>
-          <TabsTrigger value="boletas">Boletas</TabsTrigger>
+          <TabsTrigger value="boletas">Boletas y facturas</TabsTrigger>
         </TabsList>
 
         {/* CATEGORÍAS */}
