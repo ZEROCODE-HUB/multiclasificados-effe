@@ -14,6 +14,7 @@ const titlesByPath: Record<string, string> = {
   "/dashboard/anunciante/postulaciones": "Postulaciones",
   "/dashboard/anunciante/estadisticas": "Panel y estadísticas",
   "/dashboard/anunciante/configuracion": "Configuración",
+  "/dashboard/anunciante/boletas": "Mis comprobantes",
   "/dashboard/buscador": "Panel y estadísticas",
   "/dashboard/buscador/buscar": "Buscar avisos",
   "/dashboard/buscador/favoritos": "Favoritos",
