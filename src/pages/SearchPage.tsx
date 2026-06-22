@@ -201,12 +201,80 @@ export default function SearchPage() {
           </div>
         </div>
       ) : (
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-[480px_1fr] min-h-0">
-          {/* List */}
-          <div className="overflow-y-auto border-r border-border bg-background">
-            <div className="px-5 py-4 border-b border-border sticky top-0 bg-background/95 backdrop-blur z-10">
-              <p className="text-xs uppercase tracking-[0.2em] font-bold text-secondary">Resultados</p>
-              <h1 className="text-lg font-bold text-foreground mt-1">
+        <div className="flex-1 flex flex-col lg:grid lg:grid-cols-[480px_1fr] min-h-0">
+          {/* Map - full width on top in mobile, right column on desktop */}
+          <div className="relative bg-muted overflow-hidden h-[55vh] lg:h-auto lg:order-2 shrink-0">
+            <img
+              src="https://images.unsplash.com/photo-1524661135-423995f22d0b?w=1600&h=1200&fit=crop"
+              alt="Mapa interactivo de avisos"
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-primary/10" />
+            <div
+              className="absolute inset-0 opacity-20 pointer-events-none"
+              style={{
+                backgroundImage:
+                  "linear-gradient(to right, hsl(var(--primary)/.3) 1px, transparent 1px), linear-gradient(to bottom, hsl(var(--primary)/.3) 1px, transparent 1px)",
+                backgroundSize: "60px 60px",
+              }}
+            />
+
+            {listings.map((l, i) => {
+              const pos = PIN_POSITIONS[i % PIN_POSITIONS.length];
+              const isActive = active === l.id;
+              return (
+                <Link
+                  key={l.id}
+                  to={`/aviso/${l.id}`}
+                  onMouseEnter={() => setActive(l.id)}
+                  onClick={(e) => {
+                    if (window.innerWidth < 1024 && !isActive) {
+                      e.preventDefault();
+                      setActive(l.id);
+                    }
+                  }}
+                  className="absolute -translate-x-1/2 -translate-y-1/2 group"
+                  style={{ left: pos.x, top: pos.y, zIndex: isActive ? 30 : 10 }}
+                >
+                  <div
+                    className={`px-2.5 py-1 lg:px-3 lg:py-1.5 rounded-full text-[11px] lg:text-xs font-bold shadow-lg transition-all ${
+                      isActive
+                        ? "bg-primary text-primary-foreground scale-110 ring-4 ring-primary/20"
+                        : "bg-secondary text-secondary-foreground ring-2 lg:ring-4 ring-secondary/20 hover:scale-110"
+                    }`}
+                  >
+                    {formatPrice(l.price, l.currency)}
+                  </div>
+                  {isActive && (
+                    <div className="hidden lg:block absolute top-full left-1/2 -translate-x-1/2 mt-3 w-64 bg-card border border-border shadow-2xl overflow-hidden animate-fade-in">
+                      <div className="aspect-[4/3] bg-muted">
+                        <img src={l.imageUrl} alt={l.title} className="w-full h-full object-cover" />
+                      </div>
+                      <div className="p-3">
+                        <span className="text-[10px] uppercase tracking-wider font-bold text-secondary">
+                          {l.category}
+                        </span>
+                        <h4 className="text-sm font-semibold text-foreground line-clamp-1 mt-1">{l.title}</h4>
+                        <p className="text-base font-extrabold text-primary mt-1">
+                          {formatPrice(l.price, l.currency)}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </Link>
+              );
+            })}
+
+            <div className="absolute bottom-3 right-3 px-2 py-1 bg-card/90 backdrop-blur text-[10px] text-muted-foreground rounded">
+              Vista de mapa demo · Próximamente con datos reales
+            </div>
+          </div>
+
+          {/* List - below map on mobile, left column on desktop */}
+          <div className="flex-1 lg:flex-none overflow-y-auto lg:border-r border-border bg-background lg:order-1 min-h-0">
+            <div className="px-4 lg:px-5 py-3 lg:py-4 border-b border-border sticky top-0 bg-background/95 backdrop-blur z-10">
+              <p className="text-[10px] lg:text-xs uppercase tracking-[0.2em] font-bold text-secondary">Resultados</p>
+              <h1 className="text-base lg:text-lg font-bold text-foreground mt-0.5 lg:mt-1">
                 {listings.length} avisos en el mapa
               </h1>
             </div>
@@ -216,12 +284,12 @@ export default function SearchPage() {
                   key={l.id}
                   to={`/aviso/${l.id}`}
                   onMouseEnter={() => setActive(l.id)}
-                  className={`flex gap-4 p-4 transition-colors ${
+                  className={`flex gap-3 lg:gap-4 p-3 lg:p-4 transition-colors ${
                     active === l.id ? "bg-muted/60" : "hover:bg-muted/40"
                   }`}
                 >
                   <div
-                    className="w-32 shrink-0 bg-muted overflow-hidden"
+                    className="w-24 lg:w-32 shrink-0 bg-muted overflow-hidden"
                     style={{ aspectRatio: "4 / 3" }}
                   >
                     <img src={l.imageUrl} alt={l.title} className="w-full h-full object-cover" loading="lazy" />
@@ -253,68 +321,6 @@ export default function SearchPage() {
                   </div>
                 </Link>
               ))}
-            </div>
-          </div>
-
-          {/* Map */}
-          <div className="relative bg-muted overflow-hidden hidden lg:block">
-            <img
-              src="https://images.unsplash.com/photo-1524661135-423995f22d0b?w=1600&h=1200&fit=crop"
-              alt="Mapa interactivo de avisos"
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-primary/10" />
-            <div
-              className="absolute inset-0 opacity-20 pointer-events-none"
-              style={{
-                backgroundImage:
-                  "linear-gradient(to right, hsl(var(--primary)/.3) 1px, transparent 1px), linear-gradient(to bottom, hsl(var(--primary)/.3) 1px, transparent 1px)",
-                backgroundSize: "60px 60px",
-              }}
-            />
-
-            {listings.map((l, i) => {
-              const pos = PIN_POSITIONS[i % PIN_POSITIONS.length];
-              const isActive = active === l.id;
-              return (
-                <Link
-                  key={l.id}
-                  to={`/aviso/${l.id}`}
-                  onMouseEnter={() => setActive(l.id)}
-                  className="absolute -translate-x-1/2 -translate-y-1/2 group"
-                  style={{ left: pos.x, top: pos.y, zIndex: isActive ? 30 : 10 }}
-                >
-                  <div
-                    className={`px-3 py-1.5 rounded-full text-xs font-bold shadow-lg transition-all ${
-                      isActive
-                        ? "bg-primary text-primary-foreground scale-110 ring-4 ring-primary/20"
-                        : "bg-secondary text-secondary-foreground ring-4 ring-secondary/20 hover:scale-110"
-                    }`}
-                  >
-                    {formatPrice(l.price, l.currency)}
-                  </div>
-                  {isActive && (
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-3 w-64 bg-card border border-border shadow-2xl overflow-hidden animate-fade-in">
-                      <div className="aspect-[4/3] bg-muted">
-                        <img src={l.imageUrl} alt={l.title} className="w-full h-full object-cover" />
-                      </div>
-                      <div className="p-3">
-                        <span className="text-[10px] uppercase tracking-wider font-bold text-secondary">
-                          {l.category}
-                        </span>
-                        <h4 className="text-sm font-semibold text-foreground line-clamp-1 mt-1">{l.title}</h4>
-                        <p className="text-base font-extrabold text-primary mt-1">
-                          {formatPrice(l.price, l.currency)}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </Link>
-              );
-            })}
-
-            <div className="absolute bottom-3 right-3 px-2 py-1 bg-card/90 backdrop-blur text-[10px] text-muted-foreground rounded">
-              Vista de mapa demo · Próximamente con datos reales
             </div>
           </div>
         </div>
