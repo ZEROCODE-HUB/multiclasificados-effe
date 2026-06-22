@@ -185,7 +185,7 @@ const AdvertiserPublish = () => {
     setTimeout(() => setSummaryOpen(true), 250);
   };
 
-  const canPublish = form.category && form.title && form.description && form.price && form.location && photos.length > 0;
+  const canPublish = form.category && form.title && form.description && form.price && form.location && !!mainPhoto;
 
   const openSummary = () => {
     if (!canPublish) {
