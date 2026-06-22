@@ -12,17 +12,28 @@ import { BrandMark } from "@/components/BrandMark";
 
 const AuthPage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get("redirect");
   const enterDemo = (role: "anunciante" | "buscador" | "admin" | "superadmin") => {
     import("@/hooks/useSession").then(({ setSession }) => setSession(role));
-    // Perfil único: Anunciante/Buscador aterrizan en la home post-login
-    // Admin / Superadmin mantienen su panel propio
+    if (redirectTo && (role === "anunciante" || role === "buscador")) {
+      navigate(redirectTo);
+      return;
+    }
     if (role === "admin" || role === "superadmin") {
       navigate(`/dashboard/${role}`);
     } else {
       navigate("/");
     }
   };
-  const [searchParams] = useSearchParams();
+  const handleLogin = () => {
+    import("@/hooks/useSession").then(({ setSession }) => setSession("buscador"));
+    navigate(redirectTo || "/");
+  };
+  const handleRegister = () => {
+    import("@/hooks/useSession").then(({ setSession }) => setSession("buscador"));
+    navigate(redirectTo || "/");
+  };
   const [activeTab, setActiveTab] = useState<"login" | "register">(
     searchParams.get("tab") === "register" ? "register" : "login"
   );
