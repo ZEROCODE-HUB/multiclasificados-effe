@@ -511,18 +511,7 @@ const AdvertiserPublish = () => {
         </div>
       </div>
 
-      {/* Popup verificación */}
-      <Dialog open={verifyOpen} onOpenChange={setVerifyOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Verifica tu identidad</DialogTitle>
-            <DialogDescription>
-              Para publicar tu aviso necesitamos confirmar si publicas como persona natural o jurídica. Luego pasarás al pago.
-            </DialogDescription>
-          </DialogHeader>
-          </div>
-        </div>
-      </div>
+
 
       {/* Popup verificación */}
       <Dialog open={verifyOpen} onOpenChange={setVerifyOpen}>
