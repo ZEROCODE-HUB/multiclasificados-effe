@@ -28,8 +28,6 @@ import AdminCommunications from "./pages/admin/AdminCommunications.tsx";
 import AdminCommercial from "./pages/admin/AdminCommercial.tsx";
 import AdminReports from "./pages/admin/AdminReports.tsx";
 import SuperRoles from "./pages/superadmin/SuperRoles.tsx";
-import SuperPlatform from "./pages/superadmin/SuperPlatform.tsx";
-import SuperSecurity from "./pages/superadmin/SuperSecurity.tsx";
 import SuperAudit from "./pages/superadmin/SuperAudit.tsx";
 import SuperConversations from "./pages/superadmin/SuperConversations.tsx";
 import NotFound from "./pages/NotFound.tsx";
