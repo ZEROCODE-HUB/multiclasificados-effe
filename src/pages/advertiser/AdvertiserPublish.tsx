@@ -54,9 +54,11 @@ const AdvertiserPublish = () => {
   const [docNumber, setDocNumber] = useState("");
   const [verified, setVerified] = useState(false);
 
-  // Datos del aviso
-  const [photos, setPhotos] = useState<PhotoItem[]>([]);
-  const [dragId, setDragId] = useState<string | null>(null);
+  // Imágenes — solo 2 slots por aviso
+  const [mainPhoto, setMainPhoto] = useState<PhotoItem | null>(null);
+  const [secondPhoto, setSecondPhoto] = useState<PhotoItem | null>(null);
+  const secondFileRef = useRef<HTMLInputElement>(null);
+
   const [form, setForm] = useState({
     category: "",
     title: "",
@@ -66,8 +68,11 @@ const AdvertiserPublish = () => {
     location: "",
     condition: "nuevo",
   });
+
+  // Paquete: cantidad, duración, extras (cantidad por tipo)
+  const [quantity, setQuantity] = useState<number>(1);
   const [duration, setDuration] = useState<DurationDays>(7);
-  const [extras, setExtras] = useState<ExtrasSelection>({});
+  const [extras, setExtras] = useState<ExtrasCount>({});
 
   // Resumen y pago
   const [summaryOpen, setSummaryOpen] = useState(false);
@@ -92,11 +97,11 @@ const AdvertiserPublish = () => {
       const d = JSON.parse(raw);
       if (d.form) setForm(d.form);
       if (d.duration) setDuration(d.duration);
+      if (d.quantity) setQuantity(d.quantity);
       if (d.extras) setExtras(d.extras);
       if (d.verified) setVerified(d.verified);
       if (d.personType) setPersonType(d.personType);
       if (d.docNumber) setDocNumber(d.docNumber);
-      // Si el usuario regresa autenticado y ya estaba verificado, retomar en el resumen
       if (d.resumeAtSummary && session) {
         setTimeout(() => setSummaryOpen(true), 200);
       }
@@ -105,47 +110,47 @@ const AdvertiserPublish = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-
+  const packageBase = priceForDuration(quantity, duration, settings);
+  const extrasSum = EXTRA_DEFS.reduce((acc, def) => {
+    const c = extras[def.key] ?? 0;
+    return acc + c * (settings.extras[def.key as keyof ExtraPrices] ?? 0);
+  }, 0);
+  const total = Math.round((packageBase + extrasSum) * 100) / 100;
+  // Para la vista previa del aviso individual
   const basePrice = priceForDuration(1, duration, settings);
-  const extrasSum = extrasTotal(extras, settings);
-  const total = totalPrice(1, duration, extras, settings);
 
   const updateForm = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
-  const addFiles = (files: FileList | null) => {
-    if (!files) return;
-    const incoming = Array.from(files).slice(0, MAX_PHOTOS - photos.length);
-    const mapped: PhotoItem[] = incoming.map((f) => ({
-      id: `${f.name}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+  const pickPhoto = (slot: "main" | "second", files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const f = files[0];
+    const item: PhotoItem = {
+      id: `${slot}-${Date.now()}`,
       url: URL.createObjectURL(f),
       name: f.name,
-    }));
-    setPhotos((p) => [...p, ...mapped]);
+    };
+    if (slot === "main") setMainPhoto(item);
+    else setSecondPhoto(item);
   };
 
-  const removePhoto = (id: string) => setPhotos((p) => p.filter((x) => x.id !== id));
-  const setCover = (id: string) =>
-    setPhotos((p) => {
-      const found = p.find((x) => x.id === id);
-      if (!found) return p;
-      return [found, ...p.filter((x) => x.id !== id)];
-    });
+  const setExtraCount = (key: ExtraKey, count: number) => {
+    const max = quantity;
+    const v = Math.max(0, Math.min(max, count));
+    setExtras((e) => ({ ...e, [key]: v }));
+  };
 
-  const onDragStart = (id: string) => setDragId(id);
-  const onDragOver = (e: React.DragEvent, overId: string) => {
-    e.preventDefault();
-    if (!dragId || dragId === overId) return;
-    setPhotos((prev) => {
-      const from = prev.findIndex((p) => p.id === dragId);
-      const to = prev.findIndex((p) => p.id === overId);
-      if (from < 0 || to < 0) return prev;
-      const next = [...prev];
-      const [moved] = next.splice(from, 1);
-      next.splice(to, 0, moved);
+  // Si cambia la cantidad, recortar extras al nuevo máximo
+  useEffect(() => {
+    setExtras((prev) => {
+      const next: ExtrasCount = {};
+      (Object.keys(prev) as ExtraKey[]).forEach((k) => {
+        next[k] = Math.min(prev[k] ?? 0, quantity);
+      });
       return next;
     });
-  };
-  const onDragEnd = () => setDragId(null);
+  }, [quantity]);
+
+  const hasSecondImageInPackage = (extras.img500 ?? 0) > 0;
 
   const persistDraftForLogin = (resumeAtSummary: boolean) => {
     try {
