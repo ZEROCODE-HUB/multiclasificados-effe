@@ -659,6 +659,39 @@ const AdvertiserPublish = () => {
               </div>
             </div>
 
+            {/* Tipo de comprobante */}
+            <div className="space-y-2">
+              <Label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Tipo de comprobante</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReceiptType("boleta")}
+                  className={`p-3 border text-left transition-all ${receiptType === "boleta" ? "border-secondary bg-secondary/10" : "border-border hover:bg-muted/50"}`}
+                >
+                  <p className="font-bold text-sm">Boleta</p>
+                  <p className="text-[11px] text-muted-foreground">Persona natural</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReceiptType("factura")}
+                  className={`p-3 border text-left transition-all ${receiptType === "factura" ? "border-secondary bg-secondary/10" : "border-border hover:bg-muted/50"}`}
+                >
+                  <p className="font-bold text-sm">Factura</p>
+                  <p className="text-[11px] text-muted-foreground">Empresa con RUC</p>
+                </button>
+              </div>
+              <div>
+                <Label className="text-xs">Correo para enviar el comprobante</Label>
+                <Input
+                  type="email"
+                  value={receiptEmail}
+                  onChange={(e) => setReceiptEmail(e.target.value)}
+                  placeholder="tu@correo.com"
+                  className="mt-1"
+                />
+              </div>
+            </div>
+
             <label className="flex items-start gap-2 p-3 border bg-secondary/5 cursor-pointer">
               <Checkbox checked={confirmed} onCheckedChange={(v) => setConfirmed(!!v)} className="mt-0.5" />
               <span className="text-xs">
@@ -671,6 +704,38 @@ const AdvertiserPublish = () => {
             <Button variant="ghost" onClick={() => setSummaryOpen(false)}>Cancelar</Button>
             <Button onClick={confirmAndPay} disabled={!confirmed} className="gap-2">
               <CreditCard size={14} /> Pagar {formatSoles(total)}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmación post-pago */}
+      <Dialog open={successOpen.open} onOpenChange={(o) => setSuccessOpen((s) => ({ ...s, open: o }))}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Check className="text-success" size={20} /> ¡Pago confirmado!
+            </DialogTitle>
+            <DialogDescription>
+              Tu aviso ha sido publicado correctamente.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <div className="p-3 border bg-muted/30 space-y-1">
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{receiptType === "factura" ? "Factura" : "Boleta"} electrónica</p>
+              <p className="font-mono font-bold">{successOpen.number}</p>
+              <p className="text-xs text-muted-foreground">Enviado a <span className="font-semibold text-foreground">{successOpen.email}</span></p>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              También puedes verlo en <span className="font-semibold text-foreground">Mis comprobantes</span>.
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setSuccessOpen({ open: false, number: "", email: "" }); navigate("/dashboard/anunciante/boletas"); }}>
+              Ver mis comprobantes
+            </Button>
+            <Button onClick={() => { setSuccessOpen({ open: false, number: "", email: "" }); navigate("/dashboard/anunciante/avisos"); }}>
+              Ir a mis avisos
             </Button>
           </DialogFooter>
         </DialogContent>
