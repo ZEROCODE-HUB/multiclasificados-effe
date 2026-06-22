@@ -44,48 +44,6 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
     toast({ title: "Categoría eliminada", description: c.name });
   };
 
-  // ===== Planes =====
-  const [plans, setPlans] = useState<Plan[]>(initialPlans);
-  const [planDialog, setPlanDialog] = useState<Plan | null>(null);
-  const [planForm, setPlanForm] = useState<Plan | null>(null);
-  const openEditPlan = (p: Plan) => { setPlanForm({ ...p }); setPlanDialog(p); };
-  const savePlan = () => {
-    if (!planForm) return;
-    setPlans((prev) => prev.map((p) => p.id === planForm.id ? planForm : p));
-    toast({ title: "Plan actualizado", description: planForm.name });
-    setPlanDialog(null);
-  };
-
-  // ===== Promociones =====
-  const [promos, setPromos] = useState<Promo[]>(initialPromos);
-  const [promoDialog, setPromoDialog] = useState(false);
-  const [promoForm, setPromoForm] = useState<{ name: string; discount: string; until: string }>({ name: "", discount: "", until: "" });
-
-  const createPromo = () => {
-    if (!promoForm.name.trim()) return;
-    const next: Promo = {
-      id: Date.now(),
-      name: promoForm.name.trim(),
-      discount: promoForm.discount || "0%",
-      until: promoForm.until || "Permanente",
-      status: "Programada",
-    };
-    setPromos((p) => [next, ...p]);
-    toast({ title: "Promoción creada", description: next.name });
-    setPromoForm({ name: "", discount: "", until: "" });
-    setPromoDialog(false);
-  };
-
-  const togglePromo = (p: Promo) => {
-    const newStatus: Promo["status"] = p.status === "Activa" ? "Pausada" : "Activa";
-    setPromos((prev) => prev.map((x) => x.id === p.id ? { ...x, status: newStatus } : x));
-    toast({ title: `Promoción ${newStatus.toLowerCase()}`, description: p.name });
-  };
-
-  const deletePromo = (p: Promo) => {
-    setPromos((prev) => prev.filter((x) => x.id !== p.id));
-    toast({ title: "Promoción eliminada", description: p.name });
-  };
 
   return (
     <AdminLayout role={role} title="Configuración comercial" breadcrumb={["Operación", "Comercial"]}>
