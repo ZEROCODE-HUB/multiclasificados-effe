@@ -88,8 +88,6 @@ const App = () => (
           <Route path="/dashboard/superadmin/reportes" element={<AdminReports role="superadmin" />} />
           <Route path="/dashboard/superadmin/tarifas" element={<AdminPricing role="superadmin" />} />
           <Route path="/dashboard/superadmin/roles" element={<SuperRoles />} />
-          <Route path="/dashboard/superadmin/plataforma" element={<SuperPlatform />} />
-          <Route path="/dashboard/superadmin/seguridad" element={<SuperSecurity />} />
           <Route path="/dashboard/superadmin/auditoria" element={<SuperAudit />} />
 
           <Route path="*" element={<NotFound />} />
