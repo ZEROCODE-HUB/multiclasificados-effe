@@ -172,7 +172,7 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
           <Card>
             <CardHeader>
               <CardTitle className="text-base md:text-lg flex items-center gap-2">
-                <FileText size={16} className="text-secondary" /> Boletas generadas
+                <FileText size={16} className="text-secondary" /> Boletas y facturas generadas
               </CardTitle>
             </CardHeader>
             <CardContent className="overflow-x-auto">
