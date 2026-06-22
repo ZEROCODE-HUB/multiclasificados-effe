@@ -203,7 +203,7 @@ export default function SearchPage() {
           </div>
 
           <div className="flex gap-6">
-            <aside className={`${showFilters ? "block" : "hidden"} lg:block w-full lg:w-72 flex-shrink-0`}>
+            <aside className="hidden lg:block w-72 flex-shrink-0">
               {FiltersPanel}
             </aside>
 
