@@ -139,7 +139,7 @@ const AuthPage = () => {
                 </label>
                 <a href="#" className="text-sm text-secondary hover:underline">¿Olvidaste tu contraseña?</a>
               </div>
-              <Button className="w-full" size="lg">Iniciar sesión</Button>
+              <Button className="w-full" size="lg" onClick={handleLogin}>Iniciar sesión</Button>
 
               <div className="relative my-4">
                 <div className="absolute inset-0 flex items-center"><div className="w-full border-t" /></div>
