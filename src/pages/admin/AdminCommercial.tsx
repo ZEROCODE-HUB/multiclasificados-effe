@@ -13,22 +13,12 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Trash2, Sparkles, Power, FileText } from "lucide-react";
+import { Plus, Pencil, Trash2, FileText } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { categories as initialCategories } from "@/data/mockData";
-import { plans as initialPlans } from "@/data/adminMockData";
 import { toast } from "@/hooks/use-toast";
 import { loadInvoices, formatSoles } from "@/lib/pricing";
 
-interface Cat { id: string; name: string; iconKey?: string }
-interface Plan { id: string; name: string; price: string; listings: number; featured: number; active: number }
-interface Promo { id: number; name: string; discount: string; status: "Activa" | "Pausada" | "Programada"; until: string }
-
-const initialPromos: Promo[] = [
-  { id: 1, name: "Black Friday", discount: "30%", status: "Activa", until: "2026-06-30" },
-  { id: 2, name: "Primer aviso gratis", discount: "100%", status: "Activa", until: "Permanente" },
-  { id: 3, name: "Pro x 3 meses", discount: "20%", status: "Programada", until: "2026-07-15" },
-];
 
 const AdminCommercial = ({ role }: { role: AdminRole }) => {
   // ===== Categorías =====
