@@ -155,7 +155,7 @@ const AdvertiserPublish = () => {
   const persistDraftForLogin = (resumeAtSummary: boolean) => {
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify({
-        form, duration, extras, verified: true, personType, docNumber, resumeAtSummary,
+        form, duration, quantity, extras, verified: true, personType, docNumber, resumeAtSummary,
       }));
     } catch { /* noop */ }
   };
