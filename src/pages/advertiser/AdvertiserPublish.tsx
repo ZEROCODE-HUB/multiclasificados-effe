@@ -299,77 +299,116 @@ const AdvertiserPublish = () => {
               </CardContent>
             </Card>
 
-            {/* Step 2: Photos */}
+            {/* Step 2: Photos — 2 slots por aviso */}
             <Card>
               <CardHeader className="border-b">
                 <div className="flex items-center gap-3">
                   <span className="w-8 h-8 bg-primary text-primary-foreground text-xs font-extrabold flex items-center justify-center">02</span>
                   <div>
-                    <CardTitle className="text-base flex items-center gap-2"><Camera size={16} className="text-secondary" /> Imágenes ({photos.length}/{MAX_PHOTOS})</CardTitle>
-                    <CardDescription className="text-xs">Sube hasta 10 fotos. Arrastra para reordenar.</CardDescription>
+                    <CardTitle className="text-base flex items-center gap-2"><Camera size={16} className="text-secondary" /> Imágenes del aviso</CardTitle>
+                    <CardDescription className="text-xs">Cada aviso admite hasta 2 imágenes: la principal incluida y una segunda opcional.</CardDescription>
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="pt-5 space-y-4">
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => { addFiles(e.target.files); if (fileRef.current) fileRef.current.value = ""; }}
-                />
-                {photos.length === 0 ? (
+              <CardContent className="pt-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Slot 1 — Principal */}
+                <div>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => { pickPhoto("main", e.target.files); if (fileRef.current) fileRef.current.value = ""; }}
+                  />
                   <button
                     type="button"
                     onClick={() => fileRef.current?.click()}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files); }}
-                    className="w-full border-2 border-dashed border-border p-10 text-center hover:border-secondary/60 hover:bg-muted/30 transition-colors cursor-pointer"
+                    className="relative w-full aspect-[4/3] border-2 border-dashed border-border hover:border-secondary/60 hover:bg-muted/30 transition-colors flex items-center justify-center overflow-hidden bg-muted/20"
                   >
-                    <ImagePlus size={36} className="mx-auto text-muted-foreground mb-3" />
-                    <p className="text-sm font-semibold text-foreground">Arrastra tus fotos o haz clic para seleccionar</p>
-                    <p className="text-xs text-muted-foreground mt-1">JPG, PNG o WEBP</p>
-                  </button>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                    {photos.map((p, i) => (
-                      <div
-                        key={p.id}
-                        draggable
-                        onDragStart={() => onDragStart(p.id)}
-                        onDragOver={(e) => onDragOver(e, p.id)}
-                        onDragEnd={onDragEnd}
-                        className={`relative group aspect-square overflow-hidden border bg-muted cursor-move ${dragId === p.id ? "ring-2 ring-secondary opacity-70" : "border-border"}`}
-                      >
-                        <img src={p.url} alt={p.name} className="w-full h-full object-cover" />
-                        <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-black/70 text-white text-[10px] font-bold">{i + 1}</div>
-                        {i === 0 && (
-                          <div className="absolute bottom-1 left-1 right-1 flex items-center justify-center gap-1 px-1.5 py-1 bg-secondary text-secondary-foreground text-[10px] font-extrabold uppercase tracking-wider">
-                            <Star size={10} className="fill-current" /> Portada
-                          </div>
-                        )}
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100">
-                          {i !== 0 && (
-                            <button type="button" onClick={() => setCover(p.id)} title="Portada" className="w-7 h-7 bg-white text-foreground flex items-center justify-center hover:bg-secondary hover:text-secondary-foreground">
-                              <Star size={13} />
-                            </button>
-                          )}
-                          <button type="button" onClick={() => removePhoto(p.id)} title="Eliminar" className="w-7 h-7 bg-white text-destructive flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground">
-                            <X size={14} />
-                          </button>
-                        </div>
+                    {mainPhoto ? (
+                      <>
+                        <img src={mainPhoto.url} alt="Principal" className="absolute inset-0 w-full h-full object-cover" />
+                        <span className="absolute top-1.5 left-1.5 px-2 py-0.5 bg-secondary text-secondary-foreground text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1">
+                          <Star size={10} className="fill-current" /> Portada
+                        </span>
+                        <span
+                          role="button"
+                          aria-label="Quitar imagen principal"
+                          onClick={(e) => { e.stopPropagation(); setMainPhoto(null); }}
+                          className="absolute top-1.5 right-1.5 w-7 h-7 bg-white text-destructive flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground"
+                        >
+                          <X size={14} />
+                        </span>
+                      </>
+                    ) : (
+                      <div className="text-center px-4">
+                        <ImagePlus size={28} className="mx-auto text-muted-foreground mb-2" />
+                        <p className="text-xs font-semibold text-foreground">Imagen principal</p>
+                        <p className="text-[11px] text-muted-foreground">Incluida · hasta 100 KB</p>
                       </div>
-                    ))}
-                    {photos.length < MAX_PHOTOS && (
-                      <button type="button" onClick={() => fileRef.current?.click()}
-                        className="aspect-square border-2 border-dashed border-border flex flex-col items-center justify-center gap-1 text-muted-foreground hover:border-secondary/60 hover:text-secondary hover:bg-muted/30 transition-colors">
-                        <ImagePlus size={22} />
-                        <span className="text-[11px] font-semibold uppercase tracking-wider">Añadir</span>
-                      </button>
                     )}
-                  </div>
-                )}
+                  </button>
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    <span className="font-semibold text-foreground">Imagen principal</span> — incluida sin costo, hasta 100 KB.
+                  </p>
+                </div>
+
+                {/* Slot 2 — Segunda imagen (requiere adicional) */}
+                <div>
+                  <input
+                    ref={secondFileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => { pickPhoto("second", e.target.files); if (secondFileRef.current) secondFileRef.current.value = ""; }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => hasSecondImageInPackage && secondFileRef.current?.click()}
+                    disabled={!hasSecondImageInPackage}
+                    className={`relative w-full aspect-[4/3] border-2 border-dashed transition-colors flex items-center justify-center overflow-hidden ${
+                      hasSecondImageInPackage
+                        ? "border-border hover:border-secondary/60 hover:bg-muted/30 bg-muted/20"
+                        : "border-border bg-muted/40 cursor-not-allowed opacity-80"
+                    }`}
+                  >
+                    {hasSecondImageInPackage && secondPhoto ? (
+                      <>
+                        <img src={secondPhoto.url} alt="Segunda" className="absolute inset-0 w-full h-full object-cover" />
+                        <span
+                          role="button"
+                          aria-label="Quitar segunda imagen"
+                          onClick={(e) => { e.stopPropagation(); setSecondPhoto(null); }}
+                          className="absolute top-1.5 right-1.5 w-7 h-7 bg-white text-destructive flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground"
+                        >
+                          <X size={14} />
+                        </span>
+                      </>
+                    ) : (
+                      <div className="text-center px-4">
+                        {hasSecondImageInPackage ? (
+                          <>
+                            <ImagePlus size={28} className="mx-auto text-muted-foreground mb-2" />
+                            <p className="text-xs font-semibold text-foreground">Segunda imagen</p>
+                            <p className="text-[11px] text-muted-foreground">Disponible · hasta 500 KB</p>
+                          </>
+                        ) : (
+                          <>
+                            <Lock size={24} className="mx-auto text-muted-foreground mb-2" />
+                            <p className="text-xs font-semibold text-foreground">Segunda imagen</p>
+                            <p className="text-[11px] text-muted-foreground">Hasta 500 KB</p>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </button>
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    <span className="font-semibold text-foreground">Segunda imagen (hasta 500 KB)</span> — incluida si compraste este adicional en tu paquete.
+                  </p>
+                  {!hasSecondImageInPackage && (
+                    <p className="mt-1 text-[11px] text-warning">No tienes este adicional en tu paquete actual.</p>
+                  )}
+                </div>
               </CardContent>
             </Card>
 
