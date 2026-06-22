@@ -54,49 +54,70 @@ export default function SearchPage() {
     setParams(next, { replace: true });
   };
 
+  const ViewToggle = (
+    <div className="flex items-center gap-1 border border-border rounded-full p-0.5 shrink-0">
+      <button
+        onClick={() => switchView("list")}
+        className={`px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-full transition-colors ${
+          view === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        <ListIcon size={12} className="inline mr-1" /> Lista
+      </button>
+      <button
+        onClick={() => switchView("map")}
+        className={`px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-full transition-colors ${
+          view === "map" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        <MapIcon size={12} className="inline mr-1" /> Mapa
+      </button>
+    </div>
+  );
+
   const FilterBar = useMemo(
     () => (
       <div className="border-b border-border bg-card">
-        <div className="container mx-auto px-4 md:px-6 py-3 flex items-center gap-3 overflow-x-auto">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowFilters((s) => !s)}
-            className="gap-2 rounded-full shrink-0"
-          >
-            <SlidersHorizontal size={14} /> Filtros
-          </Button>
-          {categories.slice(0, 6).map((c) => (
-            <button
-              key={c.id}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-border rounded-full hover:border-secondary hover:text-secondary transition-colors shrink-0"
+        <div className="container mx-auto px-4 md:px-6 py-3 space-y-2 md:space-y-0">
+          {/* Top row: filtros + toggle (siempre visibles, sin scroll) */}
+          <div className="flex items-center gap-3 md:hidden">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFilters(true)}
+              className="gap-2 rounded-full shrink-0"
             >
-              <c.icon size={12} /> {c.name}
-            </button>
-          ))}
-          <div className="ml-auto flex items-center gap-1 border border-border rounded-full p-0.5 shrink-0">
-            <button
-              onClick={() => switchView("list")}
-              className={`px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-full transition-colors ${
-                view === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
+              <SlidersHorizontal size={14} /> Filtros
+            </Button>
+            <div className="ml-auto">{ViewToggle}</div>
+          </div>
+
+          {/* Categories row (scrollable) + en desktop, todo en una sola línea */}
+          <div className="flex items-center gap-3 overflow-x-auto no-scrollbar">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFilters(true)}
+              className="gap-2 rounded-full shrink-0 hidden md:inline-flex"
             >
-              <ListIcon size={12} className="inline mr-1" /> Lista
-            </button>
-            <button
-              onClick={() => switchView("map")}
-              className={`px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-full transition-colors ${
-                view === "map" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <MapIcon size={12} className="inline mr-1" /> Mapa
-            </button>
+              <SlidersHorizontal size={14} /> Filtros
+            </Button>
+            {categories.slice(0, 6).map((c) => (
+              <button
+                key={c.id}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-border rounded-full hover:border-secondary hover:text-secondary transition-colors shrink-0"
+              >
+                <c.icon size={12} /> {c.name}
+              </button>
+            ))}
+            <div className="ml-auto hidden md:block">{ViewToggle}</div>
           </div>
         </div>
       </div>
     ),
     [view, params]
   );
+
 
   const FiltersPanel = (
     <div className="bg-card border border-border p-5 space-y-4">
