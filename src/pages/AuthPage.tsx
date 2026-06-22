@@ -184,7 +184,7 @@ const AuthPage = () => {
                 <span>Acepto los <a href="#" className="text-secondary hover:underline">términos</a> y la <a href="#" className="text-secondary hover:underline">política de privacidad</a></span>
               </label>
 
-              <Button className="w-full" size="lg">Crear cuenta</Button>
+              <Button className="w-full" size="lg" onClick={handleRegister}>Crear cuenta</Button>
             </div>
 
           )}
