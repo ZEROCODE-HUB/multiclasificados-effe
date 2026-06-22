@@ -29,6 +29,8 @@ interface PhotoItem { id: string; url: string; name: string; }
 const MAX_PHOTOS = 10;
 const DURATIONS: DurationDays[] = [3, 7, 15, 30, 60, 90];
 
+const DRAFT_KEY = "effe:publish-draft";
+
 const AdvertiserPublish = () => {
   const session = useSession();
   const navigate = useNavigate();
@@ -58,6 +60,9 @@ const AdvertiserPublish = () => {
   // Resumen y pago
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+  const [receiptType, setReceiptType] = useState<"boleta" | "factura">("boleta");
+  const [receiptEmail, setReceiptEmail] = useState("");
+  const [successOpen, setSuccessOpen] = useState<{ open: boolean; number: string; email: string }>({ open: false, number: "", email: "" });
 
   // Pricing en vivo
   const [settings, setSettings] = useState<PricingSettings>(() => loadSettings());
@@ -66,6 +71,28 @@ const AdvertiserPublish = () => {
     window.addEventListener("effe:pricing-updated", sync);
     return () => window.removeEventListener("effe:pricing-updated", sync);
   }, []);
+
+  // Restaurar borrador y reanudar flujo tras login
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (d.form) setForm(d.form);
+      if (d.duration) setDuration(d.duration);
+      if (d.extras) setExtras(d.extras);
+      if (d.verified) setVerified(d.verified);
+      if (d.personType) setPersonType(d.personType);
+      if (d.docNumber) setDocNumber(d.docNumber);
+      // Si el usuario regresa autenticado y ya estaba verificado, retomar en el resumen
+      if (d.resumeAtSummary && session) {
+        setTimeout(() => setSummaryOpen(true), 200);
+      }
+      localStorage.removeItem(DRAFT_KEY);
+    } catch { /* noop */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
 
   const basePrice = priceForDuration(1, duration, settings);
   const extrasSum = extrasTotal(extras, settings);
