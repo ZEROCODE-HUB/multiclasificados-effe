@@ -34,7 +34,7 @@ const buildMenu = (role: AdminRole): MenuItem[] => {
     { title: "Gestión de avisos", url: `/dashboard/${role}/avisos`, icon: ClipboardList, group: "Operación" },
     { title: "Gestión de usuarios", url: `/dashboard/${role}/usuarios`, icon: Users, group: "Operación" },
     { title: "Config. comercial", url: `/dashboard/${role}/comercial`, icon: Tags, group: "Operación" },
-    { title: "Tarifas", url: `/dashboard/${role}/tarifas`, icon: DollarSign, group: "Operación" },
+    { title: "Tarifas y Descuentos", url: `/dashboard/${role}/tarifas`, icon: DollarSign, group: "Operación" },
     { title: "Reportes", url: `/dashboard/${role}/reportes`, icon: FileBarChart, group: "Operación" },
     { title: "Comunicaciones", url: `/dashboard/${role}/comunicaciones`, icon: Send, group: "Comunicaciones" },
     { title: "Conversaciones", url: `/dashboard/${role}/conversaciones`, icon: MessagesSquare, group: "Comunicaciones" },
