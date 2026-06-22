@@ -451,7 +451,7 @@ const Index = () => {
               <h4 className="font-semibold mb-5 uppercase text-secondary" style={{ fontSize: "13px", letterSpacing: "0.08em" }}>Plataforma</h4>
               <ul className="space-y-3 text-sm text-primary-foreground/70">
                 <li><Link to="/buscar" className="hover:text-secondary transition-colors">Explorar avisos</Link></li>
-                <li><Link to="/auth" className="hover:text-secondary transition-colors">Publicar aviso</Link></li>
+                <li><Link to="/dashboard/anunciante/publicar" className="hover:text-secondary transition-colors">Publicar aviso</Link></li>
                 <li><Link to="/auth" className="hover:text-secondary transition-colors">Planes Pro</Link></li>
                 <li><Link to="/auth" className="hover:text-secondary transition-colors">Iniciar sesión</Link></li>
               </ul>

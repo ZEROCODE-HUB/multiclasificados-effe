@@ -90,7 +90,7 @@ export function Navbar() {
             Explorar
           </Link>
           <Link
-            to={isUser ? "/dashboard/anunciante/publicar" : "/auth?tab=register"}
+            to="/dashboard/anunciante/publicar"
             className="px-3 py-2 text-sm font-semibold text-foreground hover:text-secondary transition-colors"
           >
             Publicar
@@ -210,7 +210,7 @@ export function Navbar() {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Link to={isUser ? "/dashboard/anunciante/publicar" : "/auth?tab=register"} className="ml-2">
+          <Link to="/dashboard/anunciante/publicar" className="ml-2">
             <Button size="sm" className="gap-1.5 font-semibold rounded-none px-4">
               <PlusCircle size={14} /> Publicar
             </Button>
@@ -218,7 +218,7 @@ export function Navbar() {
         </div>
 
         <Link
-          to={isUser ? "/dashboard/anunciante/publicar" : "/auth?tab=register"}
+          to="/dashboard/anunciante/publicar"
           className="md:hidden ml-auto p-2 text-foreground"
           aria-label="Publicar"
         >
@@ -282,7 +282,7 @@ export function Navbar() {
                   Explorar
                 </Link>
                 <div className="border-t my-2" />
-                <Link to="/auth?tab=register" onClick={() => setMobileOpen(false)} className="px-3">
+                <Link to="/dashboard/anunciante/publicar" onClick={() => setMobileOpen(false)} className="px-3">
                   <Button className="w-full gap-1.5 rounded-none"><PlusCircle size={14} /> Publicar aviso</Button>
                 </Link>
                 <Link to="/auth" onClick={() => setMobileOpen(false)} className="px-3 mt-2">
