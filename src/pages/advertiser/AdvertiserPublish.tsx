@@ -482,74 +482,122 @@ const AdvertiserPublish = () => {
               </CardContent>
             </Card>
 
-            {/* Step 5: Duración */}
+            {/* Step 5: Paquete (cantidad + duración + adicionales) */}
             <Card>
               <CardHeader className="border-b">
                 <div className="flex items-center gap-3">
                   <span className="w-8 h-8 bg-primary text-primary-foreground text-xs font-extrabold flex items-center justify-center">05</span>
                   <div>
-                    <CardTitle className="text-base flex items-center gap-2"><Receipt size={16} className="text-secondary" /> Duración del aviso</CardTitle>
-                    <CardDescription className="text-xs">El precio cambia automáticamente según la duración.</CardDescription>
+                    <CardTitle className="text-base flex items-center gap-2"><Package size={16} className="text-secondary" /> ¿Cuántos avisos quieres publicar?</CardTitle>
+                    <CardDescription className="text-xs">Configura tu paquete antes de pasar al pago.</CardDescription>
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="pt-5">
-                <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
-                  {DURATIONS.map((d) => {
-                    const p = priceForDuration(1, d, settings);
-                    const active = duration === d;
-                    return (
-                      <button
-                        key={d}
-                        type="button"
-                        onClick={() => setDuration(d)}
-                        className={`border p-3 text-center transition-all ${
-                          active
-                            ? "border-secondary bg-secondary/10 ring-2 ring-secondary/30"
-                            : "border-border hover:border-secondary/40 hover:bg-muted/50"
-                        }`}
-                      >
-                        <p className="text-lg font-extrabold text-foreground">{d}</p>
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">días</p>
-                        <p className="text-xs font-bold text-secondary mt-1">{formatSoles(p)}</p>
-                      </button>
-                    );
-                  })}
+              <CardContent className="pt-5 space-y-6">
+                {/* Cantidad */}
+                <div>
+                  <Label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Cantidad de avisos</Label>
+                  <div className="mt-2 grid grid-cols-5 sm:grid-cols-10 gap-2">
+                    {QUANTITIES.map((n) => {
+                      const active = quantity === n;
+                      return (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setQuantity(n)}
+                          className={`border py-2 text-center text-sm font-bold transition-all ${
+                            active ? "border-secondary bg-secondary/10 ring-2 ring-secondary/30 text-foreground" : "border-border hover:border-secondary/40 hover:bg-muted/50"
+                          }`}
+                        >
+                          {n}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
 
-            {/* Step 6: Extras */}
-            <Card>
-              <CardHeader className="border-b">
-                <div className="flex items-center gap-3">
-                  <span className="w-8 h-8 bg-primary text-primary-foreground text-xs font-extrabold flex items-center justify-center">06</span>
-                  <div>
-                    <CardTitle className="text-base flex items-center gap-2"><Sparkles size={16} className="text-secondary" /> Extras opcionales</CardTitle>
-                    <CardDescription className="text-xs">Mejora la visibilidad de tu aviso.</CardDescription>
+                {/* Duración */}
+                <div>
+                  <Label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Duración por aviso</Label>
+                  <div className="mt-2 grid grid-cols-3 md:grid-cols-6 gap-2">
+                    {DURATIONS.map((d) => {
+                      const p = priceForDuration(1, d, settings);
+                      const active = duration === d;
+                      return (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => setDuration(d)}
+                          className={`border p-3 text-center transition-all ${
+                            active ? "border-secondary bg-secondary/10 ring-2 ring-secondary/30" : "border-border hover:border-secondary/40 hover:bg-muted/50"
+                          }`}
+                        >
+                          <p className="text-lg font-extrabold text-foreground">{d}</p>
+                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">días</p>
+                          <p className="text-xs font-bold text-secondary mt-1">{formatSoles(p)}</p>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
-              </CardHeader>
-              <CardContent className="pt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {([
-                  { key: "img100", label: "Imagen adicional 100kb", icon: ImagePlus },
-                  { key: "img500", label: "Imagen adicional 500kb", icon: ImagePlus },
-                  { key: "pdf100", label: "PDF adjunto 100kb", icon: FileText },
-                  { key: "pdf500", label: "PDF adjunto 500kb", icon: FileText },
-                  { key: "urgente", label: "Marcar como Urgente", icon: Flame },
-                  { key: "destacado", label: "Marcar como Destacado", icon: Star },
-                  { key: "confidencial", label: "Marcar como Confidencial", icon: EyeOff },
-                ] as const).map(({ key, label, icon: Icon }) => {
-                  const checked = !!extras[key];
-                  return (
-                    <label key={key} className={`flex items-center gap-3 p-3 border cursor-pointer transition-all ${checked ? "border-secondary bg-secondary/5" : "border-border hover:bg-muted/30"}`}>
-                      <Checkbox checked={checked} onCheckedChange={(v) => setExtras((e) => ({ ...e, [key]: !!v }))} />
-                      <Icon size={16} className="text-secondary" />
-                      <span className="flex-1 text-sm font-medium">{label}</span>
-                      <span className="text-xs font-bold text-foreground">+ {formatSoles(settings.extras[key])}</span>
-                    </label>
-                  );
-                })}
+
+                {/* Adicionales opcionales */}
+                <div>
+                  <Label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Adicionales opcionales</Label>
+                  <p className="text-[11px] text-muted-foreground mt-1 mb-2">
+                    Hasta {quantity} unidades por adicional (uno por aviso del paquete).
+                  </p>
+                  <div className="space-y-2">
+                    {EXTRA_DEFS.map(({ key, label, sub, icon: Icon }) => {
+                      const count = extras[key] ?? 0;
+                      const unit = settings.extras[key as keyof ExtraPrices] ?? 0;
+                      return (
+                        <div key={key} className={`flex items-center gap-3 p-3 border transition-all ${count > 0 ? "border-secondary bg-secondary/5" : "border-border"}`}>
+                          <Icon size={16} className="text-secondary" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-foreground leading-tight">{label}</p>
+                            {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
+                          </div>
+                          <span className="text-xs font-bold text-muted-foreground hidden sm:inline">{formatSoles(unit)} c/u</span>
+                          <div className="flex items-center border">
+                            <button type="button" onClick={() => setExtraCount(key, count - 1)} className="w-8 h-8 flex items-center justify-center hover:bg-muted disabled:opacity-30" disabled={count <= 0}>
+                              <Minus size={12} />
+                            </button>
+                            <span className="w-8 text-center text-sm font-bold">{count}</span>
+                            <button type="button" onClick={() => setExtraCount(key, count + 1)} className="w-8 h-8 flex items-center justify-center hover:bg-muted disabled:opacity-30" disabled={count >= quantity}>
+                              <Plus size={12} />
+                            </button>
+                          </div>
+                          <span className="text-xs font-bold text-foreground w-16 text-right">{formatSoles(count * unit)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Resumen del paquete */}
+                <div className="border bg-muted/30 p-4 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Subtotal por {quantity} aviso{quantity > 1 ? "s" : ""} ({duration} días c/u)</span>
+                    <span className="font-bold">{formatSoles(packageBase)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Subtotal por adicionales</span>
+                    <span className="font-bold">{formatSoles(extrasSum)}</span>
+                  </div>
+                  <div className="border-t pt-2 flex items-baseline justify-between">
+                    <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Total a pagar (IGV incl.)</span>
+                    <span className="text-2xl font-extrabold text-primary">{formatSoles(total)}</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground pt-1">
+                    El paquete que estás comprando es una referencia. Podrás distribuir tus adicionales libremente entre tus avisos según tu saldo disponible.
+                  </p>
+                  {quantity > 1 && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Tus avisos restantes quedarán disponibles en tu saldo para publicar durante el período de vigencia del paquete.
+                    </p>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </div>
