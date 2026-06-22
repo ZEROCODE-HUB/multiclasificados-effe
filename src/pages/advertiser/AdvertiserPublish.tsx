@@ -135,6 +135,14 @@ const AdvertiserPublish = () => {
   };
   const onDragEnd = () => setDragId(null);
 
+  const persistDraftForLogin = (resumeAtSummary: boolean) => {
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({
+        form, duration, extras, verified: true, personType, docNumber, resumeAtSummary,
+      }));
+    } catch { /* noop */ }
+  };
+
   const handleVerify = () => {
     if (personType === "natural" && docNumber.length !== 8) {
       toast({ title: "DNI inválido", description: "El DNI debe tener 8 dígitos.", variant: "destructive" });
@@ -146,8 +154,16 @@ const AdvertiserPublish = () => {
     }
     setVerified(true);
     setVerifyOpen(false);
-    toast({ title: "Identidad verificada", description: `${personType === "natural" ? "DNI" : "RUC"} ${docNumber} confirmado. Continúa con el pago.` });
-    // Tras verificar, abre directamente el resumen y pago
+    toast({ title: "Identidad verificada", description: `${personType === "natural" ? "DNI" : "RUC"} ${docNumber} confirmado.` });
+
+    // Tras verificar exige login antes del pago
+    if (!session) {
+      persistDraftForLogin(true);
+      toast({ title: "Inicia sesión para pagar", description: "Te llevamos al login y retomamos tu publicación." });
+      setTimeout(() => navigate("/auth?redirect=/dashboard/anunciante/publicar"), 400);
+      return;
+    }
+    // Si ya hay sesión, abre el resumen directamente
     setConfirmed(false);
     setTimeout(() => setSummaryOpen(true), 250);
   };
@@ -155,41 +171,46 @@ const AdvertiserPublish = () => {
   const canPublish = form.category && form.title && form.description && form.price && form.location && photos.length > 0;
 
   const openSummary = () => {
-    if (!session) {
-      toast({ title: "Inicia sesión para continuar", description: "Necesitas una cuenta para publicar." });
-      navigate("/auth?redirect=/dashboard/anunciante/publicar");
-      return;
-    }
     if (!canPublish) {
       toast({ title: "Completa los datos requeridos", description: "Faltan campos obligatorios o imágenes.", variant: "destructive" });
       return;
     }
-    // Paso 1: verificar identidad si aún no se ha hecho
+    // Paso 1: verificar identidad (sin requerir login todavía)
     if (!verified) {
       setVerifyOpen(true);
       return;
     }
-    // Paso 2: resumen y pago
+    // Paso 2: si no hay sesión, exigir login antes de mostrar el pago
+    if (!session) {
+      persistDraftForLogin(true);
+      toast({ title: "Inicia sesión para pagar", description: "Te llevamos al login y retomamos tu publicación." });
+      navigate("/auth?redirect=/dashboard/anunciante/publicar");
+      return;
+    }
+    // Paso 3: resumen y pago
     setConfirmed(false);
     setSummaryOpen(true);
   };
 
   const confirmAndPay = () => {
     if (!confirmed) return;
+    if (!session) {
+      persistDraftForLogin(true);
+      navigate("/auth?redirect=/dashboard/anunciante/publicar");
+      return;
+    }
+    const email = receiptEmail.trim() || "anunciante@effe.pe";
     const inv = addInvoice({
-      email: "anunciante@effe.pe",
+      email,
       advertiser: session?.name || "Anunciante",
       listingTitle: form.title,
       amount: total,
-      detail: `Aviso ${duration} días · ${Object.keys(extras).filter((k) => (extras as Record<string, boolean>)[k]).join(", ") || "sin extras"}`,
+      detail: `${receiptType === "factura" ? "Factura" : "Boleta"} · Aviso ${duration} días · ${Object.keys(extras).filter((k) => (extras as Record<string, boolean>)[k]).join(", ") || "sin extras"}`,
     });
     setSummaryOpen(false);
-    toast({
-      title: "¡Aviso publicado!",
-      description: `Boleta ${inv.number} enviada a ${inv.email}.`,
-    });
-    setTimeout(() => navigate("/dashboard/anunciante/avisos"), 800);
+    setSuccessOpen({ open: true, number: inv.number, email });
   };
+
 
   const completion = (() => {
     const fields = [form.category, form.title, form.description, form.price, form.location];
