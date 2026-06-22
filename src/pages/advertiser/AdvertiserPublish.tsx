@@ -744,19 +744,23 @@ const AdvertiserPublish = () => {
 
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Duración</span>
-                <span className="font-bold">{duration} días</span>
+                <span className="text-muted-foreground">Paquete</span>
+                <span className="font-bold">{quantity} aviso{quantity > 1 ? "s" : ""} · {duration} días c/u</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Publicación</span>
-                <span>{formatSoles(basePrice)}</span>
+                <span className="text-muted-foreground">Subtotal avisos</span>
+                <span>{formatSoles(packageBase)}</span>
               </div>
-              {Object.entries(extras).filter(([, v]) => v).map(([k]) => (
-                <div key={k} className="flex justify-between text-xs">
-                  <span className="text-muted-foreground capitalize">+ {k}</span>
-                  <span>{formatSoles(settings.extras[k as keyof typeof settings.extras])}</span>
-                </div>
-              ))}
+              {EXTRA_DEFS.filter((d) => (extras[d.key] ?? 0) > 0).map((d) => {
+                const count = extras[d.key] ?? 0;
+                const unit = settings.extras[d.key as keyof ExtraPrices] ?? 0;
+                return (
+                  <div key={d.key} className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">+ {d.label} × {count}</span>
+                    <span>{formatSoles(count * unit)}</span>
+                  </div>
+                );
+              })}
               <div className="border-t pt-2 flex justify-between items-baseline">
                 <span className="font-bold uppercase tracking-wider text-xs">Total (IGV incl.)</span>
                 <span className="text-2xl font-extrabold text-primary">{formatSoles(total)}</span>
