@@ -233,7 +233,7 @@ const AdvertiserPublish = () => {
     const fields = [form.category, form.title, form.description, form.price, form.location];
     const filled = fields.filter((v) => v && v.trim().length > 0).length;
     const total = fields.length + 1; // +1 fotos
-    return Math.round(((filled + (photos.length > 0 ? 1 : 0)) / total) * 100);
+    return Math.round(((filled + (mainPhoto ? 1 : 0)) / total) * 100);
   })();
 
   return (
