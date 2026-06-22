@@ -347,6 +347,16 @@ export default function SearchPage() {
           </div>
         </div>
       )}
+
+      {/* Mobile filters drawer (funciona en vistas lista y mapa) */}
+      <Sheet open={showFilters} onOpenChange={setShowFilters}>
+        <SheetContent side="left" className="w-[88vw] max-w-sm p-0 overflow-y-auto lg:hidden">
+          <SheetHeader className="p-5 border-b">
+            <SheetTitle>Filtros</SheetTitle>
+          </SheetHeader>
+          <div className="p-4">{FiltersPanel}</div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
