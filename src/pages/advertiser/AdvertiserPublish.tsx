@@ -727,7 +727,7 @@ const AdvertiserPublish = () => {
 
           <div className="space-y-4">
             <div className="flex gap-3 p-3 border bg-muted/30">
-              {photos[0] && <img src={photos[0].url} alt="" className="w-20 h-20 object-cover" />}
+              {mainPhoto && <img src={mainPhoto.url} alt="" className="w-20 h-20 object-cover" />}
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] uppercase tracking-widest font-bold text-secondary">
                   {categories.find((c) => c.id === form.category)?.name}
