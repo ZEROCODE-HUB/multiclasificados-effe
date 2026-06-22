@@ -612,11 +612,11 @@ const AdvertiserPublish = () => {
               </CardHeader>
               <CardContent className="p-5 space-y-3">
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Publicación ({duration} días)</span>
-                  <span className="font-bold">{formatSoles(basePrice)}</span>
+                  <span className="text-muted-foreground">{quantity} aviso{quantity > 1 ? "s" : ""} × {duration} días</span>
+                  <span className="font-bold">{formatSoles(packageBase)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Extras</span>
+                  <span className="text-muted-foreground">Adicionales</span>
                   <span className="font-bold">{formatSoles(extrasSum)}</span>
                 </div>
                 <div className="border-t pt-3 flex items-baseline justify-between">
