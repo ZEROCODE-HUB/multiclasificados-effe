@@ -119,10 +119,13 @@ const AdvertiserPublish = () => {
     }
     setVerified(true);
     setVerifyOpen(false);
-    toast({ title: "Identidad verificada", description: `${personType === "natural" ? "DNI" : "RUC"} ${docNumber} confirmado.` });
+    toast({ title: "Identidad verificada", description: `${personType === "natural" ? "DNI" : "RUC"} ${docNumber} confirmado. Continúa con el pago.` });
+    // Tras verificar, abre directamente el resumen y pago
+    setConfirmed(false);
+    setTimeout(() => setSummaryOpen(true), 250);
   };
 
-  const canPublish = form.category && form.title && form.description && form.price && form.location && photos.length > 0 && verified;
+  const canPublish = form.category && form.title && form.description && form.price && form.location && photos.length > 0;
 
   const openSummary = () => {
     if (!session) {
@@ -134,6 +137,12 @@ const AdvertiserPublish = () => {
       toast({ title: "Completa los datos requeridos", description: "Faltan campos obligatorios o imágenes.", variant: "destructive" });
       return;
     }
+    // Paso 1: verificar identidad si aún no se ha hecho
+    if (!verified) {
+      setVerifyOpen(true);
+      return;
+    }
+    // Paso 2: resumen y pago
     setConfirmed(false);
     setSummaryOpen(true);
   };
