@@ -29,6 +29,8 @@ interface PhotoItem { id: string; url: string; name: string; }
 const MAX_PHOTOS = 10;
 const DURATIONS: DurationDays[] = [3, 7, 15, 30, 60, 90];
 
+const DRAFT_KEY = "effe:publish-draft";
+
 const AdvertiserPublish = () => {
   const session = useSession();
   const navigate = useNavigate();
@@ -58,6 +60,9 @@ const AdvertiserPublish = () => {
   // Resumen y pago
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+  const [receiptType, setReceiptType] = useState<"boleta" | "factura">("boleta");
+  const [receiptEmail, setReceiptEmail] = useState("");
+  const [successOpen, setSuccessOpen] = useState<{ open: boolean; number: string; email: string }>({ open: false, number: "", email: "" });
 
   // Pricing en vivo
   const [settings, setSettings] = useState<PricingSettings>(() => loadSettings());
@@ -66,6 +71,28 @@ const AdvertiserPublish = () => {
     window.addEventListener("effe:pricing-updated", sync);
     return () => window.removeEventListener("effe:pricing-updated", sync);
   }, []);
+
+  // Restaurar borrador y reanudar flujo tras login
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (d.form) setForm(d.form);
+      if (d.duration) setDuration(d.duration);
+      if (d.extras) setExtras(d.extras);
+      if (d.verified) setVerified(d.verified);
+      if (d.personType) setPersonType(d.personType);
+      if (d.docNumber) setDocNumber(d.docNumber);
+      // Si el usuario regresa autenticado y ya estaba verificado, retomar en el resumen
+      if (d.resumeAtSummary && session) {
+        setTimeout(() => setSummaryOpen(true), 200);
+      }
+      localStorage.removeItem(DRAFT_KEY);
+    } catch { /* noop */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
 
   const basePrice = priceForDuration(1, duration, settings);
   const extrasSum = extrasTotal(extras, settings);
@@ -108,6 +135,14 @@ const AdvertiserPublish = () => {
   };
   const onDragEnd = () => setDragId(null);
 
+  const persistDraftForLogin = (resumeAtSummary: boolean) => {
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({
+        form, duration, extras, verified: true, personType, docNumber, resumeAtSummary,
+      }));
+    } catch { /* noop */ }
+  };
+
   const handleVerify = () => {
     if (personType === "natural" && docNumber.length !== 8) {
       toast({ title: "DNI inválido", description: "El DNI debe tener 8 dígitos.", variant: "destructive" });
@@ -119,8 +154,16 @@ const AdvertiserPublish = () => {
     }
     setVerified(true);
     setVerifyOpen(false);
-    toast({ title: "Identidad verificada", description: `${personType === "natural" ? "DNI" : "RUC"} ${docNumber} confirmado. Continúa con el pago.` });
-    // Tras verificar, abre directamente el resumen y pago
+    toast({ title: "Identidad verificada", description: `${personType === "natural" ? "DNI" : "RUC"} ${docNumber} confirmado.` });
+
+    // Tras verificar exige login antes del pago
+    if (!session) {
+      persistDraftForLogin(true);
+      toast({ title: "Inicia sesión para pagar", description: "Te llevamos al login y retomamos tu publicación." });
+      setTimeout(() => navigate("/auth?redirect=/dashboard/anunciante/publicar"), 400);
+      return;
+    }
+    // Si ya hay sesión, abre el resumen directamente
     setConfirmed(false);
     setTimeout(() => setSummaryOpen(true), 250);
   };
@@ -128,41 +171,46 @@ const AdvertiserPublish = () => {
   const canPublish = form.category && form.title && form.description && form.price && form.location && photos.length > 0;
 
   const openSummary = () => {
-    if (!session) {
-      toast({ title: "Inicia sesión para continuar", description: "Necesitas una cuenta para publicar." });
-      navigate("/auth?redirect=/dashboard/anunciante/publicar");
-      return;
-    }
     if (!canPublish) {
       toast({ title: "Completa los datos requeridos", description: "Faltan campos obligatorios o imágenes.", variant: "destructive" });
       return;
     }
-    // Paso 1: verificar identidad si aún no se ha hecho
+    // Paso 1: verificar identidad (sin requerir login todavía)
     if (!verified) {
       setVerifyOpen(true);
       return;
     }
-    // Paso 2: resumen y pago
+    // Paso 2: si no hay sesión, exigir login antes de mostrar el pago
+    if (!session) {
+      persistDraftForLogin(true);
+      toast({ title: "Inicia sesión para pagar", description: "Te llevamos al login y retomamos tu publicación." });
+      navigate("/auth?redirect=/dashboard/anunciante/publicar");
+      return;
+    }
+    // Paso 3: resumen y pago
     setConfirmed(false);
     setSummaryOpen(true);
   };
 
   const confirmAndPay = () => {
     if (!confirmed) return;
+    if (!session) {
+      persistDraftForLogin(true);
+      navigate("/auth?redirect=/dashboard/anunciante/publicar");
+      return;
+    }
+    const email = receiptEmail.trim() || "anunciante@effe.pe";
     const inv = addInvoice({
-      email: "anunciante@effe.pe",
+      email,
       advertiser: session?.name || "Anunciante",
       listingTitle: form.title,
       amount: total,
-      detail: `Aviso ${duration} días · ${Object.keys(extras).filter((k) => (extras as Record<string, boolean>)[k]).join(", ") || "sin extras"}`,
+      detail: `${receiptType === "factura" ? "Factura" : "Boleta"} · Aviso ${duration} días · ${Object.keys(extras).filter((k) => (extras as Record<string, boolean>)[k]).join(", ") || "sin extras"}`,
     });
     setSummaryOpen(false);
-    toast({
-      title: "¡Aviso publicado!",
-      description: `Boleta ${inv.number} enviada a ${inv.email}.`,
-    });
-    setTimeout(() => navigate("/dashboard/anunciante/avisos"), 800);
+    setSuccessOpen({ open: true, number: inv.number, email });
   };
+
 
   const completion = (() => {
     const fields = [form.category, form.title, form.description, form.price, form.location];
@@ -611,6 +659,39 @@ const AdvertiserPublish = () => {
               </div>
             </div>
 
+            {/* Tipo de comprobante */}
+            <div className="space-y-2">
+              <Label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Tipo de comprobante</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReceiptType("boleta")}
+                  className={`p-3 border text-left transition-all ${receiptType === "boleta" ? "border-secondary bg-secondary/10" : "border-border hover:bg-muted/50"}`}
+                >
+                  <p className="font-bold text-sm">Boleta</p>
+                  <p className="text-[11px] text-muted-foreground">Persona natural</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReceiptType("factura")}
+                  className={`p-3 border text-left transition-all ${receiptType === "factura" ? "border-secondary bg-secondary/10" : "border-border hover:bg-muted/50"}`}
+                >
+                  <p className="font-bold text-sm">Factura</p>
+                  <p className="text-[11px] text-muted-foreground">Empresa con RUC</p>
+                </button>
+              </div>
+              <div>
+                <Label className="text-xs">Correo para enviar el comprobante</Label>
+                <Input
+                  type="email"
+                  value={receiptEmail}
+                  onChange={(e) => setReceiptEmail(e.target.value)}
+                  placeholder="tu@correo.com"
+                  className="mt-1"
+                />
+              </div>
+            </div>
+
             <label className="flex items-start gap-2 p-3 border bg-secondary/5 cursor-pointer">
               <Checkbox checked={confirmed} onCheckedChange={(v) => setConfirmed(!!v)} className="mt-0.5" />
               <span className="text-xs">
@@ -623,6 +704,38 @@ const AdvertiserPublish = () => {
             <Button variant="ghost" onClick={() => setSummaryOpen(false)}>Cancelar</Button>
             <Button onClick={confirmAndPay} disabled={!confirmed} className="gap-2">
               <CreditCard size={14} /> Pagar {formatSoles(total)}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmación post-pago */}
+      <Dialog open={successOpen.open} onOpenChange={(o) => setSuccessOpen((s) => ({ ...s, open: o }))}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Check className="text-success" size={20} /> ¡Pago confirmado!
+            </DialogTitle>
+            <DialogDescription>
+              Tu aviso ha sido publicado correctamente.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <div className="p-3 border bg-muted/30 space-y-1">
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{receiptType === "factura" ? "Factura" : "Boleta"} electrónica</p>
+              <p className="font-mono font-bold">{successOpen.number}</p>
+              <p className="text-xs text-muted-foreground">Enviado a <span className="font-semibold text-foreground">{successOpen.email}</span></p>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              También puedes verlo en <span className="font-semibold text-foreground">Mis comprobantes</span>.
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setSuccessOpen({ open: false, number: "", email: "" }); navigate("/dashboard/anunciante/boletas"); }}>
+              Ver mis comprobantes
+            </Button>
+            <Button onClick={() => { setSuccessOpen({ open: false, number: "", email: "" }); navigate("/dashboard/anunciante/avisos"); }}>
+              Ir a mis avisos
             </Button>
           </DialogFooter>
         </DialogContent>

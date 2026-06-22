@@ -43,8 +43,6 @@ const buildMenu = (role: AdminRole): MenuItem[] => {
   return [
     ...base,
     { title: "Roles y permisos", url: `/dashboard/superadmin/roles`, icon: ShieldCheck, group: "Plataforma" },
-    { title: "Configuración global", url: `/dashboard/superadmin/plataforma`, icon: Settings, group: "Plataforma" },
-    { title: "Seguridad", url: `/dashboard/superadmin/seguridad`, icon: Lock, group: "Plataforma" },
     { title: "Auditoría y logs", url: `/dashboard/superadmin/auditoria`, icon: ScrollText, group: "Plataforma" },
   ];
 };

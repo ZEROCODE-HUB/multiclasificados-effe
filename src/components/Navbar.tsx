@@ -48,7 +48,7 @@ export function Navbar() {
         { label: "Favoritos", icon: Heart, to: "/dashboard/buscador/favoritos" },
         { label: "Búsquedas guardadas", icon: Star, to: "/dashboard/buscador/busquedas" },
         { label: "Panel y estadísticas", icon: BarChart3, to: "/dashboard/anunciante/estadisticas" },
-        { label: "Boletas de pago", icon: CreditCard, to: "/dashboard/anunciante/boletas" },
+        { label: "Mis comprobantes", icon: CreditCard, to: "/dashboard/anunciante/boletas" },
         { label: "Configuración", icon: Settings, to: "/dashboard/anunciante/configuracion" },
       ]
     : [];

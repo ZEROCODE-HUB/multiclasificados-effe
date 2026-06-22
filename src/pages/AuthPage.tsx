@@ -12,17 +12,28 @@ import { BrandMark } from "@/components/BrandMark";
 
 const AuthPage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get("redirect");
   const enterDemo = (role: "anunciante" | "buscador" | "admin" | "superadmin") => {
     import("@/hooks/useSession").then(({ setSession }) => setSession(role));
-    // Perfil único: Anunciante/Buscador aterrizan en la home post-login
-    // Admin / Superadmin mantienen su panel propio
+    if (redirectTo && (role === "anunciante" || role === "buscador")) {
+      navigate(redirectTo);
+      return;
+    }
     if (role === "admin" || role === "superadmin") {
       navigate(`/dashboard/${role}`);
     } else {
       navigate("/");
     }
   };
-  const [searchParams] = useSearchParams();
+  const handleLogin = () => {
+    import("@/hooks/useSession").then(({ setSession }) => setSession("buscador"));
+    navigate(redirectTo || "/");
+  };
+  const handleRegister = () => {
+    import("@/hooks/useSession").then(({ setSession }) => setSession("buscador"));
+    navigate(redirectTo || "/");
+  };
   const [activeTab, setActiveTab] = useState<"login" | "register">(
     searchParams.get("tab") === "register" ? "register" : "login"
   );
@@ -128,7 +139,7 @@ const AuthPage = () => {
                 </label>
                 <a href="#" className="text-sm text-secondary hover:underline">¿Olvidaste tu contraseña?</a>
               </div>
-              <Button className="w-full" size="lg">Iniciar sesión</Button>
+              <Button className="w-full" size="lg" onClick={handleLogin}>Iniciar sesión</Button>
 
               <div className="relative my-4">
                 <div className="absolute inset-0 flex items-center"><div className="w-full border-t" /></div>
@@ -173,7 +184,7 @@ const AuthPage = () => {
                 <span>Acepto los <a href="#" className="text-secondary hover:underline">términos</a> y la <a href="#" className="text-secondary hover:underline">política de privacidad</a></span>
               </label>
 
-              <Button className="w-full" size="lg">Crear cuenta</Button>
+              <Button className="w-full" size="lg" onClick={handleRegister}>Crear cuenta</Button>
             </div>
 
           )}
