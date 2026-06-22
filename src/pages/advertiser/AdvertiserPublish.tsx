@@ -632,8 +632,8 @@ const AdvertiserPublish = () => {
               </CardHeader>
               <CardContent className="p-0">
                 <div className="aspect-[4/3] bg-muted relative overflow-hidden">
-                  {photos[0] ? (
-                    <img src={photos[0].url} alt="Portada" className="w-full h-full object-cover" />
+                  {mainPhoto ? (
+                    <img src={mainPhoto.url} alt="Portada" className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs uppercase tracking-widest">Sin imagen</div>
                   )}
