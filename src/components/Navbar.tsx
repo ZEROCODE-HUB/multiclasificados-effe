@@ -210,7 +210,7 @@ export function Navbar() {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Link to={isUser ? "/dashboard/anunciante/publicar" : "/auth?tab=register"} className="ml-2">
+          <Link to="/dashboard/anunciante/publicar" className="ml-2">
             <Button size="sm" className="gap-1.5 font-semibold rounded-none px-4">
               <PlusCircle size={14} /> Publicar
             </Button>
@@ -218,7 +218,7 @@ export function Navbar() {
         </div>
 
         <Link
-          to={isUser ? "/dashboard/anunciante/publicar" : "/auth?tab=register"}
+          to="/dashboard/anunciante/publicar"
           className="md:hidden ml-auto p-2 text-foreground"
           aria-label="Publicar"
         >
