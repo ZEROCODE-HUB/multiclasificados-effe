@@ -282,7 +282,7 @@ export function Navbar() {
                   Explorar
                 </Link>
                 <div className="border-t my-2" />
-                <Link to="/auth?tab=register" onClick={() => setMobileOpen(false)} className="px-3">
+                <Link to="/dashboard/anunciante/publicar" onClick={() => setMobileOpen(false)} className="px-3">
                   <Button className="w-full gap-1.5 rounded-none"><PlusCircle size={14} /> Publicar aviso</Button>
                 </Link>
                 <Link to="/auth" onClick={() => setMobileOpen(false)} className="px-3 mt-2">
