@@ -503,15 +503,23 @@ const AdvertiserPublish = () => {
               <Button variant="hero" size="lg" className="w-full rounded-none" onClick={openSummary}>
                 Publicar aviso <ArrowRight size={16} className="ml-1" />
               </Button>
-              {!verified && (
-                <Button variant="outline" size="sm" onClick={() => setVerifyOpen(true)} className="rounded-none">
-                  Verificar identidad
-                </Button>
-              )}
-              <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 justify-center">
-                <ShieldCheck size={12} className="text-secondary" /> Tu aviso se publica al confirmar el pago.
+              <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 justify-center text-center">
+                <ShieldCheck size={12} className="text-secondary" /> Al publicar verificarás tu identidad y luego confirmarás el pago.
               </p>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Popup verificación */}
+      <Dialog open={verifyOpen} onOpenChange={setVerifyOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Verifica tu identidad</DialogTitle>
+            <DialogDescription>
+              Para publicar tu aviso necesitamos confirmar si publicas como persona natural o jurídica. Luego pasarás al pago.
+            </DialogDescription>
+          </DialogHeader>
           </div>
         </div>
       </div>
