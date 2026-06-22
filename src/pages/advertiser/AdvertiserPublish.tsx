@@ -34,8 +34,8 @@ const AdvertiserPublish = () => {
   const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Verificación de identidad inicial
-  const [verifyOpen, setVerifyOpen] = useState(true);
+  // Verificación de identidad (se solicita al presionar "Publicar aviso")
+  const [verifyOpen, setVerifyOpen] = useState(false);
   const [personType, setPersonType] = useState<"natural" | "juridica" | "">("");
   const [docNumber, setDocNumber] = useState("");
   const [verified, setVerified] = useState(false);
@@ -119,10 +119,13 @@ const AdvertiserPublish = () => {
     }
     setVerified(true);
     setVerifyOpen(false);
-    toast({ title: "Identidad verificada", description: `${personType === "natural" ? "DNI" : "RUC"} ${docNumber} confirmado.` });
+    toast({ title: "Identidad verificada", description: `${personType === "natural" ? "DNI" : "RUC"} ${docNumber} confirmado. Continúa con el pago.` });
+    // Tras verificar, abre directamente el resumen y pago
+    setConfirmed(false);
+    setTimeout(() => setSummaryOpen(true), 250);
   };
 
-  const canPublish = form.category && form.title && form.description && form.price && form.location && photos.length > 0 && verified;
+  const canPublish = form.category && form.title && form.description && form.price && form.location && photos.length > 0;
 
   const openSummary = () => {
     if (!session) {
@@ -134,6 +137,12 @@ const AdvertiserPublish = () => {
       toast({ title: "Completa los datos requeridos", description: "Faltan campos obligatorios o imágenes.", variant: "destructive" });
       return;
     }
+    // Paso 1: verificar identidad si aún no se ha hecho
+    if (!verified) {
+      setVerifyOpen(true);
+      return;
+    }
+    // Paso 2: resumen y pago
     setConfirmed(false);
     setSummaryOpen(true);
   };
@@ -158,8 +167,8 @@ const AdvertiserPublish = () => {
   const completion = (() => {
     const fields = [form.category, form.title, form.description, form.price, form.location];
     const filled = fields.filter((v) => v && v.trim().length > 0).length;
-    const total = fields.length + 2; // +1 fotos +1 verificación
-    return Math.round(((filled + (photos.length > 0 ? 1 : 0) + (verified ? 1 : 0)) / total) * 100);
+    const total = fields.length + 1; // +1 fotos
+    return Math.round(((filled + (photos.length > 0 ? 1 : 0)) / total) * 100);
   })();
 
   return (
@@ -494,18 +503,15 @@ const AdvertiserPublish = () => {
               <Button variant="hero" size="lg" className="w-full rounded-none" onClick={openSummary}>
                 Publicar aviso <ArrowRight size={16} className="ml-1" />
               </Button>
-              {!verified && (
-                <Button variant="outline" size="sm" onClick={() => setVerifyOpen(true)} className="rounded-none">
-                  Verificar identidad
-                </Button>
-              )}
-              <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 justify-center">
-                <ShieldCheck size={12} className="text-secondary" /> Tu aviso se publica al confirmar el pago.
+              <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 justify-center text-center">
+                <ShieldCheck size={12} className="text-secondary" /> Al publicar verificarás tu identidad y luego confirmarás el pago.
               </p>
             </div>
           </div>
         </div>
       </div>
+
+
 
       {/* Popup verificación */}
       <Dialog open={verifyOpen} onOpenChange={setVerifyOpen}>
