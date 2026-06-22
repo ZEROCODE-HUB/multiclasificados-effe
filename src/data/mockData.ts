@@ -1,4 +1,4 @@
-import { Car, Home, Briefcase, Smartphone, Shirt, Wrench, GraduationCap, Heart } from "lucide-react";
+import { Car, Home, Briefcase, Smartphone, Package, Wrench, GraduationCap, Sparkles } from "lucide-react";
 
 export interface Category {
   id: string;
@@ -12,10 +12,10 @@ export const categories: Category[] = [
   { id: "vehiculos", name: "Vehículos", icon: Car, count: 892 },
   { id: "empleos", name: "Empleos", icon: Briefcase, count: 2103 },
   { id: "tecnologia", name: "Tecnología", icon: Smartphone, count: 756 },
-  { id: "moda", name: "Moda", icon: Shirt, count: 543 },
+  { id: "productos", name: "Productos", icon: Package, count: 1320 },
   { id: "servicios", name: "Servicios", icon: Wrench, count: 1890 },
-  { id: "educacion", name: "Educación", icon: GraduationCap, count: 321 },
-  { id: "salud", name: "Salud y Belleza", icon: Heart, count: 467 },
+  { id: "educacion-finanzas", name: "Educación y Finanzas", icon: GraduationCap, count: 321 },
+  { id: "salud-belleza-moda", name: "Salud, Belleza y Moda", icon: Sparkles, count: 467 },
 ];
 
 export interface Listing {
@@ -110,7 +110,7 @@ export const featuredListings: Listing[] = [
     description: "120 horas, certificación internacional, modalidad online con clases en vivo.",
     price: 1500,
     currency: "PEN",
-    category: "educacion",
+    category: "educacion-finanzas",
     location: "Online",
     imageUrl: "https://images.unsplash.com/photo-1432888498266-38ffec3eaf0a?w=400&h=300&fit=crop",
     date: "2026-03-06",

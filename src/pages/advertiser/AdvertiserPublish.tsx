@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   ImagePlus, X, ArrowLeft, ArrowRight, Star, Check, MapPin, Tag, FileText, Camera,
-  ShieldCheck, Building2, User, CreditCard, Receipt, Sparkles, Flame, EyeOff,
+  ShieldCheck, Building2, User, CreditCard, Receipt, Sparkles, Flame, EyeOff, Lock, Package, Minus, Plus,
 } from "lucide-react";
 import { categories } from "@/data/mockData";
 import { useEffect, useRef, useState } from "react";
@@ -20,14 +20,26 @@ import { useNavigate } from "react-router-dom";
 import { useSession } from "@/hooks/useSession";
 import { toast } from "@/hooks/use-toast";
 import {
-  loadSettings, totalPrice, priceForDuration, extrasTotal, formatSoles, addInvoice,
-  type ExtrasSelection, type DurationDays, type PricingSettings,
+  loadSettings, priceForDuration, formatSoles, addInvoice,
+  type DurationDays, type PricingSettings, type ExtraPrices,
 } from "@/lib/pricing";
 
 interface PhotoItem { id: string; url: string; name: string; }
 
-const MAX_PHOTOS = 10;
 const DURATIONS: DurationDays[] = [3, 7, 15, 30, 60, 90];
+const QUANTITIES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+// Extras del paquete (cantidad numérica por cada uno)
+type ExtraKey = "img500" | "pdf500" | "urgente" | "destacado" | "confidencial";
+const EXTRA_DEFS: Array<{ key: ExtraKey; label: string; sub?: string; icon: typeof Sparkles }> = [
+  { key: "img500", label: "Segunda imagen por aviso", sub: "hasta 500 KB", icon: ImagePlus },
+  { key: "pdf500", label: "PDF adjunto por aviso", sub: "hasta 500 KB", icon: FileText },
+  { key: "urgente", label: "Marcar como Urgente", icon: Flame },
+  { key: "destacado", label: "Marcar como Destacado", icon: Star },
+  { key: "confidencial", label: "Marcar como Confidencial", icon: EyeOff },
+];
+
+type ExtrasCount = Partial<Record<ExtraKey, number>>;
 
 const DRAFT_KEY = "effe:publish-draft";
 
@@ -42,9 +54,11 @@ const AdvertiserPublish = () => {
   const [docNumber, setDocNumber] = useState("");
   const [verified, setVerified] = useState(false);
 
-  // Datos del aviso
-  const [photos, setPhotos] = useState<PhotoItem[]>([]);
-  const [dragId, setDragId] = useState<string | null>(null);
+  // Imágenes — solo 2 slots por aviso
+  const [mainPhoto, setMainPhoto] = useState<PhotoItem | null>(null);
+  const [secondPhoto, setSecondPhoto] = useState<PhotoItem | null>(null);
+  const secondFileRef = useRef<HTMLInputElement>(null);
+
   const [form, setForm] = useState({
     category: "",
     title: "",
@@ -54,8 +68,11 @@ const AdvertiserPublish = () => {
     location: "",
     condition: "nuevo",
   });
+
+  // Paquete: cantidad, duración, extras (cantidad por tipo)
+  const [quantity, setQuantity] = useState<number>(1);
   const [duration, setDuration] = useState<DurationDays>(7);
-  const [extras, setExtras] = useState<ExtrasSelection>({});
+  const [extras, setExtras] = useState<ExtrasCount>({});
 
   // Resumen y pago
   const [summaryOpen, setSummaryOpen] = useState(false);
@@ -80,11 +97,11 @@ const AdvertiserPublish = () => {
       const d = JSON.parse(raw);
       if (d.form) setForm(d.form);
       if (d.duration) setDuration(d.duration);
+      if (d.quantity) setQuantity(d.quantity);
       if (d.extras) setExtras(d.extras);
       if (d.verified) setVerified(d.verified);
       if (d.personType) setPersonType(d.personType);
       if (d.docNumber) setDocNumber(d.docNumber);
-      // Si el usuario regresa autenticado y ya estaba verificado, retomar en el resumen
       if (d.resumeAtSummary && session) {
         setTimeout(() => setSummaryOpen(true), 200);
       }
@@ -93,52 +110,52 @@ const AdvertiserPublish = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-
+  const packageBase = priceForDuration(quantity, duration, settings);
+  const extrasSum = EXTRA_DEFS.reduce((acc, def) => {
+    const c = extras[def.key] ?? 0;
+    return acc + c * (settings.extras[def.key as keyof ExtraPrices] ?? 0);
+  }, 0);
+  const total = Math.round((packageBase + extrasSum) * 100) / 100;
+  // Para la vista previa del aviso individual
   const basePrice = priceForDuration(1, duration, settings);
-  const extrasSum = extrasTotal(extras, settings);
-  const total = totalPrice(1, duration, extras, settings);
 
   const updateForm = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
-  const addFiles = (files: FileList | null) => {
-    if (!files) return;
-    const incoming = Array.from(files).slice(0, MAX_PHOTOS - photos.length);
-    const mapped: PhotoItem[] = incoming.map((f) => ({
-      id: `${f.name}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+  const pickPhoto = (slot: "main" | "second", files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const f = files[0];
+    const item: PhotoItem = {
+      id: `${slot}-${Date.now()}`,
       url: URL.createObjectURL(f),
       name: f.name,
-    }));
-    setPhotos((p) => [...p, ...mapped]);
+    };
+    if (slot === "main") setMainPhoto(item);
+    else setSecondPhoto(item);
   };
 
-  const removePhoto = (id: string) => setPhotos((p) => p.filter((x) => x.id !== id));
-  const setCover = (id: string) =>
-    setPhotos((p) => {
-      const found = p.find((x) => x.id === id);
-      if (!found) return p;
-      return [found, ...p.filter((x) => x.id !== id)];
-    });
+  const setExtraCount = (key: ExtraKey, count: number) => {
+    const max = quantity;
+    const v = Math.max(0, Math.min(max, count));
+    setExtras((e) => ({ ...e, [key]: v }));
+  };
 
-  const onDragStart = (id: string) => setDragId(id);
-  const onDragOver = (e: React.DragEvent, overId: string) => {
-    e.preventDefault();
-    if (!dragId || dragId === overId) return;
-    setPhotos((prev) => {
-      const from = prev.findIndex((p) => p.id === dragId);
-      const to = prev.findIndex((p) => p.id === overId);
-      if (from < 0 || to < 0) return prev;
-      const next = [...prev];
-      const [moved] = next.splice(from, 1);
-      next.splice(to, 0, moved);
+  // Si cambia la cantidad, recortar extras al nuevo máximo
+  useEffect(() => {
+    setExtras((prev) => {
+      const next: ExtrasCount = {};
+      (Object.keys(prev) as ExtraKey[]).forEach((k) => {
+        next[k] = Math.min(prev[k] ?? 0, quantity);
+      });
       return next;
     });
-  };
-  const onDragEnd = () => setDragId(null);
+  }, [quantity]);
+
+  const hasSecondImageInPackage = (extras.img500 ?? 0) > 0;
 
   const persistDraftForLogin = (resumeAtSummary: boolean) => {
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify({
-        form, duration, extras, verified: true, personType, docNumber, resumeAtSummary,
+        form, duration, quantity, extras, verified: true, personType, docNumber, resumeAtSummary,
       }));
     } catch { /* noop */ }
   };
@@ -168,7 +185,7 @@ const AdvertiserPublish = () => {
     setTimeout(() => setSummaryOpen(true), 250);
   };
 
-  const canPublish = form.category && form.title && form.description && form.price && form.location && photos.length > 0;
+  const canPublish = form.category && form.title && form.description && form.price && form.location && !!mainPhoto;
 
   const openSummary = () => {
     if (!canPublish) {
@@ -216,7 +233,7 @@ const AdvertiserPublish = () => {
     const fields = [form.category, form.title, form.description, form.price, form.location];
     const filled = fields.filter((v) => v && v.trim().length > 0).length;
     const total = fields.length + 1; // +1 fotos
-    return Math.round(((filled + (photos.length > 0 ? 1 : 0)) / total) * 100);
+    return Math.round(((filled + (mainPhoto ? 1 : 0)) / total) * 100);
   })();
 
   return (
@@ -282,77 +299,116 @@ const AdvertiserPublish = () => {
               </CardContent>
             </Card>
 
-            {/* Step 2: Photos */}
+            {/* Step 2: Photos — 2 slots por aviso */}
             <Card>
               <CardHeader className="border-b">
                 <div className="flex items-center gap-3">
                   <span className="w-8 h-8 bg-primary text-primary-foreground text-xs font-extrabold flex items-center justify-center">02</span>
                   <div>
-                    <CardTitle className="text-base flex items-center gap-2"><Camera size={16} className="text-secondary" /> Imágenes ({photos.length}/{MAX_PHOTOS})</CardTitle>
-                    <CardDescription className="text-xs">Sube hasta 10 fotos. Arrastra para reordenar.</CardDescription>
+                    <CardTitle className="text-base flex items-center gap-2"><Camera size={16} className="text-secondary" /> Imágenes del aviso</CardTitle>
+                    <CardDescription className="text-xs">Cada aviso admite hasta 2 imágenes: la principal incluida y una segunda opcional.</CardDescription>
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="pt-5 space-y-4">
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => { addFiles(e.target.files); if (fileRef.current) fileRef.current.value = ""; }}
-                />
-                {photos.length === 0 ? (
+              <CardContent className="pt-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Slot 1 — Principal */}
+                <div>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => { pickPhoto("main", e.target.files); if (fileRef.current) fileRef.current.value = ""; }}
+                  />
                   <button
                     type="button"
                     onClick={() => fileRef.current?.click()}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files); }}
-                    className="w-full border-2 border-dashed border-border p-10 text-center hover:border-secondary/60 hover:bg-muted/30 transition-colors cursor-pointer"
+                    className="relative w-full aspect-[4/3] border-2 border-dashed border-border hover:border-secondary/60 hover:bg-muted/30 transition-colors flex items-center justify-center overflow-hidden bg-muted/20"
                   >
-                    <ImagePlus size={36} className="mx-auto text-muted-foreground mb-3" />
-                    <p className="text-sm font-semibold text-foreground">Arrastra tus fotos o haz clic para seleccionar</p>
-                    <p className="text-xs text-muted-foreground mt-1">JPG, PNG o WEBP</p>
-                  </button>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                    {photos.map((p, i) => (
-                      <div
-                        key={p.id}
-                        draggable
-                        onDragStart={() => onDragStart(p.id)}
-                        onDragOver={(e) => onDragOver(e, p.id)}
-                        onDragEnd={onDragEnd}
-                        className={`relative group aspect-square overflow-hidden border bg-muted cursor-move ${dragId === p.id ? "ring-2 ring-secondary opacity-70" : "border-border"}`}
-                      >
-                        <img src={p.url} alt={p.name} className="w-full h-full object-cover" />
-                        <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-black/70 text-white text-[10px] font-bold">{i + 1}</div>
-                        {i === 0 && (
-                          <div className="absolute bottom-1 left-1 right-1 flex items-center justify-center gap-1 px-1.5 py-1 bg-secondary text-secondary-foreground text-[10px] font-extrabold uppercase tracking-wider">
-                            <Star size={10} className="fill-current" /> Portada
-                          </div>
-                        )}
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100">
-                          {i !== 0 && (
-                            <button type="button" onClick={() => setCover(p.id)} title="Portada" className="w-7 h-7 bg-white text-foreground flex items-center justify-center hover:bg-secondary hover:text-secondary-foreground">
-                              <Star size={13} />
-                            </button>
-                          )}
-                          <button type="button" onClick={() => removePhoto(p.id)} title="Eliminar" className="w-7 h-7 bg-white text-destructive flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground">
-                            <X size={14} />
-                          </button>
-                        </div>
+                    {mainPhoto ? (
+                      <>
+                        <img src={mainPhoto.url} alt="Principal" className="absolute inset-0 w-full h-full object-cover" />
+                        <span className="absolute top-1.5 left-1.5 px-2 py-0.5 bg-secondary text-secondary-foreground text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1">
+                          <Star size={10} className="fill-current" /> Portada
+                        </span>
+                        <span
+                          role="button"
+                          aria-label="Quitar imagen principal"
+                          onClick={(e) => { e.stopPropagation(); setMainPhoto(null); }}
+                          className="absolute top-1.5 right-1.5 w-7 h-7 bg-white text-destructive flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground"
+                        >
+                          <X size={14} />
+                        </span>
+                      </>
+                    ) : (
+                      <div className="text-center px-4">
+                        <ImagePlus size={28} className="mx-auto text-muted-foreground mb-2" />
+                        <p className="text-xs font-semibold text-foreground">Imagen principal</p>
+                        <p className="text-[11px] text-muted-foreground">Incluida · hasta 100 KB</p>
                       </div>
-                    ))}
-                    {photos.length < MAX_PHOTOS && (
-                      <button type="button" onClick={() => fileRef.current?.click()}
-                        className="aspect-square border-2 border-dashed border-border flex flex-col items-center justify-center gap-1 text-muted-foreground hover:border-secondary/60 hover:text-secondary hover:bg-muted/30 transition-colors">
-                        <ImagePlus size={22} />
-                        <span className="text-[11px] font-semibold uppercase tracking-wider">Añadir</span>
-                      </button>
                     )}
-                  </div>
-                )}
+                  </button>
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    <span className="font-semibold text-foreground">Imagen principal</span> — incluida sin costo, hasta 100 KB.
+                  </p>
+                </div>
+
+                {/* Slot 2 — Segunda imagen (requiere adicional) */}
+                <div>
+                  <input
+                    ref={secondFileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => { pickPhoto("second", e.target.files); if (secondFileRef.current) secondFileRef.current.value = ""; }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => hasSecondImageInPackage && secondFileRef.current?.click()}
+                    disabled={!hasSecondImageInPackage}
+                    className={`relative w-full aspect-[4/3] border-2 border-dashed transition-colors flex items-center justify-center overflow-hidden ${
+                      hasSecondImageInPackage
+                        ? "border-border hover:border-secondary/60 hover:bg-muted/30 bg-muted/20"
+                        : "border-border bg-muted/40 cursor-not-allowed opacity-80"
+                    }`}
+                  >
+                    {hasSecondImageInPackage && secondPhoto ? (
+                      <>
+                        <img src={secondPhoto.url} alt="Segunda" className="absolute inset-0 w-full h-full object-cover" />
+                        <span
+                          role="button"
+                          aria-label="Quitar segunda imagen"
+                          onClick={(e) => { e.stopPropagation(); setSecondPhoto(null); }}
+                          className="absolute top-1.5 right-1.5 w-7 h-7 bg-white text-destructive flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground"
+                        >
+                          <X size={14} />
+                        </span>
+                      </>
+                    ) : (
+                      <div className="text-center px-4">
+                        {hasSecondImageInPackage ? (
+                          <>
+                            <ImagePlus size={28} className="mx-auto text-muted-foreground mb-2" />
+                            <p className="text-xs font-semibold text-foreground">Segunda imagen</p>
+                            <p className="text-[11px] text-muted-foreground">Disponible · hasta 500 KB</p>
+                          </>
+                        ) : (
+                          <>
+                            <Lock size={24} className="mx-auto text-muted-foreground mb-2" />
+                            <p className="text-xs font-semibold text-foreground">Segunda imagen</p>
+                            <p className="text-[11px] text-muted-foreground">Hasta 500 KB</p>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </button>
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    <span className="font-semibold text-foreground">Segunda imagen (hasta 500 KB)</span> — incluida si compraste este adicional en tu paquete.
+                  </p>
+                  {!hasSecondImageInPackage && (
+                    <p className="mt-1 text-[11px] text-warning">No tienes este adicional en tu paquete actual.</p>
+                  )}
+                </div>
               </CardContent>
             </Card>
 
@@ -426,74 +482,122 @@ const AdvertiserPublish = () => {
               </CardContent>
             </Card>
 
-            {/* Step 5: Duración */}
+            {/* Step 5: Paquete (cantidad + duración + adicionales) */}
             <Card>
               <CardHeader className="border-b">
                 <div className="flex items-center gap-3">
                   <span className="w-8 h-8 bg-primary text-primary-foreground text-xs font-extrabold flex items-center justify-center">05</span>
                   <div>
-                    <CardTitle className="text-base flex items-center gap-2"><Receipt size={16} className="text-secondary" /> Duración del aviso</CardTitle>
-                    <CardDescription className="text-xs">El precio cambia automáticamente según la duración.</CardDescription>
+                    <CardTitle className="text-base flex items-center gap-2"><Package size={16} className="text-secondary" /> ¿Cuántos avisos quieres publicar?</CardTitle>
+                    <CardDescription className="text-xs">Configura tu paquete antes de pasar al pago.</CardDescription>
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="pt-5">
-                <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
-                  {DURATIONS.map((d) => {
-                    const p = priceForDuration(1, d, settings);
-                    const active = duration === d;
-                    return (
-                      <button
-                        key={d}
-                        type="button"
-                        onClick={() => setDuration(d)}
-                        className={`border p-3 text-center transition-all ${
-                          active
-                            ? "border-secondary bg-secondary/10 ring-2 ring-secondary/30"
-                            : "border-border hover:border-secondary/40 hover:bg-muted/50"
-                        }`}
-                      >
-                        <p className="text-lg font-extrabold text-foreground">{d}</p>
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">días</p>
-                        <p className="text-xs font-bold text-secondary mt-1">{formatSoles(p)}</p>
-                      </button>
-                    );
-                  })}
+              <CardContent className="pt-5 space-y-6">
+                {/* Cantidad */}
+                <div>
+                  <Label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Cantidad de avisos</Label>
+                  <div className="mt-2 grid grid-cols-5 sm:grid-cols-10 gap-2">
+                    {QUANTITIES.map((n) => {
+                      const active = quantity === n;
+                      return (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setQuantity(n)}
+                          className={`border py-2 text-center text-sm font-bold transition-all ${
+                            active ? "border-secondary bg-secondary/10 ring-2 ring-secondary/30 text-foreground" : "border-border hover:border-secondary/40 hover:bg-muted/50"
+                          }`}
+                        >
+                          {n}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
 
-            {/* Step 6: Extras */}
-            <Card>
-              <CardHeader className="border-b">
-                <div className="flex items-center gap-3">
-                  <span className="w-8 h-8 bg-primary text-primary-foreground text-xs font-extrabold flex items-center justify-center">06</span>
-                  <div>
-                    <CardTitle className="text-base flex items-center gap-2"><Sparkles size={16} className="text-secondary" /> Extras opcionales</CardTitle>
-                    <CardDescription className="text-xs">Mejora la visibilidad de tu aviso.</CardDescription>
+                {/* Duración */}
+                <div>
+                  <Label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Duración por aviso</Label>
+                  <div className="mt-2 grid grid-cols-3 md:grid-cols-6 gap-2">
+                    {DURATIONS.map((d) => {
+                      const p = priceForDuration(1, d, settings);
+                      const active = duration === d;
+                      return (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => setDuration(d)}
+                          className={`border p-3 text-center transition-all ${
+                            active ? "border-secondary bg-secondary/10 ring-2 ring-secondary/30" : "border-border hover:border-secondary/40 hover:bg-muted/50"
+                          }`}
+                        >
+                          <p className="text-lg font-extrabold text-foreground">{d}</p>
+                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">días</p>
+                          <p className="text-xs font-bold text-secondary mt-1">{formatSoles(p)}</p>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
-              </CardHeader>
-              <CardContent className="pt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {([
-                  { key: "img100", label: "Imagen adicional 100kb", icon: ImagePlus },
-                  { key: "img500", label: "Imagen adicional 500kb", icon: ImagePlus },
-                  { key: "pdf100", label: "PDF adjunto 100kb", icon: FileText },
-                  { key: "pdf500", label: "PDF adjunto 500kb", icon: FileText },
-                  { key: "urgente", label: "Marcar como Urgente", icon: Flame },
-                  { key: "destacado", label: "Marcar como Destacado", icon: Star },
-                  { key: "confidencial", label: "Marcar como Confidencial", icon: EyeOff },
-                ] as const).map(({ key, label, icon: Icon }) => {
-                  const checked = !!extras[key];
-                  return (
-                    <label key={key} className={`flex items-center gap-3 p-3 border cursor-pointer transition-all ${checked ? "border-secondary bg-secondary/5" : "border-border hover:bg-muted/30"}`}>
-                      <Checkbox checked={checked} onCheckedChange={(v) => setExtras((e) => ({ ...e, [key]: !!v }))} />
-                      <Icon size={16} className="text-secondary" />
-                      <span className="flex-1 text-sm font-medium">{label}</span>
-                      <span className="text-xs font-bold text-foreground">+ {formatSoles(settings.extras[key])}</span>
-                    </label>
-                  );
-                })}
+
+                {/* Adicionales opcionales */}
+                <div>
+                  <Label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Adicionales opcionales</Label>
+                  <p className="text-[11px] text-muted-foreground mt-1 mb-2">
+                    Hasta {quantity} unidades por adicional (uno por aviso del paquete).
+                  </p>
+                  <div className="space-y-2">
+                    {EXTRA_DEFS.map(({ key, label, sub, icon: Icon }) => {
+                      const count = extras[key] ?? 0;
+                      const unit = settings.extras[key as keyof ExtraPrices] ?? 0;
+                      return (
+                        <div key={key} className={`flex items-center gap-3 p-3 border transition-all ${count > 0 ? "border-secondary bg-secondary/5" : "border-border"}`}>
+                          <Icon size={16} className="text-secondary" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-foreground leading-tight">{label}</p>
+                            {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
+                          </div>
+                          <span className="text-xs font-bold text-muted-foreground hidden sm:inline">{formatSoles(unit)} c/u</span>
+                          <div className="flex items-center border">
+                            <button type="button" onClick={() => setExtraCount(key, count - 1)} className="w-8 h-8 flex items-center justify-center hover:bg-muted disabled:opacity-30" disabled={count <= 0}>
+                              <Minus size={12} />
+                            </button>
+                            <span className="w-8 text-center text-sm font-bold">{count}</span>
+                            <button type="button" onClick={() => setExtraCount(key, count + 1)} className="w-8 h-8 flex items-center justify-center hover:bg-muted disabled:opacity-30" disabled={count >= quantity}>
+                              <Plus size={12} />
+                            </button>
+                          </div>
+                          <span className="text-xs font-bold text-foreground w-16 text-right">{formatSoles(count * unit)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Resumen del paquete */}
+                <div className="border bg-muted/30 p-4 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Subtotal por {quantity} aviso{quantity > 1 ? "s" : ""} ({duration} días c/u)</span>
+                    <span className="font-bold">{formatSoles(packageBase)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Subtotal por adicionales</span>
+                    <span className="font-bold">{formatSoles(extrasSum)}</span>
+                  </div>
+                  <div className="border-t pt-2 flex items-baseline justify-between">
+                    <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Total a pagar (IGV incl.)</span>
+                    <span className="text-2xl font-extrabold text-primary">{formatSoles(total)}</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground pt-1">
+                    El paquete que estás comprando es una referencia. Podrás distribuir tus adicionales libremente entre tus avisos según tu saldo disponible.
+                  </p>
+                  {quantity > 1 && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Tus avisos restantes quedarán disponibles en tu saldo para publicar durante el período de vigencia del paquete.
+                    </p>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -508,11 +612,11 @@ const AdvertiserPublish = () => {
               </CardHeader>
               <CardContent className="p-5 space-y-3">
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Publicación ({duration} días)</span>
-                  <span className="font-bold">{formatSoles(basePrice)}</span>
+                  <span className="text-muted-foreground">{quantity} aviso{quantity > 1 ? "s" : ""} × {duration} días</span>
+                  <span className="font-bold">{formatSoles(packageBase)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Extras</span>
+                  <span className="text-muted-foreground">Adicionales</span>
                   <span className="font-bold">{formatSoles(extrasSum)}</span>
                 </div>
                 <div className="border-t pt-3 flex items-baseline justify-between">
@@ -528,8 +632,8 @@ const AdvertiserPublish = () => {
               </CardHeader>
               <CardContent className="p-0">
                 <div className="aspect-[4/3] bg-muted relative overflow-hidden">
-                  {photos[0] ? (
-                    <img src={photos[0].url} alt="Portada" className="w-full h-full object-cover" />
+                  {mainPhoto ? (
+                    <img src={mainPhoto.url} alt="Portada" className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs uppercase tracking-widest">Sin imagen</div>
                   )}
@@ -623,7 +727,7 @@ const AdvertiserPublish = () => {
 
           <div className="space-y-4">
             <div className="flex gap-3 p-3 border bg-muted/30">
-              {photos[0] && <img src={photos[0].url} alt="" className="w-20 h-20 object-cover" />}
+              {mainPhoto && <img src={mainPhoto.url} alt="" className="w-20 h-20 object-cover" />}
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] uppercase tracking-widest font-bold text-secondary">
                   {categories.find((c) => c.id === form.category)?.name}
@@ -640,19 +744,23 @@ const AdvertiserPublish = () => {
 
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Duración</span>
-                <span className="font-bold">{duration} días</span>
+                <span className="text-muted-foreground">Paquete</span>
+                <span className="font-bold">{quantity} aviso{quantity > 1 ? "s" : ""} · {duration} días c/u</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Publicación</span>
-                <span>{formatSoles(basePrice)}</span>
+                <span className="text-muted-foreground">Subtotal avisos</span>
+                <span>{formatSoles(packageBase)}</span>
               </div>
-              {Object.entries(extras).filter(([, v]) => v).map(([k]) => (
-                <div key={k} className="flex justify-between text-xs">
-                  <span className="text-muted-foreground capitalize">+ {k}</span>
-                  <span>{formatSoles(settings.extras[k as keyof typeof settings.extras])}</span>
-                </div>
-              ))}
+              {EXTRA_DEFS.filter((d) => (extras[d.key] ?? 0) > 0).map((d) => {
+                const count = extras[d.key] ?? 0;
+                const unit = settings.extras[d.key as keyof ExtraPrices] ?? 0;
+                return (
+                  <div key={d.key} className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">+ {d.label} × {count}</span>
+                    <span>{formatSoles(count * unit)}</span>
+                  </div>
+                );
+              })}
               <div className="border-t pt-2 flex justify-between items-baseline">
                 <span className="font-bold uppercase tracking-wider text-xs">Total (IGV incl.)</span>
                 <span className="text-2xl font-extrabold text-primary">{formatSoles(total)}</span>

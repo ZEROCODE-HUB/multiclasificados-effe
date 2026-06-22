@@ -2,7 +2,7 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { advertiserStats, featuredListings } from "@/data/mockData";
-import { ClipboardList, AlertTriangle, MessageSquare, Eye, Users, TrendingUp, BarChart3, PlusCircle, ArrowRight } from "lucide-react";
+import { ClipboardList, AlertTriangle, MessageSquare, Eye, Users, TrendingUp, BarChart3, PlusCircle, ArrowRight, Wallet, Flame, Star, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ListingRow } from "@/components/ListingRow";
 import { Link } from "react-router-dom";
@@ -52,6 +52,52 @@ const AdvertiserDashboard = () => {
             </Card>
           ))}
         </div>
+
+        {/* Mi saldo */}
+        <Card className="border-2 border-secondary/30">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base md:text-lg flex items-center gap-2">
+              <Wallet size={18} className="text-secondary" /> Mi saldo
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {[
+                { label: "Saldo total comprado", value: "S/ 120.00", tone: "text-foreground" },
+                { label: "Saldo consumido", value: "S/ 48.00", tone: "text-muted-foreground" },
+                { label: "Saldo restante", value: "S/ 72.00", tone: "text-secondary" },
+              ].map((s) => (
+                <div key={s.label} className="border p-3 bg-muted/30">
+                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{s.label}</p>
+                  <p className={`text-xl font-extrabold mt-1 ${s.tone}`}>{s.value}</p>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 border-t pt-3">
+              <p className="text-sm">
+                <span className="font-bold text-foreground">2 de 5</span>
+                <span className="text-muted-foreground"> avisos publicados</span>
+              </p>
+              <div className="h-2 flex-1 bg-muted overflow-hidden">
+                <div className="h-full bg-secondary" style={{ width: "40%" }} />
+              </div>
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">Adicionales restantes</p>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { icon: Flame, label: "Urgente: 1 restante" },
+                  { icon: Star, label: "Destacado: 2 restantes" },
+                  { icon: EyeOff, label: "Confidencial: 2 restantes" },
+                ].map((a) => (
+                  <Badge key={a.label} variant="outline" className="gap-1.5 py-1.5 px-2.5 text-xs">
+                    <a.icon size={12} className="text-secondary" /> {a.label}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Recent listings */}
         <Card>

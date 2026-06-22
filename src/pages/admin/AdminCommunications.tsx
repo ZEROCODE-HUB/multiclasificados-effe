@@ -97,8 +97,10 @@ const AdminCommunications = ({ role }: { role: AdminRole }) => {
                           <SelectItem value="vehiculos">Vehículos</SelectItem>
                           <SelectItem value="empleos">Empleos</SelectItem>
                           <SelectItem value="tecnologia">Tecnología</SelectItem>
+                          <SelectItem value="productos">Productos</SelectItem>
                           <SelectItem value="servicios">Servicios</SelectItem>
-                          <SelectItem value="educacion">Educación</SelectItem>
+                          <SelectItem value="educacion-finanzas">Educación y Finanzas</SelectItem>
+                          <SelectItem value="salud-belleza-moda">Salud, Belleza y Moda</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

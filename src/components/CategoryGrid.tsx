@@ -6,10 +6,10 @@ const images: Record<string, string> = {
   vehiculos: "https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=800&h=600&fit=crop",
   empleos: "https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=800&h=600&fit=crop",
   tecnologia: "https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&h=600&fit=crop",
-  moda: "https://images.unsplash.com/photo-1445205170230-053b83016050?w=800&h=600&fit=crop",
+  productos: "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=800&h=600&fit=crop",
   servicios: "https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?w=800&h=600&fit=crop",
-  educacion: "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=800&h=600&fit=crop",
-  salud: "https://images.unsplash.com/photo-1556228720-195a672e8a03?w=800&h=600&fit=crop",
+  "educacion-finanzas": "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=800&h=600&fit=crop",
+  "salud-belleza-moda": "https://images.unsplash.com/photo-1445205170230-053b83016050?w=800&h=600&fit=crop",
 };
 
 export function CategoryGrid() {
