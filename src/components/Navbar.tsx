@@ -90,7 +90,7 @@ export function Navbar() {
             Explorar
           </Link>
           <Link
-            to={isUser ? "/dashboard/anunciante/publicar" : "/auth?tab=register"}
+            to="/dashboard/anunciante/publicar"
             className="px-3 py-2 text-sm font-semibold text-foreground hover:text-secondary transition-colors"
           >
             Publicar
