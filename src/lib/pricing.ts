@@ -60,10 +60,14 @@ export function saveSettings(s: PricingSettings) {
   window.dispatchEvent(new Event("effe:pricing-updated"));
 }
 
-// Precio base por (cantidadAvisos, dias). dias debe ser 7/15/30/60/90.
+// Precio TOTAL del paquete de n avisos por `dias`. dias debe ser 7/15/30/60/90.
+// El total crece con la cantidad, pero el precio POR aviso baja por volumen:
+//   total(n) = base · n · (1 - desc)^(n-1) · (factores de duración)
+//   por aviso = base · (1 - desc)^(n-1) · (factores de duración)
 export function priceFor(n: number, dias: 7 | 15 | 30 | 60 | 90, s: PricingSettings = loadSettings()): number {
-  let price = s.base;
-  // factor cantidad: (1 - desc)^(n-1)
+  // base × cantidad de avisos
+  let price = s.base * n;
+  // descuento por volumen aplicado al total: (1 - desc)^(n-1)
   price = price * Math.pow(1 - s.descPorAviso, Math.max(0, n - 1));
   // factor días: por cada salto duplicar y aplicar descuento
   const steps: Array<{ to: 15 | 30 | 60 | 90; key: 15 | 30 | 60 | 90 }> = [

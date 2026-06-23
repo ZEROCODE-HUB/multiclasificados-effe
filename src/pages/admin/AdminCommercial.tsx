@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AdminLayout, AdminRole } from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -13,11 +13,13 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Trash2, FileText } from "lucide-react";
+import { Plus, Pencil, Trash2, FileText, SlidersHorizontal, Save } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { categories as initialCategories } from "@/data/mockData";
 import { toast } from "@/hooks/use-toast";
 import { loadInvoices, formatSoles } from "@/lib/pricing";
+import { fetchSettings, setSetting } from "@/lib/admin";
 
 
 const AdminCommercial = ({ role }: { role: AdminRole }) => {
@@ -44,12 +46,54 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
     toast({ title: "Categoría eliminada", description: c.name });
   };
 
+  // ===== Variables del sistema (REQ-ADM-04) =====
+  const SETTING_KEYS = {
+    commission_pct: "Comisión por transacción (%)",
+    featured_price: "Precio de aviso destacado (S/)",
+    free_listings_limit: "Límite de publicaciones gratis",
+    gateway_stripe: "Pasarela Stripe activa",
+    gateway_culqi: "Pasarela Culqi activa",
+    maintenance_mode: "Modo mantenimiento",
+  } as const;
+  type SettingKey = keyof typeof SETTING_KEYS;
+  const [settings, setSettings] = useState<Record<SettingKey, any>>({
+    commission_pct: 8, featured_price: 25, free_listings_limit: 3,
+    gateway_stripe: true, gateway_culqi: false, maintenance_mode: false,
+  });
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  useEffect(() => {
+    fetchSettings().then((rows) => {
+      if (!rows.length) return;
+      setSettings((prev) => {
+        const next = { ...prev };
+        rows.forEach((s) => { if (s.key in next) (next as any)[s.key] = s.value; });
+        return next;
+      });
+    });
+  }, []);
+
+  const saveSettings = async () => {
+    setSavingSettings(true);
+    try {
+      await Promise.all(
+        (Object.keys(SETTING_KEYS) as SettingKey[]).map((k) =>
+          setSetting(k, settings[k], SETTING_KEYS[k]),
+        ),
+      );
+      toast({ title: "Configuración guardada", description: "Las variables del sistema se actualizaron." });
+    } catch (e: any) {
+      toast({ title: "No se pudo guardar", description: e?.message ?? "Error", variant: "destructive" });
+    }
+    setSavingSettings(false);
+  };
 
   return (
     <AdminLayout role={role} title="Configuración comercial" breadcrumb={["Operación", "Comercial"]}>
       <Tabs defaultValue="categorias">
         <TabsList className="w-full overflow-x-auto justify-start no-scrollbar">
           <TabsTrigger value="categorias">Categorías</TabsTrigger>
+          <TabsTrigger value="sistema">Sistema</TabsTrigger>
           <TabsTrigger value="boletas">Boletas y facturas</TabsTrigger>
         </TabsList>
 
@@ -114,6 +158,59 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
         </TabsContent>
 
 
+
+        {/* SISTEMA (variables globales) */}
+        <TabsContent value="sistema" className="pt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base md:text-lg flex items-center gap-2">
+                <SlidersHorizontal size={16} className="text-secondary" /> Variables del sistema
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>{SETTING_KEYS.commission_pct}</Label>
+                  <Input type="number" value={settings.commission_pct}
+                    onChange={(e) => setSettings((s) => ({ ...s, commission_pct: Number(e.target.value) }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>{SETTING_KEYS.featured_price}</Label>
+                  <Input type="number" value={settings.featured_price}
+                    onChange={(e) => setSettings((s) => ({ ...s, featured_price: Number(e.target.value) }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>{SETTING_KEYS.free_listings_limit}</Label>
+                  <Input type="number" value={settings.free_listings_limit}
+                    onChange={(e) => setSettings((s) => ({ ...s, free_listings_limit: Number(e.target.value) }))} />
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {([
+                  ["gateway_stripe", SETTING_KEYS.gateway_stripe, "Acepta pagos con tarjeta vía Stripe."],
+                  ["gateway_culqi", SETTING_KEYS.gateway_culqi, "Acepta pagos locales vía Culqi."],
+                  ["maintenance_mode", SETTING_KEYS.maintenance_mode, "Bloquea el acceso público mientras se realizan tareas."],
+                ] as const).map(([key, label, desc]) => (
+                  <div key={key} className="flex items-center justify-between border rounded-lg p-4">
+                    <div className="pr-4">
+                      <p className="font-medium text-sm">{label}</p>
+                      <p className="text-xs text-muted-foreground">{desc}</p>
+                    </div>
+                    <Switch checked={!!settings[key]}
+                      onCheckedChange={(v) => setSettings((s) => ({ ...s, [key]: v }))} />
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-end">
+                <Button onClick={saveSettings} disabled={savingSettings} className="gap-2">
+                  <Save size={14} /> {savingSettings ? "Guardando..." : "Guardar configuración"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* BOLETAS (solo lectura) */}
         <TabsContent value="boletas" className="pt-4">

@@ -1,57 +1,164 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeft, Send, Search, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Send, Search, CheckCircle2, Check, CheckCheck } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { loadSold, markSold } from "@/lib/pricing";
+import {
+  fetchConversations, fetchMessages, sendMessage, markDelivered, markRead,
+  subscribeToMessages, subscribeToConversations, unsubscribe, getCurrentUserId,
+  type Conversation, type ChatMessage,
+} from "@/lib/messaging";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 
-const conversations = [
-  { id: 1, listingId: "AV-10241", name: "María López", listing: "Departamento 3 dormitorios", lastMsg: "Hola, ¿sigue disponible?", time: "Hace 2h", unread: 2 },
-  { id: 2, listingId: "AV-10239", name: "Carlos Ruiz", listing: "Desarrollador Full Stack", lastMsg: "Me interesa el puesto.", time: "Hace 5h", unread: 0 },
-  { id: 3, listingId: "AV-10240", name: "Ana Torres", listing: "Toyota Corolla 2024", lastMsg: "¿Puede enviar más fotos?", time: "Ayer", unread: 1 },
-  { id: 4, listingId: "AV-10238", name: "Pedro Gómez", listing: "iPhone 15 Pro Max", lastMsg: "¿Aceptaría un cambio?", time: "Hace 2 días", unread: 0 },
-];
+const fmtTime = (iso: string) =>
+  new Date(iso).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" });
 
-const sampleMessages = [
-  { from: "María López", text: "Hola, buenas tardes. Vi su aviso del departamento en Miraflores.", time: "14:20", mine: false },
-  { from: "Tú", text: "¡Hola María! Sí, aún está disponible. ¿Le gustaría agendar una visita?", time: "14:25", mine: true },
-  { from: "María López", text: "Sí, me encantaría. ¿Está disponible este fin de semana?", time: "14:30", mine: false },
-  { from: "Tú", text: "Por supuesto. ¿Le parece bien el sábado a las 10am?", time: "14:35", mine: true },
-  { from: "María López", text: "Perfecto, ahí estaré. ¿Me puede enviar la dirección exacta?", time: "15:00", mine: false },
-];
+const fmtWhen = (iso: string | null) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const today = new Date();
+  const sameDay = d.toDateString() === today.toDateString();
+  return sameDay
+    ? fmtTime(iso)
+    : d.toLocaleDateString("es-PE", { day: "2-digit", month: "short" });
+};
+
+// Indicador de estado para los mensajes propios (Enviado/Recibido/Leído).
+function StatusTick({ status }: { status: ChatMessage["status"] }) {
+  if (status === "read") return <CheckCheck size={13} className="text-sky-300" />;
+  if (status === "delivered") return <CheckCheck size={13} className="text-primary-foreground/60" />;
+  return <Check size={13} className="text-primary-foreground/60" />;
+}
 
 const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [params, setParams] = useSearchParams();
+  const [userId, setUserId] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(params.get("c"));
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
+  const [filter, setFilter] = useState("");
   const [sold, setSold] = useState(() => loadSold());
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const msgChannel = useRef<RealtimeChannel | null>(null);
+
+  // Carga inicial + suscripción a cambios en mis conversaciones.
+  useEffect(() => {
+    getCurrentUserId().then(setUserId);
+    fetchConversations().then(setConversations);
+    const ch = subscribeToConversations(() => {
+      fetchConversations().then(setConversations);
+    });
+    return () => unsubscribe(ch);
+  }, []);
+
+  // Ventas (localStorage) — se conserva la función previa.
   useEffect(() => {
     const sync = () => setSold(loadSold());
     window.addEventListener("effe:sold-updated", sync);
     return () => window.removeEventListener("effe:sold-updated", sync);
   }, []);
 
-  const selected = conversations.find((c) => c.id === selectedId) ?? null;
-  const selectedSold = selected ? sold[selected.listingId] : undefined;
-  const role_side: "buyer" | "seller" = role === "buscador" ? "buyer" : "seller";
+  // Al seleccionar una conversación: carga mensajes, marca leído y se suscribe.
+  useEffect(() => {
+    unsubscribe(msgChannel.current);
+    msgChannel.current = null;
+    if (!selectedId) {
+      setMessages([]);
+      return;
+    }
+    let active = true;
+    fetchMessages(selectedId).then((rows) => {
+      if (!active) return;
+      setMessages(rows);
+    });
+    markDelivered(selectedId);
+    markRead(selectedId).then(() => fetchConversations().then(setConversations));
+
+    msgChannel.current = subscribeToMessages(
+      selectedId,
+      (m) => {
+        // INSERT: añade si no existe; si es del otro, márcalo leído.
+        setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
+        getCurrentUserId().then((uid) => {
+          if (m.sender_id !== uid) {
+            markRead(selectedId);
+            fetchConversations().then(setConversations);
+          }
+        });
+      },
+      (m) => {
+        // UPDATE: actualiza el estado (delivered/read) del mensaje.
+        setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, ...m } : x)));
+      }
+    );
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
+
+  // Auto-scroll al final cuando llegan mensajes.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages]);
+
+  const selected = useMemo(
+    () => conversations.find((c) => c.id === selectedId) ?? null,
+    [conversations, selectedId]
+  );
+
+  const visibleConvs = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    return q
+      ? conversations.filter(
+          (c) => c.counterpart_name.toLowerCase().includes(q) || c.listing_title.toLowerCase().includes(q)
+        )
+      : conversations;
+  }, [conversations, filter]);
+
+  const selectedSold = selected ? sold[selected.listing_id] : undefined;
+  // El lado se define por quién soy en ESTA conversación (no por el dashboard).
+  const role_side: "buyer" | "seller" =
+    selected && userId === selected.seller_id ? "seller" : "buyer";
   const selfMarked = selected ? !!(role_side === "buyer" ? selectedSold?.buyer : selectedSold?.seller) : false;
 
-  const send = () => {
-    if (!draft.trim()) return;
-    toast({ title: "Mensaje enviado", description: draft });
+  const openConversation = (id: string) => {
+    setSelectedId(id);
+    setParams({ c: id }, { replace: true });
+  };
+
+  const closeConversation = () => {
+    setSelectedId(null);
+    params.delete("c");
+    setParams(params, { replace: true });
+  };
+
+  const send = async () => {
+    if (!draft.trim() || !selectedId) return;
+    const text = draft;
     setDraft("");
+    try {
+      const inserted = await sendMessage(selectedId, text);
+      if (inserted) {
+        setMessages((prev) => (prev.some((x) => x.id === inserted.id) ? prev : [...prev, inserted]));
+      }
+    } catch (e) {
+      setDraft(text);
+      toast({ title: "No se pudo enviar", description: e instanceof Error ? e.message : "Intenta de nuevo.", variant: "destructive" });
+    }
   };
 
   const toggleSold = () => {
     if (!selected) return;
-    markSold(selected.listingId, role_side, role_side === "buyer" ? "Comprador" : selected.name);
+    markSold(selected.listing_id, role_side, role_side === "buyer" ? "Comprador" : selected.counterpart_name);
     setSold(loadSold());
     toast({ title: "Venta marcada como concretada" });
   };
-
 
   return (
     <DashboardLayout role={role}>
@@ -59,46 +166,57 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
         <h1 className="text-2xl font-bold text-foreground mb-4 lg:block hidden">Mensajes</h1>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:h-[calc(100vh-12rem)]">
-          {/* Conversations list — mobile: only shown when none selected; desktop: always shown */}
+          {/* Lista de conversaciones */}
           <Card className={`lg:col-span-1 overflow-hidden ${selected ? "hidden lg:flex lg:flex-col" : "flex flex-col"}`}>
             <CardHeader className="pb-3">
               <CardTitle className="text-base mb-2 lg:hidden">Mensajes</CardTitle>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
-                <Input placeholder="Buscar conversaciones..." className="text-sm pl-9" />
+                <Input
+                  placeholder="Buscar conversaciones..."
+                  className="text-sm pl-9"
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                />
               </div>
             </CardHeader>
             <CardContent className="p-0 overflow-y-auto flex-1">
-              {conversations.map((conv) => (
-                <button
-                  key={conv.id}
-                  onClick={() => setSelectedId(conv.id)}
-                  className={`w-full flex items-start gap-3 p-3 hover:bg-muted text-left border-b transition-colors ${
-                    conv.id === selectedId ? "bg-muted" : ""
-                  }`}
-                >
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-                    {conv.name.charAt(0)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-semibold text-foreground truncate">{conv.name}</p>
-                      <span className="text-[10px] text-muted-foreground flex-shrink-0">{conv.time}</span>
+              {visibleConvs.length === 0 ? (
+                <div className="p-8 text-center text-sm text-muted-foreground">
+                  {conversations.length === 0 ? "Aún no tienes conversaciones." : "Sin resultados."}
+                </div>
+              ) : (
+                visibleConvs.map((conv) => (
+                  <button
+                    key={conv.id}
+                    onClick={() => openConversation(conv.id)}
+                    className={`w-full flex items-start gap-3 p-3 hover:bg-muted text-left border-b transition-colors ${
+                      conv.id === selectedId ? "bg-muted" : ""
+                    }`}
+                  >
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                      {conv.counterpart_name.charAt(0).toUpperCase()}
                     </div>
-                    <p className="text-xs text-secondary truncate font-medium">{conv.listing}</p>
-                    <p className="text-xs text-muted-foreground truncate">{conv.lastMsg}</p>
-                  </div>
-                  {conv.unread > 0 && (
-                    <span className="bg-secondary text-secondary-foreground text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0">
-                      {conv.unread}
-                    </span>
-                  )}
-                </button>
-              ))}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-foreground truncate">{conv.counterpart_name}</p>
+                        <span className="text-[10px] text-muted-foreground flex-shrink-0">{fmtWhen(conv.last_message_at)}</span>
+                      </div>
+                      <p className="text-xs text-secondary truncate font-medium">{conv.listing_title}</p>
+                      <p className="text-xs text-muted-foreground truncate">{conv.last_message ?? "Sin mensajes aún"}</p>
+                    </div>
+                    {conv.unread > 0 && (
+                      <span className="bg-secondary text-secondary-foreground text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0">
+                        {conv.unread}
+                      </span>
+                    )}
+                  </button>
+                ))
+              )}
             </CardContent>
           </Card>
 
-          {/* Chat area — mobile: only when selected; desktop: always (placeholder if none) */}
+          {/* Área de chat */}
           <Card
             className={`lg:col-span-2 flex flex-col overflow-hidden h-[calc(100vh-9rem)] lg:h-auto ${
               selected ? "flex" : "hidden lg:flex"
@@ -109,49 +227,61 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
                 <CardHeader className="border-b py-3">
                   <div className="flex items-center gap-3">
                     <button
-                      onClick={() => setSelectedId(null)}
+                      onClick={closeConversation}
                       className="lg:hidden p-1 -ml-1 rounded-md hover:bg-muted text-muted-foreground"
                       aria-label="Volver"
                     >
                       <ArrowLeft size={20} />
                     </button>
                     <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white text-sm font-bold">
-                      {selected.name.charAt(0)}
+                      {selected.counterpart_name.charAt(0).toUpperCase()}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <CardTitle className="text-sm truncate">{selected.name}</CardTitle>
-                      <p className="text-xs text-muted-foreground truncate">{selected.listing}</p>
+                      <CardTitle className="text-sm truncate">{selected.counterpart_name}</CardTitle>
+                      <p className="text-xs text-muted-foreground truncate">{selected.listing_title}</p>
                     </div>
                   </div>
-                  <div className="mt-2 pt-2 border-t flex items-center justify-between gap-2 flex-wrap">
-                    <label className="flex items-center gap-2 text-xs cursor-pointer">
-                      <Checkbox checked={selfMarked} onCheckedChange={toggleSold} />
-                      <span>Marcar venta concretada ({role === "buscador" ? "como comprador" : "como vendedor"})</span>
-                    </label>
-                    {(selectedSold?.buyer && selectedSold?.seller) && (
-                      <span className="text-[11px] text-success font-semibold flex items-center gap-1">
-                        <CheckCircle2 size={11} /> Confirmada por ambos
-                      </span>
-                    )}
-                  </div>
+                  {selected.listing_category !== "empleos" && (
+                    <div className="mt-2 pt-2 border-t flex items-center justify-between gap-2 flex-wrap">
+                      <label className="flex items-center gap-2 text-xs cursor-pointer">
+                        <Checkbox checked={selfMarked} onCheckedChange={toggleSold} />
+                        <span>Marcar venta concretada ({role_side === "buyer" ? "como comprador" : "como vendedor"})</span>
+                      </label>
+                      {(selectedSold?.buyer && selectedSold?.seller) && (
+                        <span className="text-[11px] text-success font-semibold flex items-center gap-1">
+                          <CheckCircle2 size={11} /> Confirmada por ambos
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </CardHeader>
-                <CardContent className="flex-1 overflow-y-auto p-4 space-y-3 bg-muted/30">
-                  {sampleMessages.map((msg, i) => (
-                    <div key={i} className={`flex ${msg.mine ? "justify-end" : "justify-start"}`}>
-                      <div
-                        className={`max-w-[80%] rounded-2xl px-4 py-2 shadow-sm ${
-                          msg.mine
-                            ? "bg-primary text-primary-foreground rounded-br-sm"
-                            : "bg-card text-foreground rounded-bl-sm border"
-                        }`}
-                      >
-                        <p className="text-sm">{msg.text}</p>
-                        <p className={`text-[10px] mt-1 ${msg.mine ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
-                          {msg.time}
-                        </p>
-                      </div>
+                <CardContent ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 bg-muted/30">
+                  {messages.length === 0 ? (
+                    <div className="h-full flex items-center justify-center text-center text-muted-foreground text-sm">
+                      Escribe el primer mensaje para iniciar la conversación.
                     </div>
-                  ))}
+                  ) : (
+                    messages.map((msg) => {
+                      const mine = msg.sender_id === userId;
+                      return (
+                        <div key={msg.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+                          <div
+                            className={`max-w-[80%] rounded-2xl px-4 py-2 shadow-sm ${
+                              mine
+                                ? "bg-primary text-primary-foreground rounded-br-sm"
+                                : "bg-card text-foreground rounded-bl-sm border"
+                            }`}
+                          >
+                            <p className="text-sm whitespace-pre-wrap break-words">{msg.body}</p>
+                            <p className={`text-[10px] mt-1 flex items-center gap-1 justify-end ${mine ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
+                              {fmtTime(msg.created_at)}
+                              {mine && <StatusTick status={msg.status} />}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </CardContent>
                 <div className="p-3 border-t flex gap-2 bg-card">
                   <Input

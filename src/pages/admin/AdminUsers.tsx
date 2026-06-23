@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AdminLayout, AdminRole } from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,39 +10,71 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Search, UserCheck, UserX, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
-import { adminUsers, AdminUserStatus } from "@/data/adminMockData";
+import { Search, UserCheck, UserX, Ban, BadgeCheck, KeyRound, ChevronLeft, ChevronRight } from "lucide-react";
+import { fetchAdminUsers, setUserStatus, verifyUser, type AdminUser } from "@/lib/admin";
+import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
 
-const statusColor: Record<AdminUserStatus, string> = {
-  Activo: "bg-success/15 text-success border-success/30",
-  Pendiente: "bg-warning/15 text-warning border-warning/30",
-  Suspendido: "bg-destructive/15 text-destructive border-destructive/30",
+// Mapa estado real (BD) -> etiqueta y color del diseño existente.
+const statusMeta: Record<string, { label: string; color: string }> = {
+  active:    { label: "Activo",     color: "bg-success/15 text-success border-success/30" },
+  pending:   { label: "Pendiente",  color: "bg-warning/15 text-warning border-warning/30" },
+  suspended: { label: "Suspendido", color: "bg-destructive/15 text-destructive border-destructive/30" },
+  banned:    { label: "Baneado",    color: "bg-destructive/20 text-destructive border-destructive/40" },
 };
+const metaFor = (s: string) => statusMeta[s] ?? statusMeta.active;
+
+const isUuid = (v: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 
 const PAGE_SIZE = 5;
 
-type User = (typeof adminUsers)[number];
-
 const AdminUsers = ({ role }: { role: AdminRole }) => {
+  const [users, setUsers] = useState<AdminUser[]>([]);
   const [q, setQ] = useState("");
   const [r, setR] = useState("all");
   const [page, setPage] = useState(1);
 
+  const load = () => fetchAdminUsers().then(({ data }) => setUsers(data));
+  useEffect(() => { load(); }, []);
+
   const filtered = useMemo(
     () =>
-      adminUsers.filter((u) =>
-        (r === "all" || u.role === r) &&
-        (q === "" || u.name.toLowerCase().includes(q.toLowerCase()) || u.email.toLowerCase().includes(q.toLowerCase())),
+      users.filter((u) =>
+        (r === "all" || u.roles.split(",").includes(r)) &&
+        (q === "" || (u.full_name ?? "").toLowerCase().includes(q.toLowerCase()) || (u.email ?? "").toLowerCase().includes(q.toLowerCase())),
       ),
-    [q, r],
+    [users, q, r],
   );
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const list = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const act = (l: string, u: User) => toast({ title: l, description: `${u.name} · ${u.email}` });
+  // Ejecuta una acción real contra la BD si el id es un usuario real (uuid);
+  // si es un dato mock (sin backend) solo muestra el toast para no romper la demo.
+  const run = async (label: string, u: AdminUser, fn: () => Promise<void>) => {
+    if (!isUuid(u.id)) { toast({ title: label, description: `${u.full_name} · ${u.email}` }); return; }
+    try {
+      await fn();
+      toast({ title: label, description: `${u.full_name} · ${u.email}` });
+      load();
+    } catch (e: any) {
+      toast({ title: "No se pudo completar", description: e?.message ?? "Error", variant: "destructive" });
+    }
+  };
 
-  const renderActions = (u: User, compact = false) => {
+  const resetPassword = (u: AdminUser) =>
+    run("Correo de restablecimiento enviado", u, async () => {
+      const { error } = await supabase.functions.invoke("admin-reset-password", { body: { user_id: u.id } });
+      if (error) throw error;
+    });
+
+  const initials = (name: string) => (name || "?").split(" ").map((n) => n[0]).slice(0, 2).join("");
+  const primaryRole = (roles: string) => {
+    const r0 = roles.split(",")[0] || "buscador";
+    return r0.charAt(0).toUpperCase() + r0.slice(1);
+  };
+
+  const renderActions = (u: AdminUser, compact = false) => {
     const Btn = compact ? "outline" : "ghost";
     const size: "icon" | "sm" = compact ? "sm" : "icon";
     const iconSize = compact ? 14 : 16;
@@ -54,14 +86,14 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>¿Activar a {u.name}?</AlertDialogTitle>
+              <AlertDialogTitle>¿Activar a {u.full_name}?</AlertDialogTitle>
               <AlertDialogDescription>
                 El usuario recibirá acceso completo a la plataforma. Se le notificará por correo.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={() => act("Usuario activado", u)}>Activar</AlertDialogAction>
+              <AlertDialogAction onClick={() => run("Usuario activado", u, () => setUserStatus(u.id, "active"))}>Activar</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
@@ -72,30 +104,68 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>¿Suspender a {u.name}?</AlertDialogTitle>
+              <AlertDialogTitle>¿Suspender a {u.full_name}?</AlertDialogTitle>
               <AlertDialogDescription>
                 El usuario perderá acceso temporal a la plataforma hasta su reactivación. Se le notificará por correo.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={() => act("Usuario suspendido", u)}>Suspender</AlertDialogAction>
+              <AlertDialogAction onClick={() => run("Usuario suspendido", u, () => setUserStatus(u.id, "suspended"))}>Suspender</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
 
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button size={size} variant={Btn as any} className="text-destructive" title="Eliminar"><Trash2 size={iconSize} /></Button>
+            <Button size={size} variant={Btn as any} className={u.verified ? "text-secondary" : "text-muted-foreground"} title={u.verified ? "Quitar verificación" : "Verificar"}><BadgeCheck size={iconSize} /></Button>
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>¿Eliminar al usuario {u.name}?</AlertDialogTitle>
-              <AlertDialogDescription>Esta acción es permanente y eliminará todos sus datos.</AlertDialogDescription>
+              <AlertDialogTitle>{u.verified ? `¿Quitar la verificación de ${u.full_name}?` : `¿Verificar a ${u.full_name}?`}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {u.verified ? "El perfil dejará de aparecer como verificado." : "El perfil quedará marcado como verificado / oficial."}
+              </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={() => act("Usuario eliminado", u)}>Eliminar</AlertDialogAction>
+              <AlertDialogAction onClick={() => run(u.verified ? "Verificación retirada" : "Usuario verificado", u, () => verifyUser(u.id, !u.verified))}>
+                {u.verified ? "Quitar" : "Verificar"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button size={size} variant={Btn as any} className="text-primary" title="Restablecer contraseña"><KeyRound size={iconSize} /></Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Restablecer la contraseña de {u.full_name}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Se enviará un correo a {u.email} con un enlace para crear una nueva contraseña.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={() => resetPassword(u)}>Enviar enlace</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button size={size} variant={Btn as any} className="text-destructive" title="Banear"><Ban size={iconSize} /></Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Banear al usuario {u.full_name}?</AlertDialogTitle>
+              <AlertDialogDescription>El usuario perderá el acceso de forma permanente. Solo el superadministrador puede revertirlo.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={() => run("Usuario baneado", u, () => setUserStatus(u.id, "banned"))}>Banear</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
@@ -120,8 +190,8 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
               <SelectTrigger className="md:w-44"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos los roles</SelectItem>
-                <SelectItem value="Anunciante">Anunciantes</SelectItem>
-                <SelectItem value="Buscador">Buscadores</SelectItem>
+                <SelectItem value="anunciante">Anunciantes</SelectItem>
+                <SelectItem value="buscador">Buscadores</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -141,53 +211,65 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {list.map((u) => (
-                  <TableRow key={u.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">
-                          {u.name.split(" ").map(n => n[0]).slice(0, 2).join("")}
+                {list.map((u) => {
+                  const m = metaFor(u.status);
+                  return (
+                    <TableRow key={u.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">
+                            {initials(u.full_name)}
+                          </div>
+                          <div>
+                            <p className="font-medium text-sm flex items-center gap-1">
+                              {u.full_name}
+                              {u.verified && <BadgeCheck size={13} className="text-secondary" />}
+                            </p>
+                            <p className="text-[10px] font-mono text-muted-foreground">{u.id.slice(0, 8)}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium text-sm">{u.name}</p>
-                          <p className="text-[10px] font-mono text-muted-foreground">{u.id}</p>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{u.email}</TableCell>
-                    <TableCell><Badge variant="outline">{u.role}</Badge></TableCell>
-                    <TableCell>{u.listings}</TableCell>
-                    <TableCell className="text-muted-foreground">{u.date}</TableCell>
-                    <TableCell><Badge className={statusColor[u.status]} variant="outline">{u.status}</Badge></TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">{renderActions(u)}</div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{u.email}</TableCell>
+                      <TableCell><Badge variant="outline">{primaryRole(u.roles)}</Badge></TableCell>
+                      <TableCell>{u.listings_count}</TableCell>
+                      <TableCell className="text-muted-foreground">{(u.created_at ?? "").slice(0, 10)}</TableCell>
+                      <TableCell><Badge className={m.color} variant="outline">{m.label}</Badge></TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">{renderActions(u)}</div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
 
           <div className="md:hidden space-y-3">
-            {list.map((u) => (
-              <div key={u.id} className="border p-4 bg-card">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold flex-shrink-0">
-                    {u.name.split(" ").map(n => n[0]).slice(0, 2).join("")}
+            {list.map((u) => {
+              const m = metaFor(u.status);
+              return (
+                <div key={u.id} className="border p-4 bg-card">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold flex-shrink-0">
+                      {initials(u.full_name)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm truncate flex items-center gap-1">
+                        {u.full_name}
+                        {u.verified && <BadgeCheck size={13} className="text-secondary flex-shrink-0" />}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                    </div>
+                    <Badge className={m.color} variant="outline">{m.label}</Badge>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm truncate">{u.name}</p>
-                    <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
+                    <Badge variant="outline">{primaryRole(u.roles)}</Badge>
+                    <span>{u.listings_count} avisos</span>
                   </div>
-                  <Badge className={statusColor[u.status]} variant="outline">{u.status}</Badge>
+                  <div className="grid grid-cols-3 gap-1.5">{renderActions(u, true)}</div>
                 </div>
-                <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
-                  <Badge variant="outline">{u.role}</Badge>
-                  <span>{u.listings} avisos</span>
-                </div>
-                <div className="grid grid-cols-3 gap-1.5">{renderActions(u, true)}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {filtered.length > 0 && (

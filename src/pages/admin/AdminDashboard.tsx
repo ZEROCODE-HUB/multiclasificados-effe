@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Users, ClipboardList, CheckCircle2, XCircle, DollarSign, ArrowUpRight, Flag } from "lucide-react";
-import { adminKpis, revenueSeries, categoryDistribution, recentActivity, adminListings } from "@/data/adminMockData";
+import { recentActivity, adminListings } from "@/data/adminMockData";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
 import { loadSold, loadReports } from "@/lib/pricing";
+import { fetchAdminStats, fetchGrowthSeries, fetchCategoryDistribution, type AdminStats } from "@/lib/admin";
 
 const COLORS = ["hsl(220 56% 20%)", "hsl(24 95% 53%)", "hsl(166 60% 45%)", "hsl(220 56% 45%)", "hsl(40 95% 55%)", "hsl(220 14% 60%)"];
 
@@ -18,6 +19,9 @@ const AdminDashboard = ({ role }: Props) => {
   const [sold, setSold] = useState(() => loadSold());
   const [reports, setReports] = useState(() => loadReports());
   const [catFilter, setCatFilter] = useState<string>("all");
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [series, setSeries] = useState<{ mes: string; ingresos: number; usuarios: number }[]>([]);
+  const [catDist, setCatDist] = useState<{ name: string; value: number }[]>([]);
 
   useEffect(() => {
     const sync = () => { setSold(loadSold()); setReports(loadReports()); };
@@ -29,6 +33,13 @@ const AdminDashboard = ({ role }: Props) => {
     };
   }, []);
 
+  // Datos reales de Supabase (con fallback a mock dentro de la capa admin).
+  useEffect(() => {
+    fetchAdminStats().then(({ data }) => setStats(data));
+    fetchGrowthSeries().then(setSeries);
+    fetchCategoryDistribution().then(setCatDist);
+  }, []);
+
   const allCats = useMemo(() => Array.from(new Set(adminListings.map((l) => l.category))), []);
   const filteredListings = useMemo(
     () => adminListings.filter((l) => catFilter === "all" || l.category === catFilter),
@@ -38,16 +49,18 @@ const AdminDashboard = ({ role }: Props) => {
     () => reports.filter((r) => catFilter === "all" || r.category === catFilter),
     [reports, catFilter],
   );
-  const soldCount = Object.keys(sold).length;
-  const notSold = Math.max(0, filteredListings.length - soldCount);
+  // Vendidos: usa el dato real si existe; conserva el conteo local como respaldo visual.
+  const soldCount = stats ? stats.sold_listings : Object.keys(sold).length;
+  const activeCount = stats ? stats.active_listings : filteredListings.length;
+  const notSold = Math.max(0, activeCount - soldCount);
 
   const kpis = [
-    { label: "Avisos publicados", value: filteredListings.length.toLocaleString(), icon: ClipboardList, trend: "+3.2%", accent: "bg-secondary/15 text-secondary" },
+    { label: "Avisos publicados", value: activeCount.toLocaleString(), icon: ClipboardList, trend: "+3.2%", accent: "bg-secondary/15 text-secondary" },
     { label: "Vendidos", value: soldCount.toLocaleString(), icon: CheckCircle2, trend: "", accent: "bg-success/15 text-success" },
     { label: "No vendidos", value: notSold.toLocaleString(), icon: XCircle, trend: "", accent: "bg-warning/15 text-warning" },
-    { label: "Reportados", value: filteredReports.length.toLocaleString(), icon: Flag, trend: "", accent: "bg-destructive/15 text-destructive" },
-    { label: "Usuarios", value: adminKpis.users.toLocaleString(), icon: Users, trend: "+8.4%", accent: "bg-primary/10 text-primary" },
-    { label: "Ingresos (S/)", value: adminKpis.revenue.toLocaleString(), icon: DollarSign, trend: "+14.1%", accent: "bg-success/15 text-success" },
+    { label: "Reportados", value: (stats ? stats.reports_open : filteredReports.length).toLocaleString(), icon: Flag, trend: "", accent: "bg-destructive/15 text-destructive" },
+    { label: "Usuarios", value: (stats ? stats.users : 0).toLocaleString(), icon: Users, trend: "+8.4%", accent: "bg-primary/10 text-primary" },
+    { label: "Ingresos (S/)", value: (stats ? stats.revenue : 0).toLocaleString(), icon: DollarSign, trend: "+14.1%", accent: "bg-success/15 text-success" },
   ];
 
 
@@ -108,7 +121,7 @@ const AdminDashboard = ({ role }: Props) => {
           </CardHeader>
           <CardContent className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={revenueSeries}>
+              <AreaChart data={series}>
                 <defs>
                   <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="hsl(24 95% 53%)" stopOpacity={0.5} />
@@ -137,8 +150,8 @@ const AdminDashboard = ({ role }: Props) => {
           <CardContent className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={categoryDistribution} dataKey="value" nameKey="name" innerRadius={45} outerRadius={80} paddingAngle={3}>
-                  {categoryDistribution.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                <Pie data={catDist} dataKey="value" nameKey="name" innerRadius={45} outerRadius={80} paddingAngle={3}>
+                  {catDist.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Pie>
                 <Tooltip />
                 <Legend wrapperStyle={{ fontSize: 11 }} />

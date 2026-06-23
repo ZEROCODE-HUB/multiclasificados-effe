@@ -4,7 +4,9 @@ import { HeroSearch } from "@/components/HeroSearch";
 import { CategoryGrid } from "@/components/CategoryGrid";
 import { ListingCard } from "@/components/ListingCard";
 import { CountUp } from "@/components/CountUp";
-import { featuredListings } from "@/data/mockData";
+import { type Listing } from "@/data/mockData";
+import { fetchListings } from "@/lib/listings";
+import { useEffect, useState } from "react";
 import heroBg from "@/assets/hero-bg.jpg";
 import { ArrowRight, BadgeCheck, Gem, Headset, Star, TrendingUp, CheckCircle2, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -72,6 +74,12 @@ const testimonials = [
 ];
 
 const Index = () => {
+  // Avisos reales desde Supabase (vacío hasta que existan avisos publicados).
+  const [listings, setListings] = useState<Listing[]>([]);
+  useEffect(() => {
+    fetchListings({ limit: 8 }).then(setListings);
+  }, []);
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header — distinct white bar above hero */}
@@ -134,7 +142,7 @@ const Index = () => {
               {/* Columna derecha: una sola tarjeta visual con "avisos activos" (solo desktop) */}
               <div className="hidden lg:flex lg:col-span-5 xl:col-span-5 relative h-[560px]">
                 <div className="absolute inset-0 border border-white/20 shadow-2xl overflow-hidden">
-                  <img src={featuredListings[0]?.imageUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                  <img src={listings[0]?.imageUrl ?? heroBg} alt="" className="absolute inset-0 w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-gradient-to-b from-primary/20 via-primary/40 to-primary/90" />
                   <div className="absolute inset-x-0 bottom-0 p-8 text-primary-foreground">
                     <div className="flex items-center gap-2 mb-3">
@@ -232,11 +240,20 @@ const Index = () => {
             Ver todo el catálogo →
           </Link>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-10">
-          {featuredListings.slice(0, 8).map((listing) => (
-            <ListingCard key={listing.id} listing={listing} />
-          ))}
-        </div>
+        {listings.length === 0 ? (
+          <div className="border border-dashed border-border py-16 text-center">
+            <p className="text-muted-foreground">Aún no hay avisos publicados.</p>
+            <Link to="/dashboard/anunciante/publicar" className="text-sm font-bold text-secondary hover:underline mt-2 inline-block">
+              Publica el primero →
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-10">
+            {listings.slice(0, 8).map((listing) => (
+              <ListingCard key={listing.id} listing={listing} />
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Map teaser */}
@@ -305,11 +322,17 @@ const Index = () => {
             Ver más recientes →
           </Link>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-10">
-          {featuredListings.slice(0, 4).reverse().map((listing) => (
-            <ListingCard key={`new-${listing.id}`} listing={listing} />
-          ))}
-        </div>
+        {listings.length === 0 ? (
+          <div className="border border-dashed border-border py-16 text-center">
+            <p className="text-muted-foreground">Aún no hay avisos recientes.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-10">
+            {[...listings].slice(0, 4).reverse().map((listing) => (
+              <ListingCard key={`new-${listing.id}`} listing={listing} />
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Brand trust strip */}

@@ -23,8 +23,9 @@ import {
   loadSettings, priceForDuration, formatSoles, addInvoice,
   type DurationDays, type PricingSettings, type ExtraPrices,
 } from "@/lib/pricing";
+import { createAndPublishListing } from "@/lib/publish";
 
-interface PhotoItem { id: string; url: string; name: string; }
+interface PhotoItem { id: string; url: string; name: string; file: File; }
 
 const DURATIONS: DurationDays[] = [3, 7, 15, 30, 60, 90];
 const QUANTITIES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -77,6 +78,7 @@ const AdvertiserPublish = () => {
   // Resumen y pago
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [receiptType, setReceiptType] = useState<"boleta" | "factura">("boleta");
   const [receiptEmail, setReceiptEmail] = useState("");
   const [successOpen, setSuccessOpen] = useState<{ open: boolean; number: string; email: string }>({ open: false, number: "", email: "" });
@@ -128,6 +130,7 @@ const AdvertiserPublish = () => {
       id: `${slot}-${Date.now()}`,
       url: URL.createObjectURL(f),
       name: f.name,
+      file: f,
     };
     if (slot === "main") setMainPhoto(item);
     else setSecondPhoto(item);
@@ -209,23 +212,50 @@ const AdvertiserPublish = () => {
     setSummaryOpen(true);
   };
 
-  const confirmAndPay = () => {
-    if (!confirmed) return;
+  const confirmAndPay = async () => {
+    if (!confirmed || publishing) return;
     if (!session) {
       persistDraftForLogin(true);
       navigate("/auth?redirect=/dashboard/anunciante/publicar");
       return;
     }
     const email = receiptEmail.trim() || "anunciante@effe.pe";
-    const inv = addInvoice({
-      email,
-      advertiser: session?.name || "Anunciante",
-      listingTitle: form.title,
-      amount: total,
-      detail: `${receiptType === "factura" ? "Factura" : "Boleta"} · Aviso ${duration} días · ${Object.keys(extras).filter((k) => (extras as Record<string, boolean>)[k]).join(", ") || "sin extras"}`,
-    });
-    setSummaryOpen(false);
-    setSuccessOpen({ open: true, number: inv.number, email });
+    setPublishing(true);
+    try {
+      // Crea el aviso real + sube imágenes + orden/comprobante + publica con vigencia
+      const { invoiceNumber } = await createAndPublishListing({
+        form,
+        quantity,
+        duration,
+        extras,
+        total,
+        mainPhoto: mainPhoto ? { file: mainPhoto.file, name: mainPhoto.name } : null,
+        secondPhoto: hasSecondImageInPackage && secondPhoto ? { file: secondPhoto.file, name: secondPhoto.name } : null,
+        receiptType,
+        email,
+        advertiserName: session?.name || "Anunciante",
+      });
+
+      // Mantiene el comprobante también en "Mis comprobantes" (local)
+      const localInv = addInvoice({
+        email,
+        advertiser: session?.name || "Anunciante",
+        listingTitle: form.title,
+        amount: total,
+        detail: `${receiptType === "factura" ? "Factura" : "Boleta"} · Aviso ${duration} días`,
+      });
+
+      setSummaryOpen(false);
+      setSuccessOpen({ open: true, number: invoiceNumber || localInv.number, email });
+    } catch (e) {
+      toast({
+        title: "No se pudo publicar",
+        description: e instanceof Error ? e.message : "Intenta nuevamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setPublishing(false);
+    }
   };
 
 
@@ -810,8 +840,8 @@ const AdvertiserPublish = () => {
 
           <DialogFooter className="gap-2">
             <Button variant="ghost" onClick={() => setSummaryOpen(false)}>Cancelar</Button>
-            <Button onClick={confirmAndPay} disabled={!confirmed} className="gap-2">
-              <CreditCard size={14} /> Pagar {formatSoles(total)}
+            <Button onClick={confirmAndPay} disabled={!confirmed || publishing} className="gap-2">
+              <CreditCard size={14} /> {publishing ? "Publicando…" : `Pagar ${formatSoles(total)}`}
             </Button>
           </DialogFooter>
         </DialogContent>

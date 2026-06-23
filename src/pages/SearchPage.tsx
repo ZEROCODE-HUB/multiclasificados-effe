@@ -1,12 +1,16 @@
-import { useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ListingCard } from "@/components/ListingCard";
 import { Navbar } from "@/components/Navbar";
-import { featuredListings, categories } from "@/data/mockData";
+import { categories, type Listing } from "@/data/mockData";
+import { searchListings, type SortKey } from "@/lib/listings";
+import { useSession } from "@/hooks/useSession";
+import { createSavedSearch } from "@/lib/savedSearches";
+import { toast } from "@/hooks/use-toast";
 import {
   Search,
   LayoutGrid,
@@ -16,6 +20,7 @@ import {
   MapPin,
   Heart,
   Star,
+  Bookmark,
   X,
 } from "lucide-react";
 
@@ -38,13 +43,75 @@ const formatPrice = (price: number, currency: string) =>
 
 export default function SearchPage() {
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
+  const session = useSession();
   const initialView = (params.get("view") as ViewMode) || "list";
   const [view, setView] = useState<ViewMode>(initialView);
   const [layout, setLayout] = useState<Layout>("grid");
   const [showFilters, setShowFilters] = useState(false);
-  const [active, setActive] = useState<string | null>(featuredListings[0]?.id ?? null);
+  const [active, setActive] = useState<string | null>(null);
 
-  const listings = featuredListings;
+  // ---- Datos reales + filtros + búsqueda EN VIVO (REQ-02) ----
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [q, setQ] = useState<string>(params.get("q") || "");
+  const [category, setCategory] = useState<string>(params.get("cat") || "");
+  const [priceMin, setPriceMin] = useState<string>("");
+  const [priceMax, setPriceMax] = useState<string>("");
+  const [sort, setSort] = useState<SortKey>((params.get("sort") as SortKey) || "recent");
+
+  // Sincroniza texto/categoría/orden/precio desde la URL (navbar, hero, búsquedas guardadas).
+  useEffect(() => {
+    setQ(params.get("q") || "");
+    setCategory(params.get("cat") || "");
+    setSort((params.get("sort") as SortKey) || "recent");
+    setPriceMin(params.get("min") || "");
+    setPriceMax(params.get("max") || "");
+  }, [params]);
+
+  // Guarda la búsqueda actual (REQ-04).
+  const saveCurrentSearch = async () => {
+    if (!session?.supabase) {
+      toast({ title: "Inicia sesión", description: "Crea una cuenta para guardar búsquedas y recibir alertas." });
+      navigate("/auth?redirect=/buscar");
+      return;
+    }
+    const catName = categories.find((c) => c.id === category)?.name;
+    const defaultName = q || catName || "Mi búsqueda";
+    try {
+      await createSavedSearch(
+        {
+          q: q || undefined,
+          category: category || undefined,
+          priceMin: priceMin ? Number(priceMin) : undefined,
+          priceMax: priceMax ? Number(priceMax) : undefined,
+          sort,
+        },
+        defaultName
+      );
+      toast({ title: "Búsqueda guardada", description: "La verás en 'Mis búsquedas' y recibirás alertas de nuevos avisos." });
+    } catch (e) {
+      toast({ title: "No se pudo guardar", description: e instanceof Error ? e.message : "Intenta de nuevo.", variant: "destructive" });
+    }
+  };
+
+  // Búsqueda en vivo: filtra a medida que se escribe / cambian filtros (debounce 250 ms).
+  useEffect(() => {
+    const t = setTimeout(() => {
+      searchListings({
+        q: q || undefined,
+        category: category || undefined,
+        priceMin: priceMin ? Number(priceMin) : undefined,
+        priceMax: priceMax ? Number(priceMax) : undefined,
+        sort,
+      }).then((rows) => {
+        setListings(rows);
+        setActive(rows[0]?.id ?? null);
+      });
+    }, 250);
+    return () => clearTimeout(t);
+  }, [q, category, priceMin, priceMax, sort]);
+
+  const applyFilters = () => setShowFilters(false);
 
   const switchView = (v: ViewMode) => {
     setView(v);
@@ -105,7 +172,12 @@ export default function SearchPage() {
             {categories.slice(0, 6).map((c) => (
               <button
                 key={c.id}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-border rounded-full hover:border-secondary hover:text-secondary transition-colors shrink-0"
+                onClick={() => setCategory((prev) => (prev === c.id ? "" : c.id))}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border rounded-full transition-colors shrink-0 ${
+                  category === c.id
+                    ? "border-secondary text-secondary"
+                    : "border-border hover:border-secondary hover:text-secondary"
+                }`}
               >
                 <c.icon size={12} /> {c.name}
               </button>
@@ -115,7 +187,7 @@ export default function SearchPage() {
         </div>
       </div>
     ),
-    [view, params]
+    [view, params, category]
   );
 
 
@@ -129,7 +201,7 @@ export default function SearchPage() {
       </div>
       <div>
         <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Categoría</label>
-        <Select>
+        <Select value={category || undefined} onValueChange={setCategory}>
           <SelectTrigger className="mt-1.5 rounded-none"><SelectValue placeholder="Todas" /></SelectTrigger>
           <SelectContent>
             {categories.map((cat) => (
@@ -141,11 +213,13 @@ export default function SearchPage() {
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Precio min</label>
-          <Input type="number" placeholder="0" className="mt-1.5 rounded-none" />
+          <Input type="number" placeholder="0" className="mt-1.5 rounded-none"
+            value={priceMin} onChange={(e) => setPriceMin(e.target.value)} />
         </div>
         <div>
           <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Precio max</label>
-          <Input type="number" placeholder="Sin límite" className="mt-1.5 rounded-none" />
+          <Input type="number" placeholder="Sin límite" className="mt-1.5 rounded-none"
+            value={priceMax} onChange={(e) => setPriceMax(e.target.value)} />
         </div>
       </div>
       <div>
@@ -154,23 +228,51 @@ export default function SearchPage() {
       </div>
       <div>
         <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Ordenar por</label>
-        <Select>
+        <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
           <SelectTrigger className="mt-1.5 rounded-none"><SelectValue placeholder="Más recientes" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="recent">Más recientes</SelectItem>
-            <SelectItem value="price-asc">Precio: menor a mayor</SelectItem>
-            <SelectItem value="price-desc">Precio: mayor a menor</SelectItem>
+            <SelectItem value="price_asc">Precio: menor a mayor</SelectItem>
+            <SelectItem value="price_desc">Precio: mayor a menor</SelectItem>
             <SelectItem value="views">Más vistos</SelectItem>
           </SelectContent>
         </Select>
       </div>
-      <Button className="w-full rounded-none" size="sm">Aplicar filtros</Button>
+      <Button className="w-full rounded-none" size="sm" onClick={applyFilters}>Aplicar filtros</Button>
+      <Button variant="outline" className="w-full rounded-none gap-2" size="sm" onClick={saveCurrentSearch}>
+        <Bookmark size={14} /> Guardar búsqueda
+      </Button>
     </div>
   );
 
   return (
     <div className={`${view === "map" ? "h-screen" : "min-h-screen"} flex flex-col bg-background`}>
       <Navbar />
+
+      {/* Búsqueda en vivo (filtra mientras escribes) */}
+      <div className="border-b border-border bg-card">
+        <div className="container mx-auto px-4 md:px-6 py-3">
+          <div className="flex items-center bg-muted/50 border border-border h-11 max-w-2xl focus-within:border-secondary/40 focus-within:bg-card transition-colors">
+            <Search size={16} className="ml-3 text-muted-foreground shrink-0" />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Busca por título, descripción o ubicación…"
+              className="flex-1 bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground"
+            />
+            {q && (
+              <button
+                onClick={() => setQ("")}
+                className="px-3 text-muted-foreground hover:text-foreground shrink-0"
+                aria-label="Limpiar búsqueda"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
       {FilterBar}
 
       {view === "list" ? (
@@ -208,17 +310,23 @@ export default function SearchPage() {
             </aside>
 
             <div className="flex-1 min-w-0">
-              <div
-                className={
-                  layout === "grid"
-                    ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5"
-                    : "space-y-4"
-                }
-              >
-                {listings.map((listing) => (
-                  <ListingCard key={listing.id} listing={listing} layout={layout} />
-                ))}
-              </div>
+              {listings.length === 0 ? (
+                <div className="border border-dashed border-border py-20 text-center">
+                  <p className="text-muted-foreground">No se encontraron avisos con estos filtros.</p>
+                </div>
+              ) : (
+                <div
+                  className={
+                    layout === "grid"
+                      ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5"
+                      : "space-y-4"
+                  }
+                >
+                  {listings.map((listing) => (
+                    <ListingCard key={listing.id} listing={listing} layout={layout} />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -331,7 +439,7 @@ export default function SearchPage() {
                     <h3 className="font-semibold text-sm text-foreground line-clamp-2 mt-1">{l.title}</h3>
                     <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-1.5">
                       <Star size={11} className="text-secondary fill-secondary" />
-                      <span className="font-semibold text-foreground">4.8</span>
+                      <span className="font-semibold text-foreground">0.0</span>
                       <span>·</span>
                       <span className="truncate">
                         <MapPin size={10} className="inline" /> {l.location}

@@ -6,6 +6,8 @@ export interface Session {
   role: SessionRole;
   name: string;
   initials: string;
+  /** true cuando la sesión proviene de Supabase (no de los botones demo). */
+  supabase?: boolean;
 }
 
 const KEY = "effe_session";
@@ -30,6 +32,13 @@ export function getSession(): Session | null {
 
 export function setSession(role: SessionRole) {
   const s: Session = { role, ...defaultsByRole[role] };
+  localStorage.setItem(KEY, JSON.stringify(s));
+  window.dispatchEvent(new Event("effe-session"));
+  return s;
+}
+
+// Guarda una sesión completa (usado por la autenticación real de Supabase).
+export function setSessionData(s: Session) {
   localStorage.setItem(KEY, JSON.stringify(s));
   window.dispatchEvent(new Event("effe-session"));
   return s;

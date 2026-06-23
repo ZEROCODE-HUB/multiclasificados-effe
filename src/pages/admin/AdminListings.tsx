@@ -13,9 +13,10 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Search, Eye, ChevronLeft, ChevronRight, MapPin, Calendar, Tag, User, Ban, Flag } from "lucide-react";
-import { adminListings, AdminListingStatus } from "@/data/adminMockData";
+import { AdminListingStatus } from "@/data/adminMockData";
 import { toast } from "@/hooks/use-toast";
 import { disableListing, loadDisabled, loadReports, ReportEntry } from "@/lib/pricing";
+import { fetchAdminListings, setListingStatus, type AdminListingRow } from "@/lib/admin";
 
 const statusColor: Record<AdminListingStatus, string> = {
   Pendiente: "bg-warning/15 text-warning border-warning/30",
@@ -24,10 +25,33 @@ const statusColor: Record<AdminListingStatus, string> = {
   Destacado: "bg-secondary/15 text-secondary border-secondary/30",
 };
 
+// Forma que consume el diseño (igual que el mock original), derivada del dato real.
+interface Listing {
+  id: string; title: string; advertiser: string; category: string;
+  status: AdminListingStatus; date: string; price: string;
+}
+
+const isUuid = (v: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+
+// Estado real (BD) + featured -> etiqueta del diseño.
+const toDisplayStatus = (r: AdminListingRow): AdminListingStatus =>
+  r.featured ? "Destacado"
+  : r.status === "pending" ? "Pendiente"
+  : r.status === "rejected" || r.status === "paused" || r.status === "expired" ? "Rechazado"
+  : "Activo";
+
+const mapRow = (r: AdminListingRow): Listing => ({
+  id: r.id, title: r.title, advertiser: r.advertiser ?? "Anunciante",
+  category: r.category_id, status: toDisplayStatus(r),
+  date: (r.created_at ?? "").slice(0, 10),
+  price: `${r.currency || "PEN"} ${Number(r.price || 0).toLocaleString()}`,
+});
+
 const PAGE_SIZE = 5;
-type Listing = (typeof adminListings)[number];
 
 const AdminListings = ({ role }: { role: AdminRole }) => {
+  const [rows, setRows] = useState<Listing[]>([]);
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
@@ -37,30 +61,43 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
   const [reports, setReports] = useState<ReportEntry[]>(() => loadReports());
   const [disabled, setDisabled] = useState<Record<string, string>>(() => loadDisabled());
 
+  const load = () => fetchAdminListings().then(({ data }) => setRows(data.map(mapRow)));
   useEffect(() => {
+    load();
     setReports(loadReports());
     setDisabled(loadDisabled());
   }, []);
 
   const filtered = useMemo(
     () =>
-      adminListings.filter((l) =>
+      rows.filter((l) =>
         (filter === "all" || l.status === filter) &&
         (q === "" || l.title.toLowerCase().includes(q.toLowerCase()) || l.id.toLowerCase().includes(q.toLowerCase())),
       ),
-    [q, filter],
+    [rows, q, filter],
   );
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const list = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const confirmDisable = () => {
+  const confirmDisable = async () => {
     if (!disableTarget || !disableReason.trim()) return;
-    disableListing(disableTarget.id, disableReason.trim());
-    setDisabled(loadDisabled());
-    toast({
-      title: "Aviso deshabilitado",
-      description: `Notificación enviada a ${disableTarget.advertiser}: "${disableReason.trim()}"`,
-    });
+    const reason = disableReason.trim();
+    try {
+      if (isUuid(disableTarget.id)) {
+        await setListingStatus(disableTarget.id, "rejected");
+        await load();
+      } else {
+        // Dato mock (sin backend): conserva el comportamiento local.
+        disableListing(disableTarget.id, reason);
+        setDisabled(loadDisabled());
+      }
+      toast({
+        title: "Aviso deshabilitado",
+        description: `Notificación enviada a ${disableTarget.advertiser}: "${reason}"`,
+      });
+    } catch (e: any) {
+      toast({ title: "No se pudo deshabilitar", description: e?.message ?? "Error", variant: "destructive" });
+    }
     setDisableTarget(null);
     setDisableReason("");
   };

@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/hooks/useSession";
+import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 
 type Item = { title: string; url: string; icon: LucideIcon };
 
@@ -33,6 +34,7 @@ const seekerPrimary: Item[] = [
 export function MobileBottomNav() {
   const { pathname } = useLocation();
   const session = useSession();
+  const unread = useUnreadMessages();
 
   if (!session) return null;
   if (session.role !== "anunciante" && session.role !== "buscador") return null;
@@ -46,6 +48,7 @@ export function MobileBottomNav() {
       <div className="grid grid-cols-5 h-16">
         {primary.map((item) => {
           const active = isActive(item.url);
+          const showBadge = item.icon === MessageSquare && unread > 0;
           return (
             <Link
               key={item.url}
@@ -56,7 +59,14 @@ export function MobileBottomNav() {
               )}
             >
               {active && <span className="absolute top-0 h-1 w-12 bg-secondary rounded-b-full shadow-[0_2px_8px_rgba(249,115,22,0.6)]" />}
-              <item.icon size={active ? 22 : 20} strokeWidth={active ? 2.5 : 2} />
+              <div className="relative">
+                <item.icon size={active ? 22 : 20} strokeWidth={active ? 2.5 : 2} />
+                {showBadge && (
+                  <span className="absolute -top-1.5 -right-2 inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 text-[9px] font-bold bg-secondary text-secondary-foreground rounded-full">
+                    {unread > 9 ? "9+" : unread}
+                  </span>
+                )}
+              </div>
               <span className="truncate max-w-[60px]">{item.title}</span>
             </Link>
           );

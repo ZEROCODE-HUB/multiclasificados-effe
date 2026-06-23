@@ -15,7 +15,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { clearSession, useSession } from "@/hooks/useSession";
+import { useSession } from "@/hooks/useSession";
+import { useUnreadMessages } from "@/hooks/useUnreadMessages";
+import { NotificationsBell } from "@/components/NotificationsBell";
+import { signOut } from "@/lib/auth";
 import { BrandMark } from "@/components/BrandMark";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 
@@ -24,6 +27,7 @@ export function Navbar() {
   const [query, setQuery] = useState("");
   const navigate = useNavigate();
   const session = useSession();
+  const unread = useUnreadMessages();
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,7 +36,7 @@ export function Navbar() {
   };
 
   const logout = () => {
-    clearSession();
+    signOut();
     navigate("/");
   };
 
@@ -120,6 +124,7 @@ export function Navbar() {
               <Link to="/dashboard/buscador/favoritos" className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Favoritos">
                 <Heart size={18} />
               </Link>
+              <NotificationsBell />
               <Link
                 to={session?.role === "buscador" ? "/dashboard/buscador/mensajes" : "/dashboard/anunciante/mensajes"}
                 className="relative flex items-center gap-2 px-3 py-1.5 ml-1 border border-border hover:border-secondary/50 hover:bg-muted/50 text-foreground transition-all rounded-none"
@@ -127,7 +132,11 @@ export function Navbar() {
               >
                 <MessageSquare size={16} className="text-secondary" />
                 <span className="text-xs font-semibold">Mensajes</span>
-                <span className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold bg-secondary text-secondary-foreground rounded-full">3</span>
+                {unread > 0 && (
+                  <span className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold bg-secondary text-secondary-foreground rounded-full">
+                    {unread > 9 ? "9+" : unread}
+                  </span>
+                )}
               </Link>
             </>
           )}

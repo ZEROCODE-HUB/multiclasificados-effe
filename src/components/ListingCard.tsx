@@ -2,7 +2,10 @@ import { MapPin, Heart, ShieldCheck, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import type { Listing } from "@/data/mockData";
+import { useSession } from "@/hooks/useSession";
+import { useFavorites } from "@/hooks/useFavorites";
 
 interface ListingCardProps {
   listing: Listing;
@@ -11,13 +14,36 @@ interface ListingCardProps {
 
 export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
   const navigate = useNavigate();
+  const session = useSession();
+  const { isFavorite, toggle } = useFavorites();
+  const fav = isFavorite(listing.id);
   const goToDetail = () => navigate(`/aviso/${listing.id}`);
+
+  const handleFav = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!session) {
+      toast.error("Inicia sesión para guardar favoritos");
+      navigate("/auth");
+      return;
+    }
+    try {
+      const res = await toggle(listing.id);
+      if (res === null) {
+        toast.message("Disponible con avisos reales");
+        return;
+      }
+      toast.success(res ? "Guardado en favoritos" : "Quitado de favoritos");
+    } catch {
+      toast.error("No se pudo actualizar el favorito");
+    }
+  };
   const formatPrice = (price: number, currency: string) =>
     currency === "USD" ? `US$ ${price.toLocaleString()}` : `S/ ${price.toLocaleString()}`;
 
-  // Mock rating / reviews
-  const rating = (4.5 + ((listing.id?.toString().length ?? 1) % 5) / 10).toFixed(1);
-  const reviews = 40 + ((listing.id?.toString().length ?? 0) * 37) % 280;
+  // Sin reseñas reales todavía → valores neutros
+  const rating = "0.0";
+  const reviews = 0;
 
   if (layout === "list") {
     return (
@@ -65,11 +91,11 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
         </span>
         {/* Favorite */}
         <button
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onClick={handleFav}
           className="absolute top-3 right-3 w-8 h-8 bg-white/95 backdrop-blur-sm flex items-center justify-center hover:bg-white hover:scale-110 transition-all shadow-sm"
           aria-label="Guardar en favoritos"
         >
-          <Heart size={15} className="text-primary" />
+          <Heart size={15} className={fav ? "text-secondary fill-secondary" : "text-primary"} />
         </button>
 
       </div>

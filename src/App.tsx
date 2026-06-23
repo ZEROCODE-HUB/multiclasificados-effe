@@ -5,6 +5,9 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Index from "./pages/Index.tsx";
 import AuthPage from "./pages/AuthPage.tsx";
+import AuthCallback from "./pages/AuthCallback.tsx";
+import { SupabaseAuthBridge } from "@/components/SupabaseAuthBridge";
+import { FavoritesProvider } from "@/hooks/useFavorites";
 import SearchPage from "./pages/SearchPage.tsx";
 import ListingDetail from "./pages/ListingDetail.tsx";
 import AdminPricing from "./pages/admin/AdminPricing.tsx";
@@ -30,6 +33,7 @@ import AdminReports from "./pages/admin/AdminReports.tsx";
 import SuperRoles from "./pages/superadmin/SuperRoles.tsx";
 import SuperAudit from "./pages/superadmin/SuperAudit.tsx";
 import SuperConversations from "./pages/superadmin/SuperConversations.tsx";
+import { RequireRole } from "@/components/RequireRole";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -39,10 +43,13 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
+      <SupabaseAuthBridge />
+      <FavoritesProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<AuthPage />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/buscar" element={<SearchPage />} />
           <Route path="/aviso/:id" element={<ListingDetail />} />
           <Route path="/planes" element={<Navigate to="/dashboard/anunciante/publicar" replace />} />
@@ -68,31 +75,32 @@ const App = () => (
           <Route path="/dashboard/buscador/alertas" element={<Navigate to="/dashboard/buscador" replace />} />
           <Route path="/dashboard/buscador/configuracion" element={<SettingsPage role="buscador" />} />
 
-          {/* Admin */}
-          <Route path="/dashboard/admin" element={<AdminDashboard role="admin" />} />
-          <Route path="/dashboard/admin/avisos" element={<AdminListings role="admin" />} />
-          <Route path="/dashboard/admin/usuarios" element={<AdminUsers role="admin" />} />
-          <Route path="/dashboard/admin/comunicaciones" element={<AdminCommunications role="admin" />} />
-          <Route path="/dashboard/admin/conversaciones" element={<SuperConversations role="admin" />} />
-          <Route path="/dashboard/admin/comercial" element={<AdminCommercial role="admin" />} />
-          <Route path="/dashboard/admin/reportes" element={<AdminReports role="admin" />} />
-          <Route path="/dashboard/admin/tarifas" element={<AdminPricing role="admin" />} />
+          {/* Admin — requiere rol admin o superior (login real) */}
+          <Route path="/dashboard/admin" element={<RequireRole min="admin"><AdminDashboard role="admin" /></RequireRole>} />
+          <Route path="/dashboard/admin/avisos" element={<RequireRole min="admin"><AdminListings role="admin" /></RequireRole>} />
+          <Route path="/dashboard/admin/usuarios" element={<RequireRole min="admin"><AdminUsers role="admin" /></RequireRole>} />
+          <Route path="/dashboard/admin/comunicaciones" element={<RequireRole min="admin"><AdminCommunications role="admin" /></RequireRole>} />
+          <Route path="/dashboard/admin/conversaciones" element={<RequireRole min="admin"><SuperConversations role="admin" /></RequireRole>} />
+          <Route path="/dashboard/admin/comercial" element={<RequireRole min="admin"><AdminCommercial role="admin" /></RequireRole>} />
+          <Route path="/dashboard/admin/reportes" element={<RequireRole min="admin"><AdminReports role="admin" /></RequireRole>} />
+          <Route path="/dashboard/admin/tarifas" element={<RequireRole min="admin"><AdminPricing role="admin" /></RequireRole>} />
 
-          {/* Super Admin */}
-          <Route path="/dashboard/superadmin" element={<AdminDashboard role="superadmin" />} />
-          <Route path="/dashboard/superadmin/avisos" element={<AdminListings role="superadmin" />} />
-          <Route path="/dashboard/superadmin/usuarios" element={<AdminUsers role="superadmin" />} />
-          <Route path="/dashboard/superadmin/comunicaciones" element={<AdminCommunications role="superadmin" />} />
-          <Route path="/dashboard/superadmin/conversaciones" element={<SuperConversations role="superadmin" />} />
-          <Route path="/dashboard/superadmin/comercial" element={<AdminCommercial role="superadmin" />} />
-          <Route path="/dashboard/superadmin/reportes" element={<AdminReports role="superadmin" />} />
-          <Route path="/dashboard/superadmin/tarifas" element={<AdminPricing role="superadmin" />} />
-          <Route path="/dashboard/superadmin/roles" element={<SuperRoles />} />
-          <Route path="/dashboard/superadmin/auditoria" element={<SuperAudit />} />
+          {/* Super Admin — solo rol superadmin (login real) */}
+          <Route path="/dashboard/superadmin" element={<RequireRole min="superadmin"><AdminDashboard role="superadmin" /></RequireRole>} />
+          <Route path="/dashboard/superadmin/avisos" element={<RequireRole min="superadmin"><AdminListings role="superadmin" /></RequireRole>} />
+          <Route path="/dashboard/superadmin/usuarios" element={<RequireRole min="superadmin"><AdminUsers role="superadmin" /></RequireRole>} />
+          <Route path="/dashboard/superadmin/comunicaciones" element={<RequireRole min="superadmin"><AdminCommunications role="superadmin" /></RequireRole>} />
+          <Route path="/dashboard/superadmin/conversaciones" element={<RequireRole min="superadmin"><SuperConversations role="superadmin" /></RequireRole>} />
+          <Route path="/dashboard/superadmin/comercial" element={<RequireRole min="superadmin"><AdminCommercial role="superadmin" /></RequireRole>} />
+          <Route path="/dashboard/superadmin/reportes" element={<RequireRole min="superadmin"><AdminReports role="superadmin" /></RequireRole>} />
+          <Route path="/dashboard/superadmin/tarifas" element={<RequireRole min="superadmin"><AdminPricing role="superadmin" /></RequireRole>} />
+          <Route path="/dashboard/superadmin/roles" element={<RequireRole min="superadmin"><SuperRoles /></RequireRole>} />
+          <Route path="/dashboard/superadmin/auditoria" element={<RequireRole min="superadmin"><SuperAudit /></RequireRole>} />
 
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
+      </FavoritesProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );
