@@ -28,7 +28,7 @@ Necesario para que el **login con Google** funcione fuera de localhost.
 
 ### 4. Rotar secretos comprometidos 🔐
 Durante el desarrollo se compartieron por chat:
-- Contraseña de la base de datos de Supabase (`Cuenta225.-.`).
+- Contraseña de la base de datos de Supabase (compartida durante el desarrollo; **rotar**).
 - La `service_role` key.
 - Tokens personales de GitHub.
 
