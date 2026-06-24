@@ -13,7 +13,7 @@ import {
   Settings,
   ScrollText,
   Lock,
-  MessagesSquare,
+  Flag,
   Menu,
   LogOut,
   Bell,
@@ -35,9 +35,9 @@ const buildMenu = (role: AdminRole): MenuItem[] => {
     { title: "Gestión de usuarios", url: `/dashboard/${role}/usuarios`, icon: Users, group: "Operación" },
     { title: "Config. comercial", url: `/dashboard/${role}/comercial`, icon: Tags, group: "Operación" },
     { title: "Tarifas y Descuentos", url: `/dashboard/${role}/tarifas`, icon: DollarSign, group: "Operación" },
+    { title: "Denuncias", url: `/dashboard/${role}/conversaciones`, icon: Flag, group: "Operación" },
     { title: "Reportes", url: `/dashboard/${role}/reportes`, icon: FileBarChart, group: "Operación" },
     { title: "Comunicaciones", url: `/dashboard/${role}/comunicaciones`, icon: Send, group: "Comunicaciones" },
-    { title: "Conversaciones", url: `/dashboard/${role}/conversaciones`, icon: MessagesSquare, group: "Comunicaciones" },
   ];
   if (role === "admin") return base;
   return [
@@ -171,7 +171,7 @@ export function AdminLayout({ children, role, title, breadcrumb }: Props) {
         </header>
 
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 lg:py-8 pb-24 lg:pb-8 bg-background">
-          <div className="max-w-7xl mx-auto w-full space-y-5 md:space-y-6 animate-fade-in">
+          <div className="w-full space-y-5 md:space-y-6 animate-fade-in">
             <div className="hidden lg:block">
               <h1 className="text-2xl xl:text-3xl font-extrabold text-foreground tracking-tight">{title}</h1>
             </div>

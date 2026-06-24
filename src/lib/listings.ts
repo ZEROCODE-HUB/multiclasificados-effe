@@ -142,6 +142,7 @@ export type ListingStatus =
 
 export interface MyListing extends Listing {
   status: ListingStatus;
+  expiresAt: string | null;
 }
 
 // Avisos del anunciante actual (todos sus estados). Usa la tabla `listings`
@@ -155,7 +156,7 @@ export async function fetchMyListings(): Promise<MyListing[]> {
     const { data, error } = await supabase
       .from("listings")
       .select(
-        "id, title, description, price, currency, category_id, location, featured, views, status, published_at, created_at, listing_images(url, sort_order)"
+        "id, title, description, price, currency, category_id, location, featured, views, status, published_at, expires_at, created_at, listing_images(url, sort_order)"
       )
       .eq("owner_id", user.id)
       .order("created_at", { ascending: false });
@@ -178,6 +179,7 @@ export async function fetchMyListings(): Promise<MyListing[]> {
         advertiser: "",
         views: Number(r.views) || 0,
         status: r.status as ListingStatus,
+        expiresAt: r.expires_at ?? null,
       };
     });
   } catch {

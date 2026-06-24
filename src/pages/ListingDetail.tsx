@@ -46,7 +46,9 @@ import { ListingReviews } from "@/components/ListingReviews";
 import { fetchSellerInfo, fetchReviews } from "@/lib/reviews";
 import { applyToListing, fetchMyApplication, STATUS_LABEL, type ApplicationStatus } from "@/lib/applications";
 import { Checkbox } from "@/components/ui/checkbox";
-import { addReport, loadSold, markSold } from "@/lib/pricing";
+import { loadSold, markSold } from "@/lib/pricing";
+import { reportListing, reportUser, LISTING_REPORT_REASONS, USER_REPORT_REASONS } from "@/lib/reports";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/lib/supabase";
 import { getOrCreateConversation, sendMessage } from "@/lib/messaging";
 
@@ -74,6 +76,20 @@ export default function ListingDetail() {
   const [applyMsg, setApplyMsg] = useState("");
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  // Guardia: el detalle del aviso solo es visible con sesión iniciada.
+  const [authChecked, setAuthChecked] = useState(false);
+  useEffect(() => {
+    let active = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      if (!data.session) {
+        navigate(`/auth?redirect=/aviso/${id ?? ""}`, { replace: true });
+      } else {
+        setAuthChecked(true);
+      }
+    });
+    return () => { active = false; };
+  }, [id, navigate]);
 
   const loadReviewMeta = () => {
     if (!id) return;
@@ -141,25 +157,50 @@ export default function ListingDetail() {
   const [phoneOpen, setPhoneOpen] = useState(false);
   const [phoneRevealed, setPhoneRevealed] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
-  const [reportReason, setReportReason] = useState("");
+  const [reportCategory, setReportCategory] = useState("");
+  const [reportDetail, setReportDetail] = useState("");
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  // Reporte de usuario (anunciante)
+  const [userReportOpen, setUserReportOpen] = useState(false);
+  const [userReportCategory, setUserReportCategory] = useState("");
+  const [userReportDetail, setUserReportDetail] = useState("");
+  const [userReportSubmitting, setUserReportSubmitting] = useState(false);
   const [soldState, setSoldState] = useState(() => loadSold()[listing.id]);
 
   const [messageText, setMessageText] = useState(
     `Hola ${listing.advertiser.split(" ")[0]}, estoy interesado en "${listing.title}". ¿Sigue disponible?`,
   );
 
-  const handleReport = () => {
-    if (!reportReason.trim()) return;
-    addReport({
-      listingId: listing.id,
-      listingTitle: listing.title,
-      reason: reportReason.trim(),
-      reportedBy: session?.name || "Usuario anónimo",
-      category: category?.name,
-    });
-    setReportOpen(false);
-    setReportReason("");
-    toast({ title: "Reporte enviado", description: "Nuestro equipo revisará el aviso." });
+  const handleReport = async () => {
+    if (!reportCategory || !listing.id) return;
+    setReportSubmitting(true);
+    try {
+      await reportListing(listing.id, reportCategory, reportDetail);
+      setReportOpen(false);
+      setReportCategory("");
+      setReportDetail("");
+      toast({ title: "Reporte enviado", description: "Nuestro equipo de moderación revisará el aviso." });
+    } catch (e) {
+      toast({ title: "No se pudo reportar", description: e instanceof Error ? e.message : "Intenta de nuevo.", variant: "destructive" });
+    } finally {
+      setReportSubmitting(false);
+    }
+  };
+
+  const handleReportUser = async () => {
+    if (!userReportCategory || !ownerId) return;
+    setUserReportSubmitting(true);
+    try {
+      await reportUser(ownerId, userReportCategory, userReportDetail);
+      setUserReportOpen(false);
+      setUserReportCategory("");
+      setUserReportDetail("");
+      toast({ title: "Usuario reportado", description: "Nuestro equipo de moderación revisará al anunciante." });
+    } catch (e) {
+      toast({ title: "No se pudo reportar", description: e instanceof Error ? e.message : "Intenta de nuevo.", variant: "destructive" });
+    } finally {
+      setUserReportSubmitting(false);
+    }
   };
 
   const toggleSold = (who: "buyer" | "seller") => {
@@ -169,7 +210,8 @@ export default function ListingDetail() {
   };
 
   const requireAuthOrRun = (action: () => void) => {
-    if (!session) {
+    // Exige una sesión REAL de Supabase (no demo) para contactar/postular/reportar.
+    if (!session?.supabase) {
       toast({
         title: "Inicia sesión para continuar",
         description: "Necesitas una cuenta para contactar al anunciante.",
@@ -189,6 +231,7 @@ export default function ListingDetail() {
     try {
       const convId = await getOrCreateConversation(id, ownerId);
       await sendMessage(convId, messageText);
+      trackEvent(id, "contact_click"); // REQ-08: clic de contacto
       setMessageOpen(false);
       toast({
         title: "Mensaje enviado",
@@ -208,6 +251,7 @@ export default function ListingDetail() {
   const handleRevealPhone = () => {
     setPhoneRevealed(true);
     setPhoneOpen(true);
+    if (id) trackEvent(id, "phone_click"); // REQ-08: clic de contacto (teléfono)
   };
 
   const handleApply = async () => {
@@ -256,6 +300,18 @@ export default function ListingDetail() {
     "Devolución dentro de 7 días",
   ];
 
+
+  // Mientras se verifica la sesión (o se redirige al login) no mostramos el detalle.
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <div className="container mx-auto px-4 py-24 text-center text-muted-foreground text-sm">
+          Verificando tu sesión…
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -517,6 +573,14 @@ export default function ListingDetail() {
             <Button variant="outline" className="w-full rounded-none gap-2 text-xs uppercase tracking-wider font-bold">
               <Users size={14} /> Ver todos sus avisos
             </Button>
+            {!isOwner && (
+              <button
+                onClick={() => requireAuthOrRun(() => setUserReportOpen(true))}
+                className="w-full flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors pt-1"
+              >
+                <Flag size={12} /> Reportar a este usuario
+              </button>
+            )}
           </div>
 
           {/* Sale closure — no aplica a empleos (no es una venta de producto) */}
@@ -579,7 +643,7 @@ export default function ListingDetail() {
             <p className="text-muted-foreground text-sm">Aún no hay otros avisos para mostrar.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-10">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 3xl:grid-cols-5 4xl:grid-cols-6 5xl:grid-cols-8 gap-x-6 gap-y-10">
             {related.map((l) => (
               <ListingCard key={l.id} listing={l} />
             ))}
@@ -683,19 +747,59 @@ export default function ListingDetail() {
             <DialogDescription>Cuéntanos qué problema observas con "{listing.title}".</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
-            <Label htmlFor="reason">Motivo del reporte</Label>
+            <Label>Motivo del reporte</Label>
+            <Select value={reportCategory} onValueChange={setReportCategory}>
+              <SelectTrigger><SelectValue placeholder="Selecciona un motivo" /></SelectTrigger>
+              <SelectContent>
+                {LISTING_REPORT_REASONS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Label htmlFor="reason">Detalle (opcional)</Label>
             <Textarea
               id="reason"
-              rows={4}
-              value={reportReason}
-              onChange={(e) => setReportReason(e.target.value)}
-              placeholder="Ej: información engañosa, contenido inapropiado, posible estafa…"
+              rows={3}
+              value={reportDetail}
+              onChange={(e) => setReportDetail(e.target.value)}
+              placeholder="Cuéntanos más sobre el problema…"
             />
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setReportOpen(false)}>Cancelar</Button>
-            <Button onClick={handleReport} disabled={!reportReason.trim()} className="gap-2">
-              <Flag size={14} /> Enviar reporte
+            <Button onClick={handleReport} disabled={!reportCategory || reportSubmitting} className="gap-2">
+              <Flag size={14} /> {reportSubmitting ? "Enviando…" : "Enviar reporte"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reportar usuario (REQ-10) */}
+      <Dialog open={userReportOpen} onOpenChange={setUserReportOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reportar usuario</DialogTitle>
+            <DialogDescription>Cuéntanos qué problema observas con {listing.advertiser || "este anunciante"}.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Label>Motivo del reporte</Label>
+            <Select value={userReportCategory} onValueChange={setUserReportCategory}>
+              <SelectTrigger><SelectValue placeholder="Selecciona un motivo" /></SelectTrigger>
+              <SelectContent>
+                {USER_REPORT_REASONS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Label htmlFor="user-reason">Detalle (opcional)</Label>
+            <Textarea
+              id="user-reason"
+              rows={3}
+              value={userReportDetail}
+              onChange={(e) => setUserReportDetail(e.target.value)}
+              placeholder="Cuéntanos más sobre el problema…"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setUserReportOpen(false)}>Cancelar</Button>
+            <Button onClick={handleReportUser} disabled={!userReportCategory || userReportSubmitting} className="gap-2">
+              <Flag size={14} /> {userReportSubmitting ? "Enviando…" : "Enviar reporte"}
             </Button>
           </DialogFooter>
         </DialogContent>

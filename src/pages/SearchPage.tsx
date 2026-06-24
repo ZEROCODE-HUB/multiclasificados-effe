@@ -318,7 +318,7 @@ export default function SearchPage() {
                 <div
                   className={
                     layout === "grid"
-                      ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5"
+                      ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 3xl:grid-cols-5 4xl:grid-cols-6 5xl:grid-cols-8 6xl:grid-cols-10 gap-5"
                       : "space-y-4"
                   }
                 >
@@ -355,7 +355,7 @@ export default function SearchPage() {
               return (
                 <Link
                   key={l.id}
-                  to={`/aviso/${l.id}`}
+                  to={session?.supabase ? `/aviso/${l.id}` : `/auth?redirect=/aviso/${l.id}`}
                   onMouseEnter={() => setActive(l.id)}
                   onClick={(e) => {
                     if (window.innerWidth < 1024 && !isActive) {
@@ -385,9 +385,13 @@ export default function SearchPage() {
                           {l.category}
                         </span>
                         <h4 className="text-sm font-semibold text-foreground line-clamp-1 mt-1">{l.title}</h4>
-                        <p className="text-base font-extrabold text-primary mt-1">
-                          {formatPrice(l.price, l.currency)}
-                        </p>
+                        {session?.supabase ? (
+                          <p className="text-base font-extrabold text-primary mt-1">
+                            {formatPrice(l.price, l.currency)}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-secondary font-semibold mt-1">Ver detalle</p>
+                        )}
                       </div>
                     </div>
                   )}
@@ -412,7 +416,7 @@ export default function SearchPage() {
               {listings.map((l) => (
                 <Link
                   key={l.id}
-                  to={`/aviso/${l.id}`}
+                  to={session?.supabase ? `/aviso/${l.id}` : `/auth?redirect=/aviso/${l.id}`}
                   onMouseEnter={() => setActive(l.id)}
                   className={`flex gap-3 lg:gap-4 p-3 lg:p-4 transition-colors ${
                     active === l.id ? "bg-muted/60" : "hover:bg-muted/40"
@@ -438,16 +442,24 @@ export default function SearchPage() {
                     </div>
                     <h3 className="font-semibold text-sm text-foreground line-clamp-2 mt-1">{l.title}</h3>
                     <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-1.5">
-                      <Star size={11} className="text-secondary fill-secondary" />
-                      <span className="font-semibold text-foreground">0.0</span>
-                      <span>·</span>
+                      {session?.supabase && (
+                        <>
+                          <Star size={11} className="text-secondary fill-secondary" />
+                          <span className="font-semibold text-foreground">0.0</span>
+                          <span>·</span>
+                        </>
+                      )}
                       <span className="truncate">
                         <MapPin size={10} className="inline" /> {l.location}
                       </span>
                     </div>
-                    <p className="text-base font-extrabold text-primary mt-2">
-                      {formatPrice(l.price, l.currency)}
-                    </p>
+                    {session?.supabase ? (
+                      <p className="text-base font-extrabold text-primary mt-2">
+                        {formatPrice(l.price, l.currency)}
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-secondary font-semibold mt-2">Ver detalle</p>
+                    )}
                   </div>
                 </Link>
               ))}

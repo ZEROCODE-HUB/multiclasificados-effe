@@ -10,8 +10,8 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Search, UserCheck, UserX, Ban, BadgeCheck, KeyRound, ChevronLeft, ChevronRight } from "lucide-react";
-import { fetchAdminUsers, setUserStatus, verifyUser, type AdminUser } from "@/lib/admin";
+import { Search, UserCheck, UserX, Ban, BadgeCheck, KeyRound, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { fetchAdminUsers, setUserStatus, verifyUser, deleteUser, type AdminUser } from "@/lib/admin";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
 
@@ -64,8 +64,18 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
 
   const resetPassword = (u: AdminUser) =>
     run("Correo de restablecimiento enviado", u, async () => {
-      const { error } = await supabase.functions.invoke("admin-reset-password", { body: { user_id: u.id } });
+      // Dispara el correo de recuperación de Supabase (no requiere Edge Function).
+      const { error } = await supabase.auth.resetPasswordForEmail(u.email, {
+        redirectTo: `${window.location.origin}/auth`,
+      });
       if (error) throw error;
+      // Registro de auditoría (best-effort).
+      try {
+        await supabase.rpc("log_audit", {
+          p_action: "reset_password", p_entity_type: "user", p_entity_id: u.id,
+          p_metadata: { email: u.email },
+        });
+      } catch { /* no bloquea el flujo */ }
     });
 
   const initials = (name: string) => (name || "?").split(" ").map((n) => n[0]).slice(0, 2).join("");
@@ -169,6 +179,30 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button size={size} variant={Btn as any} className="text-destructive" title="Eliminar"><Trash2 size={iconSize} /></Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Eliminar al usuario {u.full_name}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Esta acción es <b>permanente e irreversible</b>: se borrará la cuenta junto con su perfil,
+                avisos, mensajes y demás datos. Solo el superadministrador puede hacerlo.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive hover:bg-destructive/90"
+                onClick={() => run("Usuario eliminado", u, () => deleteUser(u.id))}
+              >
+                Eliminar definitivamente
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </>
     );
   };
@@ -207,6 +241,7 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
                   <TableHead>Avisos</TableHead>
                   <TableHead>Registro</TableHead>
                   <TableHead>Estado</TableHead>
+                  <TableHead>Verificación</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
@@ -234,6 +269,15 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
                       <TableCell>{u.listings_count}</TableCell>
                       <TableCell className="text-muted-foreground">{(u.created_at ?? "").slice(0, 10)}</TableCell>
                       <TableCell><Badge className={m.color} variant="outline">{m.label}</Badge></TableCell>
+                      <TableCell>
+                        {u.verified ? (
+                          <Badge variant="outline" className="gap-1 bg-secondary/15 text-secondary border-secondary/30">
+                            <BadgeCheck size={12} /> Verificado
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-muted-foreground">Sin verificar</Badge>
+                        )}
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">{renderActions(u)}</div>
                       </TableCell>
@@ -262,9 +306,18 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
                     </div>
                     <Badge className={m.color} variant="outline">{m.label}</Badge>
                   </div>
-                  <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
-                    <Badge variant="outline">{primaryRole(u.roles)}</Badge>
-                    <span>{u.listings_count} avisos</span>
+                  <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground mb-3">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <Badge variant="outline">{primaryRole(u.roles)}</Badge>
+                      {u.verified ? (
+                        <Badge variant="outline" className="gap-1 bg-secondary/15 text-secondary border-secondary/30">
+                          <BadgeCheck size={11} /> Verificado
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-muted-foreground">Sin verificar</Badge>
+                      )}
+                    </div>
+                    <span className="flex-shrink-0">{u.listings_count} avisos</span>
                   </div>
                   <div className="grid grid-cols-3 gap-1.5">{renderActions(u, true)}</div>
                 </div>

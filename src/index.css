@@ -137,4 +137,12 @@
   .listing-shadow {
     box-shadow: 0 2px 12px rgba(0,0,0,0.08);
   }
+  /* Oculta el scrollbar manteniendo el scroll (filtros del buscador y sidebar de publicar). */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 }

@@ -39,7 +39,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       </div>
 
       <main className="flex-1 px-3 sm:px-6 lg:px-8 py-4 md:py-6 lg:py-8 pb-24 lg:pb-12">
-        <div className="container mx-auto max-w-7xl">{children}</div>
+        <div className="container mx-auto">{children}</div>
       </main>
     </div>
   );

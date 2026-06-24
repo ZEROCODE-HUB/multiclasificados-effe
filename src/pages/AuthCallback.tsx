@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
-import { syncSession, landingPath } from "@/lib/auth";
+import { syncSession, landingPath, AccountBlockedError } from "@/lib/auth";
 import { BrandMark } from "@/components/BrandMark";
 
 // Página de retorno del flujo OAuth (Google). Supabase detecta la sesión en la
@@ -16,8 +17,14 @@ const AuthCallback = () => {
     const go = async () => {
       if (done) return;
       done = true;
-      const session = await syncSession();
-      navigate(landingPath(session, redirect), { replace: true });
+      try {
+        const session = await syncSession();
+        navigate(landingPath(session, redirect), { replace: true });
+      } catch (e) {
+        // Cuenta suspendida/baneada: syncSession ya cerró la sesión.
+        if (e instanceof AccountBlockedError) toast.error(e.message);
+        navigate("/auth", { replace: true });
+      }
     };
 
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {

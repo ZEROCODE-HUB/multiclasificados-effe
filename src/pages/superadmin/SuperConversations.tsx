@@ -58,7 +58,7 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
   const suspendUser = () => act("Cuenta suspendida", () => resolveReport(item!.id, "ban", item!.reason));
 
   return (
-    <AdminLayout role={role} title="Conversaciones reportadas" breadcrumb={["Comunicaciones", "Conversaciones"]}>
+    <AdminLayout role={role} title="Denuncias / Moderación" breadcrumb={["Operación", "Denuncias"]}>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[calc(100vh-220px)] min-h-[500px]">
         <Card className={`lg:col-span-1 flex flex-col ${selected ? "hidden lg:flex" : "flex"}`}>
           <CardHeader className="space-y-2">

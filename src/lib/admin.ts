@@ -7,7 +7,9 @@ import {
   adminKpis, auditLogs as mockAudit, adminUsers as mockUsers,
   adminListings as mockListings, reportedConversations as mockReports,
   revenueSeries as mockSeries, categoryDistribution as mockCats,
+  recentActivity as mockActivity,
 } from "@/data/adminMockData";
+import { loadInvoices } from "@/lib/pricing";
 
 const isUuid = (v: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
@@ -55,6 +57,142 @@ export async function fetchGrowthSeries() {
   return mockSeries;
 }
 
+// ------------------------------------------------------------------ Comprobantes
+// Boletas y facturas de TODOS los anunciantes (panel comercial admin/superadmin).
+// La RLS permite a staff leer todos los comprobantes; unimos hasta el aviso para
+// mostrar su título. En modo demo (sin sesión) cae a los comprobantes locales.
+export interface AdminInvoice {
+  id: string;
+  number: string;
+  type: "boleta" | "factura";
+  date: string;
+  advertiser: string;
+  email: string;
+  listingTitle: string;
+  amount: number;
+}
+
+// Forma (laxa) de la fila que devuelve PostgREST con el join anidado. Las
+// relaciones pueden venir como objeto o como array según la cardinalidad.
+interface RelTitle { title?: string }
+interface RelOrderListing { listings?: RelTitle | RelTitle[] }
+interface RelOrder { order_listings?: RelOrderListing | RelOrderListing[] }
+interface InvoiceRow {
+  id: string;
+  number: string;
+  type: string;
+  email: string | null;
+  advertiser_name: string | null;
+  amount: number | string;
+  detail: string | null;
+  issued_at: string;
+  orders?: RelOrder | RelOrder[] | null;
+}
+
+export async function fetchAllInvoices(): Promise<{ data: AdminInvoice[]; real: boolean }> {
+  try {
+    if (await isAuthed()) {
+      const { data, error } = await supabase
+        .from("invoices")
+        .select(
+          "id, number, type, email, advertiser_name, amount, detail, issued_at, " +
+            "orders ( order_listings ( listings ( title ) ) )"
+        )
+        .order("issued_at", { ascending: false });
+      if (error) throw error;
+      const first = <T,>(v: T | T[] | null | undefined): T | undefined =>
+        Array.isArray(v) ? v[0] : v ?? undefined;
+      const rows: AdminInvoice[] = ((data ?? []) as unknown as InvoiceRow[]).map((r) => {
+        const order = first(r.orders);
+        const ol = first(order?.order_listings);
+        const title = first(ol?.listings)?.title;
+        return {
+          id: r.id,
+          number: r.number,
+          type: r.type === "factura" ? "factura" : "boleta",
+          date: r.issued_at,
+          advertiser: r.advertiser_name || "—",
+          email: r.email || "—",
+          listingTitle: title || r.detail || "—",
+          amount: Number(r.amount) || 0,
+        };
+      });
+      return { data: rows, real: true };
+    }
+  } catch {
+    /* fallback a comprobantes locales (modo demo) */
+  }
+  const local: AdminInvoice[] = loadInvoices().map((l) => ({
+    id: l.id,
+    number: l.number,
+    type: "boleta",
+    date: l.date,
+    advertiser: l.advertiser,
+    email: l.email,
+    listingTitle: l.listingTitle,
+    amount: l.amount,
+  }));
+  return { data: local, real: false };
+}
+
+// Tiempo relativo en español a partir de un timestamp ISO.
+function relativeTime(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (!t) return "";
+  const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
+  if (s < 60) return "Hace un momento";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `Hace ${m} min`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `Hace ${h} h`;
+  const d = Math.floor(h / 24);
+  return d === 1 ? "Ayer" : `Hace ${d} días`;
+}
+
+export interface ActivityItem {
+  who: string; action: string; target: string; time: string; at: string;
+  entityType: string | null; entityId: string | null;
+}
+
+// Actividad reciente real: avisos publicados + acciones del staff (auditoría).
+export async function fetchRecentActivity(): Promise<{ data: ActivityItem[]; real: boolean }> {
+  try {
+    const items: ActivityItem[] = [];
+    const { data: listings } = await supabase.rpc("admin_list_listings", {
+      p_search: null, p_status: null, p_limit: 8, p_offset: 0,
+    });
+    (listings ?? []).forEach((l: any) => items.push({
+      who: l.advertiser ?? "Anunciante", action: "publicó el aviso", target: l.title,
+      at: l.created_at, time: relativeTime(l.created_at),
+      entityType: "listing", entityId: l.id,
+    }));
+    const { data: logs } = await supabase
+      .from("audit_logs")
+      .select("action, entity_type, entity_id, created_at, actor:profiles!audit_logs_actor_id_fkey(full_name, email)")
+      .order("created_at", { ascending: false })
+      .limit(8);
+    (logs ?? []).forEach((a: any) => items.push({
+      who: a.actor?.email || a.actor?.full_name || "Staff",
+      action: a.action,
+      target: [a.entity_type, a.entity_id].filter(Boolean).join(" "),
+      at: a.created_at, time: relativeTime(a.created_at),
+      entityType: a.entity_type ?? null, entityId: a.entity_id ?? null,
+    }));
+    if (items.length) {
+      items.sort((x, y) => new Date(y.at).getTime() - new Date(x.at).getTime());
+      return { data: items.slice(0, 6), real: true };
+    }
+    if (await isAuthed()) return { data: [], real: true };
+  } catch { /* fallback */ }
+  return {
+    real: false,
+    data: mockActivity.map((a) => ({
+      who: a.who, action: a.action, target: a.target, time: a.time, at: "",
+      entityType: null, entityId: null,
+    })),
+  };
+}
+
 export async function fetchCategoryDistribution() {
   try {
     const { data, error } = await supabase.rpc("admin_category_distribution");
@@ -98,6 +236,12 @@ export async function setUserStatus(userId: string, status: string, reason?: str
 
 export async function verifyUser(userId: string, verified: boolean) {
   const { error } = await supabase.rpc("admin_verify_user", { p_user: userId, p_verified: verified });
+  if (error) throw error;
+}
+
+// Elimina al usuario de forma permanente (solo superadmin; borra auth + cascada).
+export async function deleteUser(userId: string) {
+  const { error } = await supabase.rpc("admin_delete_user", { p_user: userId });
   if (error) throw error;
 }
 

@@ -64,13 +64,13 @@ export function Navbar() {
     "/dashboard/buscador",
   ]);
   const mobileOverflow = isUser
-    ? accountItems.filter((i) => !bottomNavCovered.has(i.to) && i.label !== "Panel y estadísticas")
+    ? accountItems.filter((i) => !bottomNavCovered.has(i.to))
     : [];
 
   return (
     <>
     <header className="w-full z-50 bg-card border-b border-border sticky top-0 shadow-[0_1px_0_0_hsl(var(--border))]">
-      <div className="container mx-auto flex items-center gap-4 md:gap-8 h-16 md:h-[76px] px-3 md:px-6">
+      <div className="container mx-auto flex items-center gap-3 lg:gap-8 h-16 md:h-[76px] px-3 md:px-6">
         <BrandMark size="md" />
 
         <nav className="hidden lg:flex items-center gap-1">
@@ -103,7 +103,7 @@ export function Navbar() {
 
         <form
           onSubmit={submit}
-          className="hidden md:flex flex-1 max-w-xl items-center bg-muted/50 border border-border rounded-none overflow-hidden focus-within:ring-2 focus-within:ring-secondary/30 focus-within:border-secondary/40 focus-within:bg-card transition-all h-11"
+          className="hidden md:flex flex-1 min-w-0 max-w-xl items-center bg-muted/50 border border-border rounded-none overflow-hidden focus-within:ring-2 focus-within:ring-secondary/30 focus-within:border-secondary/40 focus-within:bg-card transition-all h-11"
         >
           <Search size={16} className="ml-4 text-muted-foreground shrink-0" />
           <input
@@ -111,14 +111,14 @@ export function Navbar() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar inmuebles, vehículos, empleos…"
-            className="flex-1 bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground"
+            className="flex-1 min-w-0 bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground"
           />
-          <button type="submit" className="px-4 h-full bg-secondary text-secondary-foreground hover:opacity-90 transition-opacity flex items-center justify-center text-xs font-bold uppercase tracking-wider">
+          <button type="submit" className="shrink-0 whitespace-nowrap px-4 h-full bg-secondary text-secondary-foreground hover:opacity-90 transition-opacity flex items-center justify-center text-xs font-bold uppercase tracking-wider">
             Buscar
           </button>
         </form>
 
-        <div className="hidden md:flex items-center gap-1 ml-auto">
+        <div className="hidden md:flex items-center gap-1 ml-auto shrink-0">
           {isUser && (
             <>
               <Link to="/dashboard/buscador/favoritos" className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Favoritos">

@@ -14,6 +14,7 @@ import {
   type Conversation, type ChatMessage,
 } from "@/lib/messaging";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import { LoadingState } from "@/components/LoadingState";
 
 const fmtTime = (iso: string) =>
   new Date(iso).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" });
@@ -44,6 +45,8 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
   const [draft, setDraft] = useState("");
   const [filter, setFilter] = useState("");
   const [sold, setSold] = useState(() => loadSold());
+  const [loadingConvs, setLoadingConvs] = useState(true);
+  const [loadingMsgs, setLoadingMsgs] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const msgChannel = useRef<RealtimeChannel | null>(null);
@@ -51,7 +54,7 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
   // Carga inicial + suscripción a cambios en mis conversaciones.
   useEffect(() => {
     getCurrentUserId().then(setUserId);
-    fetchConversations().then(setConversations);
+    fetchConversations().then(setConversations).finally(() => setLoadingConvs(false));
     const ch = subscribeToConversations(() => {
       fetchConversations().then(setConversations);
     });
@@ -74,10 +77,13 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
       return;
     }
     let active = true;
-    fetchMessages(selectedId).then((rows) => {
-      if (!active) return;
-      setMessages(rows);
-    });
+    setLoadingMsgs(true);
+    fetchMessages(selectedId)
+      .then((rows) => {
+        if (!active) return;
+        setMessages(rows);
+      })
+      .finally(() => active && setLoadingMsgs(false));
     markDelivered(selectedId);
     markRead(selectedId).then(() => fetchConversations().then(setConversations));
 
@@ -162,12 +168,13 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
 
   return (
     <DashboardLayout role={role}>
-      <div className="animate-fade-in">
-        <h1 className="text-2xl font-bold text-foreground mb-4 lg:block hidden">Mensajes</h1>
+      {/* En móvil el chat va edge-to-edge (como WhatsApp); en desktop se mantiene en el contenedor. */}
+      <div className="animate-fade-in -mx-3 sm:-mx-6 lg:mx-0">
+        <h1 className="text-2xl font-bold text-foreground mb-4 lg:block hidden px-3 sm:px-0">Mensajes</h1>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:h-[calc(100vh-12rem)]">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 lg:gap-4 lg:h-[calc(100vh-12rem)]">
           {/* Lista de conversaciones */}
-          <Card className={`lg:col-span-1 overflow-hidden ${selected ? "hidden lg:flex lg:flex-col" : "flex flex-col"}`}>
+          <Card className={`lg:col-span-1 overflow-hidden rounded-none border-x-0 lg:rounded-xl lg:border-x h-[calc(100dvh-8rem)] lg:h-auto ${selected ? "hidden lg:flex lg:flex-col" : "flex flex-col"}`}>
             <CardHeader className="pb-3">
               <CardTitle className="text-base mb-2 lg:hidden">Mensajes</CardTitle>
               <div className="relative">
@@ -181,7 +188,9 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
               </div>
             </CardHeader>
             <CardContent className="p-0 overflow-y-auto flex-1">
-              {visibleConvs.length === 0 ? (
+              {loadingConvs ? (
+                <LoadingState label="Cargando conversaciones…" />
+              ) : visibleConvs.length === 0 ? (
                 <div className="p-8 text-center text-sm text-muted-foreground">
                   {conversations.length === 0 ? "Aún no tienes conversaciones." : "Sin resultados."}
                 </div>
@@ -218,7 +227,7 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
 
           {/* Área de chat */}
           <Card
-            className={`lg:col-span-2 flex flex-col overflow-hidden h-[calc(100vh-9rem)] lg:h-auto ${
+            className={`lg:col-span-2 flex flex-col overflow-hidden rounded-none border-x-0 lg:rounded-xl lg:border-x h-[calc(100dvh-8rem)] lg:h-auto ${
               selected ? "flex" : "hidden lg:flex"
             }`}
           >
@@ -256,7 +265,9 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
                   )}
                 </CardHeader>
                 <CardContent ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 bg-muted/30">
-                  {messages.length === 0 ? (
+                  {loadingMsgs ? (
+                    <LoadingState label="Cargando mensajes…" />
+                  ) : messages.length === 0 ? (
                     <div className="h-full flex items-center justify-center text-center text-muted-foreground text-sm">
                       Escribe el primer mensaje para iniciar la conversación.
                     </div>

@@ -17,12 +17,21 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
   const session = useSession();
   const { isFavorite, toggle } = useFavorites();
   const fav = isFavorite(listing.id);
-  const goToDetail = () => navigate(`/aviso/${listing.id}`);
+
+  // Solo los usuarios con sesión real pueden ver el detalle.
+  const isAuthed = !!session?.supabase;
+  const goToDetail = () => {
+    if (!isAuthed) {
+      navigate(`/auth?redirect=/aviso/${listing.id}`);
+      return;
+    }
+    navigate(`/aviso/${listing.id}`);
+  };
 
   const handleFav = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!session) {
+    if (!isAuthed) {
       toast.error("Inicia sesión para guardar favoritos");
       navigate("/auth");
       return;
@@ -56,11 +65,16 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
             <h3 className="font-semibold text-foreground group-hover:text-secondary transition-colors truncate">{listing.title}</h3>
             {listing.featured && <Badge className="bg-secondary text-secondary-foreground flex-shrink-0">Destacado</Badge>}
           </div>
-          <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{listing.description}</p>
+          {/* Contenido detallado solo para usuarios con sesión */}
+          {isAuthed && <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{listing.description}</p>}
           <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
             <span className="flex items-center gap-1"><MapPin size={12} />{listing.location}</span>
           </div>
-          <p className="text-xl font-extrabold text-primary mt-2">{formatPrice(listing.price, listing.currency)}</p>
+          {isAuthed ? (
+            <p className="text-xl font-extrabold text-primary mt-2">{formatPrice(listing.price, listing.currency)}</p>
+          ) : (
+            <p className="text-sm text-secondary font-semibold mt-2 group-hover:underline">Ver detalle</p>
+          )}
         </div>
       </div>
     );
@@ -107,24 +121,33 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
           {listing.title}
         </h3>
 
-        {/* Rating */}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <Star size={12} className="text-secondary fill-secondary" />
-            <span className="font-semibold text-foreground">{rating}</span>
-          </span>
-          <span className="text-muted-foreground/60">·</span>
-          <span>{reviews} reseñas</span>
-          <span className="text-muted-foreground/60">·</span>
-          <span className="flex items-center gap-1 truncate"><MapPin size={11} />{listing.location}</span>
-        </div>
+        {isAuthed ? (
+          <>
+            {/* Rating */}
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <Star size={12} className="text-secondary fill-secondary" />
+                <span className="font-semibold text-foreground">{rating}</span>
+              </span>
+              <span className="text-muted-foreground/60">·</span>
+              <span>{reviews} reseñas</span>
+              <span className="text-muted-foreground/60">·</span>
+              <span className="flex items-center gap-1 truncate"><MapPin size={11} />{listing.location}</span>
+            </div>
 
-        {/* Price */}
-        <div className="flex items-baseline gap-2">
-          <p className="text-xl font-extrabold text-primary tracking-tight">{formatPrice(listing.price, listing.currency)}</p>
-        </div>
+            {/* Price */}
+            <div className="flex items-baseline gap-2">
+              <p className="text-xl font-extrabold text-primary tracking-tight">{formatPrice(listing.price, listing.currency)}</p>
+            </div>
+          </>
+        ) : (
+          /* Visibilidad restringida para no logueados: solo ciudad */
+          <div className="flex items-center gap-1 text-xs text-muted-foreground truncate">
+            <MapPin size={11} />{listing.location}
+          </div>
+        )}
 
-        {/* CTA */}
+        {/* CTA — mismo botón para todos; si no hay sesión, lleva al login */}
         <Button
           variant="outline"
           size="sm"

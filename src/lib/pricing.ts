@@ -188,18 +188,51 @@ export interface Invoice {
   detail: string;
 }
 export function loadInvoices(): Invoice[] {
-  try { return JSON.parse(localStorage.getItem(INVOICES_KEY) || "[]"); } catch { return []; }
+  try {
+    const all = JSON.parse(localStorage.getItem(INVOICES_KEY) || "[]");
+    return Array.isArray(all) ? all : [];
+  } catch { return []; }
 }
-export function addInvoice(inv: Omit<Invoice, "id" | "number" | "date">): Invoice {
+
+// Contador persistente e independiente del nº de filas: así el número del
+// comprobante nunca se repite ni se "reusa" aunque se borre alguna boleta.
+const INVOICE_SEQ_KEY = "effe:invoice-seq";
+function nextInvoiceSeq(fallback: number): number {
+  const stored = Number(localStorage.getItem(INVOICE_SEQ_KEY));
+  const base = Number.isFinite(stored) && stored > 0 ? stored : fallback;
+  const seq = base + 1;
+  localStorage.setItem(INVOICE_SEQ_KEY, String(seq));
+  return seq;
+}
+function uniqueInvoiceId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `INV-${crypto.randomUUID()}`;
+  }
+  return `INV-${Date.now()}-${Math.floor(Math.random() * 1e9).toString(36)}`;
+}
+
+// Guarda SIEMPRE un comprobante. Acepta un número de serie ya emitido (p. ej.
+// el que devuelve la BD) para que coincida con lo que vio el usuario; si no,
+// genera uno local correlativo. id único → nunca se pierde una fila por clave duplicada.
+export function addInvoice(
+  inv: Omit<Invoice, "id" | "number" | "date"> & { number?: string },
+): Invoice {
   const all = loadInvoices();
+  const seq = nextInvoiceSeq(all.length);
   const next: Invoice = {
-    ...inv,
-    id: `INV-${Date.now()}`,
-    number: `B001-${String(all.length + 1).padStart(6, "0")}`,
+    email: inv.email,
+    advertiser: inv.advertiser,
+    listingTitle: inv.listingTitle,
+    amount: inv.amount,
+    detail: inv.detail,
+    id: uniqueInvoiceId(),
+    number: inv.number?.trim() || `B001-${String(seq).padStart(6, "0")}`,
     date: new Date().toISOString(),
   };
   all.unshift(next);
   localStorage.setItem(INVOICES_KEY, JSON.stringify(all));
+  // Avisa a otras pestañas/paneles (AdvertiserInvoices/AdminCommercial) para refrescar.
+  try { window.dispatchEvent(new Event("effe:invoices-updated")); } catch { /* noop */ }
   return next;
 }
 

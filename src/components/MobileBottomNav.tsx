@@ -41,7 +41,20 @@ export function MobileBottomNav() {
   if (pathname.startsWith("/auth")) return null;
 
   const primary = session.role === "anunciante" ? advertiserPrimary : seekerPrimary;
-  const isActive = (url: string) => (url === "/" ? pathname === "/" : pathname === url || pathname.startsWith(url + "/"));
+
+  // Cuánto coincide una ruta con la URL actual (-1 = no coincide).
+  // "/dashboard/buscador" es prefijo de "/dashboard/buscador/favoritos",
+  // así que elegimos SOLO el item más específico (coincidencia más larga).
+  const matchLen = (url: string) => {
+    if (url === "/") return pathname === "/" ? 0 : -1;
+    if (pathname === url || pathname.startsWith(url + "/")) return url.length;
+    return -1;
+  };
+  const activeUrl = primary.reduce(
+    (best, it) => (matchLen(it.url) > best.len ? { url: it.url, len: matchLen(it.url) } : best),
+    { url: "", len: -1 },
+  ).url;
+  const isActive = (url: string) => url === activeUrl;
 
   return (
     <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-primary text-primary-foreground border-t border-primary/40 shadow-[0_-8px_24px_-6px_rgba(0,0,0,0.25)]">

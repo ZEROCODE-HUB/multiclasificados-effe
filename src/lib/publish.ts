@@ -40,7 +40,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export async function createAndPublishListing(
   input: PublishInput
-): Promise<{ listingId: string; invoiceNumber: string }> {
+): Promise<{ listingId: string; invoiceNumber: string; published: boolean }> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -86,51 +86,58 @@ export async function createAndPublishListing(
     sort++;
   }
 
-  // 3) Orden + comprobante (best-effort; el total ya incluye IGV 18%)
+  // 3) Orden + comprobante — TODO comprobante debe guardarse: los errores se
+  //    registran (no se ignoran en silencio) para poder diagnosticarlos.
+  //    El total ya incluye IGV 18%.
   let invoiceNumber = "";
-  try {
-    const subtotal = round2(input.total / 1.18);
-    const igv = round2(input.total - subtotal);
-    const { data: order } = await supabase
-      .from("orders")
+  const subtotal = round2(input.total / 1.18);
+  const igv = round2(input.total - subtotal);
+  const { data: order, error: oErr } = await supabase
+    .from("orders")
+    .insert({
+      user_id: user.id,
+      listing_qty: input.quantity,
+      duration_days: input.duration,
+      extras: input.extras,
+      subtotal,
+      igv,
+      total: input.total,
+      status: "paid",
+    })
+    .select("id")
+    .single();
+  if (oErr || !order) {
+    console.error("[publish] No se pudo crear la orden:", oErr?.message);
+  } else {
+    const { error: olErr } = await supabase
+      .from("order_listings")
+      .insert({ order_id: order.id, listing_id: listingId });
+    if (olErr) console.error("[publish] No se pudo vincular el aviso a la orden:", olErr.message);
+
+    const { data: inv, error: iErr } = await supabase
+      .from("invoices")
       .insert({
-        user_id: user.id,
-        listing_qty: input.quantity,
-        duration_days: input.duration,
-        extras: input.extras,
-        subtotal,
-        igv,
-        total: input.total,
-        status: "paid",
+        order_id: order.id,
+        type: input.receiptType,
+        email: input.email,
+        advertiser_name: input.advertiserName,
+        amount: input.total,
+        detail: `Aviso ${input.duration} días · ${input.quantity} unidad(es)`,
       })
-      .select("id")
+      .select("number")
       .single();
-    if (order) {
-      await supabase.from("order_listings").insert({ order_id: order.id, listing_id: listingId });
-      const { data: inv } = await supabase
-        .from("invoices")
-        .insert({
-          order_id: order.id,
-          type: input.receiptType,
-          email: input.email,
-          advertiser_name: input.advertiserName,
-          amount: input.total,
-          detail: `Aviso ${input.duration} días · ${input.quantity} unidad(es)`,
-        })
-        .select("number")
-        .single();
-      invoiceNumber = inv?.number ?? "";
-    }
-  } catch {
-    /* el comprobante es secundario; el aviso ya está creado */
+    if (iErr) console.error("[publish] No se pudo generar el comprobante en la BD:", iErr.message);
+    invoiceNumber = inv?.number ?? "";
   }
 
-  // 4) Publicar: estado active + vigencia (published_at / expires_at)
+  // 4) Publicar: estado active + vigencia (published_at / expires_at).
+  //    Si falla, NO descartamos el comprobante: devolvemos published=false para
+  //    que el llamador guarde igualmente la boleta y avise al usuario.
   const { error: pErr } = await supabase.rpc("publish_listing", {
     p_listing: listingId,
     p_duration_days: input.duration,
   });
-  if (pErr) throw new Error(pErr.message);
+  if (pErr) console.error("[publish] No se pudo activar el aviso:", pErr.message);
 
-  return { listingId, invoiceNumber };
+  return { listingId, invoiceNumber, published: !pErr };
 }

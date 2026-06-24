@@ -18,8 +18,8 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { categories as initialCategories } from "@/data/mockData";
 import { toast } from "@/hooks/use-toast";
-import { loadInvoices, formatSoles } from "@/lib/pricing";
-import { fetchSettings, setSetting } from "@/lib/admin";
+import { formatSoles } from "@/lib/pricing";
+import { fetchSettings, setSetting, fetchAllInvoices, type AdminInvoice } from "@/lib/admin";
 
 
 const AdminCommercial = ({ role }: { role: AdminRole }) => {
@@ -62,6 +62,10 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
   });
   const [savingSettings, setSavingSettings] = useState(false);
 
+  // ===== Boletas y facturas (todos los anunciantes, desde la BD) =====
+  const [invoices, setInvoices] = useState<AdminInvoice[]>([]);
+  const [invoicesLoading, setInvoicesLoading] = useState(true);
+
   useEffect(() => {
     fetchSettings().then((rows) => {
       if (!rows.length) return;
@@ -71,6 +75,24 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
         return next;
       });
     });
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const load = () => {
+      fetchAllInvoices().then(({ data }) => {
+        if (mounted) { setInvoices(data); setInvoicesLoading(false); }
+      });
+    };
+    load();
+    // Refresca cuando se emite un comprobante nuevo (misma pestaña u otra).
+    window.addEventListener("effe:invoices-updated", load);
+    window.addEventListener("storage", load);
+    return () => {
+      mounted = false;
+      window.removeEventListener("effe:invoices-updated", load);
+      window.removeEventListener("storage", load);
+    };
   }, []);
 
   const saveSettings = async () => {
@@ -221,13 +243,16 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
               </CardTitle>
             </CardHeader>
             <CardContent className="overflow-x-auto">
-              {loadInvoices().length === 0 ? (
+              {invoicesLoading ? (
+                <p className="text-sm text-muted-foreground text-center py-8">Cargando comprobantes…</p>
+              ) : invoices.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-8">Aún no se han generado boletas.</p>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>N° Boleta</TableHead>
+                      <TableHead>N° Comprobante</TableHead>
+                      <TableHead>Tipo</TableHead>
                       <TableHead>Fecha</TableHead>
                       <TableHead>Anunciante</TableHead>
                       <TableHead>Correo</TableHead>
@@ -236,9 +261,10 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {loadInvoices().map((inv) => (
+                    {invoices.map((inv) => (
                       <TableRow key={inv.id}>
                         <TableCell className="font-mono text-xs">{inv.number}</TableCell>
+                        <TableCell className="text-xs capitalize">{inv.type}</TableCell>
                         <TableCell className="text-xs">{new Date(inv.date).toLocaleDateString("es-PE")}</TableCell>
                         <TableCell className="text-sm">{inv.advertiser}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{inv.email}</TableCell>

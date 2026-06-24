@@ -1,7 +1,16 @@
 import { useEffect } from "react";
+import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
-import { syncSession } from "@/lib/auth";
+import { syncSession, AccountBlockedError } from "@/lib/auth";
 import { clearSession, getSession } from "@/hooks/useSession";
+import { savePushToken } from "@/lib/push";
+
+// Sincroniza y, si la cuenta está bloqueada, avisa (syncSession ya cerró sesión).
+function safeSync() {
+  syncSession().catch((e) => {
+    if (e instanceof AccountBlockedError) toast.error(e.message);
+  });
+}
 
 // Puente Supabase → sesión local. Mantiene useSession() sincronizado con el
 // estado real de autenticación sin tocar el resto de la app.
@@ -9,7 +18,7 @@ import { clearSession, getSession } from "@/hooks/useSession";
 export function SupabaseAuthBridge() {
   useEffect(() => {
     // Sincroniza al cargar (por si ya hay sesión persistida).
-    syncSession();
+    safeSync();
 
     // Asegura que Realtime use el JWT del usuario desde el arranque
     // (clave para que la autorización RLS de Realtime funcione en producción).
@@ -23,7 +32,9 @@ export function SupabaseAuthBridge() {
       supabase.realtime.setAuth(session?.access_token ?? null);
 
       if (session?.user) {
-        syncSession();
+        safeSync();
+        // Asocia el token de push del dispositivo a este usuario (en el APK).
+        savePushToken();
       } else {
         // Solo limpiamos si la sesión local provenía de Supabase (no la demo).
         const current = getSession();
