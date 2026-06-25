@@ -106,6 +106,15 @@ export function notificationText(n: AppNotification): string {
     }
     case "new_review":
       return `Recibiste una nueva reseña (${p.rating ?? "—"}★)`;
+    case "listing_disabled": {
+      const title = (p.listing_title as string) || "Tu aviso";
+      const reason = (p.reason as string) || "";
+      return reason
+        ? `"${title}" fue deshabilitado: ${reason}`
+        : `"${title}" fue deshabilitado por moderación`;
+    }
+    case "listing_enabled":
+      return `"${(p.listing_title as string) || "Tu aviso"}" volvió a estar visible`;
     default:
       return n.title || "Notificación";
   }
@@ -123,6 +132,10 @@ export function notificationLink(n: AppNotification, role: string): string {
     case "application_status":
     case "new_review":
       return p.listing_id ? `/aviso/${p.listing_id}` : "#";
+    case "listing_disabled":
+    case "listing_enabled":
+      // El dueño revisa el estado/motivo en "Mis avisos".
+      return "/dashboard/anunciante/avisos";
     default:
       return "#";
   }

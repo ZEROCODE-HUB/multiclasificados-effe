@@ -2,10 +2,13 @@
 // - Sin sesión  -> redirige a /auth recordando el destino.
 // - Área de staff sin login real de Supabase -> también va a /auth.
 // - Sesión con rol insuficiente -> pantalla "Acceso denegado".
+import { useEffect, useState } from "react";
 import { Link, Navigate, useLocation } from "react-router-dom";
-import { ShieldAlert } from "lucide-react";
+import { ShieldAlert, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSession, type SessionRole } from "@/hooks/useSession";
+import { getMfaState } from "@/lib/mfa";
+import { MfaGate } from "@/components/MfaGate";
 
 // Jerarquía: superadmin > admin > (anunciante/buscador).
 const RANK: Record<SessionRole, number> = {
@@ -55,9 +58,31 @@ export function RequireRole({ min, requireReal = true, children }: Props) {
   const location = useLocation();
   const loginUrl = `/auth?redirect=${encodeURIComponent(location.pathname)}`;
 
+  // El staff (admin/superadmin) DEBE tener 2FA completado (AAL2) para entrar al panel.
+  const isStaffArea = min === "admin" || min === "superadmin";
+  const [mfaOk, setMfaOk] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!isStaffArea || !session?.supabase) { setMfaOk(true); return; }
+    let active = true;
+    getMfaState().then((m) => active && setMfaOk(m.currentLevel === "aal2"));
+    return () => { active = false; };
+  }, [isStaffArea, session?.supabase, session?.role]);
+
   if (!session) return <Navigate to={loginUrl} replace />;
   if (requireReal && !session.supabase) return <Navigate to={loginUrl} replace />;
   if (RANK[session.role] < RANK[min]) return <AccessDenied role={session.role} />;
+
+  if (isStaffArea) {
+    if (mfaOk === null) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-muted/30">
+          <Loader2 className="animate-spin text-secondary" size={28} />
+        </div>
+      );
+    }
+    if (!mfaOk) return <MfaGate onVerified={() => setMfaOk(true)} />;
+  }
 
   return <>{children}</>;
 }

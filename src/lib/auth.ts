@@ -147,27 +147,39 @@ export async function signUpWithPassword(input: SignUpInput): Promise<Session | 
   return syncSession();
 }
 
-// Inicia el flujo OAuth de Google. Redirige el navegador a Google y vuelve a /auth/callback.
-export async function signInWithGoogle(redirect?: string): Promise<void> {
+// Deep link al que vuelve el OAuth en el APK (registrado en AndroidManifest).
+export const NATIVE_OAUTH_REDIRECT = "pe.effe.clasificados://auth-callback";
+
+// Flujo OAuth unificado. En web redirige a /auth/callback; en el APK (Capacitor)
+// abre el navegador del sistema y vuelve a la app por deep link (lo completa
+// el listener `appUrlOpen` de nativeInit).
+async function oauthSignIn(provider: "google" | "facebook", redirect?: string): Promise<void> {
+  const { Capacitor } = await import("@capacitor/core");
+  if (Capacitor.isNativePlatform()) {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: NATIVE_OAUTH_REDIRECT, skipBrowserRedirect: true },
+    });
+    if (error) throw error;
+    if (data?.url) {
+      const { Browser } = await import("@capacitor/browser");
+      await Browser.open({ url: data.url });
+    }
+    return;
+  }
   const redirectTo = `${window.location.origin}/auth/callback${
     redirect ? `?redirect=${encodeURIComponent(redirect)}` : ""
   }`;
-  const { error } = await supabase.auth.signInWithOAuth({
-    provider: "google",
-    options: { redirectTo },
-  });
+  const { error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo } });
   if (error) throw error;
 }
 
+export async function signInWithGoogle(redirect?: string): Promise<void> {
+  return oauthSignIn("google", redirect);
+}
+
 export async function signInWithFacebook(redirect?: string): Promise<void> {
-  const redirectTo = `${window.location.origin}/auth/callback${
-    redirect ? `?redirect=${encodeURIComponent(redirect)}` : ""
-  }`;
-  const { error } = await supabase.auth.signInWithOAuth({
-    provider: "facebook",
-    options: { redirectTo },
-  });
-  if (error) throw error;
+  return oauthSignIn("facebook", redirect);
 }
 
 export async function signOut(): Promise<void> {

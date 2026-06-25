@@ -1,40 +1,44 @@
+import { lazy, Suspense } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { SupabaseAuthBridge } from "@/components/SupabaseAuthBridge";
+import { FavoritesProvider } from "@/hooks/useFavorites";
+import { RequireRole } from "@/components/RequireRole";
+
+// Páginas críticas (primer render): se cargan de inmediato.
 import Index from "./pages/Index.tsx";
 import AuthPage from "./pages/AuthPage.tsx";
 import AuthCallback from "./pages/AuthCallback.tsx";
-import { SupabaseAuthBridge } from "@/components/SupabaseAuthBridge";
-import { FavoritesProvider } from "@/hooks/useFavorites";
 import SearchPage from "./pages/SearchPage.tsx";
 import ListingDetail from "./pages/ListingDetail.tsx";
-import AdminPricing from "./pages/admin/AdminPricing.tsx";
-import AdvertiserInvoices from "./pages/advertiser/AdvertiserInvoices.tsx";
-import { Navigate } from "react-router-dom";
-import AdvertiserDashboard from "./pages/AdvertiserDashboard.tsx";
-import SeekerDashboard from "./pages/SeekerDashboard.tsx";
-import AdvertiserPublish from "./pages/advertiser/AdvertiserPublish.tsx";
-import AdvertiserListings from "./pages/advertiser/AdvertiserListings.tsx";
-import AdvertiserApplications from "./pages/advertiser/AdvertiserApplications.tsx";
-import AdvertiserStats from "./pages/advertiser/AdvertiserStats.tsx";
-import SeekerSearch from "./pages/seeker/SeekerSearch.tsx";
-import SeekerFavorites from "./pages/seeker/SeekerFavorites.tsx";
-import SeekerSearches from "./pages/seeker/SeekerSearches.tsx";
-import MessagesPage from "./pages/shared/MessagesPage.tsx";
-import SettingsPage from "./pages/shared/SettingsPage.tsx";
-import AdminDashboard from "./pages/admin/AdminDashboard.tsx";
-import AdminListings from "./pages/admin/AdminListings.tsx";
-import AdminUsers from "./pages/admin/AdminUsers.tsx";
-import AdminCommunications from "./pages/admin/AdminCommunications.tsx";
-import AdminCommercial from "./pages/admin/AdminCommercial.tsx";
-import AdminReports from "./pages/admin/AdminReports.tsx";
-import SuperRoles from "./pages/superadmin/SuperRoles.tsx";
-import SuperAudit from "./pages/superadmin/SuperAudit.tsx";
-import SuperConversations from "./pages/superadmin/SuperConversations.tsx";
-import { RequireRole } from "@/components/RequireRole";
-import NotFound from "./pages/NotFound.tsx";
+
+// Resto (panel, admin, gráficas) → carga diferida para aligerar el arranque.
+const AdminPricing = lazy(() => import("./pages/admin/AdminPricing.tsx"));
+const AdvertiserInvoices = lazy(() => import("./pages/advertiser/AdvertiserInvoices.tsx"));
+const AdvertiserDashboard = lazy(() => import("./pages/AdvertiserDashboard.tsx"));
+const SeekerDashboard = lazy(() => import("./pages/SeekerDashboard.tsx"));
+const AdvertiserPublish = lazy(() => import("./pages/advertiser/AdvertiserPublish.tsx"));
+const AdvertiserListings = lazy(() => import("./pages/advertiser/AdvertiserListings.tsx"));
+const AdvertiserApplications = lazy(() => import("./pages/advertiser/AdvertiserApplications.tsx"));
+const AdvertiserStats = lazy(() => import("./pages/advertiser/AdvertiserStats.tsx"));
+const SeekerSearch = lazy(() => import("./pages/seeker/SeekerSearch.tsx"));
+const SeekerFavorites = lazy(() => import("./pages/seeker/SeekerFavorites.tsx"));
+const SeekerSearches = lazy(() => import("./pages/seeker/SeekerSearches.tsx"));
+const MessagesPage = lazy(() => import("./pages/shared/MessagesPage.tsx"));
+const SettingsPage = lazy(() => import("./pages/shared/SettingsPage.tsx"));
+const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard.tsx"));
+const AdminListings = lazy(() => import("./pages/admin/AdminListings.tsx"));
+const AdminUsers = lazy(() => import("./pages/admin/AdminUsers.tsx"));
+const AdminCommunications = lazy(() => import("./pages/admin/AdminCommunications.tsx"));
+const AdminCommercial = lazy(() => import("./pages/admin/AdminCommercial.tsx"));
+const AdminReports = lazy(() => import("./pages/admin/AdminReports.tsx"));
+const SuperRoles = lazy(() => import("./pages/superadmin/SuperRoles.tsx"));
+const SuperAudit = lazy(() => import("./pages/superadmin/SuperAudit.tsx"));
+const SuperConversations = lazy(() => import("./pages/superadmin/SuperConversations.tsx"));
+const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 const queryClient = new QueryClient();
 
@@ -46,6 +50,7 @@ const App = () => (
       <SupabaseAuthBridge />
       <FavoritesProvider>
       <BrowserRouter>
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><div className="w-9 h-9 rounded-full border-[3px] border-muted border-t-secondary animate-spin" /></div>}>
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<AuthPage />} />
@@ -99,6 +104,7 @@ const App = () => (
 
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </Suspense>
       </BrowserRouter>
       </FavoritesProvider>
     </TooltipProvider>

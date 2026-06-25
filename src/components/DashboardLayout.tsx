@@ -32,14 +32,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <Navbar />
 
       <div className="border-b bg-muted/30">
-        <div className="container mx-auto px-3 md:px-6 lg:px-8 py-3">
+        <div className="mx-auto max-w-7xl w-full px-3 md:px-6 lg:px-8 py-3">
           <p className="text-[10px] uppercase tracking-widest text-secondary font-bold">Mi cuenta</p>
           <h1 className="text-lg md:text-xl font-bold text-foreground leading-tight">{title}</h1>
         </div>
       </div>
 
       <main className="flex-1 px-3 sm:px-6 lg:px-8 py-4 md:py-6 lg:py-8 pb-24 lg:pb-12">
-        <div className="container mx-auto">{children}</div>
+        <div className="mx-auto max-w-7xl w-full">{children}</div>
       </main>
     </div>
   );

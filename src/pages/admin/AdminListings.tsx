@@ -12,11 +12,12 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, Eye, ChevronLeft, ChevronRight, MapPin, Calendar, Tag, User, Ban, Flag } from "lucide-react";
+import { Search, Eye, ChevronLeft, ChevronRight, MapPin, Calendar, Tag, User, Ban, RotateCcw, Flag } from "lucide-react";
 import { AdminListingStatus } from "@/data/adminMockData";
 import { toast } from "@/hooks/use-toast";
 import { disableListing, loadDisabled, loadReports, ReportEntry } from "@/lib/pricing";
 import { fetchAdminListings, setListingStatus, type AdminListingRow } from "@/lib/admin";
+import { fetchListingImages } from "@/lib/listings";
 
 const statusColor: Record<AdminListingStatus, string> = {
   Pendiente: "bg-warning/15 text-warning border-warning/30",
@@ -60,6 +61,8 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
   const [disableReason, setDisableReason] = useState("");
   const [reports, setReports] = useState<ReportEntry[]>(() => loadReports());
   const [disabled, setDisabled] = useState<Record<string, string>>(() => loadDisabled());
+  const [detailImg, setDetailImg] = useState<string | null>(null);
+  const [imgLoading, setImgLoading] = useState(false);
 
   const load = () => fetchAdminListings().then(({ data }) => setRows(data.map(mapRow)));
   useEffect(() => {
@@ -67,6 +70,17 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
     setReports(loadReports());
     setDisabled(loadDisabled());
   }, []);
+
+  // Al abrir "Ver", carga la imagen principal real del aviso.
+  useEffect(() => {
+    if (!detail) { setDetailImg(null); return; }
+    setImgLoading(true);
+    let active = true;
+    fetchListingImages(detail.id).then((imgs) => {
+      if (active) { setDetailImg(imgs[0] ?? null); setImgLoading(false); }
+    });
+    return () => { active = false; };
+  }, [detail]);
 
   const filtered = useMemo(
     () =>
@@ -84,7 +98,7 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
     const reason = disableReason.trim();
     try {
       if (isUuid(disableTarget.id)) {
-        await setListingStatus(disableTarget.id, "rejected");
+        await setListingStatus(disableTarget.id, "rejected", reason);
         await load();
       } else {
         // Dato mock (sin backend): conserva el comportamiento local.
@@ -100,6 +114,25 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
     }
     setDisableTarget(null);
     setDisableReason("");
+  };
+
+  // Vuelve a publicar un aviso deshabilitado (status -> active).
+  const enableListing = async (l: Listing) => {
+    if (!isUuid(l.id)) {
+      // Dato mock: limpia el flag local.
+      const next = { ...loadDisabled() }; delete next[l.id];
+      try { localStorage.setItem("effe_disabled", JSON.stringify(next)); } catch { /* noop */ }
+      setDisabled(next);
+      toast({ title: "Aviso habilitado", description: l.title });
+      return;
+    }
+    try {
+      await setListingStatus(l.id, "active");
+      await load();
+      toast({ title: "Aviso habilitado", description: `"${l.title}" vuelve a estar visible.` });
+    } catch (e: any) {
+      toast({ title: "No se pudo habilitar", description: e?.message ?? "Error", variant: "destructive" });
+    }
   };
 
   return (
@@ -153,7 +186,7 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
                   </TableHeader>
                   <TableBody>
                     {list.map((l) => {
-                      const isDisabled = !!disabled[l.id];
+                      const isDisabled = l.status === "Rechazado" || !!disabled[l.id];
                       return (
                         <TableRow key={l.id}>
                           <TableCell className="font-mono text-xs">{l.id}</TableCell>
@@ -173,16 +206,27 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
                               <Button size="icon" variant="ghost" title="Ver detalle" onClick={() => setDetail(l)}>
                                 <Eye size={16} />
                               </Button>
+                              {isDisabled ? (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="text-success"
+                                  title="Habilitar"
+                                  onClick={() => enableListing(l)}
+                                >
+                                  <RotateCcw size={16} />
+                                </Button>
+                              ) : (
                               <Button
                                 size="icon"
                                 variant="ghost"
                                 className="text-destructive"
                                 title="Deshabilitar"
-                                disabled={isDisabled}
                                 onClick={() => setDisableTarget({ id: l.id, title: l.title, advertiser: l.advertiser })}
                               >
                                 <Ban size={16} />
                               </Button>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -195,7 +239,7 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
               {/* Mobile cards */}
               <div className="md:hidden space-y-3">
                 {list.map((l) => {
-                  const isDisabled = !!disabled[l.id];
+                  const isDisabled = l.status === "Rechazado" || !!disabled[l.id];
                   return (
                     <div key={l.id} className="border p-4 bg-card listing-shadow">
                       <div className="flex items-start justify-between gap-2 mb-2">
@@ -216,10 +260,16 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
                       </div>
                       <div className="grid grid-cols-2 gap-1.5">
                         <Button size="sm" variant="outline" onClick={() => setDetail(l)}><Eye size={14} /> Ver</Button>
-                        <Button size="sm" variant="outline" className="text-destructive" disabled={isDisabled}
-                          onClick={() => setDisableTarget({ id: l.id, title: l.title, advertiser: l.advertiser })}>
-                          <Ban size={14} /> Deshabilitar
-                        </Button>
+                        {isDisabled ? (
+                          <Button size="sm" variant="outline" className="text-success" onClick={() => enableListing(l)}>
+                            <RotateCcw size={14} /> Habilitar
+                          </Button>
+                        ) : (
+                          <Button size="sm" variant="outline" className="text-destructive"
+                            onClick={() => setDisableTarget({ id: l.id, title: l.title, advertiser: l.advertiser })}>
+                            <Ban size={14} /> Deshabilitar
+                          </Button>
+                        )}
                       </div>
                     </div>
                   );
@@ -311,8 +361,14 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
                   <Badge className={statusColor[detail.status]} variant="outline">{detail.status}</Badge>
                 </div>
               </DialogHeader>
-              <div className="aspect-video bg-muted border flex items-center justify-center text-muted-foreground text-xs">
-                Imagen principal del aviso
+              <div className="aspect-video bg-muted border rounded-lg overflow-hidden flex items-center justify-center text-muted-foreground text-xs">
+                {imgLoading ? (
+                  "Cargando imagen…"
+                ) : detailImg ? (
+                  <img src={detailImg} alt={detail.title} className="w-full h-full object-cover" loading="lazy" />
+                ) : (
+                  "Este aviso no tiene imagen"
+                )}
               </div>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div className="flex items-center gap-2"><Tag size={14} className="text-secondary" /><span className="text-muted-foreground">Categoría:</span><span className="font-medium">{detail.category}</span></div>

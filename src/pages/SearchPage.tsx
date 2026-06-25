@@ -276,7 +276,7 @@ export default function SearchPage() {
       {FilterBar}
 
       {view === "list" ? (
-        <div className="container mx-auto px-4 md:px-6 py-8 flex-1">
+        <div className="container mx-auto px-4 md:px-6 pt-8 pb-28 lg:pb-8 flex-1">
           <div className="flex items-baseline justify-between mb-6">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] font-bold text-secondary">Resultados</p>

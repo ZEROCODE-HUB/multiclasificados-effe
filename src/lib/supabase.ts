@@ -17,5 +17,7 @@ export const supabase = createClient(url ?? "", anonKey ?? "", {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
+    // PKCE: requerido para completar OAuth por deep link en el APK (Capacitor).
+    flowType: "pkce",
   },
 });

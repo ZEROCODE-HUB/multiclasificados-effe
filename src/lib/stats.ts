@@ -37,6 +37,17 @@ export async function fetchPlatformStats(): Promise<PlatformStats | null> {
   }
 }
 
+// Conteo real de avisos activos por categoría (para el grid del landing).
+export async function fetchCategoryCounts(): Promise<Record<string, number>> {
+  try {
+    const { data, error } = await supabase.rpc("category_counts");
+    if (error) throw error;
+    return (data as Record<string, number>) ?? {};
+  } catch {
+    return {};
+  }
+}
+
 export async function fetchAdvertiserStats(): Promise<AdvertiserStatsData> {
   try {
     const { data, error } = await supabase.rpc("advertiser_stats");

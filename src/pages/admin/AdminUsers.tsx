@@ -11,7 +11,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Search, UserCheck, UserX, Ban, BadgeCheck, KeyRound, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
-import { fetchAdminUsers, setUserStatus, verifyUser, deleteUser, type AdminUser } from "@/lib/admin";
+import { fetchAdminUsers, setUserStatus, verifyUser, deleteUser, setUserRole, type AdminUser } from "@/lib/admin";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
 
@@ -82,6 +82,38 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
   const primaryRole = (roles: string) => {
     const r0 = roles.split(",")[0] || "buscador";
     return r0.charAt(0).toUpperCase() + r0.slice(1);
+  };
+
+  // Roles asignables desde el panel (enum app_role).
+  const ASSIGNABLE_ROLES = [
+    { value: "buscador", label: "Buscador" },
+    { value: "anunciante", label: "Anunciante" },
+    { value: "moderador", label: "Moderador" },
+    { value: "soporte", label: "Soporte" },
+    { value: "admin", label: "Admin" },
+    { value: "superadmin", label: "Super Admin" },
+  ];
+
+  // Celda de rol: el superadmin puede asignar rol con un selector; los demás solo lo ven.
+  const roleControl = (u: AdminUser) => {
+    if (role !== "superadmin") {
+      return <Badge variant="outline">{primaryRole(u.roles)}</Badge>;
+    }
+    // Rol "efectivo": el de mayor jerarquía que tenga el usuario.
+    const RANK = ["superadmin", "admin", "moderador", "soporte", "anunciante", "buscador"];
+    const owned = u.roles.split(",").filter(Boolean);
+    const current = RANK.find((r) => owned.includes(r)) ?? "buscador";
+    return (
+      <Select
+        value={current}
+        onValueChange={(v) => v !== current && run(`Rol cambiado a "${v}"`, u, () => setUserRole(u.id, v))}
+      >
+        <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          {ASSIGNABLE_ROLES.map((x) => <SelectItem key={x.value} value={x.value}>{x.label}</SelectItem>)}
+        </SelectContent>
+      </Select>
+    );
   };
 
   const renderActions = (u: AdminUser, compact = false) => {
@@ -265,7 +297,7 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
                         </div>
                       </TableCell>
                       <TableCell className="text-muted-foreground">{u.email}</TableCell>
-                      <TableCell><Badge variant="outline">{primaryRole(u.roles)}</Badge></TableCell>
+                      <TableCell>{roleControl(u)}</TableCell>
                       <TableCell>{u.listings_count}</TableCell>
                       <TableCell className="text-muted-foreground">{(u.created_at ?? "").slice(0, 10)}</TableCell>
                       <TableCell><Badge className={m.color} variant="outline">{m.label}</Badge></TableCell>
@@ -308,7 +340,7 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
                   </div>
                   <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground mb-3">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <Badge variant="outline">{primaryRole(u.roles)}</Badge>
+                      {roleControl(u)}
                       {u.verified ? (
                         <Badge variant="outline" className="gap-1 bg-secondary/15 text-secondary border-secondary/30">
                           <BadgeCheck size={11} /> Verificado

@@ -135,6 +135,69 @@ export async function fetchAllInvoices(): Promise<{ data: AdminInvoice[]; real: 
   return { data: local, real: false };
 }
 
+// ------------------------------------------------------------------ Categorías
+export interface AdminCategory {
+  id: string; name: string; icon: string; sort_order: number; active: boolean; count: number;
+}
+
+// Categorías reales (tabla categories) + nº de avisos por categoría.
+export async function fetchCategories(): Promise<{ data: AdminCategory[]; real: boolean }> {
+  try {
+    const { data: cats, error } = await supabase
+      .from("categories")
+      .select("id, name, icon, sort_order, active")
+      .order("sort_order", { ascending: true });
+    if (error) throw error;
+    if (cats && (cats.length || (await isAuthed()))) {
+      const { data: ls } = await supabase.from("listings").select("category_id");
+      const counts: Record<string, number> = {};
+      (ls ?? []).forEach((r: any) => { counts[r.category_id] = (counts[r.category_id] ?? 0) + 1; });
+      const rows: AdminCategory[] = (cats as any[]).map((c) => ({
+        id: c.id, name: c.name, icon: c.icon, sort_order: c.sort_order, active: c.active,
+        count: counts[c.id] ?? 0,
+      }));
+      return { data: rows, real: true };
+    }
+  } catch { /* fallback */ }
+  // Modo demo (sin sesión): set base de categorías con icono como texto.
+  const fallback: AdminCategory[] = [
+    { id: "inmuebles", name: "Inmuebles", icon: "Home", sort_order: 0, active: true, count: 0 },
+    { id: "vehiculos", name: "Vehículos", icon: "Car", sort_order: 1, active: true, count: 0 },
+    { id: "empleos", name: "Empleos", icon: "Briefcase", sort_order: 2, active: true, count: 0 },
+    { id: "tecnologia", name: "Tecnología", icon: "Smartphone", sort_order: 3, active: true, count: 0 },
+    { id: "productos", name: "Productos", icon: "Package", sort_order: 4, active: true, count: 0 },
+    { id: "servicios", name: "Servicios", icon: "Wrench", sort_order: 5, active: true, count: 0 },
+  ];
+  return { data: fallback, real: false };
+}
+
+// Genera un slug/id válido a partir del nombre (sin tildes ni espacios).
+export function slugify(name: string): string {
+  return name.trim().toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+export async function createCategory(input: { name: string; icon: string; sort_order: number }) {
+  const id = slugify(input.name);
+  if (!id) throw new Error("Nombre de categoría inválido.");
+  const { error } = await supabase.from("categories").insert({
+    id, name: input.name.trim(), icon: input.icon || "Tag", sort_order: input.sort_order, active: true,
+  });
+  if (error) throw error;
+  return id;
+}
+
+export async function updateCategory(id: string, patch: { name?: string; icon?: string; active?: boolean }) {
+  const { error } = await supabase.from("categories").update(patch).eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteCategory(id: string) {
+  const { error } = await supabase.from("categories").delete().eq("id", id);
+  if (error) throw error;
+}
+
 // Tiempo relativo en español a partir de un timestamp ISO.
 function relativeTime(iso: string): string {
   const t = new Date(iso).getTime();
@@ -202,6 +265,47 @@ export async function fetchCategoryDistribution() {
   return mockCats;
 }
 
+export interface ReportDateRange { from?: string | null; to?: string | null }
+const rangeArgs = (range?: ReportDateRange) => ({ p_from: range?.from || null, p_to: range?.to || null });
+
+// Avisos + monto por categoría (datos reales; vacío si aún no hay).
+export async function fetchCategoryRevenue(range?: ReportDateRange) {
+  try {
+    const { data, error } = await supabase.rpc("admin_category_revenue", rangeArgs(range));
+    if (error) throw error;
+    return ((data as any[]) ?? []).map((r) => ({ cat: r.cat, avisos: Number(r.avisos) || 0, monto: Number(r.monto) || 0 }));
+  } catch { return []; }
+}
+
+// Avisos + monto por región/ciudad (datos reales).
+export async function fetchRegionDistribution(range?: ReportDateRange) {
+  try {
+    const { data, error } = await supabase.rpc("admin_region_distribution", rangeArgs(range));
+    if (error) throw error;
+    return ((data as any[]) ?? []).map((r) => ({ reg: r.reg, avisos: Number(r.avisos) || 0, monto: Number(r.monto) || 0 }));
+  } catch { return []; }
+}
+
+export interface ClaimsSummary {
+  recibidos: number; pendientes: number; solucionados: number;
+  trend: { mes: string; recibidos: number; solucionados: number }[];
+}
+export async function fetchClaimsSummary(range?: ReportDateRange): Promise<ClaimsSummary> {
+  try {
+    const { data, error } = await supabase.rpc("admin_claims_summary", rangeArgs(range));
+    if (error) throw error;
+    const d = data as any;
+    return {
+      recibidos: Number(d?.recibidos) || 0,
+      pendientes: Number(d?.pendientes) || 0,
+      solucionados: Number(d?.solucionados) || 0,
+      trend: ((d?.trend as any[]) ?? []).map((t) => ({ mes: t.mes, recibidos: Number(t.recibidos) || 0, solucionados: Number(t.solucionados) || 0 })),
+    };
+  } catch {
+    return { recibidos: 0, pendientes: 0, solucionados: 0, trend: [] };
+  }
+}
+
 // ------------------------------------------------------------------ Usuarios
 export interface AdminUser {
   id: string; full_name: string; email: string; status: string; verified: boolean;
@@ -236,6 +340,24 @@ export async function setUserStatus(userId: string, status: string, reason?: str
 
 export async function verifyUser(userId: string, verified: boolean) {
   const { error } = await supabase.rpc("admin_verify_user", { p_user: userId, p_verified: verified });
+  if (error) throw error;
+}
+
+// Asigna un rol a un usuario (solo superadmin). Roles válidos del enum app_role.
+export async function assignUserRole(userId: string, role: string) {
+  const { error } = await supabase.rpc("admin_assign_role", { p_user: userId, p_role: role });
+  if (error) throw error;
+}
+
+// Cambia el rol del usuario de forma EXCLUSIVA (reemplaza todos sus roles).
+export async function setUserRole(userId: string, role: string) {
+  const { error } = await supabase.rpc("admin_set_user_role", { p_user: userId, p_role: role });
+  if (error) throw error;
+}
+
+// Quita un rol a un usuario (solo superadmin).
+export async function removeUserRole(userId: string, role: string) {
+  const { error } = await supabase.rpc("admin_remove_role", { p_user: userId, p_role: role });
   if (error) throw error;
 }
 
@@ -278,8 +400,10 @@ export async function fetchAdminListings(opts?: { search?: string; status?: stri
   return { data: mapped, real: false };
 }
 
-export async function setListingStatus(listingId: string, status: string) {
-  const { error } = await supabase.rpc("admin_set_listing_status", { p_listing: listingId, p_status: status });
+export async function setListingStatus(listingId: string, status: string, reason?: string) {
+  const { error } = await supabase.rpc("admin_set_listing_status", {
+    p_listing: listingId, p_status: status, p_reason: reason ?? null,
+  });
   if (error) throw error;
 }
 

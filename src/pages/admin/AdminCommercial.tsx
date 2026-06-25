@@ -13,37 +13,86 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Trash2, FileText, SlidersHorizontal, Save } from "lucide-react";
+import {
+  Plus, Pencil, Trash2, FileText, SlidersHorizontal, Save,
+  Home, Car, Briefcase, Smartphone, Package, Wrench, GraduationCap, Sparkles, Tag,
+  ShoppingBag, Heart, Building2, Plane, PawPrint, Dumbbell, Music, Camera, Utensils,
+  type LucideIcon,
+} from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { categories as initialCategories } from "@/data/mockData";
 import { toast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import { formatSoles } from "@/lib/pricing";
-import { fetchSettings, setSetting, fetchAllInvoices, type AdminInvoice } from "@/lib/admin";
+import {
+  fetchSettings, setSetting, fetchAllInvoices,
+  fetchCategories, createCategory, updateCategory, deleteCategory,
+  type AdminInvoice, type AdminCategory,
+} from "@/lib/admin";
+
+// Iconos disponibles para categorías (el icono se guarda como texto en la BD).
+const ICONS: Record<string, LucideIcon> = {
+  Home, Car, Briefcase, Smartphone, Package, Wrench, GraduationCap, Sparkles, Tag,
+  ShoppingBag, Heart, Building2, Plane, PawPrint, Dumbbell, Music, Camera, Utensils,
+};
+const ICON_OPTIONS = Object.keys(ICONS);
+const iconFor = (name: string): LucideIcon => ICONS[name] ?? Tag;
 
 
 const AdminCommercial = ({ role }: { role: AdminRole }) => {
-  // ===== Categorías =====
-  const [cats, setCats] = useState(initialCategories.map((c) => ({ id: c.id, name: c.name, count: c.count, Icon: c.icon })));
-  const [catDialog, setCatDialog] = useState<{ open: boolean; editing: typeof cats[number] | null }>({ open: false, editing: null });
+  // ===== Categorías (tabla real `categories`) =====
+  const [cats, setCats] = useState<AdminCategory[]>([]);
+  const [catsLoading, setCatsLoading] = useState(true);
+  const [catDialog, setCatDialog] = useState<{ open: boolean; editing: AdminCategory | null }>({ open: false, editing: null });
   const [catName, setCatName] = useState("");
+  const [catIcon, setCatIcon] = useState("Tag");
+  const [savingCat, setSavingCat] = useState(false);
 
-  const openNewCat = () => { setCatName(""); setCatDialog({ open: true, editing: null }); };
-  const openEditCat = (c: typeof cats[number]) => { setCatName(c.name); setCatDialog({ open: true, editing: c }); };
-  const saveCat = () => {
-    if (!catName.trim()) return;
-    if (catDialog.editing) {
-      setCats((p) => p.map((c) => c.id === catDialog.editing!.id ? { ...c, name: catName.trim() } : c));
-      toast({ title: "Categoría actualizada", description: catName.trim() });
-    } else {
-      setCats((p) => [...p, { id: catName.toLowerCase().replace(/\s+/g, "-"), name: catName.trim(), count: 0, Icon: initialCategories[0].icon }]);
-      toast({ title: "Categoría creada", description: catName.trim() });
-    }
-    setCatDialog({ open: false, editing: null });
+  const loadCats = () => {
+    setCatsLoading(true);
+    fetchCategories().then(({ data }) => { setCats(data); setCatsLoading(false); });
   };
-  const deleteCat = (c: typeof cats[number]) => {
-    setCats((p) => p.filter((x) => x.id !== c.id));
-    toast({ title: "Categoría eliminada", description: c.name });
+  useEffect(() => { loadCats(); }, []);
+
+  const openNewCat = () => { setCatName(""); setCatIcon("Tag"); setCatDialog({ open: true, editing: null }); };
+  const openEditCat = (c: AdminCategory) => { setCatName(c.name); setCatIcon(c.icon); setCatDialog({ open: true, editing: c }); };
+
+  const saveCat = async () => {
+    if (!catName.trim()) return;
+    setSavingCat(true);
+    try {
+      if (catDialog.editing) {
+        await updateCategory(catDialog.editing.id, { name: catName.trim(), icon: catIcon });
+        toast({ title: "Categoría actualizada", description: catName.trim() });
+      } else {
+        await createCategory({ name: catName.trim(), icon: catIcon, sort_order: cats.length });
+        toast({ title: "Categoría creada", description: catName.trim() });
+      }
+      setCatDialog({ open: false, editing: null });
+      loadCats();
+    } catch (e: any) {
+      toast({ title: "No se pudo guardar", description: e?.message ?? "Error", variant: "destructive" });
+    }
+    setSavingCat(false);
+  };
+
+  const deleteCat = async (c: AdminCategory) => {
+    // No se puede borrar una categoría con avisos (FK restrictiva en `listings`).
+    if (c.count > 0) {
+      toast({
+        title: "No se puede eliminar",
+        description: `"${c.name}" tiene ${c.count} aviso(s) asociados. Reasigna o elimina esos avisos primero.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      await deleteCategory(c.id);
+      toast({ title: "Categoría eliminada", description: c.name });
+      loadCats();
+    } catch (e: any) {
+      toast({ title: "No se pudo eliminar", description: e?.message ?? "Error", variant: "destructive" });
+    }
   };
 
   // ===== Variables del sistema (REQ-ADM-04) =====
@@ -127,35 +176,44 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
               <Button size="sm" className="gap-2" onClick={openNewCat}><Plus size={14} /> Nueva</Button>
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-              {cats.map((c) => (
-                <div key={c.id} className="border p-4 bg-card card-lift">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="w-10 h-10 rounded-lg bg-accent text-accent-foreground flex items-center justify-center">
-                      <c.Icon size={18} />
+              {catsLoading && <p className="text-sm text-muted-foreground col-span-full py-6 text-center">Cargando categorías…</p>}
+              {!catsLoading && cats.length === 0 && <p className="text-sm text-muted-foreground col-span-full py-6 text-center">No hay categorías. Crea la primera.</p>}
+              {cats.map((c) => {
+                const Icon = iconFor(c.icon);
+                return (
+                  <div key={c.id} className="border p-4 bg-card card-lift">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="w-10 h-10 rounded-lg bg-accent text-accent-foreground flex items-center justify-center">
+                        <Icon size={18} />
+                      </div>
+                      <div className="flex gap-1">
+                        <Button size="icon" variant="ghost" title="Editar" onClick={() => openEditCat(c)}><Pencil size={14} /></Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button size="icon" variant="ghost" className="text-destructive" title="Eliminar"><Trash2 size={14} /></Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>¿Eliminar "{c.name}"?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                {c.count > 0
+                                  ? `Esta categoría tiene ${c.count} aviso(s) asociados. No podrás eliminarla hasta reasignar o quitar esos avisos.`
+                                  : "Esta acción es permanente. La categoría dejará de estar disponible para nuevos avisos."}
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => deleteCat(c)}>Eliminar</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
                     </div>
-                    <div className="flex gap-1">
-                      <Button size="icon" variant="ghost" title="Editar" onClick={() => openEditCat(c)}><Pencil size={14} /></Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button size="icon" variant="ghost" className="text-destructive" title="Eliminar"><Trash2 size={14} /></Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>¿Eliminar "{c.name}"?</AlertDialogTitle>
-                            <AlertDialogDescription>Los avisos asociados quedarán sin categoría.</AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => deleteCat(c)}>Eliminar</AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
+                    <p className="font-semibold text-sm">{c.name}</p>
+                    <p className="text-xs text-muted-foreground">{c.count.toLocaleString()} avisos</p>
                   </div>
-                  <p className="font-semibold text-sm">{c.name}</p>
-                  <p className="text-xs text-muted-foreground">{c.count.toLocaleString()} avisos</p>
-                </div>
-              ))}
+                );
+              })}
             </CardContent>
           </Card>
 
@@ -167,13 +225,40 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
                   {catDialog.editing ? "Modifica el nombre de la categoría." : "Crea una nueva categoría para clasificar avisos."}
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-3">
-                <Label>Nombre</Label>
-                <Input value={catName} onChange={(e) => setCatName(e.target.value)} placeholder="Ej. Maquinaria pesada" />
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Nombre</Label>
+                  <Input value={catName} onChange={(e) => setCatName(e.target.value)} placeholder="Ej. Maquinaria pesada" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Icono</Label>
+                  <div className="grid grid-cols-6 gap-2">
+                    {ICON_OPTIONS.map((name) => {
+                      const Ico = iconFor(name);
+                      const active = catIcon === name;
+                      return (
+                        <button
+                          key={name}
+                          type="button"
+                          onClick={() => setCatIcon(name)}
+                          title={name}
+                          className={cn(
+                            "h-10 rounded-lg border flex items-center justify-center transition-colors",
+                            active ? "border-secondary bg-secondary/15 text-secondary" : "hover:bg-muted text-muted-foreground",
+                          )}
+                        >
+                          <Ico size={18} />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setCatDialog({ open: false, editing: null })}>Cancelar</Button>
-                <Button onClick={saveCat}>{catDialog.editing ? "Guardar" : "Crear"}</Button>
+                <Button onClick={saveCat} disabled={savingCat || !catName.trim()}>
+                  {savingCat ? "Guardando..." : catDialog.editing ? "Guardar" : "Crear"}
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>

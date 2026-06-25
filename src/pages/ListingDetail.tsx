@@ -628,7 +628,7 @@ export default function ListingDetail() {
       </div>
 
       {/* Related */}
-      <section className="container mx-auto px-4 md:px-6 py-14 md:py-20 border-t">
+      <section className="container mx-auto px-4 md:px-6 pt-14 md:pt-20 pb-28 md:pb-20 border-t">
         <div className="flex items-end justify-between mb-8 gap-4 flex-wrap">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] font-bold text-secondary mb-2">Sigue explorando</p>

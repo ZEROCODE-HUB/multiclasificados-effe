@@ -89,6 +89,8 @@
   body {
     @apply bg-background text-foreground font-sans;
     line-height: 1.65;
+    /* Evita scroll horizontal en móvil (que haría que la página se vea "alejada"/apretada). */
+    overflow-x: hidden;
   }
   h1, h2, h3, h4, h5, h6 {
     @apply font-heading;

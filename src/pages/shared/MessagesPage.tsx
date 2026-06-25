@@ -168,13 +168,16 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
 
   return (
     <DashboardLayout role={role}>
-      {/* En móvil el chat va edge-to-edge (como WhatsApp); en desktop se mantiene en el contenedor. */}
-      <div className="animate-fade-in -mx-3 sm:-mx-6 lg:mx-0">
+      {/* En móvil el chat va edge-to-edge (como WhatsApp); en desktop se mantiene en el contenedor.
+          OJO: sin animate-fade-in aquí — su transform rompería el position:fixed del grid. */}
+      <div className="-mx-3 sm:-mx-6 lg:mx-0">
         <h1 className="text-2xl font-bold text-foreground mb-4 lg:block hidden px-3 sm:px-0">Mensajes</h1>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 lg:gap-4 lg:h-[calc(100vh-12rem)]">
+        {/* Móvil: contenedor fijo entre el navbar superior (64px) y el inferior (64px),
+            a pantalla completa de lado a lado. Desktop (lg): layout normal. */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 lg:gap-4 fixed inset-x-0 top-16 md:top-[76px] bottom-16 z-30 lg:static lg:inset-auto lg:top-auto lg:bottom-auto lg:z-auto lg:h-[calc(100vh-12rem)]">
           {/* Lista de conversaciones */}
-          <Card className={`lg:col-span-1 overflow-hidden rounded-none border-x-0 lg:rounded-xl lg:border-x h-[calc(100dvh-8rem)] lg:h-auto ${selected ? "hidden lg:flex lg:flex-col" : "flex flex-col"}`}>
+          <Card className={`lg:col-span-1 overflow-hidden rounded-none border-x-0 lg:rounded-xl lg:border-x h-full lg:h-auto ${selected ? "hidden lg:flex lg:flex-col" : "flex flex-col"}`}>
             <CardHeader className="pb-3">
               <CardTitle className="text-base mb-2 lg:hidden">Mensajes</CardTitle>
               <div className="relative">
@@ -227,13 +230,13 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
 
           {/* Área de chat */}
           <Card
-            className={`lg:col-span-2 flex flex-col overflow-hidden rounded-none border-x-0 lg:rounded-xl lg:border-x h-[calc(100dvh-8rem)] lg:h-auto ${
+            className={`lg:col-span-2 flex flex-col overflow-hidden rounded-none border-x-0 lg:rounded-xl lg:border-x h-full lg:h-auto ${
               selected ? "flex" : "hidden lg:flex"
             }`}
           >
             {selected ? (
               <>
-                <CardHeader className="border-b py-3">
+                <CardHeader className="border-b py-3 shrink-0 bg-card">
                   <div className="flex items-center gap-3">
                     <button
                       onClick={closeConversation}
@@ -294,7 +297,7 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
                     })
                   )}
                 </CardContent>
-                <div className="p-3 border-t flex gap-2 bg-card">
+                <div className="p-3 border-t flex gap-2 bg-card shrink-0">
                   <Input
                     placeholder="Escribe un mensaje..."
                     className="flex-1"

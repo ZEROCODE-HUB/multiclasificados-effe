@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSession } from "@/hooks/useSession";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,6 +43,17 @@ const AuthPage = () => {
   const [regPasswordConfirm, setRegPasswordConfirm] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Cuando aparece una sesión real (ej. al volver del OAuth de Google por deep
+  // link en el APK), redirige solo a donde corresponda. Evita que la pantalla
+  // de login se quede cargando tras un inicio de sesión externo.
+  const session = useSession();
+  useEffect(() => {
+    if (session?.supabase) {
+      navigate(landingPath(session, redirectTo), { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.supabase, session?.role]);
+
   // El acceso demo queda solo para roles de usuario (no staff). Admin/Super Admin
   // requieren login real con rol asignado en la base de datos.
   const enterDemo = (role: "anunciante" | "buscador") => {
@@ -60,10 +72,10 @@ const AuthPage = () => {
     }
     setLoading(true);
     try {
-      const session = await signInWithPassword(email, password);
+      const logged = await signInWithPassword(email, password);
       toast.success("¡Bienvenido de vuelta!");
       // El staff aterriza directo en su panel; el resto, donde pidió ir o al inicio.
-      navigate(landingPath(session, redirectTo));
+      navigate(landingPath(logged, redirectTo));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "No se pudo iniciar sesión.");
     } finally {
@@ -97,17 +109,21 @@ const AuthPage = () => {
     }
     setLoading(true);
     try {
-      const session = await signUpWithPassword({
+      const created = await signUpWithPassword({
         email: regEmail,
         password: regPassword,
         phone: phone ? `${countryCode} ${phone}` : undefined,
       });
-      if (session) {
+      if (created) {
         toast.success("¡Cuenta creada!");
-        navigate(redirectTo || "/");
       } else {
         toast.success("Cuenta creada. Revisa tu correo para confirmar el registro.");
       }
+      // Tras crear la cuenta, llevamos al usuario a la pantalla de iniciar sesión
+      // (con el correo precargado para mayor comodidad).
+      setEmail(regEmail);
+      setPassword("");
+      setActiveTab("login");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "No se pudo crear la cuenta.");
     } finally {
@@ -119,9 +135,11 @@ const AuthPage = () => {
     setLoading(true);
     try {
       await signInWithGoogle(redirectTo || undefined);
-      // El navegador se redirige a Google; no hace falta navegar aquí.
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "No se pudo conectar con Google.");
+    } finally {
+      // En el APK el navegador se abre aparte; reseteamos para que el botón no
+      // quede cargando si el usuario vuelve sin completar el login.
       setLoading(false);
     }
   };
@@ -130,9 +148,9 @@ const AuthPage = () => {
     setLoading(true);
     try {
       await signInWithFacebook(redirectTo || undefined);
-      // El navegador se redirige a Facebook; no hace falta navegar aquí.
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "No se pudo conectar con Facebook.");
+    } finally {
       setLoading(false);
     }
   };
