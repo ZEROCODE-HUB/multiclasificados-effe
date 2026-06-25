@@ -23,6 +23,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { signOut } from "@/lib/auth";
+
+// Cierra la sesión real (Supabase + estado local) y va al login.
+async function handleLogout() {
+  try {
+    await signOut();
+  } finally {
+    window.location.href = "/auth";
+  }
+}
 
 export type AdminRole = "admin" | "superadmin";
 
@@ -125,11 +135,15 @@ export function AdminLayout({ children, role, title, breadcrumb }: Props) {
               <p className="text-[10px] text-sidebar-foreground/50 truncate">{isSuper ? "superadmin@effe.pe" : "admin@effe.pe"}</p>
             </div>
           </div>
-          <Link to="/auth">
-            <Button variant="ghost" size="sm" className="w-full justify-start text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/60">
-              <LogOut size={14} /> Cerrar sesión
-            </Button>
-          </Link>
+          <Button
+            type="button"
+            onClick={handleLogout}
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/60"
+          >
+            <LogOut size={14} /> Cerrar sesión
+          </Button>
         </div>
       </aside>
 
@@ -268,13 +282,13 @@ function AdminHamburger({ role, menu }: { role: AdminRole; menu: MenuItem[] }) {
             );
           })}
           <div className="border-t border-sidebar-border/40 my-3" />
-          <Link
-            to="/auth"
-            onClick={() => setOpen(false)}
-            className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-secondary hover:bg-secondary/10"
+          <button
+            type="button"
+            onClick={() => { setOpen(false); handleLogout(); }}
+            className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-secondary hover:bg-secondary/10"
           >
             <LogOut size={18} /> Cerrar sesión
-          </Link>
+          </button>
         </div>
       </SheetContent>
     </Sheet>

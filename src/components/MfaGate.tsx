@@ -1,18 +1,13 @@
-// Puerta de seguridad del staff: hCaptcha + 2FA (TOTP) antes de entrar al panel.
-import { useEffect, useRef, useState } from "react";
+// Puerta de seguridad del staff: 2FA (TOTP) antes de entrar al panel.
+// El captcha anti-bot ya se valida en el login (/auth), no se repite aquí.
+import { useEffect, useState } from "react";
 import { ShieldCheck, Loader2, KeyRound } from "lucide-react";
-import HCaptcha from "@hcaptcha/react-hcaptcha";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { getMfaState, enrollTotp, verifyTotp, type TotpEnrollment } from "@/lib/mfa";
 import { signOut } from "@/lib/auth";
-import { supabase } from "@/lib/supabase";
-
-// Llave de sitio de hCaptcha (de prueba por defecto; real vía VITE_HCAPTCHA_SITE_KEY).
-const HCAPTCHA_SITE_KEY =
-  (import.meta.env.VITE_HCAPTCHA_SITE_KEY as string) || "10000000-ffff-ffff-ffff-000000000001";
 
 export function MfaGate({ onVerified }: { onVerified: () => void }) {
   const [mode, setMode] = useState<"loading" | "enroll" | "verify">("loading");
@@ -20,8 +15,6 @@ export function MfaGate({ onVerified }: { onVerified: () => void }) {
   const [enrollment, setEnrollment] = useState<TotpEnrollment | null>(null);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
-  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
-  const captchaRef = useRef<HCaptcha>(null);
 
   useEffect(() => {
     getMfaState().then(async (m) => {
@@ -42,35 +35,19 @@ export function MfaGate({ onVerified }: { onVerified: () => void }) {
   }, []);
 
   const submit = async () => {
-    if (!captchaToken) {
-      toast.error("Completa el captcha de seguridad.");
-      return;
-    }
     if (!factorId || code.trim().length < 6) {
       toast.error("Ingresa el código de 6 dígitos.");
       return;
     }
     setBusy(true);
     try {
-      // 1) Verifica el captcha (anti-bot) en el servidor.
-      const { data: cap } = await supabase.functions.invoke("verify-captcha", {
-        body: { token: captchaToken },
-      });
-      if (!cap?.success) {
-        toast.error("Captcha inválido. Inténtalo de nuevo.");
-        captchaRef.current?.resetCaptcha();
-        setCaptchaToken(null);
-        return;
-      }
-      // 2) Verifica el 2FA (sube la sesión a AAL2).
+      // Verifica el 2FA (sube la sesión a AAL2).
       await verifyTotp(factorId, code);
       toast.success("Verificación correcta");
       onVerified();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Código incorrecto. Intenta de nuevo.");
       setCode("");
-      captchaRef.current?.resetCaptcha();
-      setCaptchaToken(null);
     } finally {
       setBusy(false);
     }
@@ -128,15 +105,7 @@ export function MfaGate({ onVerified }: { onVerified: () => void }) {
                 maxLength={6}
               />
             </div>
-            <div className="flex justify-center">
-              <HCaptcha
-                ref={captchaRef}
-                sitekey={HCAPTCHA_SITE_KEY}
-                onVerify={(t) => setCaptchaToken(t)}
-                onExpire={() => setCaptchaToken(null)}
-              />
-            </div>
-            <Button className="w-full gap-2" onClick={submit} disabled={busy || code.length < 6 || !captchaToken}>
+            <Button className="w-full gap-2" onClick={submit} disabled={busy || code.length < 6}>
               {busy ? <Loader2 className="animate-spin" size={16} /> : <KeyRound size={16} />}
               {mode === "enroll" ? "Activar y continuar" : "Verificar"}
             </Button>

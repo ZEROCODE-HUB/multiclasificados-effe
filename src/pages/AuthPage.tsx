@@ -1,5 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import HCaptcha from "@hcaptcha/react-hcaptcha";
+import { supabase } from "@/lib/supabase";
 import { useSession } from "@/hooks/useSession";
+
+// Llave de sitio de hCaptcha (real vía VITE_HCAPTCHA_SITE_KEY; de prueba por defecto).
+const HCAPTCHA_SITE_KEY =
+  (import.meta.env.VITE_HCAPTCHA_SITE_KEY as string) || "10000000-ffff-ffff-ffff-000000000001";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,6 +32,7 @@ import { Eye, EyeOff, Megaphone, Search, ShieldCheck, Sparkles, Crown, Loader2 }
 import { toast } from "sonner";
 
 import { BrandMark } from "@/components/BrandMark";
+import { TermsDialog } from "@/components/LegalTerms";
 import { signInWithPassword, signUpWithPassword, signInWithGoogle, signInWithFacebook, landingPath } from "@/lib/auth";
 
 const AuthPage = () => {
@@ -41,7 +48,27 @@ const AuthPage = () => {
   const [phone, setPhone] = useState("");
   const [regPassword, setRegPassword] = useState("");
   const [regPasswordConfirm, setRegPasswordConfirm] = useState("");
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [termsOpen, setTermsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Captcha de seguridad: obligatorio para iniciar sesión (usuario y admin usan
+  // el mismo formulario, así que protege ambos accesos).
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const captchaRef = useRef<HCaptcha>(null);
+  const loginEmailRef = useRef<HTMLInputElement>(null);
+
+  const resetCaptcha = () => {
+    captchaRef.current?.resetCaptcha();
+    setCaptchaToken(null);
+  };
+
+  // Lleva el foco al formulario de inicio de sesión real (acceso de staff).
+  const goAdminLogin = () => {
+    setActiveTab("login");
+    toast.info("Ingresa con tu cuenta de administrador autorizada.");
+    setTimeout(() => loginEmailRef.current?.focus(), 60);
+  };
 
   // Cuando aparece una sesión real (ej. al volver del OAuth de Google por deep
   // link en el APK), redirige solo a donde corresponda. Evita que la pantalla
@@ -70,14 +97,29 @@ const AuthPage = () => {
       toast.error("Ingresa un correo electrónico válido.");
       return;
     }
+    if (!captchaToken) {
+      toast.error("Completa el captcha de seguridad.");
+      return;
+    }
     setLoading(true);
     try {
+      // 1) Verifica el captcha (anti-bot) en el servidor antes de autenticar.
+      const { data: cap } = await supabase.functions.invoke("verify-captcha", {
+        body: { token: captchaToken },
+      });
+      if (!cap?.success) {
+        toast.error("Captcha inválido. Inténtalo de nuevo.");
+        resetCaptcha();
+        return;
+      }
+      // 2) Login real.
       const logged = await signInWithPassword(email, password);
       toast.success("¡Bienvenido de vuelta!");
       // El staff aterriza directo en su panel; el resto, donde pidió ir o al inicio.
       navigate(landingPath(logged, redirectTo));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "No se pudo iniciar sesión.");
+      resetCaptcha(); // el token es de un solo uso
     } finally {
       setLoading(false);
     }
@@ -107,6 +149,11 @@ const AuthPage = () => {
       toast.error("Las contraseñas no coinciden.");
       return;
     }
+    // Aceptación obligatoria de los Términos y Condiciones / Política de Privacidad.
+    if (!acceptedTerms) {
+      toast.error("Debes aceptar los Términos y Condiciones y la Política de Privacidad.");
+      return;
+    }
     setLoading(true);
     try {
       const created = await signUpWithPassword({
@@ -132,6 +179,10 @@ const AuthPage = () => {
   };
 
   const handleGoogle = async () => {
+    if (activeTab === "register" && !acceptedTerms) {
+      toast.error("Debes aceptar los Términos y Condiciones y la Política de Privacidad.");
+      return;
+    }
     setLoading(true);
     try {
       await signInWithGoogle(redirectTo || undefined);
@@ -145,6 +196,10 @@ const AuthPage = () => {
   };
 
   const handleFacebook = async () => {
+    if (activeTab === "register" && !acceptedTerms) {
+      toast.error("Debes aceptar los Términos y Condiciones y la Política de Privacidad.");
+      return;
+    }
     setLoading(true);
     try {
       await signInWithFacebook(redirectTo || undefined);
@@ -238,7 +293,7 @@ const AuthPage = () => {
             <div className="space-y-4 animate-fade-in">
               <div>
                 <Label htmlFor="email">Correo electrónico</Label>
-                <Input id="email" type="email" placeholder="tu@correo.com" className="mt-1"
+                <Input ref={loginEmailRef} id="email" type="email" placeholder="tu@correo.com" className="mt-1"
                   value={email} onChange={(e) => setEmail(e.target.value)} />
               </div>
               <div>
@@ -263,7 +318,15 @@ const AuthPage = () => {
                 </label>
                 <a href="#" className="text-sm text-secondary hover:underline">¿Olvidaste tu contraseña?</a>
               </div>
-              <Button className="w-full" size="lg" onClick={handleLogin} disabled={loading}>
+              <div className="flex justify-center">
+                <HCaptcha
+                  ref={captchaRef}
+                  sitekey={HCAPTCHA_SITE_KEY}
+                  onVerify={(t) => setCaptchaToken(t)}
+                  onExpire={() => setCaptchaToken(null)}
+                />
+              </div>
+              <Button className="w-full" size="lg" onClick={handleLogin} disabled={loading || !captchaToken}>
                 {loading ? <Loader2 className="animate-spin" size={18} /> : "Iniciar sesión"}
               </Button>
 
@@ -332,13 +395,36 @@ const AuthPage = () => {
               </div>
 
               <label className="flex items-start gap-2 text-sm text-muted-foreground cursor-pointer">
-                <Checkbox className="mt-0.5" />
-                <span>Acepto los <a href="#" className="text-secondary hover:underline">términos</a> y la <a href="#" className="text-secondary hover:underline">política de privacidad</a></span>
+                <Checkbox
+                  className="mt-0.5"
+                  checked={acceptedTerms}
+                  onCheckedChange={(v) => setAcceptedTerms(v === true)}
+                />
+                <span>
+                  Acepto los{" "}
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); setTermsOpen(true); }}
+                    className="text-secondary hover:underline font-medium"
+                  >
+                    Términos y Condiciones
+                  </button>{" "}
+                  y la{" "}
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); setTermsOpen(true); }}
+                    className="text-secondary hover:underline font-medium"
+                  >
+                    Política de Privacidad
+                  </button>
+                </span>
               </label>
 
-              <Button className="w-full" size="lg" onClick={handleRegister} disabled={loading}>
+              <Button className="w-full" size="lg" onClick={handleRegister} disabled={loading || !acceptedTerms}>
                 {loading ? <Loader2 className="animate-spin" size={18} /> : "Crear cuenta"}
               </Button>
+
+              <TermsDialog open={termsOpen} onOpenChange={setTermsOpen} />
 
               <div className="relative my-4">
                 <div className="absolute inset-0 flex items-center"><div className="w-full border-t" /></div>
@@ -358,10 +444,10 @@ const AuthPage = () => {
 
           )}
 
-          {/* Demo buttons — solo roles de usuario. Admin / Super Admin requieren login real. */}
+          {/* Accesos rápidos — Anunciante/Buscador son demo; Administrador usa login real. */}
           <div className="mt-6 pt-4 border-t border-dashed">
-            <p className="text-xs text-muted-foreground text-center mb-3">Acceso rápido de demostración</p>
-            <div className="grid grid-cols-2 gap-2">
+            <p className="text-xs text-muted-foreground text-center mb-3">Acceso rápido</p>
+            <div className="grid grid-cols-3 gap-2">
               <Button variant="outline" size="sm" className="min-w-0 gap-1.5 border-secondary/40 text-secondary hover:bg-secondary/10 hover:text-secondary"
                 onClick={() => enterDemo("anunciante")}>
                 <Megaphone size={14} className="flex-shrink-0" />
@@ -372,9 +458,14 @@ const AuthPage = () => {
                 <Search size={14} className="flex-shrink-0" />
                 <span className="truncate">Buscador</span>
               </Button>
+              <Button variant="outline" size="sm" className="min-w-0 gap-1.5 border-amber-500/40 text-amber-600 hover:bg-amber-500/10 hover:text-amber-600"
+                onClick={goAdminLogin}>
+                <Crown size={14} className="flex-shrink-0" />
+                <span className="truncate">Admin</span>
+              </Button>
             </div>
             <p className="text-[11px] text-muted-foreground text-center mt-3 flex items-center justify-center gap-1.5">
-              <Crown size={12} className="text-secondary" /> El panel de administración requiere iniciar sesión con una cuenta autorizada.
+              <ShieldCheck size={12} className="text-secondary" /> El acceso de administrador usa el formulario de arriba con una cuenta autorizada y verificación en dos pasos.
             </p>
           </div>
         </div>
