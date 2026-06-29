@@ -32,6 +32,7 @@ jobs:
       - name: Build signed AAB
         run: |
           cd android
+          chmod +x gradlew
           ./gradlew bundleRelease \
             -Pandroid.injected.signing.store.file=app/upload-keystore.jks \
             -Pandroid.injected.signing.store.password=${{ secrets.ANDROID_STORE_PASSWORD }} \
