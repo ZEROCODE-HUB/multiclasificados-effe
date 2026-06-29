@@ -4,7 +4,7 @@ Documento de referencia del backend (Supabase / PostgreSQL) del marketplace de a
 clasificados. Describe **toda** la estructura de datos y explica **cómo crear el proyecto
 en Supabase desde cero**.
 
-> El esquema vive en `supabase/migrations/` (archivos `0001` … `0028`) y se aplica **en orden
+> El esquema vive en `supabase/migrations/` (archivos `0001` … `0034`) y se aplica **en orden
 > numérico**. Este documento es el mapa de lo que esas migraciones construyen.
 
 ---
@@ -17,14 +17,14 @@ en Supabase desde cero**.
 - **Extensiones requeridas:** `pgcrypto` (UUIDs, viene por defecto), `pg_cron` (tareas
   periódicas) y `pg_net` (HTTP saliente para push). `pg_cron` y `pg_net` se habilitan desde
   el SQL (`create extension …`) o desde **Database → Extensions** en el dashboard.
-- **~23 tablas**, varias **vistas**, ~40 **funciones/RPC**, triggers, 3 **buckets** de Storage,
+- **~24 tablas**, **5 vistas**, ~50 **funciones/RPC**, triggers, 3 **buckets** de Storage,
   Realtime en chat/notificaciones y 2 **cron jobs**.
 
 ### Módulos funcionales (requisitos)
 | Req | Módulo | Tablas / objetos clave |
 |---|---|---|
 | REQ-01 | Avisos + vigencia/expiración | `listings`, `publish_listing`, `expire_listings` |
-| REQ-02 | Buscador (precio, radio KM, orden) + subcategorías | `subcategories`, `search_listings`, vista `listing_cards` |
+| REQ-02 | Buscador (precio, radio KM, orden) + subcategorías | `subcategories`, `search_listings`, vista `listing_cards`, `category_counts` (grid landing) |
 | REQ-03 | Favoritos | `favorites`, `toggle_favorite` |
 | REQ-04 | Búsquedas guardadas + alertas | `saved_searches`, `run_saved_search_alerts` (cron) |
 | REQ-05 | Chat en tiempo real con estados | `conversations`, `messages`, Realtime |
@@ -32,10 +32,11 @@ en Supabase desde cero**.
 | REQ-07 | Reseñas (solo postulación aceptada) | `reviews`, vista `review_cards` |
 | REQ-08 | Estadísticas del anunciante | `listing_events`, `advertiser_stats`, vista `listing_stats` |
 | REQ-09 | Notificaciones (in-app/push/email) | `notifications`, `notification_preferences`, `notify_user` |
-| REQ-10 | Reportes/moderación (avisos y usuarios) | `reports` (polimórfico) |
-| REQ-ADM | Panel admin/superadmin (RBAC, auditoría) | `role_permissions`, `system_settings`, `audit_logs`, ~20 RPC `admin_*` |
+| REQ-10 | Reportes/moderación (avisos y usuarios) | `reports` (polimórfico), `admin_claims_summary` |
+| REQ-ADM | Panel admin/superadmin (RBAC, auditoría, analítica) | `role_permissions`, `system_settings`, `audit_logs`, ~25 RPC `admin_*`, vista `listing_revenue` |
 | — | Comercio (paquetes, comprobantes) | `pricing_settings`, `orders`, `order_listings`, `invoices` |
 | — | Push móvil (FCM) | `device_tokens`, Edge Function `send-push` |
+| — | Libro de Reclamaciones (Indecopi) | `complaints`, Edge Function `send-reclamo` |
 
 ---
 
@@ -61,7 +62,7 @@ Para aplicar solo desde cierto archivo en adelante (incremental), pasa un prefij
 argumento: `node supabase/run-migrations.mjs "<conn>" 0025`.
 
 **Opción B — SQL Editor del dashboard.** Abre **SQL Editor** y pega/ejecuta el contenido de
-cada archivo `0001` … `0028` **en orden numérico**, uno por uno.
+cada archivo `0001` … `0034` **en orden numérico**, uno por uno.
 
 **Opción C — Supabase CLI.**
 ```bash
@@ -73,6 +74,9 @@ npx supabase db push
 > hace `create extension pg_net`. En proyectos nuevos puede requerirse habilitarlas primero
 > desde **Database → Extensions**. Si `pg_cron`/`pg_net` no están disponibles, el resto del
 > esquema se aplica igual; solo se pierden las tareas periódicas y el push automático.
+
+> **Nombres duplicados:** hay dos archivos `0024_*` y dos `0029_*` (ver índice §11). Cada par
+> es idempotente y el orden entre ellos no afecta; el runner los aplica alfabéticamente.
 
 ### Paso 3 — Storage
 Los buckets (`listing-images`, `avatars`, `listing-docs`) y sus políticas se crean en
@@ -87,12 +91,17 @@ Los buckets (`listing-images`, `avatars`, `listing-docs`) y sus políticas se cr
    agrega el **Redirect URL** `…/auth/callback`.
 
 ### Paso 5 — Edge Functions (opcionales)
-Dos funciones en `supabase/functions/`:
+Funciones en `supabase/functions/`:
 - `admin-reset-password` — envía reset de contraseña (usa `SUPABASE_SERVICE_ROLE_KEY`).
 - `send-push` — envía push a FCM leyendo `device_tokens` (la dispara `0026_push_trigger.sql`).
+- `send-reclamo` — persiste el reclamo en `complaints` (con service_role) y envía el correo del
+  Libro de Reclamaciones vía **Resend**. Secrets: `RESEND_API_KEY`, `RECLAMOS_TO` (coma-sep,
+  default los correos de coleffe) y `RECLAMOS_FROM`. Guía en `functions/send-reclamo/DEPLOY.md`.
+- `verify-captcha` — valida el captcha de los formularios públicos.
 ```bash
 npx supabase functions deploy admin-reset-password
 npx supabase functions deploy send-push
+npx supabase functions deploy send-reclamo --no-verify-jwt
 ```
 
 ### Paso 6 — Variables de entorno del frontend (`.env`)
@@ -188,6 +197,15 @@ on conflict do nothing;
 - **`system_settings`** — config global clave/valor (jsonb).
 - **`device_tokens`** — token FCM por dispositivo (`token` único, `platform`).
 
+### Libro de Reclamaciones (`0034`)
+- **`complaints`** — Hoja de Reclamación Indecopi. `code` (correlativo `bigint` autoincremental =
+  N.º de hoja), `kind` (`reclamo`/`queja`), datos del consumidor (`full_name`, `doc_type`
+  DNI/CE/Pasaporte/RUC, `doc_number`, `email`, `phone`, `address`), `good_type`
+  (`producto`/`servicio`), `amount`, `description`, `request`, `status`
+  (`pendiente`/`en_proceso`/`resuelto`) y `user_id` (nullable). **RLS:** solo el staff (`is_staff`)
+  puede `select`/`update`; **no hay policy de INSERT** — el alta llega siempre por la Edge
+  Function `send-reclamo` con service_role (evita spam directo desde el cliente).
+
 ---
 
 ## 5. Vistas
@@ -198,6 +216,7 @@ on conflict do nothing;
 | `listing_stats` | `0011` | Por aviso: vistas únicas, clics, nº de favoritos. |
 | `listing_cards` | `0018` | "Tarjeta" pública: aviso `active` + anunciante (nombre/rating) + imagen. |
 | `review_cards` | `0021` | Reseñas con datos públicos del autor (nombre/iniciales/avatar). |
+| `listing_revenue` | `0030` | Ingreso real por aviso = total de la orden pagada repartido en partes iguales entre sus avisos (evita doble conteo de paquetes). |
 
 ---
 
@@ -222,15 +241,28 @@ on conflict do nothing;
 - `register_device_token(token, platform)` — alta/actualización de token push.
 - `advertiser_stats()` — totales + desglose por aviso + tendencia 30 días del usuario.
 - `platform_stats()` — métricas públicas del landing (anon).
+- `category_counts()` — conteo de avisos `active` por categoría para el grid del landing (anon).
 - `expire_listings()`, `run_saved_search_alerts()` — usadas por cron.
 
-### Panel admin/superadmin (`0023`, `0024`) — todas `SECURITY DEFINER`, validan rol adentro
+### Panel admin/superadmin (`0023`, `0024`, `0029`–`0033`) — todas `SECURITY DEFINER`, validan rol adentro
 `admin_stats`, `admin_growth_series`, `admin_category_distribution`, `admin_list_users`,
 `admin_set_user_status`, `admin_verify_user`, `admin_user_activity`, `admin_delete_user`
 (solo superadmin), `admin_set_listing_status`, `admin_toggle_featured`, `admin_list_listings`,
 `admin_list_reports`, `admin_assign_report`, `admin_resolve_report`, `admin_assign_role`,
 `admin_remove_role`, `get_my_permissions`, `set_role_permission`, `admin_list_permissions`,
 `admin_role_counts`, `get_settings`, `set_setting`, `log_audit`.
+
+Agregadas en `0029`–`0033`:
+- `admin_set_listing_status(listing, status, reason)` — versión de **3 argumentos** (`0029`,
+  reemplaza la de 2): al rechazar/deshabilitar guarda el `reason` en `listings.rejection_reason`
+  y lo limpia al reactivar. Desde `0032` además **notifica al dueño** (`notify_user`) con los
+  eventos `listing_disabled` (con motivo) / `listing_enabled`.
+- `admin_category_revenue(from, to)`, `admin_region_distribution(from, to)`,
+  `admin_claims_summary(from, to)` — analítica de la pantalla Reportes (avisos+ingresos por
+  categoría y por región, resumen de denuncias + tendencia 6 meses). Introducidas en `0030`
+  y recreadas en `0031` con **rango de fechas opcional** (`p_from`/`p_to` sobre `created_at`).
+- `admin_set_user_role(user, role)` — **solo superadmin** (`0033`): **reemplaza todos los roles**
+  del usuario por el seleccionado (rol único); no permite cambiar el propio rol.
 
 ---
 
@@ -316,10 +348,18 @@ on conflict do nothing;
 | `0026_push_trigger.sql` | trigger push a la Edge Function `send-push` (`pg_net`). |
 | `0027_advertiser_stats.sql` | `advertiser_stats()` (REQ-08). |
 | `0028_platform_stats.sql` | `platform_stats()` para el landing. |
+| `0029_admin_listing_status_reason.sql` | `admin_set_listing_status` con motivo (`reason`) → `rejection_reason`. |
+| `0029_category_counts.sql` | `category_counts()` para el grid de categorías del landing (anon). |
+| `0030_admin_report_analytics.sql` | Vista `listing_revenue` + RPC `admin_category_revenue` / `admin_region_distribution` / `admin_claims_summary`. |
+| `0031_report_filters.sql` | Recrea esos 3 RPC con rango de fechas opcional (`p_from`/`p_to`). |
+| `0032_listing_disabled_notify.sql` | `admin_set_listing_status` notifica al dueño (`listing_disabled`/`listing_enabled`). |
+| `0033_admin_set_user_role.sql` | `admin_set_user_role` (solo superadmin): reemplaza todos los roles por uno. |
+| `0034_libro_reclamaciones.sql` | Tabla `complaints` (Libro de Reclamaciones Indecopi), RLS solo staff; alta vía Edge Function `send-reclamo`. |
 
 > ⚠️ Hay **dos** archivos con prefijo `0024` (`0024_admin_delete_user` y
-> `0024_notifications_replica_identity`); ambos son idempotentes y el orden entre ellos no
-> importa. El runner los aplica alfabéticamente.
+> `0024_notifications_replica_identity`) y **dos** con prefijo `0029`
+> (`0029_admin_listing_status_reason` y `0029_category_counts`); cada par es idempotente y el
+> orden entre ellos no importa. El runner los aplica alfabéticamente.
 
 ---
 
@@ -337,6 +377,7 @@ profiles 1─* saved_searches / notifications / notification_preferences / devic
 profiles 1─* orders 1─* order_listings *─1 listings
 orders 1─1 invoices
 role_permissions / system_settings / audit_logs   (panel admin)
+complaints  (Libro de Reclamaciones; user_id → auth.users, nullable)
 ```
 
 ---

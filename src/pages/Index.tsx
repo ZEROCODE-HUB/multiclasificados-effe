@@ -4,6 +4,7 @@ import { HeroSearch } from "@/components/HeroSearch";
 import { CategoryGrid } from "@/components/CategoryGrid";
 import { ListingCard } from "@/components/ListingCard";
 import { CountUp } from "@/components/CountUp";
+import { LibroReclamaciones } from "@/components/LibroReclamaciones";
 import { type Listing } from "@/data/mockData";
 import { fetchListings } from "@/lib/listings";
 import { fetchPlatformStats, type PlatformStats } from "@/lib/stats";
@@ -465,6 +466,9 @@ const Index = () => {
           </div>
         </div>
       </section>
+
+      {/* Libro de Reclamaciones */}
+      <LibroReclamaciones />
 
       {/* Footer */}
       <footer className="bg-primary text-primary-foreground py-16 md:py-24">
