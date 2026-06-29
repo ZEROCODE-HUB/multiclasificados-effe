@@ -2,7 +2,10 @@ import { MapPin, Heart, ShieldCheck, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import type { Listing } from "@/data/mockData";
+import { useSession } from "@/hooks/useSession";
+import { useFavorites } from "@/hooks/useFavorites";
 
 interface ListingCardProps {
   listing: Listing;
@@ -11,13 +14,45 @@ interface ListingCardProps {
 
 export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
   const navigate = useNavigate();
-  const goToDetail = () => navigate(`/aviso/${listing.id}`);
+  const session = useSession();
+  const { isFavorite, toggle } = useFavorites();
+  const fav = isFavorite(listing.id);
+
+  // Solo los usuarios con sesión real pueden ver el detalle.
+  const isAuthed = !!session?.supabase;
+  const goToDetail = () => {
+    if (!isAuthed) {
+      navigate(`/auth?redirect=/aviso/${listing.id}`);
+      return;
+    }
+    navigate(`/aviso/${listing.id}`);
+  };
+
+  const handleFav = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isAuthed) {
+      toast.error("Inicia sesión para guardar favoritos");
+      navigate("/auth");
+      return;
+    }
+    try {
+      const res = await toggle(listing.id);
+      if (res === null) {
+        toast.message("Disponible con avisos reales");
+        return;
+      }
+      toast.success(res ? "Guardado en favoritos" : "Quitado de favoritos");
+    } catch {
+      toast.error("No se pudo actualizar el favorito");
+    }
+  };
   const formatPrice = (price: number, currency: string) =>
     currency === "USD" ? `US$ ${price.toLocaleString()}` : `S/ ${price.toLocaleString()}`;
 
-  // Mock rating / reviews
-  const rating = (4.5 + ((listing.id?.toString().length ?? 1) % 5) / 10).toFixed(1);
-  const reviews = 40 + ((listing.id?.toString().length ?? 0) * 37) % 280;
+  // Sin reseñas reales todavía → valores neutros
+  const rating = "0.0";
+  const reviews = 0;
 
   if (layout === "list") {
     return (
@@ -30,11 +65,16 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
             <h3 className="font-semibold text-foreground group-hover:text-secondary transition-colors truncate">{listing.title}</h3>
             {listing.featured && <Badge className="bg-secondary text-secondary-foreground flex-shrink-0">Destacado</Badge>}
           </div>
-          <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{listing.description}</p>
+          {/* Contenido detallado solo para usuarios con sesión */}
+          {isAuthed && <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{listing.description}</p>}
           <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
             <span className="flex items-center gap-1"><MapPin size={12} />{listing.location}</span>
           </div>
-          <p className="text-xl font-extrabold text-primary mt-2">{formatPrice(listing.price, listing.currency)}</p>
+          {isAuthed ? (
+            <p className="text-xl font-extrabold text-primary mt-2">{formatPrice(listing.price, listing.currency)}</p>
+          ) : (
+            <p className="text-sm text-secondary font-semibold mt-2 group-hover:underline">Ver detalle</p>
+          )}
         </div>
       </div>
     );
@@ -65,11 +105,11 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
         </span>
         {/* Favorite */}
         <button
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onClick={handleFav}
           className="absolute top-3 right-3 w-8 h-8 bg-white/95 backdrop-blur-sm flex items-center justify-center hover:bg-white hover:scale-110 transition-all shadow-sm"
           aria-label="Guardar en favoritos"
         >
-          <Heart size={15} className="text-primary" />
+          <Heart size={15} className={fav ? "text-secondary fill-secondary" : "text-primary"} />
         </button>
 
       </div>
@@ -81,24 +121,33 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
           {listing.title}
         </h3>
 
-        {/* Rating */}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <Star size={12} className="text-secondary fill-secondary" />
-            <span className="font-semibold text-foreground">{rating}</span>
-          </span>
-          <span className="text-muted-foreground/60">·</span>
-          <span>{reviews} reseñas</span>
-          <span className="text-muted-foreground/60">·</span>
-          <span className="flex items-center gap-1 truncate"><MapPin size={11} />{listing.location}</span>
-        </div>
+        {isAuthed ? (
+          <>
+            {/* Rating */}
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <Star size={12} className="text-secondary fill-secondary" />
+                <span className="font-semibold text-foreground">{rating}</span>
+              </span>
+              <span className="text-muted-foreground/60">·</span>
+              <span>{reviews} reseñas</span>
+              <span className="text-muted-foreground/60">·</span>
+              <span className="flex items-center gap-1 truncate"><MapPin size={11} />{listing.location}</span>
+            </div>
 
-        {/* Price */}
-        <div className="flex items-baseline gap-2">
-          <p className="text-xl font-extrabold text-primary tracking-tight">{formatPrice(listing.price, listing.currency)}</p>
-        </div>
+            {/* Price */}
+            <div className="flex items-baseline gap-2">
+              <p className="text-xl font-extrabold text-primary tracking-tight">{formatPrice(listing.price, listing.currency)}</p>
+            </div>
+          </>
+        ) : (
+          /* Visibilidad restringida para no logueados: solo ciudad */
+          <div className="flex items-center gap-1 text-xs text-muted-foreground truncate">
+            <MapPin size={11} />{listing.location}
+          </div>
+        )}
 
-        {/* CTA */}
+        {/* CTA — mismo botón para todos; si no hay sesión, lleva al login */}
         <Button
           variant="outline"
           size="sm"

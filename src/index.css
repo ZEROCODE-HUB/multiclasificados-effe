@@ -89,6 +89,8 @@
   body {
     @apply bg-background text-foreground font-sans;
     line-height: 1.65;
+    /* Evita scroll horizontal en móvil (que haría que la página se vea "alejada"/apretada). */
+    overflow-x: hidden;
   }
   h1, h2, h3, h4, h5, h6 {
     @apply font-heading;
@@ -136,5 +138,13 @@
   }
   .listing-shadow {
     box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  }
+  /* Oculta el scrollbar manteniendo el scroll (filtros del buscador y sidebar de publicar). */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
   }
 }

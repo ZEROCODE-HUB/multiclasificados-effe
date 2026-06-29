@@ -1,17 +1,22 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Eye, MapPin, Calendar, MoreVertical, Edit, Pause } from "lucide-react";
+import { Eye, MapPin, Calendar, MoreVertical, Edit, Pause, Play, Trash2 } from "lucide-react";
 import type { Listing } from "@/data/mockData";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
 interface ListingRowProps {
   listing: Listing;
   status?: "Activo" | "Pausado" | "Vencido";
+  onView?: (listing: Listing) => void;
+  onEdit?: (listing: Listing) => void;
+  onDelete?: (listing: Listing) => void;
+  onTogglePause?: (listing: Listing) => void;
 }
 
 const statusStyles: Record<string, string> = {
@@ -20,7 +25,8 @@ const statusStyles: Record<string, string> = {
   Vencido: "bg-destructive text-destructive-foreground",
 };
 
-export function ListingRow({ listing, status = "Activo" }: ListingRowProps) {
+export function ListingRow({ listing, status = "Activo", onView, onEdit, onDelete, onTogglePause }: ListingRowProps) {
+  const hasActions = !!(onView || onEdit || onDelete || onTogglePause);
   return (
     <div className="group flex flex-col sm:flex-row gap-0 sm:gap-4 bg-card border border-border overflow-hidden hover:shadow-md hover:border-secondary/40 transition-all">
       {/* Image - prominent on mobile (full width), compact on desktop */}
@@ -53,8 +59,29 @@ export function ListingRow({ listing, status = "Activo" }: ListingRowProps) {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem><Edit size={14} className="mr-2" /> Editar</DropdownMenuItem>
-              <DropdownMenuItem><Pause size={14} className="mr-2" /> Pausar</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onEdit?.(listing)}>
+                <Edit size={14} className="mr-2" /> Editar
+              </DropdownMenuItem>
+              {onTogglePause && (
+                <DropdownMenuItem onSelect={() => onTogglePause(listing)}>
+                  {status === "Pausado" ? (
+                    <><Play size={14} className="mr-2" /> Reactivar</>
+                  ) : (
+                    <><Pause size={14} className="mr-2" /> Pausar</>
+                  )}
+                </DropdownMenuItem>
+              )}
+              {onDelete && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onSelect={() => onDelete(listing)}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <Trash2 size={14} className="mr-2" /> Eliminar
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -70,10 +97,36 @@ export function ListingRow({ listing, status = "Activo" }: ListingRowProps) {
             {listing.price.toLocaleString()}
           </p>
           <div className="flex gap-1.5">
-            <Button variant="outline" size="sm" className="h-8 px-3 text-xs">Editar</Button>
-            <Button variant="default" size="sm" className="h-8 px-3 text-xs bg-primary hover:bg-primary/90">
-              Ver
-            </Button>
+            {hasActions ? (
+              <>
+                <Button variant="outline" size="sm" className="h-8 px-3 text-xs gap-1" onClick={() => onEdit?.(listing)}>
+                  <Edit size={13} /> Editar
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-3 text-xs gap-1 text-destructive border-destructive/40 hover:bg-destructive/10"
+                  onClick={() => onDelete?.(listing)}
+                >
+                  <Trash2 size={13} /> Eliminar
+                </Button>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="h-8 px-3 text-xs bg-primary hover:bg-primary/90"
+                  onClick={() => onView?.(listing)}
+                >
+                  Ver
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" size="sm" className="h-8 px-3 text-xs">Editar</Button>
+                <Button variant="default" size="sm" className="h-8 px-3 text-xs bg-primary hover:bg-primary/90">
+                  Ver
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </div>

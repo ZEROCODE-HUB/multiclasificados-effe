@@ -1,104 +1,161 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Clock, Search, Trash2, RefreshCw } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Bell, BellOff, Clock, Search, Trash2, Play } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { categories } from "@/data/mockData";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  fetchSavedSearches, deleteSavedSearch, setAlertEnabled, countResults,
+  criteriaToSearchUrl, criteriaLabel, type SavedSearch,
+} from "@/lib/savedSearches";
 
-const initial = [
-  { id: 1, query: "Departamento 2 dormitorios Miraflores", category: "Inmuebles", date: "2026-03-10", results: 24, priceRange: "USD 800 - 1,200" },
-  { id: 2, query: "Toyota Corolla 2023-2025", category: "Vehículos", date: "2026-03-09", results: 8, priceRange: "USD 18,000 - 25,000" },
-  { id: 3, query: "Desarrollador React remoto", category: "Empleos", date: "2026-03-08", results: 15, priceRange: "PEN 5,000 - 10,000" },
-  { id: 4, query: "iPhone 15 Pro", category: "Tecnología", date: "2026-03-07", results: 12, priceRange: "PEN 4,000 - 6,000" },
-];
+const fmtDate = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleDateString("es-PE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+
+const catName = (id?: string) => (id ? categories.find((c) => c.id === id)?.name ?? id : "Todas");
 
 const SeekerSearches = () => {
-  const [items, setItems] = useState(initial);
+  const navigate = useNavigate();
+  const [items, setItems] = useState<SavedSearch[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [counts, setCounts] = useState<Record<string, number>>({});
 
-  const refresh = (id: number, query: string) => {
-    setItems((prev) =>
-      prev.map((s) =>
-        s.id === id ? { ...s, date: new Date().toISOString().slice(0, 10), results: s.results + Math.floor(Math.random() * 5) } : s,
-      ),
-    );
-    toast({ title: "Búsqueda actualizada", description: query });
+  useEffect(() => {
+    fetchSavedSearches().then((rows) => {
+      setItems(rows);
+      setLoading(false);
+      // Conteo de resultados actuales por búsqueda (en paralelo).
+      rows.forEach((s) => {
+        countResults(s.criteria).then((n) =>
+          setCounts((prev) => ({ ...prev, [s.id]: n }))
+        );
+      });
+    });
+  }, []);
+
+  const toggleAlert = async (s: SavedSearch) => {
+    const next = !s.alert_enabled;
+    setItems((prev) => prev.map((x) => (x.id === s.id ? { ...x, alert_enabled: next } : x)));
+    try {
+      await setAlertEnabled(s.id, next);
+      toast({ title: next ? "Alerta activada" : "Alerta desactivada" });
+    } catch {
+      setItems((prev) => prev.map((x) => (x.id === s.id ? { ...x, alert_enabled: !next } : x)));
+      toast({ title: "No se pudo actualizar la alerta", variant: "destructive" });
+    }
   };
 
-  const remove = (id: number, query: string) => {
-    setItems((prev) => prev.filter((s) => s.id !== id));
-    toast({ title: "Búsqueda eliminada", description: query });
+  const remove = async (s: SavedSearch) => {
+    setItems((prev) => prev.filter((x) => x.id !== s.id));
+    try {
+      await deleteSavedSearch(s.id);
+      toast({ title: "Búsqueda eliminada", description: s.name ?? "" });
+    } catch {
+      toast({ title: "No se pudo eliminar", variant: "destructive" });
+      fetchSavedSearches().then(setItems);
+    }
   };
 
   return (
     <DashboardLayout role="buscador">
       <div className="space-y-6 animate-fade-in">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Mis búsquedas</h1>
-          <p className="text-muted-foreground">Búsquedas guardadas y tu historial reciente.</p>
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Mis búsquedas</h1>
+            <p className="text-muted-foreground">Guarda tus filtros y recibe alertas de nuevos avisos.</p>
+          </div>
+          <Button variant="hero" className="gap-2 self-start sm:self-auto" onClick={() => navigate("/buscar")}>
+            <Search size={16} /> Nueva búsqueda
+          </Button>
         </div>
 
         <div className="space-y-4">
-          {items.map((s) => (
-            <Card key={s.id} className="hover:shadow-md transition-shadow">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-4">
-                  <div className="p-2 rounded-lg bg-primary/10 text-primary flex-shrink-0">
-                    <Search size={20} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-foreground">{s.query}</p>
-                    <div className="flex items-center gap-3 mt-1 flex-wrap">
-                      <Badge variant="outline" className="text-xs">{s.category}</Badge>
-                      <span className="text-xs text-muted-foreground">{s.priceRange}</span>
-                      <span className="text-xs text-muted-foreground flex items-center gap-1"><Clock size={10} /> {s.date}</span>
+          {loading ? (
+            <div className="text-center py-12 text-muted-foreground border border-dashed rounded-lg">Cargando…</div>
+          ) : items.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground border border-dashed rounded-lg space-y-2">
+              <p className="text-sm">No tienes búsquedas guardadas.</p>
+              <p className="text-xs">Ve al buscador, aplica filtros y pulsa <span className="font-semibold text-foreground">"Guardar búsqueda"</span>.</p>
+              <Button variant="outline" size="sm" className="mt-1 gap-2" onClick={() => navigate("/buscar")}>
+                <Search size={14} /> Ir al buscador
+              </Button>
+            </div>
+          ) : (
+            items.map((s) => (
+              <Card key={s.id} className="hover:shadow-md transition-shadow">
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-4">
+                    <div className="p-2 rounded-lg bg-primary/10 text-primary flex-shrink-0">
+                      <Search size={20} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-foreground truncate">{s.name || criteriaLabel(s.criteria)}</p>
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                        <Badge variant="outline" className="text-xs">{catName(s.criteria.category)}</Badge>
+                        <span className="text-xs text-muted-foreground">{criteriaLabel(s.criteria)}</span>
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Clock size={10} /> Guardada {fmtDate(s.created_at)}
+                        </span>
+                      </div>
+                      {/* Alerta */}
+                      <div className="flex items-center gap-2 mt-3">
+                        <Switch checked={s.alert_enabled} onCheckedChange={() => toggleAlert(s)} />
+                        <span className="text-xs font-medium text-foreground flex items-center gap-1">
+                          {s.alert_enabled ? <Bell size={12} className="text-secondary" /> : <BellOff size={12} className="text-muted-foreground" />}
+                          {s.alert_enabled ? "Alertas activas" : "Alertas desactivadas"}
+                        </span>
+                        {s.last_notified_at && (
+                          <span className="text-[11px] text-muted-foreground hidden sm:inline">· Última alerta {fmtDate(s.last_notified_at)}</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col items-end gap-2">
+                      <Badge className="bg-secondary text-secondary-foreground">
+                        {counts[s.id] != null ? `${counts[s.id]} resultados` : "…"}
+                      </Badge>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Ejecutar búsqueda"
+                          onClick={() => navigate(criteriaToSearchUrl(s.criteria))}
+                        >
+                          <Play size={14} />
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon" className="text-destructive" title="Eliminar">
+                              <Trash2 size={14} />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>¿Eliminar esta búsqueda?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Se eliminará "{s.name || criteriaLabel(s.criteria)}" y dejarás de recibir sus alertas.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => remove(s)}>Eliminar</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
                     </div>
                   </div>
-                  <Badge className="bg-secondary text-secondary-foreground hidden sm:inline-flex">{s.results} resultados</Badge>
-                  <div className="flex gap-1">
-                    <Button variant="ghost" size="icon" title="Actualizar resultados" onClick={() => refresh(s.id, s.query)}>
-                      <RefreshCw size={14} />
-                    </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="text-destructive" title="Eliminar">
-                          <Trash2 size={14} />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>¿Eliminar esta búsqueda?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Se eliminará "{s.query}". Esta acción no se puede deshacer.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => remove(s.id, s.query)}>Eliminar</AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-
-          {items.length === 0 && (
-            <div className="text-center py-12 text-muted-foreground border border-dashed rounded-lg">
-              <p className="text-sm">No tienes búsquedas guardadas.</p>
-            </div>
+                </CardContent>
+              </Card>
+            ))
           )}
         </div>
       </div>

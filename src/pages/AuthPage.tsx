@@ -1,43 +1,219 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import HCaptcha from "@hcaptcha/react-hcaptcha";
+import { supabase } from "@/lib/supabase";
+import { useSession } from "@/hooks/useSession";
+
+// Llave de sitio de hCaptcha (real vía VITE_HCAPTCHA_SITE_KEY; de prueba por defecto).
+const HCAPTCHA_SITE_KEY =
+  (import.meta.env.VITE_HCAPTCHA_SITE_KEY as string) || "10000000-ffff-ffff-ffff-000000000001";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+
+// Códigos de país para el teléfono (opcional).
+const COUNTRY_CODES = [
+  { code: "+51", flag: "🇵🇪", name: "Perú" },
+  { code: "+52", flag: "🇲🇽", name: "México" },
+  { code: "+57", flag: "🇨🇴", name: "Colombia" },
+  { code: "+56", flag: "🇨🇱", name: "Chile" },
+  { code: "+54", flag: "🇦🇷", name: "Argentina" },
+  { code: "+593", flag: "🇪🇨", name: "Ecuador" },
+  { code: "+591", flag: "🇧🇴", name: "Bolivia" },
+  { code: "+34", flag: "🇪🇸", name: "España" },
+  { code: "+1", flag: "🇺🇸", name: "EE. UU." },
+];
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 import authBg from "@/assets/auth-bg.jpg";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Eye, EyeOff, Megaphone, Search, ShieldCheck, Sparkles, Shield, Crown } from "lucide-react";
+import { Eye, EyeOff, Megaphone, Search, ShieldCheck, Sparkles, Crown, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 import { BrandMark } from "@/components/BrandMark";
+import { TermsDialog } from "@/components/LegalTerms";
+import { signInWithPassword, signUpWithPassword, signInWithGoogle, signInWithFacebook, landingPath } from "@/lib/auth";
 
 const AuthPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get("redirect");
-  const enterDemo = (role: "anunciante" | "buscador" | "admin" | "superadmin") => {
+
+  // Estado de formularios
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [regEmail, setRegEmail] = useState("");
+  const [countryCode, setCountryCode] = useState("+51");
+  const [phone, setPhone] = useState("");
+  const [regPassword, setRegPassword] = useState("");
+  const [regPasswordConfirm, setRegPasswordConfirm] = useState("");
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [termsOpen, setTermsOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  // Captcha de seguridad: obligatorio para iniciar sesión (usuario y admin usan
+  // el mismo formulario, así que protege ambos accesos).
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const captchaRef = useRef<HCaptcha>(null);
+  const loginEmailRef = useRef<HTMLInputElement>(null);
+
+  const resetCaptcha = () => {
+    captchaRef.current?.resetCaptcha();
+    setCaptchaToken(null);
+  };
+
+  // Lleva el foco al formulario de inicio de sesión real (acceso de staff).
+  const goAdminLogin = () => {
+    setActiveTab("login");
+    toast.info("Ingresa con tu cuenta de administrador autorizada.");
+    setTimeout(() => loginEmailRef.current?.focus(), 60);
+  };
+
+  // Cuando aparece una sesión real (ej. al volver del OAuth de Google por deep
+  // link en el APK), redirige solo a donde corresponda. Evita que la pantalla
+  // de login se quede cargando tras un inicio de sesión externo.
+  const session = useSession();
+  useEffect(() => {
+    if (session?.supabase) {
+      navigate(landingPath(session, redirectTo), { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.supabase, session?.role]);
+
+  // El acceso demo queda solo para roles de usuario (no staff). Admin/Super Admin
+  // requieren login real con rol asignado en la base de datos.
+  const enterDemo = (role: "anunciante" | "buscador") => {
     import("@/hooks/useSession").then(({ setSession }) => setSession(role));
-    if (redirectTo && (role === "anunciante" || role === "buscador")) {
-      navigate(redirectTo);
+    navigate(redirectTo || "/");
+  };
+
+  const handleLogin = async () => {
+    if (!email || !password) {
+      toast.error("Ingresa tu correo y contraseña.");
       return;
     }
-    if (role === "admin" || role === "superadmin") {
-      navigate(`/dashboard/${role}`);
-    } else {
-      navigate("/");
+    if (!EMAIL_RE.test(email)) {
+      toast.error("Ingresa un correo electrónico válido.");
+      return;
+    }
+    if (!captchaToken) {
+      toast.error("Completa el captcha de seguridad.");
+      return;
+    }
+    setLoading(true);
+    try {
+      // 1) Verifica el captcha (anti-bot) en el servidor antes de autenticar.
+      const { data: cap } = await supabase.functions.invoke("verify-captcha", {
+        body: { token: captchaToken },
+      });
+      if (!cap?.success) {
+        toast.error("Captcha inválido. Inténtalo de nuevo.");
+        resetCaptcha();
+        return;
+      }
+      // 2) Login real.
+      const logged = await signInWithPassword(email, password);
+      toast.success("¡Bienvenido de vuelta!");
+      // El staff aterriza directo en su panel; el resto, donde pidió ir o al inicio.
+      navigate(landingPath(logged, redirectTo));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo iniciar sesión.");
+      resetCaptcha(); // el token es de un solo uso
+    } finally {
+      setLoading(false);
     }
   };
-  const handleLogin = () => {
-    import("@/hooks/useSession").then(({ setSession }) => setSession("buscador"));
-    navigate(redirectTo || "/");
+
+  const handleRegister = async () => {
+    // Correo: obligatorio + formato válido.
+    if (!regEmail) {
+      toast.error("Ingresa tu correo electrónico.");
+      return;
+    }
+    if (!EMAIL_RE.test(regEmail)) {
+      toast.error("Ingresa un correo electrónico válido.");
+      return;
+    }
+    // Teléfono: opcional, pero si se ingresa debe tener exactamente 9 dígitos.
+    if (phone && phone.length !== 9) {
+      toast.error("El teléfono debe tener exactamente 9 dígitos.");
+      return;
+    }
+    // Contraseña: obligatoria, mínimo 8, y debe coincidir con la confirmación.
+    if (!regPassword || regPassword.length < 8) {
+      toast.error("La contraseña debe tener al menos 8 caracteres.");
+      return;
+    }
+    if (regPassword !== regPasswordConfirm) {
+      toast.error("Las contraseñas no coinciden.");
+      return;
+    }
+    // Aceptación obligatoria de los Términos y Condiciones / Política de Privacidad.
+    if (!acceptedTerms) {
+      toast.error("Debes aceptar los Términos y Condiciones y la Política de Privacidad.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const created = await signUpWithPassword({
+        email: regEmail,
+        password: regPassword,
+        phone: phone ? `${countryCode} ${phone}` : undefined,
+      });
+      if (created) {
+        toast.success("¡Cuenta creada!");
+      } else {
+        toast.success("Cuenta creada. Revisa tu correo para confirmar el registro.");
+      }
+      // Tras crear la cuenta, llevamos al usuario a la pantalla de iniciar sesión
+      // (con el correo precargado para mayor comodidad).
+      setEmail(regEmail);
+      setPassword("");
+      setActiveTab("login");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo crear la cuenta.");
+    } finally {
+      setLoading(false);
+    }
   };
-  const handleRegister = () => {
-    import("@/hooks/useSession").then(({ setSession }) => setSession("buscador"));
-    navigate(redirectTo || "/");
+
+  const handleGoogle = async () => {
+    if (activeTab === "register" && !acceptedTerms) {
+      toast.error("Debes aceptar los Términos y Condiciones y la Política de Privacidad.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await signInWithGoogle(redirectTo || undefined);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo conectar con Google.");
+    } finally {
+      // En el APK el navegador se abre aparte; reseteamos para que el botón no
+      // quede cargando si el usuario vuelve sin completar el login.
+      setLoading(false);
+    }
   };
+
+  const handleFacebook = async () => {
+    if (activeTab === "register" && !acceptedTerms) {
+      toast.error("Debes aceptar los Términos y Condiciones y la Política de Privacidad.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await signInWithFacebook(redirectTo || undefined);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo conectar con Facebook.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const [activeTab, setActiveTab] = useState<"login" | "register">(
     searchParams.get("tab") === "register" ? "register" : "login"
   );
-  
+
   const [showPassword, setShowPassword] = useState(false);
 
   return (
@@ -117,12 +293,15 @@ const AuthPage = () => {
             <div className="space-y-4 animate-fade-in">
               <div>
                 <Label htmlFor="email">Correo electrónico</Label>
-                <Input id="email" type="email" placeholder="tu@correo.com" className="mt-1" />
+                <Input ref={loginEmailRef} id="email" type="email" placeholder="tu@correo.com" className="mt-1"
+                  value={email} onChange={(e) => setEmail(e.target.value)} />
               </div>
               <div>
                 <Label htmlFor="password">Contraseña</Label>
                 <div className="relative mt-1">
-                  <Input id="password" type={showPassword ? "text" : "password"} placeholder="••••••••" />
+                  <Input id="password" type={showPassword ? "text" : "password"} placeholder="••••••••"
+                    value={password} onChange={(e) => setPassword(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") handleLogin(); }} />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
@@ -139,7 +318,17 @@ const AuthPage = () => {
                 </label>
                 <a href="#" className="text-sm text-secondary hover:underline">¿Olvidaste tu contraseña?</a>
               </div>
-              <Button className="w-full" size="lg" onClick={handleLogin}>Iniciar sesión</Button>
+              <div className="flex justify-center">
+                <HCaptcha
+                  ref={captchaRef}
+                  sitekey={HCAPTCHA_SITE_KEY}
+                  onVerify={(t) => setCaptchaToken(t)}
+                  onExpire={() => setCaptchaToken(null)}
+                />
+              </div>
+              <Button className="w-full" size="lg" onClick={handleLogin} disabled={loading || !captchaToken}>
+                {loading ? <Loader2 className="animate-spin" size={18} /> : "Iniciar sesión"}
+              </Button>
 
               <div className="relative my-4">
                 <div className="absolute inset-0 flex items-center"><div className="w-full border-t" /></div>
@@ -147,11 +336,11 @@ const AuthPage = () => {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <Button variant="outline" className="w-full">
+                <Button variant="outline" className="w-full" onClick={handleGoogle} disabled={loading}>
                   <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
                   Google
                 </Button>
-                <Button variant="outline" className="w-full">
+                <Button variant="outline" className="w-full" onClick={handleFacebook} disabled={loading}>
                   <svg className="w-4 h-4 mr-2" fill="#1877F2" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
                   Facebook
                 </Button>
@@ -160,39 +349,105 @@ const AuthPage = () => {
           ) : (
             <div className="space-y-4 animate-fade-in">
               <div>
-                <Label htmlFor="fullName">Nombre completo</Label>
-                <Input id="fullName" placeholder="Juan Pérez" className="mt-1" />
+                <Label htmlFor="regEmail">Correo electrónico *</Label>
+                <Input id="regEmail" type="email" inputMode="email" placeholder="tu@correo.com" className="mt-1"
+                  value={regEmail} onChange={(e) => setRegEmail(e.target.value)} />
+                {regEmail && !EMAIL_RE.test(regEmail) && (
+                  <p className="text-xs text-destructive mt-1">Ingresa un correo válido.</p>
+                )}
               </div>
               <div>
-                <Label htmlFor="regEmail">Correo electrónico</Label>
-                <Input id="regEmail" type="email" placeholder="tu@correo.com" className="mt-1" />
-              </div>
-              <div>
-                <Label htmlFor="phone">Teléfono</Label>
+                <Label htmlFor="phone">Teléfono <span className="text-muted-foreground font-normal">(opcional)</span></Label>
                 <div className="flex gap-2 mt-1">
-                  <span className="flex items-center px-3 bg-muted rounded-md text-sm text-muted-foreground border">+51</span>
-                  <Input id="phone" placeholder="999 888 777" className="flex-1 min-w-0" />
+                  <Select value={countryCode} onValueChange={setCountryCode}>
+                    <SelectTrigger className="w-[110px] shrink-0"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {COUNTRY_CODES.map((c) => (
+                        <SelectItem key={c.code} value={c.code}>{c.flag} {c.code}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    id="phone"
+                    inputMode="numeric"
+                    placeholder="999 888 777"
+                    className="flex-1 min-w-0"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 9))}
+                  />
                 </div>
+                {phone.length > 0 && phone.length !== 9 && (
+                  <p className="text-xs text-destructive mt-1">El número debe tener exactamente 9 dígitos.</p>
+                )}
               </div>
               <div>
-                <Label htmlFor="regPassword">Contraseña</Label>
-                <Input id="regPassword" type="password" placeholder="Mínimo 8 caracteres" className="mt-1" />
+                <Label htmlFor="regPassword">Contraseña *</Label>
+                <Input id="regPassword" type="password" placeholder="Mínimo 8 caracteres" className="mt-1"
+                  value={regPassword} onChange={(e) => setRegPassword(e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="regPasswordConfirm">Confirmar contraseña *</Label>
+                <Input id="regPasswordConfirm" type="password" placeholder="Repite tu contraseña" className="mt-1"
+                  value={regPasswordConfirm} onChange={(e) => setRegPasswordConfirm(e.target.value)} />
+                {regPasswordConfirm.length > 0 && regPassword !== regPasswordConfirm && (
+                  <p className="text-xs text-destructive mt-1">Las contraseñas no coinciden.</p>
+                )}
               </div>
 
               <label className="flex items-start gap-2 text-sm text-muted-foreground cursor-pointer">
-                <Checkbox className="mt-0.5" />
-                <span>Acepto los <a href="#" className="text-secondary hover:underline">términos</a> y la <a href="#" className="text-secondary hover:underline">política de privacidad</a></span>
+                <Checkbox
+                  className="mt-0.5"
+                  checked={acceptedTerms}
+                  onCheckedChange={(v) => setAcceptedTerms(v === true)}
+                />
+                <span>
+                  Acepto los{" "}
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); setTermsOpen(true); }}
+                    className="text-secondary hover:underline font-medium"
+                  >
+                    Términos y Condiciones
+                  </button>{" "}
+                  y la{" "}
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); setTermsOpen(true); }}
+                    className="text-secondary hover:underline font-medium"
+                  >
+                    Política de Privacidad
+                  </button>
+                </span>
               </label>
 
-              <Button className="w-full" size="lg" onClick={handleRegister}>Crear cuenta</Button>
+              <Button className="w-full" size="lg" onClick={handleRegister} disabled={loading || !acceptedTerms}>
+                {loading ? <Loader2 className="animate-spin" size={18} /> : "Crear cuenta"}
+              </Button>
+
+              <TermsDialog open={termsOpen} onOpenChange={setTermsOpen} />
+
+              <div className="relative my-4">
+                <div className="absolute inset-0 flex items-center"><div className="w-full border-t" /></div>
+                <div className="relative flex justify-center text-xs"><span className="bg-card lg:bg-background px-2 text-muted-foreground">o regístrate con</span></div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Button variant="outline" className="w-full" onClick={handleGoogle} disabled={loading}>
+                  <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                  Google
+                </Button>
+                <Button variant="outline" className="w-full" onClick={handleFacebook} disabled={loading}>
+                  <svg className="w-4 h-4 mr-2" fill="#1877F2" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                  Facebook
+                </Button>
+              </div>
             </div>
 
           )}
 
-          {/* Demo buttons */}
+          {/* Accesos rápidos — Anunciante/Buscador son demo; Administrador usa login real. */}
           <div className="mt-6 pt-4 border-t border-dashed">
-            <p className="text-xs text-muted-foreground text-center mb-3">Acceso rápido de demostración</p>
-            <div className="grid grid-cols-2 gap-2">
+            <p className="text-xs text-muted-foreground text-center mb-3">Acceso rápido</p>
+            <div className="grid grid-cols-3 gap-2">
               <Button variant="outline" size="sm" className="min-w-0 gap-1.5 border-secondary/40 text-secondary hover:bg-secondary/10 hover:text-secondary"
                 onClick={() => enterDemo("anunciante")}>
                 <Megaphone size={14} className="flex-shrink-0" />
@@ -203,17 +458,15 @@ const AuthPage = () => {
                 <Search size={14} className="flex-shrink-0" />
                 <span className="truncate">Buscador</span>
               </Button>
-              <Button variant="outline" size="sm" className="min-w-0 gap-1.5 border-primary/60 bg-primary/5 text-primary hover:bg-primary/15"
-                onClick={() => enterDemo("admin")}>
-                <Shield size={14} className="flex-shrink-0" />
-                <span className="truncate">Administrador</span>
-              </Button>
-              <Button variant="outline" size="sm" className="min-w-0 gap-1.5 border-secondary/60 bg-gradient-to-r from-secondary/10 to-primary/10 text-secondary hover:from-secondary/20 hover:to-primary/20"
-                onClick={() => enterDemo("superadmin")}>
+              <Button variant="outline" size="sm" className="min-w-0 gap-1.5 border-amber-500/40 text-amber-600 hover:bg-amber-500/10 hover:text-amber-600"
+                onClick={goAdminLogin}>
                 <Crown size={14} className="flex-shrink-0" />
-                <span className="truncate">Super Admin</span>
+                <span className="truncate">Admin</span>
               </Button>
             </div>
+            <p className="text-[11px] text-muted-foreground text-center mt-3 flex items-center justify-center gap-1.5">
+              <ShieldCheck size={12} className="text-secondary" /> El acceso de administrador usa el formulario de arriba con una cuenta autorizada y verificación en dos pasos.
+            </p>
           </div>
         </div>
       </div>

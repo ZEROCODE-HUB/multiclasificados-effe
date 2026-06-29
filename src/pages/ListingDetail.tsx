@@ -3,7 +3,8 @@ import { Navbar } from "@/components/Navbar";
 import { ListingCard } from "@/components/ListingCard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { featuredListings, categories } from "@/data/mockData";
+import { categories, type Listing } from "@/data/mockData";
+import { fetchListingById, fetchListingImages, fetchListings, trackEvent } from "@/lib/listings";
 import {
   ChevronRight,
   MapPin,
@@ -25,8 +26,9 @@ import {
   Users,
   Copy,
   Send,
+  ClipboardCheck,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -39,60 +41,166 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { useSession } from "@/hooks/useSession";
+import { useFavorites } from "@/hooks/useFavorites";
+import { ListingReviews } from "@/components/ListingReviews";
+import { fetchSellerInfo, fetchReviews } from "@/lib/reviews";
+import { applyToListing, fetchMyApplication, STATUS_LABEL, type ApplicationStatus } from "@/lib/applications";
 import { Checkbox } from "@/components/ui/checkbox";
-import { addReport, loadSold, markSold } from "@/lib/pricing";
+import { loadSold, markSold } from "@/lib/pricing";
+import { reportListing, reportUser, LISTING_REPORT_REASONS, USER_REPORT_REASONS } from "@/lib/reports";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { supabase } from "@/lib/supabase";
+import { getOrCreateConversation, sendMessage } from "@/lib/messaging";
 
 
 export default function ListingDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const listing = featuredListings.find((l) => l.id === id) ?? featuredListings[0];
-  const category = categories.find((c) => c.id === listing.category);
-
-  const gallery = useMemo(
-    () => [
-      listing.imageUrl,
-      "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1200&h=800&fit=crop",
-      "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=1200&h=800&fit=crop",
-      "https://images.unsplash.com/photo-1505691938895-1758d7feb511?w=1200&h=800&fit=crop",
-      "https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=1200&h=800&fit=crop",
-    ],
-    [listing.imageUrl],
-  );
-
-  const [activeImg, setActiveImg] = useState(0);
+  // Placeholder neutro hasta cargar el aviso real (sin datos ficticios).
+  const EMPTY: Listing = {
+    id: id ?? "", title: "", description: "", price: 0, currency: "PEN",
+    category: "", location: "", imageUrl: "", date: new Date().toISOString(),
+    featured: false, advertiser: "", views: 0,
+  };
+  const [listing, setListing] = useState<Listing>(EMPTY);
+  const [related, setRelated] = useState<Listing[]>([]);
   const session = useSession();
+  const { isFavorite, toggle } = useFavorites();
+  const fav = isFavorite(listing.id);
 
-  // Mock phone derived from listing id for stability
-  const phoneNumber = useMemo(() => {
-    const seed = (parseInt(listing.id, 36) || 1) * 7;
-    const last = String(900000000 + (seed % 99999999)).slice(0, 9);
-    return `+51 ${last.slice(0, 3)} ${last.slice(3, 6)} ${last.slice(6)}`;
-  }, [listing.id]);
+  // Reseñas (rating real del vendedor) + postulación del usuario
+  const [sellerRating, setSellerRating] = useState(0);
+  const [reviewCount, setReviewCount] = useState(0);
+  const [myApp, setMyApp] = useState<ApplicationStatus | null>(null);
+  const [applyOpen, setApplyOpen] = useState(false);
+  const [applyMsg, setApplyMsg] = useState("");
+  const [ownerId, setOwnerId] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  // Guardia: el detalle del aviso solo es visible con sesión iniciada.
+  const [authChecked, setAuthChecked] = useState(false);
+  useEffect(() => {
+    let active = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      if (!data.session) {
+        navigate(`/auth?redirect=/aviso/${id ?? ""}`, { replace: true });
+      } else {
+        setAuthChecked(true);
+      }
+    });
+    return () => { active = false; };
+  }, [id, navigate]);
+
+  const loadReviewMeta = () => {
+    if (!id) return;
+    fetchSellerInfo(id).then((info) => {
+      if (!info) return;
+      setSellerRating(info.rating);
+      setOwnerId(info.ownerId);
+    });
+    fetchReviews(id).then((rs) => setReviewCount(rs.length));
+  };
+
+  useEffect(() => {
+    if (!id) return;
+    let mounted = true;
+    fetchListingById(id).then((l) => {
+      if (mounted && l) setListing(l);
+    });
+    fetchListings({ limit: 8 }).then((rows) => {
+      if (mounted) setRelated(rows.filter((l) => l.id !== id).slice(0, 4));
+    });
+    loadReviewMeta();
+    fetchMyApplication(id).then((s) => mounted && setMyApp(s));
+    supabase.auth.getUser().then(({ data }) => mounted && setCurrentUserId(data.user?.id ?? null));
+    trackEvent(id, "view"); // REQ-08: registra la visita
+    return () => { mounted = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, session]);
+  const category = categories.find((c) => c.id === listing.category);
+  // Las postulaciones (y las reseñas que dependen de ellas) solo aplican a empleos.
+  const isJobs = listing.category === "empleos";
+  // El dueño del aviso no puede postularse ni reseñar su propia publicación.
+  const isOwner = !!currentUserId && !!ownerId && currentUserId === ownerId;
+
+  // Imágenes de demo (solo para avisos mock, no para avisos reales).
+  const MOCK_EXTRA_IMAGES = [
+    "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1200&h=800&fit=crop",
+    "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=1200&h=800&fit=crop",
+    "https://images.unsplash.com/photo-1505691938895-1758d7feb511?w=1200&h=800&fit=crop",
+    "https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=1200&h=800&fit=crop",
+  ];
+  const isRealId = !!id &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+  const [gallery, setGallery] = useState<string[]>([listing.imageUrl]);
+  const [activeImg, setActiveImg] = useState(0);
+
+  // Carga las imágenes REALES del aviso; cae a demo solo si es un aviso mock.
+  useEffect(() => {
+    if (!id) return;
+    let mounted = true;
+    fetchListingImages(id).then((urls) => {
+      if (!mounted) return;
+      if (urls.length) setGallery(urls);
+      else if (!isRealId) setGallery([listing.imageUrl, ...MOCK_EXTRA_IMAGES]);
+      else setGallery([listing.imageUrl]);
+      setActiveImg(0);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, listing.imageUrl]);
+
+  // Sin teléfono público (se coordina por mensaje).
+  const phoneNumber = "No disponible";
 
   const [messageOpen, setMessageOpen] = useState(false);
   const [phoneOpen, setPhoneOpen] = useState(false);
   const [phoneRevealed, setPhoneRevealed] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
-  const [reportReason, setReportReason] = useState("");
+  const [reportCategory, setReportCategory] = useState("");
+  const [reportDetail, setReportDetail] = useState("");
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  // Reporte de usuario (anunciante)
+  const [userReportOpen, setUserReportOpen] = useState(false);
+  const [userReportCategory, setUserReportCategory] = useState("");
+  const [userReportDetail, setUserReportDetail] = useState("");
+  const [userReportSubmitting, setUserReportSubmitting] = useState(false);
   const [soldState, setSoldState] = useState(() => loadSold()[listing.id]);
 
   const [messageText, setMessageText] = useState(
     `Hola ${listing.advertiser.split(" ")[0]}, estoy interesado en "${listing.title}". ¿Sigue disponible?`,
   );
 
-  const handleReport = () => {
-    if (!reportReason.trim()) return;
-    addReport({
-      listingId: listing.id,
-      listingTitle: listing.title,
-      reason: reportReason.trim(),
-      reportedBy: session?.name || "Usuario anónimo",
-      category: category?.name,
-    });
-    setReportOpen(false);
-    setReportReason("");
-    toast({ title: "Reporte enviado", description: "Nuestro equipo revisará el aviso." });
+  const handleReport = async () => {
+    if (!reportCategory || !listing.id) return;
+    setReportSubmitting(true);
+    try {
+      await reportListing(listing.id, reportCategory, reportDetail);
+      setReportOpen(false);
+      setReportCategory("");
+      setReportDetail("");
+      toast({ title: "Reporte enviado", description: "Nuestro equipo de moderación revisará el aviso." });
+    } catch (e) {
+      toast({ title: "No se pudo reportar", description: e instanceof Error ? e.message : "Intenta de nuevo.", variant: "destructive" });
+    } finally {
+      setReportSubmitting(false);
+    }
+  };
+
+  const handleReportUser = async () => {
+    if (!userReportCategory || !ownerId) return;
+    setUserReportSubmitting(true);
+    try {
+      await reportUser(ownerId, userReportCategory, userReportDetail);
+      setUserReportOpen(false);
+      setUserReportCategory("");
+      setUserReportDetail("");
+      toast({ title: "Usuario reportado", description: "Nuestro equipo de moderación revisará al anunciante." });
+    } catch (e) {
+      toast({ title: "No se pudo reportar", description: e instanceof Error ? e.message : "Intenta de nuevo.", variant: "destructive" });
+    } finally {
+      setUserReportSubmitting(false);
+    }
   };
 
   const toggleSold = (who: "buyer" | "seller") => {
@@ -102,7 +210,8 @@ export default function ListingDetail() {
   };
 
   const requireAuthOrRun = (action: () => void) => {
-    if (!session) {
+    // Exige una sesión REAL de Supabase (no demo) para contactar/postular/reportar.
+    if (!session?.supabase) {
       toast({
         title: "Inicia sesión para continuar",
         description: "Necesitas una cuenta para contactar al anunciante.",
@@ -113,19 +222,53 @@ export default function ListingDetail() {
     action();
   };
 
-  const handleSendMessage = () => {
-    if (!messageText.trim()) return;
-    setMessageOpen(false);
-    toast({
-      title: "Mensaje enviado",
-      description: `${listing.advertiser} recibirá tu consulta. Revisa tus conversaciones.`,
-    });
-    setTimeout(() => navigate("/buscador/conversaciones"), 600);
+  const handleSendMessage = async () => {
+    if (!messageText.trim() || !id) return;
+    if (!ownerId) {
+      toast({ title: "No disponible", description: "No se pudo identificar al anunciante.", variant: "destructive" });
+      return;
+    }
+    try {
+      const convId = await getOrCreateConversation(id, ownerId);
+      await sendMessage(convId, messageText);
+      trackEvent(id, "contact_click"); // REQ-08: clic de contacto
+      setMessageOpen(false);
+      toast({
+        title: "Mensaje enviado",
+        description: `${listing.advertiser} recibirá tu consulta. Abriendo tu conversación…`,
+      });
+      const base = session?.role === "anunciante" ? "anunciante" : "buscador";
+      setTimeout(() => navigate(`/dashboard/${base}/mensajes?c=${convId}`), 500);
+    } catch (e) {
+      toast({
+        title: "No se pudo enviar",
+        description: e instanceof Error ? e.message : "Intenta nuevamente.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleRevealPhone = () => {
     setPhoneRevealed(true);
     setPhoneOpen(true);
+    if (id) trackEvent(id, "phone_click"); // REQ-08: clic de contacto (teléfono)
+  };
+
+  const handleApply = async () => {
+    if (!id) return;
+    try {
+      await applyToListing(id, applyMsg);
+      setMyApp("pending");
+      setApplyOpen(false);
+      setApplyMsg("");
+      toast({ title: "Postulación enviada", description: "El anunciante revisará tu postulación." });
+    } catch (e) {
+      toast({
+        title: "No se pudo postular",
+        description: e instanceof Error ? e.message : "Intenta nuevamente.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleCopyPhone = async () => {
@@ -142,7 +285,7 @@ export default function ListingDetail() {
 
   const specs = [
     { label: "Categoría", value: category?.name ?? listing.category },
-    { label: "Condición", value: "Nuevo / Como nuevo" },
+    { label: "Condición", value: "—" },
     { label: "Ubicación", value: listing.location },
     { label: "Publicado", value: new Date(listing.date).toLocaleDateString("es-PE", { day: "2-digit", month: "long", year: "numeric" }) },
     { label: "Código de aviso", value: `EFFE-${listing.id.padStart(6, "0")}` },
@@ -157,7 +300,18 @@ export default function ListingDetail() {
     "Devolución dentro de 7 días",
   ];
 
-  const related = featuredListings.filter((l) => l.id !== listing.id).slice(0, 4);
+
+  // Mientras se verifica la sesión (o se redirige al login) no mostramos el detalle.
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <div className="container mx-auto px-4 py-24 text-center text-muted-foreground text-sm">
+          Verificando tu sesión…
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -229,10 +383,26 @@ export default function ListingDetail() {
               <span className="flex items-center gap-1.5"><MapPin size={14} className="text-secondary" /> {listing.location}</span>
               <span className="flex items-center gap-1.5"><Eye size={14} /> {listing.views.toLocaleString()} vistas</span>
               <span className="flex items-center gap-1.5"><Calendar size={14} /> Publicado el {new Date(listing.date).toLocaleDateString("es-PE")}</span>
-              <span className="flex items-center gap-1.5"><Star size={14} className="text-secondary fill-secondary" /> 4.8 (132 reseñas)</span>
+              <span className="flex items-center gap-1.5"><Star size={14} className="text-secondary fill-secondary" /> {sellerRating.toFixed(1)} ({reviewCount} reseña{reviewCount === 1 ? "" : "s"})</span>
             </div>
             <div className="flex flex-wrap gap-2 pt-2">
-              <Button variant="outline" size="sm" className="gap-2 rounded-full"><Heart size={14} /> Guardar</Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 rounded-full"
+                onClick={() =>
+                  requireAuthOrRun(async () => {
+                    const res = await toggle(listing.id);
+                    if (res === null) {
+                      toast({ title: "Disponible con avisos reales" });
+                      return;
+                    }
+                    toast({ title: res ? "Guardado en favoritos" : "Quitado de favoritos" });
+                  })
+                }
+              >
+                <Heart size={14} className={fav ? "fill-secondary text-secondary" : ""} /> {fav ? "Guardado" : "Guardar"}
+              </Button>
               <Button variant="outline" size="sm" className="gap-2 rounded-full"><Share2 size={14} /> Compartir</Button>
               <Button variant="outline" size="sm" className="gap-2 rounded-full" onClick={() => requireAuthOrRun(() => setReportOpen(true))}>
                 <Flag size={14} /> Reportar
@@ -298,6 +468,11 @@ export default function ListingDetail() {
             </div>
             <p className="text-xs text-muted-foreground mt-3">Ubicación aproximada por seguridad. La dirección exacta se comparte tras coordinar con el anunciante.</p>
           </section>
+
+          {/* Reseñas (REQ-07) */}
+          {isJobs && listing.id && (
+            <ListingReviews listingId={listing.id} isOwner={isOwner} onChange={loadReviewMeta} />
+          )}
         </div>
 
         {/* RIGHT — Sticky purchase / contact panel */}
@@ -310,26 +485,52 @@ export default function ListingDetail() {
             </div>
             <div>
               <p className="text-4xl font-extrabold text-primary tracking-tight">{formatPrice(listing.price, listing.currency)}</p>
-              <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5"><Clock size={12} /> Precio actualizado hace 2 días</p>
+              <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5"><Clock size={12} /> Precio vigente</p>
             </div>
 
             <div className="flex flex-col gap-2 pt-2">
-              <Button
-                size="lg"
-                className="w-full gap-2 font-bold uppercase tracking-wider text-xs rounded-none h-12"
-                onClick={() => requireAuthOrRun(() => setMessageOpen(true))}
-              >
-                <MessageSquare size={16} /> Enviar mensaje
-              </Button>
-              <Button
-                variant="outline"
-                size="lg"
-                className="w-full gap-2 font-bold uppercase tracking-wider text-xs rounded-none h-12"
-                onClick={() => requireAuthOrRun(handleRevealPhone)}
-              >
-                <Phone size={16} />
-                {phoneRevealed ? phoneNumber : "Mostrar teléfono"}
-              </Button>
+              {isOwner && (
+                <div className="w-full h-12 flex items-center justify-center gap-2 border border-secondary/40 bg-secondary/5 text-xs font-bold uppercase tracking-wider text-secondary">
+                  <ShieldCheck size={16} /> Este es tu aviso
+                </div>
+              )}
+              {!isOwner && (
+                <>
+                  <Button
+                    size="lg"
+                    className="w-full gap-2 font-bold uppercase tracking-wider text-xs rounded-none h-12"
+                    onClick={() => requireAuthOrRun(() => setMessageOpen(true))}
+                  >
+                    <MessageSquare size={16} /> Enviar mensaje
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    className="w-full gap-2 font-bold uppercase tracking-wider text-xs rounded-none h-12"
+                    onClick={() => requireAuthOrRun(handleRevealPhone)}
+                  >
+                    <Phone size={16} />
+                    {phoneRevealed ? phoneNumber : "Mostrar teléfono"}
+                  </Button>
+                </>
+              )}
+
+              {isJobs && !isOwner && (
+                myApp ? (
+                  <div className="w-full h-12 flex items-center justify-center gap-2 border border-secondary/40 bg-secondary/5 text-xs font-bold uppercase tracking-wider text-secondary">
+                    <ClipboardCheck size={16} /> Postulación: {STATUS_LABEL[myApp]}
+                  </div>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    className="w-full gap-2 font-bold uppercase tracking-wider text-xs rounded-none h-12"
+                    onClick={() => requireAuthOrRun(() => setApplyOpen(true))}
+                  >
+                    <ClipboardCheck size={16} /> Postularme
+                  </Button>
+                )
+              )}
             </div>
 
             <div className="pt-4 border-t border-border space-y-2 text-xs text-muted-foreground">
@@ -351,47 +552,67 @@ export default function ListingDetail() {
                   <ShieldCheck size={14} className="text-secondary shrink-0" />
                 </p>
                 <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                  <Building2 size={11} /> Empresa Pro · Lima
+                  <Building2 size={11} /> {listing.location || "—"}
                 </p>
               </div>
             </div>
             <div className="grid grid-cols-3 gap-2 pt-2">
               <div className="text-center py-2 bg-muted/40 border border-border">
-                <p className="text-base font-extrabold text-primary">4.9</p>
+                <p className="text-base font-extrabold text-primary">{sellerRating.toFixed(1)}</p>
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Rating</p>
               </div>
               <div className="text-center py-2 bg-muted/40 border border-border">
-                <p className="text-base font-extrabold text-primary">132</p>
+                <p className="text-base font-extrabold text-primary">0</p>
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Avisos</p>
               </div>
               <div className="text-center py-2 bg-muted/40 border border-border">
-                <p className="text-base font-extrabold text-primary">3y</p>
+                <p className="text-base font-extrabold text-primary">Nuevo</p>
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Antigüedad</p>
               </div>
             </div>
             <Button variant="outline" className="w-full rounded-none gap-2 text-xs uppercase tracking-wider font-bold">
               <Users size={14} /> Ver todos sus avisos
             </Button>
-          </div>
-
-          {/* Sale closure */}
-          <div className="bg-card border border-border p-5 space-y-3">
-            <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-secondary">Cierre de venta</p>
-            <p className="text-xs text-muted-foreground">Marca si concretaron la transacción. Ambos lados pueden confirmar.</p>
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <Checkbox checked={!!soldState?.buyer} onCheckedChange={() => requireAuthOrRun(() => toggleSold("buyer"))} />
-              <span>Soy el comprador y la venta se concretó</span>
-            </label>
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <Checkbox checked={!!soldState?.seller} onCheckedChange={() => requireAuthOrRun(() => toggleSold("seller"))} />
-              <span>Soy el vendedor y la venta se concretó</span>
-            </label>
-            {(soldState?.buyer || soldState?.seller) && (
-              <p className="text-[11px] text-success font-semibold flex items-center gap-1">
-                <CheckCircle2 size={12} /> Venta registrada
-              </p>
+            {!isOwner && (
+              <button
+                onClick={() => requireAuthOrRun(() => setUserReportOpen(true))}
+                className="w-full flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors pt-1"
+              >
+                <Flag size={12} /> Reportar a este usuario
+              </button>
             )}
           </div>
+
+          {/* Sale closure — no aplica a empleos (no es una venta de producto) */}
+          {!isJobs && (
+            <div className="bg-card border border-border p-5 space-y-3">
+              <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-secondary">Cierre de venta</p>
+              <p className="text-xs text-muted-foreground">Marca si concretaron la transacción. Ambos lados pueden confirmar.</p>
+              {isOwner ? (
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox checked={!!soldState?.seller} onCheckedChange={() => requireAuthOrRun(() => toggleSold("seller"))} />
+                  <span>Soy el vendedor y la venta se concretó</span>
+                </label>
+              ) : (
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox checked={!!soldState?.buyer} onCheckedChange={() => requireAuthOrRun(() => toggleSold("buyer"))} />
+                  <span>Soy el comprador y la venta se concretó</span>
+                </label>
+              )}
+              {/* Estado del otro lado (solo informativo) */}
+              {isOwner && soldState?.buyer && (
+                <p className="text-[11px] text-muted-foreground">El comprador ya confirmó la transacción.</p>
+              )}
+              {!isOwner && soldState?.seller && (
+                <p className="text-[11px] text-muted-foreground">El vendedor ya confirmó la transacción.</p>
+              )}
+              {(soldState?.buyer || soldState?.seller) && (
+                <p className="text-[11px] text-success font-semibold flex items-center gap-1">
+                  <CheckCircle2 size={12} /> Venta registrada
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Safety tips */}
           <div className="bg-muted/30 border border-border p-5 text-xs text-muted-foreground space-y-2">
@@ -407,7 +628,7 @@ export default function ListingDetail() {
       </div>
 
       {/* Related */}
-      <section className="container mx-auto px-4 md:px-6 py-14 md:py-20 border-t">
+      <section className="container mx-auto px-4 md:px-6 pt-14 md:pt-20 pb-28 md:pb-20 border-t">
         <div className="flex items-end justify-between mb-8 gap-4 flex-wrap">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] font-bold text-secondary mb-2">Sigue explorando</p>
@@ -417,11 +638,17 @@ export default function ListingDetail() {
             Ver más →
           </Link>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-10">
-          {related.map((l) => (
-            <ListingCard key={l.id} listing={l} />
-          ))}
-        </div>
+        {related.length === 0 ? (
+          <div className="border border-dashed border-border py-12 text-center">
+            <p className="text-muted-foreground text-sm">Aún no hay otros avisos para mostrar.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 3xl:grid-cols-5 4xl:grid-cols-6 5xl:grid-cols-8 gap-x-6 gap-y-10">
+            {related.map((l) => (
+              <ListingCard key={l.id} listing={l} />
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Message dialog */}
@@ -484,6 +711,34 @@ export default function ListingDetail() {
         </DialogContent>
       </Dialog>
 
+      {/* Postulación dialog */}
+      <Dialog open={applyOpen} onOpenChange={setApplyOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Postular a este aviso</DialogTitle>
+            <DialogDescription>
+              Tu postulación se enviará a {listing.advertiser || "el anunciante"}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Label htmlFor="applymsg">Mensaje (opcional)</Label>
+            <Textarea
+              id="applymsg"
+              rows={4}
+              value={applyMsg}
+              onChange={(e) => setApplyMsg(e.target.value)}
+              placeholder="Preséntate o cuenta por qué te interesa este aviso…"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setApplyOpen(false)}>Cancelar</Button>
+            <Button onClick={handleApply} className="gap-2">
+              <ClipboardCheck size={14} /> Enviar postulación
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Report dialog */}
       <Dialog open={reportOpen} onOpenChange={setReportOpen}>
         <DialogContent className="sm:max-w-md">
@@ -492,19 +747,59 @@ export default function ListingDetail() {
             <DialogDescription>Cuéntanos qué problema observas con "{listing.title}".</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
-            <Label htmlFor="reason">Motivo del reporte</Label>
+            <Label>Motivo del reporte</Label>
+            <Select value={reportCategory} onValueChange={setReportCategory}>
+              <SelectTrigger><SelectValue placeholder="Selecciona un motivo" /></SelectTrigger>
+              <SelectContent>
+                {LISTING_REPORT_REASONS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Label htmlFor="reason">Detalle (opcional)</Label>
             <Textarea
               id="reason"
-              rows={4}
-              value={reportReason}
-              onChange={(e) => setReportReason(e.target.value)}
-              placeholder="Ej: información engañosa, contenido inapropiado, posible estafa…"
+              rows={3}
+              value={reportDetail}
+              onChange={(e) => setReportDetail(e.target.value)}
+              placeholder="Cuéntanos más sobre el problema…"
             />
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setReportOpen(false)}>Cancelar</Button>
-            <Button onClick={handleReport} disabled={!reportReason.trim()} className="gap-2">
-              <Flag size={14} /> Enviar reporte
+            <Button onClick={handleReport} disabled={!reportCategory || reportSubmitting} className="gap-2">
+              <Flag size={14} /> {reportSubmitting ? "Enviando…" : "Enviar reporte"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reportar usuario (REQ-10) */}
+      <Dialog open={userReportOpen} onOpenChange={setUserReportOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reportar usuario</DialogTitle>
+            <DialogDescription>Cuéntanos qué problema observas con {listing.advertiser || "este anunciante"}.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Label>Motivo del reporte</Label>
+            <Select value={userReportCategory} onValueChange={setUserReportCategory}>
+              <SelectTrigger><SelectValue placeholder="Selecciona un motivo" /></SelectTrigger>
+              <SelectContent>
+                {USER_REPORT_REASONS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Label htmlFor="user-reason">Detalle (opcional)</Label>
+            <Textarea
+              id="user-reason"
+              rows={3}
+              value={userReportDetail}
+              onChange={(e) => setUserReportDetail(e.target.value)}
+              placeholder="Cuéntanos más sobre el problema…"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setUserReportOpen(false)}>Cancelar</Button>
+            <Button onClick={handleReportUser} disabled={!userReportCategory || userReportSubmitting} className="gap-2">
+              <Flag size={14} /> {userReportSubmitting ? "Enviando…" : "Enviar reporte"}
             </Button>
           </DialogFooter>
         </DialogContent>

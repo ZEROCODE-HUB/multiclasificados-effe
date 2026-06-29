@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AdminLayout, AdminRole } from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -13,43 +13,158 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Trash2, FileText } from "lucide-react";
+import {
+  Plus, Pencil, Trash2, FileText, SlidersHorizontal, Save,
+  Home, Car, Briefcase, Smartphone, Package, Wrench, GraduationCap, Sparkles, Tag,
+  ShoppingBag, Heart, Building2, Plane, PawPrint, Dumbbell, Music, Camera, Utensils,
+  type LucideIcon,
+} from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { categories as initialCategories } from "@/data/mockData";
 import { toast } from "@/hooks/use-toast";
-import { loadInvoices, formatSoles } from "@/lib/pricing";
+import { cn } from "@/lib/utils";
+import { formatSoles } from "@/lib/pricing";
+import {
+  fetchSettings, setSetting, fetchAllInvoices,
+  fetchCategories, createCategory, updateCategory, deleteCategory,
+  type AdminInvoice, type AdminCategory,
+} from "@/lib/admin";
+
+// Iconos disponibles para categorías (el icono se guarda como texto en la BD).
+const ICONS: Record<string, LucideIcon> = {
+  Home, Car, Briefcase, Smartphone, Package, Wrench, GraduationCap, Sparkles, Tag,
+  ShoppingBag, Heart, Building2, Plane, PawPrint, Dumbbell, Music, Camera, Utensils,
+};
+const ICON_OPTIONS = Object.keys(ICONS);
+const iconFor = (name: string): LucideIcon => ICONS[name] ?? Tag;
 
 
 const AdminCommercial = ({ role }: { role: AdminRole }) => {
-  // ===== Categorías =====
-  const [cats, setCats] = useState(initialCategories.map((c) => ({ id: c.id, name: c.name, count: c.count, Icon: c.icon })));
-  const [catDialog, setCatDialog] = useState<{ open: boolean; editing: typeof cats[number] | null }>({ open: false, editing: null });
+  // ===== Categorías (tabla real `categories`) =====
+  const [cats, setCats] = useState<AdminCategory[]>([]);
+  const [catsLoading, setCatsLoading] = useState(true);
+  const [catDialog, setCatDialog] = useState<{ open: boolean; editing: AdminCategory | null }>({ open: false, editing: null });
   const [catName, setCatName] = useState("");
+  const [catIcon, setCatIcon] = useState("Tag");
+  const [savingCat, setSavingCat] = useState(false);
 
-  const openNewCat = () => { setCatName(""); setCatDialog({ open: true, editing: null }); };
-  const openEditCat = (c: typeof cats[number]) => { setCatName(c.name); setCatDialog({ open: true, editing: c }); };
-  const saveCat = () => {
+  const loadCats = () => {
+    setCatsLoading(true);
+    fetchCategories().then(({ data }) => { setCats(data); setCatsLoading(false); });
+  };
+  useEffect(() => { loadCats(); }, []);
+
+  const openNewCat = () => { setCatName(""); setCatIcon("Tag"); setCatDialog({ open: true, editing: null }); };
+  const openEditCat = (c: AdminCategory) => { setCatName(c.name); setCatIcon(c.icon); setCatDialog({ open: true, editing: c }); };
+
+  const saveCat = async () => {
     if (!catName.trim()) return;
-    if (catDialog.editing) {
-      setCats((p) => p.map((c) => c.id === catDialog.editing!.id ? { ...c, name: catName.trim() } : c));
-      toast({ title: "Categoría actualizada", description: catName.trim() });
-    } else {
-      setCats((p) => [...p, { id: catName.toLowerCase().replace(/\s+/g, "-"), name: catName.trim(), count: 0, Icon: initialCategories[0].icon }]);
-      toast({ title: "Categoría creada", description: catName.trim() });
+    setSavingCat(true);
+    try {
+      if (catDialog.editing) {
+        await updateCategory(catDialog.editing.id, { name: catName.trim(), icon: catIcon });
+        toast({ title: "Categoría actualizada", description: catName.trim() });
+      } else {
+        await createCategory({ name: catName.trim(), icon: catIcon, sort_order: cats.length });
+        toast({ title: "Categoría creada", description: catName.trim() });
+      }
+      setCatDialog({ open: false, editing: null });
+      loadCats();
+    } catch (e: any) {
+      toast({ title: "No se pudo guardar", description: e?.message ?? "Error", variant: "destructive" });
     }
-    setCatDialog({ open: false, editing: null });
-  };
-  const deleteCat = (c: typeof cats[number]) => {
-    setCats((p) => p.filter((x) => x.id !== c.id));
-    toast({ title: "Categoría eliminada", description: c.name });
+    setSavingCat(false);
   };
 
+  const deleteCat = async (c: AdminCategory) => {
+    // No se puede borrar una categoría con avisos (FK restrictiva en `listings`).
+    if (c.count > 0) {
+      toast({
+        title: "No se puede eliminar",
+        description: `"${c.name}" tiene ${c.count} aviso(s) asociados. Reasigna o elimina esos avisos primero.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      await deleteCategory(c.id);
+      toast({ title: "Categoría eliminada", description: c.name });
+      loadCats();
+    } catch (e: any) {
+      toast({ title: "No se pudo eliminar", description: e?.message ?? "Error", variant: "destructive" });
+    }
+  };
+
+  // ===== Variables del sistema (REQ-ADM-04) =====
+  const SETTING_KEYS = {
+    commission_pct: "Comisión por transacción (%)",
+    featured_price: "Precio de aviso destacado (S/)",
+    free_listings_limit: "Límite de publicaciones gratis",
+    gateway_stripe: "Pasarela Stripe activa",
+    gateway_culqi: "Pasarela Culqi activa",
+    maintenance_mode: "Modo mantenimiento",
+  } as const;
+  type SettingKey = keyof typeof SETTING_KEYS;
+  const [settings, setSettings] = useState<Record<SettingKey, any>>({
+    commission_pct: 8, featured_price: 25, free_listings_limit: 3,
+    gateway_stripe: true, gateway_culqi: false, maintenance_mode: false,
+  });
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  // ===== Boletas y facturas (todos los anunciantes, desde la BD) =====
+  const [invoices, setInvoices] = useState<AdminInvoice[]>([]);
+  const [invoicesLoading, setInvoicesLoading] = useState(true);
+
+  useEffect(() => {
+    fetchSettings().then((rows) => {
+      if (!rows.length) return;
+      setSettings((prev) => {
+        const next = { ...prev };
+        rows.forEach((s) => { if (s.key in next) (next as any)[s.key] = s.value; });
+        return next;
+      });
+    });
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const load = () => {
+      fetchAllInvoices().then(({ data }) => {
+        if (mounted) { setInvoices(data); setInvoicesLoading(false); }
+      });
+    };
+    load();
+    // Refresca cuando se emite un comprobante nuevo (misma pestaña u otra).
+    window.addEventListener("effe:invoices-updated", load);
+    window.addEventListener("storage", load);
+    return () => {
+      mounted = false;
+      window.removeEventListener("effe:invoices-updated", load);
+      window.removeEventListener("storage", load);
+    };
+  }, []);
+
+  const saveSettings = async () => {
+    setSavingSettings(true);
+    try {
+      await Promise.all(
+        (Object.keys(SETTING_KEYS) as SettingKey[]).map((k) =>
+          setSetting(k, settings[k], SETTING_KEYS[k]),
+        ),
+      );
+      toast({ title: "Configuración guardada", description: "Las variables del sistema se actualizaron." });
+    } catch (e: any) {
+      toast({ title: "No se pudo guardar", description: e?.message ?? "Error", variant: "destructive" });
+    }
+    setSavingSettings(false);
+  };
 
   return (
     <AdminLayout role={role} title="Configuración comercial" breadcrumb={["Operación", "Comercial"]}>
       <Tabs defaultValue="categorias">
         <TabsList className="w-full overflow-x-auto justify-start no-scrollbar">
           <TabsTrigger value="categorias">Categorías</TabsTrigger>
+          <TabsTrigger value="sistema">Sistema</TabsTrigger>
           <TabsTrigger value="boletas">Boletas y facturas</TabsTrigger>
         </TabsList>
 
@@ -61,35 +176,44 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
               <Button size="sm" className="gap-2" onClick={openNewCat}><Plus size={14} /> Nueva</Button>
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-              {cats.map((c) => (
-                <div key={c.id} className="border p-4 bg-card card-lift">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="w-10 h-10 rounded-lg bg-accent text-accent-foreground flex items-center justify-center">
-                      <c.Icon size={18} />
+              {catsLoading && <p className="text-sm text-muted-foreground col-span-full py-6 text-center">Cargando categorías…</p>}
+              {!catsLoading && cats.length === 0 && <p className="text-sm text-muted-foreground col-span-full py-6 text-center">No hay categorías. Crea la primera.</p>}
+              {cats.map((c) => {
+                const Icon = iconFor(c.icon);
+                return (
+                  <div key={c.id} className="border p-4 bg-card card-lift">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="w-10 h-10 rounded-lg bg-accent text-accent-foreground flex items-center justify-center">
+                        <Icon size={18} />
+                      </div>
+                      <div className="flex gap-1">
+                        <Button size="icon" variant="ghost" title="Editar" onClick={() => openEditCat(c)}><Pencil size={14} /></Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button size="icon" variant="ghost" className="text-destructive" title="Eliminar"><Trash2 size={14} /></Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>¿Eliminar "{c.name}"?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                {c.count > 0
+                                  ? `Esta categoría tiene ${c.count} aviso(s) asociados. No podrás eliminarla hasta reasignar o quitar esos avisos.`
+                                  : "Esta acción es permanente. La categoría dejará de estar disponible para nuevos avisos."}
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => deleteCat(c)}>Eliminar</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
                     </div>
-                    <div className="flex gap-1">
-                      <Button size="icon" variant="ghost" title="Editar" onClick={() => openEditCat(c)}><Pencil size={14} /></Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button size="icon" variant="ghost" className="text-destructive" title="Eliminar"><Trash2 size={14} /></Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>¿Eliminar "{c.name}"?</AlertDialogTitle>
-                            <AlertDialogDescription>Los avisos asociados quedarán sin categoría.</AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => deleteCat(c)}>Eliminar</AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
+                    <p className="font-semibold text-sm">{c.name}</p>
+                    <p className="text-xs text-muted-foreground">{c.count.toLocaleString()} avisos</p>
                   </div>
-                  <p className="font-semibold text-sm">{c.name}</p>
-                  <p className="text-xs text-muted-foreground">{c.count.toLocaleString()} avisos</p>
-                </div>
-              ))}
+                );
+              })}
             </CardContent>
           </Card>
 
@@ -101,19 +225,99 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
                   {catDialog.editing ? "Modifica el nombre de la categoría." : "Crea una nueva categoría para clasificar avisos."}
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-3">
-                <Label>Nombre</Label>
-                <Input value={catName} onChange={(e) => setCatName(e.target.value)} placeholder="Ej. Maquinaria pesada" />
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Nombre</Label>
+                  <Input value={catName} onChange={(e) => setCatName(e.target.value)} placeholder="Ej. Maquinaria pesada" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Icono</Label>
+                  <div className="grid grid-cols-6 gap-2">
+                    {ICON_OPTIONS.map((name) => {
+                      const Ico = iconFor(name);
+                      const active = catIcon === name;
+                      return (
+                        <button
+                          key={name}
+                          type="button"
+                          onClick={() => setCatIcon(name)}
+                          title={name}
+                          className={cn(
+                            "h-10 rounded-lg border flex items-center justify-center transition-colors",
+                            active ? "border-secondary bg-secondary/15 text-secondary" : "hover:bg-muted text-muted-foreground",
+                          )}
+                        >
+                          <Ico size={18} />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setCatDialog({ open: false, editing: null })}>Cancelar</Button>
-                <Button onClick={saveCat}>{catDialog.editing ? "Guardar" : "Crear"}</Button>
+                <Button onClick={saveCat} disabled={savingCat || !catName.trim()}>
+                  {savingCat ? "Guardando..." : catDialog.editing ? "Guardar" : "Crear"}
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
         </TabsContent>
 
 
+
+        {/* SISTEMA (variables globales) */}
+        <TabsContent value="sistema" className="pt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base md:text-lg flex items-center gap-2">
+                <SlidersHorizontal size={16} className="text-secondary" /> Variables del sistema
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>{SETTING_KEYS.commission_pct}</Label>
+                  <Input type="number" value={settings.commission_pct}
+                    onChange={(e) => setSettings((s) => ({ ...s, commission_pct: Number(e.target.value) }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>{SETTING_KEYS.featured_price}</Label>
+                  <Input type="number" value={settings.featured_price}
+                    onChange={(e) => setSettings((s) => ({ ...s, featured_price: Number(e.target.value) }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>{SETTING_KEYS.free_listings_limit}</Label>
+                  <Input type="number" value={settings.free_listings_limit}
+                    onChange={(e) => setSettings((s) => ({ ...s, free_listings_limit: Number(e.target.value) }))} />
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {([
+                  ["gateway_stripe", SETTING_KEYS.gateway_stripe, "Acepta pagos con tarjeta vía Stripe."],
+                  ["gateway_culqi", SETTING_KEYS.gateway_culqi, "Acepta pagos locales vía Culqi."],
+                  ["maintenance_mode", SETTING_KEYS.maintenance_mode, "Bloquea el acceso público mientras se realizan tareas."],
+                ] as const).map(([key, label, desc]) => (
+                  <div key={key} className="flex items-center justify-between border rounded-lg p-4">
+                    <div className="pr-4">
+                      <p className="font-medium text-sm">{label}</p>
+                      <p className="text-xs text-muted-foreground">{desc}</p>
+                    </div>
+                    <Switch checked={!!settings[key]}
+                      onCheckedChange={(v) => setSettings((s) => ({ ...s, [key]: v }))} />
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-end">
+                <Button onClick={saveSettings} disabled={savingSettings} className="gap-2">
+                  <Save size={14} /> {savingSettings ? "Guardando..." : "Guardar configuración"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* BOLETAS (solo lectura) */}
         <TabsContent value="boletas" className="pt-4">
@@ -124,13 +328,16 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
               </CardTitle>
             </CardHeader>
             <CardContent className="overflow-x-auto">
-              {loadInvoices().length === 0 ? (
+              {invoicesLoading ? (
+                <p className="text-sm text-muted-foreground text-center py-8">Cargando comprobantes…</p>
+              ) : invoices.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-8">Aún no se han generado boletas.</p>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>N° Boleta</TableHead>
+                      <TableHead>N° Comprobante</TableHead>
+                      <TableHead>Tipo</TableHead>
                       <TableHead>Fecha</TableHead>
                       <TableHead>Anunciante</TableHead>
                       <TableHead>Correo</TableHead>
@@ -139,9 +346,10 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {loadInvoices().map((inv) => (
+                    {invoices.map((inv) => (
                       <TableRow key={inv.id}>
                         <TableCell className="font-mono text-xs">{inv.number}</TableCell>
+                        <TableCell className="text-xs capitalize">{inv.type}</TableCell>
                         <TableCell className="text-xs">{new Date(inv.date).toLocaleDateString("es-PE")}</TableCell>
                         <TableCell className="text-sm">{inv.advertiser}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{inv.email}</TableCell>

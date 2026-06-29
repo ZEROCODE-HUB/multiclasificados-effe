@@ -13,7 +13,7 @@ import {
   Settings,
   ScrollText,
   Lock,
-  MessagesSquare,
+  Flag,
   Menu,
   LogOut,
   Bell,
@@ -23,6 +23,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { signOut } from "@/lib/auth";
+
+// Cierra la sesión real (Supabase + estado local) y va al login.
+async function handleLogout() {
+  try {
+    await signOut();
+  } finally {
+    window.location.href = "/auth";
+  }
+}
 
 export type AdminRole = "admin" | "superadmin";
 
@@ -35,9 +45,9 @@ const buildMenu = (role: AdminRole): MenuItem[] => {
     { title: "Gestión de usuarios", url: `/dashboard/${role}/usuarios`, icon: Users, group: "Operación" },
     { title: "Config. comercial", url: `/dashboard/${role}/comercial`, icon: Tags, group: "Operación" },
     { title: "Tarifas y Descuentos", url: `/dashboard/${role}/tarifas`, icon: DollarSign, group: "Operación" },
+    { title: "Denuncias", url: `/dashboard/${role}/conversaciones`, icon: Flag, group: "Operación" },
     { title: "Reportes", url: `/dashboard/${role}/reportes`, icon: FileBarChart, group: "Operación" },
     { title: "Comunicaciones", url: `/dashboard/${role}/comunicaciones`, icon: Send, group: "Comunicaciones" },
-    { title: "Conversaciones", url: `/dashboard/${role}/conversaciones`, icon: MessagesSquare, group: "Comunicaciones" },
   ];
   if (role === "admin") return base;
   return [
@@ -125,11 +135,15 @@ export function AdminLayout({ children, role, title, breadcrumb }: Props) {
               <p className="text-[10px] text-sidebar-foreground/50 truncate">{isSuper ? "superadmin@effe.pe" : "admin@effe.pe"}</p>
             </div>
           </div>
-          <Link to="/auth">
-            <Button variant="ghost" size="sm" className="w-full justify-start text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/60">
-              <LogOut size={14} /> Cerrar sesión
-            </Button>
-          </Link>
+          <Button
+            type="button"
+            onClick={handleLogout}
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/60"
+          >
+            <LogOut size={14} /> Cerrar sesión
+          </Button>
         </div>
       </aside>
 
@@ -171,7 +185,7 @@ export function AdminLayout({ children, role, title, breadcrumb }: Props) {
         </header>
 
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 lg:py-8 pb-24 lg:pb-8 bg-background">
-          <div className="max-w-7xl mx-auto w-full space-y-5 md:space-y-6 animate-fade-in">
+          <div className="w-full space-y-5 md:space-y-6 animate-fade-in">
             <div className="hidden lg:block">
               <h1 className="text-2xl xl:text-3xl font-extrabold text-foreground tracking-tight">{title}</h1>
             </div>
@@ -268,13 +282,13 @@ function AdminHamburger({ role, menu }: { role: AdminRole; menu: MenuItem[] }) {
             );
           })}
           <div className="border-t border-sidebar-border/40 my-3" />
-          <Link
-            to="/auth"
-            onClick={() => setOpen(false)}
-            className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-secondary hover:bg-secondary/10"
+          <button
+            type="button"
+            onClick={() => { setOpen(false); handleLogout(); }}
+            className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-secondary hover:bg-secondary/10"
           >
             <LogOut size={18} /> Cerrar sesión
-          </Link>
+          </button>
         </div>
       </SheetContent>
     </Sheet>

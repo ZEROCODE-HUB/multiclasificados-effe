@@ -11,7 +11,11 @@ const AdvertiserInvoices = () => {
   useEffect(() => {
     const sync = () => setInvoices(loadInvoices());
     window.addEventListener("storage", sync);
-    return () => window.removeEventListener("storage", sync);
+    window.addEventListener("effe:invoices-updated", sync);
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener("effe:invoices-updated", sync);
+    };
   }, []);
 
   return (

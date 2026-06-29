@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AdminLayout, AdminRole } from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -11,93 +11,54 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
   PieChart, Pie, Cell,
 } from "recharts";
-import { revenueSeries } from "@/data/adminMockData";
 import { toast } from "@/hooks/use-toast";
-
-// ===== Datos mock dashboard tiempo real =====
-const freeByCategory = [
-  { cat: "Inmuebles", value: 320 },
-  { cat: "Vehículos", value: 245 },
-  { cat: "Empleos", value: 410 },
-  { cat: "Tecnología", value: 180 },
-  { cat: "Servicios", value: 290 },
-  { cat: "Educación", value: 120 },
-];
-
-const visibilityByCategory = [
-  { cat: "Inmuebles", avisos: 142, monto: 21300 },
-  { cat: "Vehículos", avisos: 98, monto: 14700 },
-  { cat: "Empleos", avisos: 76, monto: 9120 },
-  { cat: "Tecnología", avisos: 64, monto: 7680 },
-  { cat: "Servicios", avisos: 51, monto: 6120 },
-];
-
-const freeByRegion = [
-  { reg: "Lima", value: 720 },
-  { reg: "Arequipa", value: 210 },
-  { reg: "Trujillo", value: 178 },
-  { reg: "Cusco", value: 140 },
-  { reg: "Piura", value: 122 },
-  { reg: "Chiclayo", value: 95 },
-];
-
-const visibilityByRegion = [
-  { reg: "Lima", avisos: 240, monto: 38400 },
-  { reg: "Arequipa", avisos: 82, monto: 12300 },
-  { reg: "Trujillo", avisos: 64, monto: 9600 },
-  { reg: "Cusco", avisos: 51, monto: 7650 },
-  { reg: "Piura", avisos: 38, monto: 5700 },
-];
-
-const claims = { recibidos: 142, pendientes: 38, solucionados: 96 };
-const claimsTrend = [
-  { mes: "Ene", recibidos: 18, solucionados: 14 },
-  { mes: "Feb", recibidos: 22, solucionados: 19 },
-  { mes: "Mar", recibidos: 28, solucionados: 24 },
-  { mes: "Abr", recibidos: 25, solucionados: 21 },
-  { mes: "May", recibidos: 24, solucionados: 18 },
-];
+import { categories } from "@/data/mockData";
+import {
+  fetchCategoryDistribution, fetchCategoryRevenue, fetchRegionDistribution,
+  fetchClaimsSummary, fetchGrowthSeries, type ClaimsSummary,
+} from "@/lib/admin";
+import { exportRows } from "@/lib/exportReport";
 
 const COLORS = ["hsl(24 95% 53%)", "hsl(220 56% 30%)", "hsl(160 64% 40%)", "hsl(280 65% 55%)", "hsl(40 90% 50%)", "hsl(200 70% 50%)"];
 
-// ===== Filtros reutilizables =====
-function ReportFilters({ onExport }: { onExport: (f: string) => void }) {
+interface Filters { from: string; to: string; cat: string; region: string }
+
+// ===== Filtros reutilizables (controlados) =====
+function ReportFilters({ filters, setFilters, regions, onExport }: {
+  filters: Filters;
+  setFilters: React.Dispatch<React.SetStateAction<Filters>>;
+  regions: string[];
+  onExport: (f: string) => void;
+}) {
+  const upd = (k: keyof Filters, v: string) => setFilters((f) => ({ ...f, [k]: v }));
   return (
     <div className="flex flex-col lg:flex-row gap-3 lg:items-end justify-between border-b pb-4">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 flex-1">
         <div>
           <Label className="text-xs">Desde</Label>
-          <Input type="date" className="h-9 mt-1" />
+          <Input type="date" className="h-9 mt-1" value={filters.from} onChange={(e) => upd("from", e.target.value)} />
         </div>
         <div>
           <Label className="text-xs">Hasta</Label>
-          <Input type="date" className="h-9 mt-1" />
+          <Input type="date" className="h-9 mt-1" value={filters.to} onChange={(e) => upd("to", e.target.value)} />
         </div>
         <div>
           <Label className="text-xs">Categoría</Label>
-          <Select defaultValue="all">
+          <Select value={filters.cat} onValueChange={(v) => upd("cat", v)}>
             <SelectTrigger className="h-9 mt-1"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas</SelectItem>
-              <SelectItem value="inmuebles">Inmuebles</SelectItem>
-              <SelectItem value="vehiculos">Vehículos</SelectItem>
-              <SelectItem value="empleos">Empleos</SelectItem>
-              <SelectItem value="tecnologia">Tecnología</SelectItem>
-              <SelectItem value="servicios">Servicios</SelectItem>
+              {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
         <div>
           <Label className="text-xs">Región</Label>
-          <Select defaultValue="all">
+          <Select value={filters.region} onValueChange={(v) => upd("region", v)}>
             <SelectTrigger className="h-9 mt-1"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas</SelectItem>
-              <SelectItem value="lima">Lima</SelectItem>
-              <SelectItem value="arequipa">Arequipa</SelectItem>
-              <SelectItem value="trujillo">Trujillo</SelectItem>
-              <SelectItem value="cusco">Cusco</SelectItem>
-              <SelectItem value="piura">Piura</SelectItem>
+              {regions.map((r) => <SelectItem key={r} value={r.toLowerCase()}>{r}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
@@ -112,8 +73,65 @@ function ReportFilters({ onExport }: { onExport: (f: string) => void }) {
 }
 
 const AdminReports = ({ role }: { role: AdminRole }) => {
-  const exp = (f: string) => toast({ title: "Exportando reporte", description: f });
-  const [, setTick] = useState(0);
+  const [activeTab, setActiveTab] = useState("dashboard");
+  const [filters, setFilters] = useState<Filters>({ from: "", to: "", cat: "all", region: "all" });
+
+  // ===== Datos reales (se llenan a medida que haya más actividad) =====
+  const [allCategory, setAllCategory] = useState<{ cat: string; avisos: number; monto: number }[]>([]);
+  const [allRegion, setAllRegion] = useState<{ reg: string; avisos: number; monto: number }[]>([]);
+  const [claims, setClaims] = useState<ClaimsSummary>({ recibidos: 0, pendientes: 0, solucionados: 0, trend: [] });
+  const [revenueSeries, setRevenueSeries] = useState<{ mes: string; ingresos: number; usuarios: number }[]>([]);
+
+  // El rango de fechas filtra en el servidor (escalable); categoría/región filtran en el cliente.
+  useEffect(() => {
+    const range = { from: filters.from || null, to: filters.to || null };
+    fetchCategoryRevenue(range).then(setAllCategory);
+    fetchRegionDistribution(range).then(setAllRegion);
+    fetchClaimsSummary(range).then(setClaims);
+  }, [filters.from, filters.to]);
+
+  useEffect(() => {
+    fetchGrowthSeries().then(setRevenueSeries);
+    // Pre-carga distribución por categoría (no usada directamente, pero deja el RPC "caliente").
+    fetchCategoryDistribution().then(() => {});
+  }, []);
+
+  // Nombre de categoría para el id seleccionado en el filtro.
+  const selCatName = filters.cat === "all" ? null : categories.find((c) => c.id === filters.cat)?.name ?? null;
+  const matchCat = (cat: string) => !selCatName || cat === selCatName;
+  const matchRegion = (reg: string) => filters.region === "all" || reg.toLowerCase() === filters.region;
+
+  // Arrays filtrados (categoría/región) que alimentan los gráficos, respetando el diseño.
+  const visibilityByCategory = allCategory.filter((r) => matchCat(r.cat));
+  const freeByCategory = visibilityByCategory.map((r) => ({ cat: r.cat, value: r.avisos }));
+  const visibilityByRegion = allRegion.filter((r) => matchRegion(r.reg));
+  const freeByRegion = visibilityByRegion.map((r) => ({ reg: r.reg, value: r.avisos }));
+  const claimsTrend = claims.trend;
+  const regionNames = allRegion.map((r) => r.reg);
+
+  // Exportación: arma las filas según la pestaña activa y descarga en el formato elegido.
+  const exp = (format: string) => {
+    const stamp = filters.from || filters.to ? ` (${filters.from || "inicio"} a ${filters.to || "hoy"})` : "";
+    let rows: Record<string, string | number>[] = [];
+    let title = "Reporte";
+    if (activeTab === "dashboard") {
+      title = "Avisos por categoría";
+      rows = visibilityByCategory.map((r) => ({ Categoría: r.cat, Avisos: r.avisos, "Monto S/": Number(r.monto.toFixed(2)) }));
+    } else if (activeTab === "reclamos") {
+      title = "Reclamos";
+      rows = [
+        { Indicador: "Recibidos", Valor: claims.recibidos },
+        { Indicador: "Pendientes", Valor: claims.pendientes },
+        { Indicador: "Solucionados", Valor: claims.solucionados },
+        ...claimsTrend.map((t) => ({ Indicador: `Mes ${t.mes}`, Valor: `${t.recibidos} recibidos / ${t.solucionados} resueltos` })),
+      ];
+    } else {
+      title = `Reporte de ${activeTab}`;
+      rows = revenueSeries.map((r) => ({ Mes: r.mes, "Ingresos S/": r.ingresos, "Usuarios nuevos": r.usuarios }));
+    }
+    exportRows(format, `reporte-${activeTab}`, `${title}${stamp}`, rows);
+    toast({ title: "Reporte exportado", description: `${activeTab}.${format}` });
+  };
 
   return (
     <AdminLayout role={role} title="Reportes" breadcrumb={["Operación", "Reportes"]}>
@@ -122,7 +140,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
           <CardTitle className="text-base md:text-lg">Generación de reportes</CardTitle>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="dashboard" onValueChange={() => setTick((t) => t + 1)}>
+          <Tabs defaultValue="dashboard" onValueChange={setActiveTab}>
             <TabsList className="w-full overflow-x-auto justify-start no-scrollbar">
               <TabsTrigger value="dashboard">Dashboard en tiempo real</TabsTrigger>
               <TabsTrigger value="reclamos">Reclamos</TabsTrigger>
@@ -134,7 +152,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
 
             {/* DASHBOARD EN TIEMPO REAL */}
             <TabsContent value="dashboard" className="pt-4 space-y-5">
-              <ReportFilters onExport={exp} />
+              <ReportFilters filters={filters} setFilters={setFilters} regions={regionNames} onExport={exp} />
 
               <div className="flex items-center gap-2 text-xs text-success">
                 <Activity size={14} /> Indicadores actualizados al minuto
@@ -222,7 +240,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
 
             {/* RECLAMOS */}
             <TabsContent value="reclamos" className="pt-4 space-y-5">
-              <ReportFilters onExport={exp} />
+              <ReportFilters filters={filters} setFilters={setFilters} regions={regionNames} onExport={exp} />
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Recibidos</p><p className="text-3xl font-extrabold">{claims.recibidos}</p></CardContent></Card>
                 <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Pendientes de solución</p><p className="text-3xl font-extrabold text-warning">{claims.pendientes}</p></CardContent></Card>
@@ -249,7 +267,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
             {/* Resto de tabs filtrables/exportables */}
             {["pagos", "avisos", "usuarios", "postulaciones"].map((tab) => (
               <TabsContent value={tab} key={tab} className="pt-4 space-y-5">
-                <ReportFilters onExport={(f) => exp(`${tab}.${f}`)} />
+                <ReportFilters filters={filters} setFilters={setFilters} regions={regionNames} onExport={exp} />
                 <Card>
                   <CardHeader><CardTitle className="text-sm capitalize">Reporte de {tab}</CardTitle></CardHeader>
                   <CardContent className="h-72">
@@ -267,7 +285,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
                   </CardContent>
                 </Card>
                 <div className="flex justify-end">
-                  <Button className="gap-2" onClick={() => exp(tab)}><Download size={16} /> Descargar todo</Button>
+                  <Button className="gap-2" onClick={() => exp("xlsx")}><Download size={16} /> Descargar todo</Button>
                 </div>
               </TabsContent>
             ))}
