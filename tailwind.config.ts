@@ -8,11 +8,19 @@ export default {
     container: {
       center: true,
       padding: "2rem",
-      screens: {
-        "2xl": "1400px",
-      },
+      // Sin tope de ancho: el contenedor es siempre fluido (100% menos padding)
+      // para que llene cualquier monitor o nivel de zoom.
+      screens: {},
     },
     extend: {
+      // Breakpoints anchos para que los grids sigan repartiendo en más
+      // columnas en pantallas grandes o con zoom muy bajo (25%-60%).
+      screens: {
+        "3xl": "2000px",
+        "4xl": "2560px",
+        "5xl": "3200px",
+        "6xl": "4096px",
+      },
       fontFamily: {
         sans: ["Montserrat", "system-ui", "sans-serif"],
         heading: ["Montserrat", "system-ui", "sans-serif"],

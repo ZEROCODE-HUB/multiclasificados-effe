@@ -1,73 +1,68 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { ListingCard } from "@/components/ListingCard";
-import { featuredListings } from "@/data/mockData";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { toast } from "@/hooks/use-toast";
+import { Link } from "react-router-dom";
+import { type Listing } from "@/data/mockData";
+import { fetchListingsByIds } from "@/lib/listings";
+import { useFavorites } from "@/hooks/useFavorites";
+import { useSession } from "@/hooks/useSession";
 
 const SeekerFavorites = () => {
-  const [items, setItems] = useState(featuredListings);
-  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const session = useSession();
+  const { ids } = useFavorites();
+  const [items, setItems] = useState<Listing[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const confirmDelete = () => {
-    if (!pendingDelete) return;
-    setItems((prev) => prev.filter((i) => i.id !== pendingDelete));
-    toast({ title: "Eliminado", description: "El aviso se eliminó de tus favoritos." });
-    setPendingDelete(null);
-  };
-
-  const pendingItem = items.find((i) => i.id === pendingDelete);
+  // Carga los avisos guardados reales del usuario (se actualiza al marcar/desmarcar).
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    fetchListingsByIds([...ids]).then((rows) => {
+      if (mounted) {
+        setItems(rows);
+        setLoading(false);
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [ids]);
 
   return (
     <DashboardLayout role="buscador">
       <div className="space-y-5 md:space-y-6 animate-fade-in">
-        {/* Título fuera de contenedor para mobile-first parity */}
         <div>
           <h2 className="text-xl md:text-2xl font-extrabold text-foreground tracking-tight uppercase">Mis favoritos</h2>
           <p className="text-sm text-muted-foreground mt-1">Avisos que has guardado para ver después.</p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8">
-          {items.map((listing) => (
-            <ListingCard key={listing.id} listing={listing} />
-          ))}
-        </div>
+        {items.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 3xl:grid-cols-6 4xl:grid-cols-7 5xl:grid-cols-9 6xl:grid-cols-12 gap-x-4 gap-y-8">
+            {items.map((listing) => (
+              <ListingCard key={listing.id} listing={listing} />
+            ))}
+          </div>
+        )}
 
-        {items.length === 0 && (
+        {items.length === 0 && !loading && (
           <Card className="rounded-none">
             <CardContent className="p-10 text-center text-muted-foreground">
-              No tienes favoritos guardados.
+              {!session ? (
+                <>
+                  Inicia sesión para ver tus favoritos.{" "}
+                  <Link to="/auth" className="text-secondary font-semibold hover:underline">Ingresar</Link>
+                </>
+              ) : (
+                <>
+                  No tienes favoritos guardados.{" "}
+                  <Link to="/buscar" className="text-secondary font-semibold hover:underline">Explora avisos</Link> y guárdalos con el corazón.
+                </>
+              )}
             </CardContent>
           </Card>
         )}
       </div>
-
-      <AlertDialog open={!!pendingDelete} onOpenChange={(o) => !o && setPendingDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar de favoritos?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {pendingItem ? `Se quitará "${pendingItem.title}" de tu lista. Esta acción no se puede deshacer.` : ""}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} className="bg-destructive hover:bg-destructive/90">
-              Eliminar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </DashboardLayout>
   );
 };

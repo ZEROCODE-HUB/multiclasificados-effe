@@ -23,8 +23,10 @@ import {
   loadSettings, priceForDuration, formatSoles, addInvoice,
   type DurationDays, type PricingSettings, type ExtraPrices,
 } from "@/lib/pricing";
+import { createAndPublishListing } from "@/lib/publish";
+import { supabase } from "@/lib/supabase";
 
-interface PhotoItem { id: string; url: string; name: string; }
+interface PhotoItem { id: string; url: string; name: string; file: File; }
 
 const DURATIONS: DurationDays[] = [3, 7, 15, 30, 60, 90];
 const QUANTITIES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -47,6 +49,22 @@ const AdvertiserPublish = () => {
   const session = useSession();
   const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Guardia: para publicar hay que haber iniciado sesión (cuenta real).
+  // Si no hay sesión de Supabase, redirige al login al entrar.
+  const [authChecked, setAuthChecked] = useState(false);
+  useEffect(() => {
+    let active = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      if (!data.session) {
+        navigate("/auth?redirect=/dashboard/anunciante/publicar", { replace: true });
+      } else {
+        setAuthChecked(true);
+      }
+    });
+    return () => { active = false; };
+  }, [navigate]);
 
   // Verificación de identidad (se solicita al presionar "Publicar aviso")
   const [verifyOpen, setVerifyOpen] = useState(false);
@@ -77,6 +95,7 @@ const AdvertiserPublish = () => {
   // Resumen y pago
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [receiptType, setReceiptType] = useState<"boleta" | "factura">("boleta");
   const [receiptEmail, setReceiptEmail] = useState("");
   const [successOpen, setSuccessOpen] = useState<{ open: boolean; number: string; email: string }>({ open: false, number: "", email: "" });
@@ -128,6 +147,7 @@ const AdvertiserPublish = () => {
       id: `${slot}-${Date.now()}`,
       url: URL.createObjectURL(f),
       name: f.name,
+      file: f,
     };
     if (slot === "main") setMainPhoto(item);
     else setSecondPhoto(item);
@@ -209,23 +229,59 @@ const AdvertiserPublish = () => {
     setSummaryOpen(true);
   };
 
-  const confirmAndPay = () => {
-    if (!confirmed) return;
+  const confirmAndPay = async () => {
+    if (!confirmed || publishing) return;
     if (!session) {
       persistDraftForLogin(true);
       navigate("/auth?redirect=/dashboard/anunciante/publicar");
       return;
     }
     const email = receiptEmail.trim() || "anunciante@effe.pe";
-    const inv = addInvoice({
-      email,
-      advertiser: session?.name || "Anunciante",
-      listingTitle: form.title,
-      amount: total,
-      detail: `${receiptType === "factura" ? "Factura" : "Boleta"} · Aviso ${duration} días · ${Object.keys(extras).filter((k) => (extras as Record<string, boolean>)[k]).join(", ") || "sin extras"}`,
-    });
-    setSummaryOpen(false);
-    setSuccessOpen({ open: true, number: inv.number, email });
+    setPublishing(true);
+    try {
+      // Crea el aviso real + sube imágenes + orden/comprobante + publica con vigencia
+      const { invoiceNumber, published } = await createAndPublishListing({
+        form,
+        quantity,
+        duration,
+        extras,
+        total,
+        mainPhoto: mainPhoto ? { file: mainPhoto.file, name: mainPhoto.name } : null,
+        secondPhoto: hasSecondImageInPackage && secondPhoto ? { file: secondPhoto.file, name: secondPhoto.name } : null,
+        receiptType,
+        email,
+        advertiserName: session?.name || "Anunciante",
+      });
+
+      // TODO comprobante se guarda SIEMPRE en "Mis comprobantes" (local), aunque
+      // el aviso no se haya podido activar. Reutiliza el nº de serie de la BD
+      // para que coincida con el comprobante oficial.
+      const localInv = addInvoice({
+        email,
+        advertiser: session?.name || "Anunciante",
+        listingTitle: form.title,
+        amount: total,
+        detail: `${receiptType === "factura" ? "Factura" : "Boleta"} · Aviso ${duration} días`,
+        number: invoiceNumber || undefined,
+      });
+
+      setSummaryOpen(false);
+      setSuccessOpen({ open: true, number: invoiceNumber || localInv.number, email });
+      if (!published) {
+        toast({
+          title: "Comprobante guardado",
+          description: "Tu boleta quedó registrada, pero el aviso quedó pendiente de activación. Nuestro equipo lo revisará.",
+        });
+      }
+    } catch (e) {
+      toast({
+        title: "No se pudo publicar",
+        description: e instanceof Error ? e.message : "Intenta nuevamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setPublishing(false);
+    }
   };
 
 
@@ -235,6 +291,17 @@ const AdvertiserPublish = () => {
     const total = fields.length + 1; // +1 fotos
     return Math.round(((filled + (mainPhoto ? 1 : 0)) / total) * 100);
   })();
+
+  // Mientras se verifica la sesión (o se redirige al login) no mostramos el formulario.
+  if (!authChecked) {
+    return (
+      <DashboardLayout role="anunciante">
+        <div className="flex items-center justify-center py-24 text-muted-foreground text-sm">
+          Verificando tu sesión…
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout role="anunciante">
@@ -602,8 +669,10 @@ const AdvertiserPublish = () => {
             </Card>
           </div>
 
-          {/* Sidebar: live total + actions */}
-          <div className="space-y-6 lg:sticky lg:top-6 lg:self-start">
+          {/* Sidebar: live total + actions.
+              Sticky bajo el navbar (~76px) con scroll interno propio si supera el alto
+              de pantalla, para que el botón "Publicar" siempre quede alcanzable. */}
+          <div className="space-y-6 lg:sticky lg:top-24 lg:self-start lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:pr-1">
             <Card className="border-secondary/40 border-2">
               <CardHeader className="border-b bg-secondary/5">
                 <CardTitle className="text-sm uppercase tracking-widest text-secondary flex items-center gap-2">
@@ -810,8 +879,8 @@ const AdvertiserPublish = () => {
 
           <DialogFooter className="gap-2">
             <Button variant="ghost" onClick={() => setSummaryOpen(false)}>Cancelar</Button>
-            <Button onClick={confirmAndPay} disabled={!confirmed} className="gap-2">
-              <CreditCard size={14} /> Pagar {formatSoles(total)}
+            <Button onClick={confirmAndPay} disabled={!confirmed || publishing} className="gap-2">
+              <CreditCard size={14} /> {publishing ? "Publicando…" : `Pagar ${formatSoles(total)}`}
             </Button>
           </DialogFooter>
         </DialogContent>

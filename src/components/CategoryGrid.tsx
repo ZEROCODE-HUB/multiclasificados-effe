@@ -1,5 +1,7 @@
 import { categories } from "@/data/mockData";
 import { ArrowUpRight } from "lucide-react";
+import { useEffect, useState } from "react";
+import { fetchCategoryCounts } from "@/lib/stats";
 
 const images: Record<string, string> = {
   inmuebles: "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800&h=600&fit=crop",
@@ -13,6 +15,12 @@ const images: Record<string, string> = {
 };
 
 export function CategoryGrid() {
+  // Conteo real de avisos activos por categoría (desde la BD).
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  useEffect(() => {
+    fetchCategoryCounts().then(setCounts);
+  }, []);
+
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-px bg-border border border-border overflow-hidden shadow-sm">
       {categories.map((cat, i) => (
@@ -44,7 +52,7 @@ export function CategoryGrid() {
                 <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-secondary">Categoría</span>
               </div>
               <h3 className="text-lg md:text-xl font-extrabold tracking-tight leading-tight">{cat.name}</h3>
-              <p className="text-[11px] text-primary-foreground/70 mt-1">{cat.count.toLocaleString()} avisos activos</p>
+              <p className="text-[11px] text-primary-foreground/70 mt-1">{(counts[cat.id] ?? 0).toLocaleString()} avisos activos</p>
             </div>
           </div>
         </a>
