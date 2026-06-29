@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'pe.effe.clasificados',
+  appId: 'com.effe.multiclasificados',
   appName: 'eFFe Clasificados',
   webDir: 'dist',
   // Fondo blanco de la vista para evitar el destello negro mientras carga la web.

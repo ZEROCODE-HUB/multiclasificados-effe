@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import HCaptcha from "@hcaptcha/react-hcaptcha";
+import { Capacitor } from "@capacitor/core";
 import { supabase } from "@/lib/supabase";
 import { useSession } from "@/hooks/useSession";
 
@@ -35,7 +36,9 @@ import { BrandMark } from "@/components/BrandMark";
 import { TermsDialog } from "@/components/LegalTerms";
 import { signInWithPassword, signUpWithPassword, signInWithGoogle, signInWithFacebook, landingPath } from "@/lib/auth";
 
-const AuthPage = () => {
+// `requireCaptcha`: el login de staff (admin/superadmin) muestra y exige
+// hCaptcha; el login de usuario (/auth) no lo usa.
+const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get("redirect");
@@ -52,8 +55,10 @@ const AuthPage = () => {
   const [termsOpen, setTermsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Captcha de seguridad: obligatorio para iniciar sesión (usuario y admin usan
-  // el mismo formulario, así que protege ambos accesos).
+  // Captcha de seguridad: solo en el login de staff y SOLO en web. En la app
+  // nativa (APK) el WebView corre sobre localhost y el widget de hCaptcha no
+  // aplica; ahí el staff queda protegido por el 2FA obligatorio del panel.
+  const showCaptcha = requireCaptcha && !Capacitor.isNativePlatform();
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const captchaRef = useRef<HCaptcha>(null);
   const loginEmailRef = useRef<HTMLInputElement>(null);
@@ -63,8 +68,13 @@ const AuthPage = () => {
     setCaptchaToken(null);
   };
 
-  // Lleva el foco al formulario de inicio de sesión real (acceso de staff).
+  // En el login de usuario, el acceso "Admin" lleva a la página de staff (con
+  // captcha). Si ya estamos en la de staff, solo enfoca el formulario.
   const goAdminLogin = () => {
+    if (!requireCaptcha) {
+      navigate("/auth/staff");
+      return;
+    }
     setActiveTab("login");
     toast.info("Ingresa con tu cuenta de administrador autorizada.");
     setTimeout(() => loginEmailRef.current?.focus(), 60);
@@ -97,20 +107,23 @@ const AuthPage = () => {
       toast.error("Ingresa un correo electrónico válido.");
       return;
     }
-    if (!captchaToken) {
+    if (showCaptcha && !captchaToken) {
       toast.error("Completa el captcha de seguridad.");
       return;
     }
     setLoading(true);
     try {
       // 1) Verifica el captcha (anti-bot) en el servidor antes de autenticar.
-      const { data: cap } = await supabase.functions.invoke("verify-captcha", {
-        body: { token: captchaToken },
-      });
-      if (!cap?.success) {
-        toast.error("Captcha inválido. Inténtalo de nuevo.");
-        resetCaptcha();
-        return;
+      // Solo en el login de staff en web; en nativo/usuario no aplica.
+      if (showCaptcha) {
+        const { data: cap } = await supabase.functions.invoke("verify-captcha", {
+          body: { token: captchaToken },
+        });
+        if (!cap?.success) {
+          toast.error("Captcha inválido. Inténtalo de nuevo.");
+          resetCaptcha();
+          return;
+        }
       }
       // 2) Login real.
       const logged = await signInWithPassword(email, password);
@@ -318,15 +331,17 @@ const AuthPage = () => {
                 </label>
                 <a href="#" className="text-sm text-secondary hover:underline">¿Olvidaste tu contraseña?</a>
               </div>
-              <div className="flex justify-center">
-                <HCaptcha
-                  ref={captchaRef}
-                  sitekey={HCAPTCHA_SITE_KEY}
-                  onVerify={(t) => setCaptchaToken(t)}
-                  onExpire={() => setCaptchaToken(null)}
-                />
-              </div>
-              <Button className="w-full" size="lg" onClick={handleLogin} disabled={loading || !captchaToken}>
+              {showCaptcha && (
+                <div className="flex justify-center">
+                  <HCaptcha
+                    ref={captchaRef}
+                    sitekey={HCAPTCHA_SITE_KEY}
+                    onVerify={(t) => setCaptchaToken(t)}
+                    onExpire={() => setCaptchaToken(null)}
+                  />
+                </div>
+              )}
+              <Button className="w-full" size="lg" onClick={handleLogin} disabled={loading || (showCaptcha && !captchaToken)}>
                 {loading ? <Loader2 className="animate-spin" size={18} /> : "Iniciar sesión"}
               </Button>
 

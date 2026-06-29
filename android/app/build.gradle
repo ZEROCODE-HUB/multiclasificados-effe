@@ -1,10 +1,10 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace = "pe.effe.clasificados"
+    namespace = "com.effe.multiclasificados"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "pe.effe.clasificados"
+        applicationId "com.effe.multiclasificados"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

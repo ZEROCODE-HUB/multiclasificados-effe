@@ -1,4 +1,4 @@
-package pe.effe.clasificados;
+package com.effe.multiclasificados;
 
 import com.getcapacitor.BridgeActivity;
 

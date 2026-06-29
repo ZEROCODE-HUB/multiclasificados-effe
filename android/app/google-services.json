@@ -7,6 +7,25 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:180967465937:android:72264ac533ec8412e736f0",
+        "android_client_info": {
+          "package_name": "com.effe.multiclasificados"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBa2V81CNGHHsIefLLsXlwWO24lOgcS7-U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:180967465937:android:261fb728b517a49be736f0",
         "android_client_info": {
           "package_name": "pe.effe.clasificados"
