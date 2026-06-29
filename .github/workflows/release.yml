@@ -28,13 +28,13 @@ jobs:
           distribution: 'temurin'
       - name: Decode Keystore
         run: |
-          echo ${{ secrets.ANDROID_KEYSTORE_BASE64 }} | base64 -d > android/app/upload-keystore.jks
+          echo ${{ secrets.ANDROID_KEYSTORE_BASE64 }} | base64 -d > ${{ github.workspace }}/android/app/upload-keystore.jks
       - name: Build signed AAB
         run: |
           cd android
           chmod +x gradlew
           ./gradlew bundleRelease \
-            -Pandroid.injected.signing.store.file=upload-keystore.jks \
+            -Pandroid.injected.signing.store.file=${{ github.workspace }}/android/app/upload-keystore.jks \
             -Pandroid.injected.signing.store.password=${{ secrets.ANDROID_STORE_PASSWORD }} \
             -Pandroid.injected.signing.key.alias=${{ secrets.ANDROID_KEY_ALIAS }} \
             -Pandroid.injected.signing.key.password=${{ secrets.ANDROID_KEY_PASSWORD }}
