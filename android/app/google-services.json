@@ -2,14 +2,14 @@
   "project_info": {
     "project_number": "180967465937",
     "project_id": "effe-clasificados",
-    "storage_bucket": "effe-clasificados.firebasestorage.app"
+    "storage_bucket": "com.effe.multiclasificados.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
         "mobilesdk_app_id": "1:180967465937:android:261fb728b517a49be736f0",
         "android_client_info": {
-          "package_name": "pe.effe.clasificados"
+          "package_name": "com.effe.multiclasificados"
         }
       },
       "oauth_client": [],
