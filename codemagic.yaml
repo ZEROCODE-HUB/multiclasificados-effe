@@ -29,7 +29,7 @@ workflows:
           pod install
       - name: Build iOS
         script: |
-          xcode-project use-profiles
+          xcode-project use-profiles --automatic-signing
           xcodebuild \
             -workspace ios/App/App.xcworkspace \
             -scheme $XCODE_SCHEME \
