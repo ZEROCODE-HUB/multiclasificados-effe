@@ -4,7 +4,7 @@ android {
     namespace = "pe.effe.clasificados"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "pe.effe.clasificados"
+        applicationId "com.effe.multiclasificados"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

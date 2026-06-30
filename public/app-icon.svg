@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+
+    <!-- Deep navy gradient: top-left bright → bottom-right dark -->
+    <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#1e3870"/>
+      <stop offset="100%" stop-color="#0a1428"/>
+    </linearGradient>
+
+    <!-- Subtle top-center glow for depth -->
+    <radialGradient id="glow" cx="50%" cy="0%" r="65%" gradientUnits="objectBoundingBox">
+      <stop offset="0%"   stop-color="#2e5299" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#2e5299" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Diagonal dot texture (brand pattern) -->
+    <pattern id="dots" x="0" y="0" width="22" height="22" patternUnits="userSpaceOnUse">
+      <circle cx="1" cy="1" r="1" fill="white" fill-opacity="0.07"/>
+    </pattern>
+
+  </defs>
+
+  <!-- ── Background layers ─────────────────────────────────────── -->
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <rect width="512" height="512" fill="url(#glow)"/>
+  <rect width="512" height="512" fill="url(#dots)"/>
+
+  <!-- ── Orange top-edge accent (brand header bar) ─────────────── -->
+  <rect x="0" y="0" width="512" height="7" fill="#f97316"/>
+
+  <!-- ── Corner accent marks (top-right / bottom-left) ─────────── -->
+  <rect x="456" y="20"  width="36" height="6"  fill="#f97316" opacity="0.55"/>
+  <rect x="456" y="20"  width="6"  height="36" fill="#f97316" opacity="0.55"/>
+  <rect x="20"  y="456" width="36" height="6"  fill="#f97316" opacity="0.55"/>
+  <rect x="20"  y="456" width="6"  height="36" fill="#f97316" opacity="0.55"/>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       EFFE  —  geometric letter construction (font-independent)
+       Letters: y = 158 → 318  (height = 160 px)
+       Bar thickness: vertical 24 px, horizontal 22 px, mid 20 px
+       Widths: E = 90 px, F = 82 px   Gaps = 18 px
+       Total = 90+18+82+18+82+18+90 = 398 px
+       Left margin = (512-398)/2 = 57 px
+       ═══════════════════════════════════════════════════════════ -->
+
+  <!-- ─ Letter  E  (x=57 … 147) ─────────────────────────────── -->
+  <rect x="57"  y="158" width="24" height="160" fill="white"/>  <!-- spine   -->
+  <rect x="57"  y="158" width="90" height="22"  fill="white"/>  <!-- top     -->
+  <rect x="57"  y="229" width="70" height="20"  fill="white"/>  <!-- middle  -->
+  <rect x="57"  y="296" width="90" height="22"  fill="white"/>  <!-- bottom  -->
+
+  <!-- ─ Letter  F  (x=165 … 247) ────────────────────────────── -->
+  <rect x="165" y="158" width="24" height="160" fill="white"/>  <!-- spine   -->
+  <rect x="165" y="158" width="82" height="22"  fill="white"/>  <!-- top     -->
+  <rect x="165" y="229" width="64" height="20"  fill="white"/>  <!-- middle  -->
+
+  <!-- ─ Letter  F  (x=265 … 347) ────────────────────────────── -->
+  <rect x="265" y="158" width="24" height="160" fill="white"/>  <!-- spine   -->
+  <rect x="265" y="158" width="82" height="22"  fill="white"/>  <!-- top     -->
+  <rect x="265" y="229" width="64" height="20"  fill="white"/>  <!-- middle  -->
+
+  <!-- ─ Letter  E  (x=365 … 455) ────────────────────────────── -->
+  <rect x="365" y="158" width="24" height="160" fill="white"/>  <!-- spine   -->
+  <rect x="365" y="158" width="90" height="22"  fill="white"/>  <!-- top     -->
+  <rect x="365" y="229" width="70" height="20"  fill="white"/>  <!-- middle  -->
+  <rect x="365" y="296" width="90" height="22"  fill="white"/>  <!-- bottom  -->
+
+  <!-- ── Orange accent bar under EFFE (aligns with letter edges) ─ -->
+  <rect x="57" y="330" width="398" height="7" fill="#f97316"/>
+
+  <!-- ── Kicker wordmark ──────────────────────────────────────── -->
+  <text
+    x="256" y="368"
+    font-family="'Montserrat','Arial','Helvetica',sans-serif"
+    font-weight="700"
+    font-size="21"
+    letter-spacing="3.8"
+    fill="#f97316"
+    text-anchor="middle">MULTICLASIFICADOS</text>
+
+  <!-- ── Subtle orange bottom strip (bookend) ─────────────────── -->
+  <rect x="0" y="498" width="512" height="14" fill="#f97316" opacity="0.22"/>
+
+</svg>
