@@ -7,7 +7,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { ListingCard } from "@/components/ListingCard";
 import { Navbar } from "@/components/Navbar";
 import { categories, type Listing } from "@/data/mockData";
-import { searchListings, type SortKey } from "@/lib/listings";
+import { searchListings, fetchListingsByOwner, type SortKey } from "@/lib/listings";
 import { useSession } from "@/hooks/useSession";
 import { createSavedSearch } from "@/lib/savedSearches";
 import { toast } from "@/hooks/use-toast";
@@ -94,22 +94,29 @@ export default function SearchPage() {
     }
   };
 
+  // Filtro por anunciante ("Ver todos sus avisos" del detalle): si la URL trae
+  // ?owner=<id> mostramos solo los avisos de ese anunciante.
+  const owner = params.get("owner") || "";
+
   // Búsqueda en vivo: filtra a medida que se escribe / cambian filtros (debounce 250 ms).
   useEffect(() => {
     const t = setTimeout(() => {
-      searchListings({
-        q: q || undefined,
-        category: category || undefined,
-        priceMin: priceMin ? Number(priceMin) : undefined,
-        priceMax: priceMax ? Number(priceMax) : undefined,
-        sort,
-      }).then((rows) => {
+      const load = owner
+        ? fetchListingsByOwner(owner)
+        : searchListings({
+            q: q || undefined,
+            category: category || undefined,
+            priceMin: priceMin ? Number(priceMin) : undefined,
+            priceMax: priceMax ? Number(priceMax) : undefined,
+            sort,
+          });
+      load.then((rows) => {
         setListings(rows);
         setActive(rows[0]?.id ?? null);
       });
-    }, 250);
+    }, owner ? 0 : 250);
     return () => clearTimeout(t);
-  }, [q, category, priceMin, priceMax, sort]);
+  }, [q, category, priceMin, priceMax, sort, owner]);
 
   const applyFilters = () => setShowFilters(false);
 
@@ -274,6 +281,27 @@ export default function SearchPage() {
       </div>
 
       {FilterBar}
+
+      {owner && (
+        <div className="container mx-auto px-4 md:px-6 pt-4">
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-secondary/30 bg-secondary/5 px-4 py-3">
+            <p className="text-sm text-foreground">
+              Mostrando todos los avisos de{" "}
+              <span className="font-bold">{listings[0]?.advertiser || "este anunciante"}</span>
+            </p>
+            <button
+              onClick={() => {
+                const next = new URLSearchParams(params);
+                next.delete("owner");
+                setParams(next);
+              }}
+              className="text-xs font-semibold text-secondary hover:underline shrink-0"
+            >
+              Quitar filtro
+            </button>
+          </div>
+        </div>
+      )}
 
       {view === "list" ? (
         <div className="container mx-auto px-4 md:px-6 pt-8 pb-28 lg:pb-8 flex-1">

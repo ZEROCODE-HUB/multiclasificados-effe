@@ -570,7 +570,12 @@ export default function ListingDetail() {
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Antigüedad</p>
               </div>
             </div>
-            <Button variant="outline" className="w-full rounded-none gap-2 text-xs uppercase tracking-wider font-bold">
+            <Button
+              variant="outline"
+              className="w-full rounded-none gap-2 text-xs uppercase tracking-wider font-bold"
+              disabled={!ownerId}
+              onClick={() => ownerId && navigate(`/buscar?owner=${ownerId}`)}
+            >
               <Users size={14} /> Ver todos sus avisos
             </Button>
             {!isOwner && (

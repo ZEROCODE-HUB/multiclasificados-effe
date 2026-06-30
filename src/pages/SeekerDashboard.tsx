@@ -1,8 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { featuredListings } from "@/data/mockData";
 import { Heart, Search, MessageSquare, Bell, Clock, MapPin, Star, SlidersHorizontal, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,18 +11,45 @@ import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
-import { Link } from "react-router-dom";
-
-const stats = [
-  { label: "Favoritos", value: 8, icon: Heart, gradient: "from-rose-500 to-pink-600", text: "text-rose-600", bg: "bg-rose-500/10" },
-  { label: "Búsquedas guardadas", value: 3, icon: Search, gradient: "from-blue-500 to-primary", text: "text-primary", bg: "bg-primary/10" },
-  { label: "Mensajes enviados", value: 12, icon: MessageSquare, gradient: "from-orange-500 to-secondary", text: "text-secondary", bg: "bg-secondary/10" },
-  { label: "Alertas activas", value: 5, icon: Bell, gradient: "from-amber-500 to-warning", text: "text-warning", bg: "bg-warning/10" },
-];
+import { Link, useNavigate } from "react-router-dom";
+import { useSession } from "@/hooks/useSession";
+import { useUnreadMessages } from "@/hooks/useUnreadMessages";
+import { useFavorites } from "@/hooks/useFavorites";
+import { fetchListingsByIds } from "@/lib/listings";
+import { type Listing } from "@/data/mockData";
+import { fetchSavedSearches, criteriaLabel, criteriaToSearchUrl, type SavedSearch } from "@/lib/savedSearches";
 
 const SeekerDashboard = () => {
+  const session = useSession();
+  const navigate = useNavigate();
+  const unread = useUnreadMessages();
+  const { ids } = useFavorites();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [price, setPrice] = useState([0, 3000]);
+  const [query, setQuery] = useState("");
+  const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
+  const [favItems, setFavItems] = useState<Listing[]>([]);
+
+  // Datos reales del usuario (búsquedas guardadas + favoritos).
+  useEffect(() => {
+    fetchSavedSearches().then(setSavedSearches);
+  }, []);
+  useEffect(() => {
+    fetchListingsByIds([...ids]).then(setFavItems);
+  }, [ids]);
+
+  const firstName = (session?.name || "").split(" ")[0] || "buscador";
+  const alerts = savedSearches.filter((s) => s.alert_enabled);
+
+  const goSearch = () => navigate(`/buscar${query ? `?q=${encodeURIComponent(query)}` : ""}`);
+
+  // Contadores reales.
+  const stats = [
+    { label: "Favoritos", value: ids.size, icon: Heart, text: "text-rose-600", bg: "bg-rose-500/10" },
+    { label: "Búsquedas guardadas", value: savedSearches.length, icon: Search, text: "text-primary", bg: "bg-primary/10" },
+    { label: "Mensajes", value: unread, icon: MessageSquare, text: "text-secondary", bg: "bg-secondary/10" },
+    { label: "Alertas activas", value: alerts.length, icon: Bell, text: "text-warning", bg: "bg-warning/10" },
+  ];
 
   return (
     <DashboardLayout role="buscador">
@@ -32,8 +58,8 @@ const SeekerDashboard = () => {
         <div className="relative overflow-hidden rounded-2xl gradient-hero text-primary-foreground p-5 md:p-7">
           <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-secondary/30 blur-3xl" />
           <div className="relative">
-            <p className="text-[11px] uppercase tracking-widest text-secondary font-bold mb-1">Bienvenida</p>
-            <h1 className="text-xl md:text-3xl font-extrabold">¡Hola, Ana!</h1>
+            <p className="text-[11px] uppercase tracking-widest text-secondary font-bold mb-1">Bienvenido</p>
+            <h1 className="text-xl md:text-3xl font-extrabold">¡Hola, {firstName}!</h1>
             <p className="text-primary-foreground/70 text-sm md:text-base mt-1">
               Encuentra lo que estás buscando hoy.
             </p>
@@ -46,7 +72,13 @@ const SeekerDashboard = () => {
             <div className="flex flex-col sm:flex-row gap-2">
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-                <Input placeholder="Buscar avisos..." className="pl-10 h-11" />
+                <Input
+                  placeholder="Buscar avisos..."
+                  className="pl-10 h-11"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") goSearch(); }}
+                />
               </div>
               <div className="flex gap-2">
                 <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
@@ -103,6 +135,7 @@ const SeekerDashboard = () => {
                         className="w-full"
                         onClick={() => {
                           setFiltersOpen(false);
+                          goSearch();
                           toast({ title: "Filtros aplicados" });
                         }}
                       >
@@ -111,7 +144,7 @@ const SeekerDashboard = () => {
                     </div>
                   </SheetContent>
                 </Sheet>
-                <Button variant="hero" size="lg" className="flex-1 sm:flex-none px-6">Buscar</Button>
+                <Button variant="hero" size="lg" className="flex-1 sm:flex-none px-6" onClick={goSearch}>Buscar</Button>
               </div>
             </div>
           </CardContent>
@@ -151,20 +184,27 @@ const SeekerDashboard = () => {
             </Link>
           </CardHeader>
           <CardContent className="space-y-2">
-            {[
-              { query: "Departamento 2 dormitorios Miraflores", category: "Inmuebles", results: 24 },
-              { query: "Toyota Corolla 2023-2025", category: "Vehículos", results: 8 },
-              { query: "Desarrollador React remoto", category: "Empleos", results: 15 },
-            ].map((search, i) => (
-              <div key={i} className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors cursor-pointer">
-                <Clock size={16} className="text-muted-foreground flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{search.query}</p>
-                  <p className="text-xs text-muted-foreground">{search.category}</p>
-                </div>
-                <Badge variant="outline" className="flex-shrink-0 text-[10px]">{search.results}</Badge>
-              </div>
-            ))}
+            {savedSearches.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                No tienes búsquedas guardadas.{" "}
+                <Link to="/buscar" className="text-secondary font-semibold hover:underline">Explora y guarda una</Link>.
+              </p>
+            ) : (
+              savedSearches.slice(0, 3).map((s) => (
+                <Link
+                  key={s.id}
+                  to={criteriaToSearchUrl(s.criteria)}
+                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors cursor-pointer"
+                >
+                  <Clock size={16} className="text-muted-foreground flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{s.name || criteriaLabel(s.criteria)}</p>
+                    <p className="text-xs text-muted-foreground">{s.criteria.category || "Todas las categorías"}</p>
+                  </div>
+                  {s.alert_enabled && <Badge variant="outline" className="flex-shrink-0 text-[10px]">Alerta</Badge>}
+                </Link>
+              ))
+            )}
           </CardContent>
         </Card>
 
@@ -181,23 +221,34 @@ const SeekerDashboard = () => {
             </Link>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {featuredListings.slice(0, 4).map((listing) => (
-                <div key={listing.id} className="flex gap-3 p-3 rounded-lg border hover:shadow-md transition-shadow">
-                  <img src={listing.imageUrl} alt={listing.title} className="w-20 h-16 object-cover rounded" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-foreground truncate">{listing.title}</p>
-                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                      <MapPin size={12} /> {listing.location}
-                    </p>
-                    <p className="text-sm font-bold text-primary mt-1">
-                      <span className="text-xs text-secondary mr-1">{listing.currency}</span>
-                      {listing.price.toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
+            {favItems.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                No tienes favoritos.{" "}
+                <Link to="/buscar" className="text-secondary font-semibold hover:underline">Explora avisos</Link> y guárdalos con el corazón.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {favItems.slice(0, 4).map((listing) => (
+                  <Link
+                    key={listing.id}
+                    to={`/aviso/${listing.id}`}
+                    className="flex gap-3 p-3 rounded-lg border hover:shadow-md transition-shadow"
+                  >
+                    <img src={listing.imageUrl} alt={listing.title} className="w-20 h-16 object-cover rounded" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">{listing.title}</p>
+                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                        <MapPin size={12} /> {listing.location}
+                      </p>
+                      <p className="text-sm font-bold text-primary mt-1">
+                        <span className="text-xs text-secondary mr-1">{listing.currency}</span>
+                        {listing.price.toLocaleString()}
+                      </p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -209,22 +260,23 @@ const SeekerDashboard = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {[
-              { criteria: "Departamentos en Miraflores < USD 1,000", frequency: "Diaria", new: 3 },
-              { criteria: "Autos Toyota < USD 20,000", frequency: "Semanal", new: 1 },
-              { criteria: "Empleos React en Lima", frequency: "Inmediata", new: 5 },
-            ].map((alert, i) => (
-              <div key={i} className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors">
-                <Star size={16} className="text-warning flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{alert.criteria}</p>
-                  <p className="text-xs text-muted-foreground">Frecuencia: {alert.frequency}</p>
+            {alerts.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                No tienes alertas activas. Actívalas en tus{" "}
+                <Link to="/dashboard/buscador/busquedas" className="text-secondary font-semibold hover:underline">búsquedas guardadas</Link>.
+              </p>
+            ) : (
+              alerts.slice(0, 3).map((s) => (
+                <div key={s.id} className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors">
+                  <Star size={16} className="text-warning flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{s.name || criteriaLabel(s.criteria)}</p>
+                    <p className="text-xs text-muted-foreground">Te avisamos cuando haya nuevos avisos</p>
+                  </div>
+                  <Badge className="bg-secondary text-secondary-foreground text-[10px] flex-shrink-0">Activa</Badge>
                 </div>
-                {alert.new > 0 && (
-                  <Badge className="bg-secondary text-secondary-foreground text-[10px] flex-shrink-0">{alert.new} nuevos</Badge>
-                )}
-              </div>
-            ))}
+              ))
+            )}
           </CardContent>
         </Card>
       </div>

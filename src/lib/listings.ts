@@ -74,6 +74,22 @@ export async function fetchListings(opts?: { limit?: number; sort?: SortKey }): 
   }
 }
 
+// Todos los avisos publicados de un anunciante (para "Ver todos sus avisos").
+export async function fetchListingsByOwner(ownerId: string): Promise<Listing[]> {
+  if (!isUuid(ownerId)) return [];
+  try {
+    const { data, error } = await supabase
+      .from("listing_cards")
+      .select("*")
+      .eq("owner_id", ownerId)
+      .order("published_at", { ascending: false, nullsFirst: false });
+    if (error) throw error;
+    return (data ?? []).map((r) => mapCard(r as CardRow));
+  } catch {
+    return [];
+  }
+}
+
 // Avisos por una lista de ids (para Favoritos del usuario).
 export async function fetchListingsByIds(ids: string[]): Promise<Listing[]> {
   const realIds = ids.filter(isUuid);

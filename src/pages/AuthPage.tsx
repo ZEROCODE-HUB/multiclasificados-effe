@@ -29,12 +29,12 @@ const COUNTRY_CODES = [
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 import authBg from "@/assets/auth-bg.jpg";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Eye, EyeOff, Megaphone, Search, ShieldCheck, Sparkles, Crown, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Search, ShieldCheck, Sparkles, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { BrandMark } from "@/components/BrandMark";
 import { TermsDialog } from "@/components/LegalTerms";
-import { signInWithPassword, signUpWithPassword, signInWithGoogle, signInWithFacebook, landingPath } from "@/lib/auth";
+import { signInWithPassword, signUpWithPassword, signInWithGoogle, landingPath } from "@/lib/auth";
 
 // `requireCaptcha`: el login de staff (admin/superadmin) muestra y exige
 // hCaptcha; el login de usuario (/auth) no lo usa.
@@ -68,18 +68,6 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
     setCaptchaToken(null);
   };
 
-  // En el login de usuario, el acceso "Admin" lleva a la página de staff (con
-  // captcha). Si ya estamos en la de staff, solo enfoca el formulario.
-  const goAdminLogin = () => {
-    if (!requireCaptcha) {
-      navigate("/auth/staff");
-      return;
-    }
-    setActiveTab("login");
-    toast.info("Ingresa con tu cuenta de administrador autorizada.");
-    setTimeout(() => loginEmailRef.current?.focus(), 60);
-  };
-
   // Cuando aparece una sesión real (ej. al volver del OAuth de Google por deep
   // link en el APK), redirige solo a donde corresponda. Evita que la pantalla
   // de login se quede cargando tras un inicio de sesión externo.
@@ -91,11 +79,12 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.supabase, session?.role]);
 
-  // El acceso demo queda solo para roles de usuario (no staff). Admin/Super Admin
-  // requieren login real con rol asignado en la base de datos.
-  const enterDemo = (role: "anunciante" | "buscador") => {
-    import("@/hooks/useSession").then(({ setSession }) => setSession(role));
-    navigate(redirectTo || "/");
+  // Explorar la plataforma como visitante: NO crea perfiles demo (esos usuarios
+  // "Juan Mendoza"/"Ana García" no existen en la BD). Limpia cualquier sesión
+  // demo previa y lleva al inicio. El acceso real es con el formulario de arriba.
+  const exploreAsGuest = () => {
+    import("@/hooks/useSession").then(({ clearSession }) => clearSession());
+    navigate("/");
   };
 
   const handleLogin = async () => {
@@ -208,21 +197,6 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
     }
   };
 
-  const handleFacebook = async () => {
-    if (activeTab === "register" && !acceptedTerms) {
-      toast.error("Debes aceptar los Términos y Condiciones y la Política de Privacidad.");
-      return;
-    }
-    setLoading(true);
-    try {
-      await signInWithFacebook(redirectTo || undefined);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo conectar con Facebook.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const [activeTab, setActiveTab] = useState<"login" | "register">(
     searchParams.get("tab") === "register" ? "register" : "login"
   );
@@ -306,13 +280,13 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
             <div className="space-y-4 animate-fade-in">
               <div>
                 <Label htmlFor="email">Correo electrónico</Label>
-                <Input ref={loginEmailRef} id="email" type="email" placeholder="tu@correo.com" className="mt-1"
+                <Input ref={loginEmailRef} id="email" type="email" autoComplete="off" placeholder="tu@correo.com" className="mt-1"
                   value={email} onChange={(e) => setEmail(e.target.value)} />
               </div>
               <div>
                 <Label htmlFor="password">Contraseña</Label>
                 <div className="relative mt-1">
-                  <Input id="password" type={showPassword ? "text" : "password"} placeholder="••••••••"
+                  <Input id="password" type={showPassword ? "text" : "password"} autoComplete="new-password" placeholder="••••••••"
                     value={password} onChange={(e) => setPassword(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") handleLogin(); }} />
                   <button
@@ -350,14 +324,10 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
                 <div className="relative flex justify-center text-xs"><span className="bg-card lg:bg-background px-2 text-muted-foreground">o continuar con</span></div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3">
                 <Button variant="outline" className="w-full" onClick={handleGoogle} disabled={loading}>
                   <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
                   Google
-                </Button>
-                <Button variant="outline" className="w-full" onClick={handleFacebook} disabled={loading}>
-                  <svg className="w-4 h-4 mr-2" fill="#1877F2" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-                  Facebook
                 </Button>
               </div>
             </div>
@@ -365,7 +335,7 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
             <div className="space-y-4 animate-fade-in">
               <div>
                 <Label htmlFor="regEmail">Correo electrónico *</Label>
-                <Input id="regEmail" type="email" inputMode="email" placeholder="tu@correo.com" className="mt-1"
+                <Input id="regEmail" type="email" inputMode="email" autoComplete="off" placeholder="tu@correo.com" className="mt-1"
                   value={regEmail} onChange={(e) => setRegEmail(e.target.value)} />
                 {regEmail && !EMAIL_RE.test(regEmail) && (
                   <p className="text-xs text-destructive mt-1">Ingresa un correo válido.</p>
@@ -385,6 +355,7 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
                   <Input
                     id="phone"
                     inputMode="numeric"
+                    autoComplete="off"
                     placeholder="999 888 777"
                     className="flex-1 min-w-0"
                     value={phone}
@@ -397,12 +368,12 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
               </div>
               <div>
                 <Label htmlFor="regPassword">Contraseña *</Label>
-                <Input id="regPassword" type="password" placeholder="Mínimo 8 caracteres" className="mt-1"
+                <Input id="regPassword" type="password" autoComplete="new-password" placeholder="Mínimo 8 caracteres" className="mt-1"
                   value={regPassword} onChange={(e) => setRegPassword(e.target.value)} />
               </div>
               <div>
                 <Label htmlFor="regPasswordConfirm">Confirmar contraseña *</Label>
-                <Input id="regPasswordConfirm" type="password" placeholder="Repite tu contraseña" className="mt-1"
+                <Input id="regPasswordConfirm" type="password" autoComplete="new-password" placeholder="Repite tu contraseña" className="mt-1"
                   value={regPasswordConfirm} onChange={(e) => setRegPasswordConfirm(e.target.value)} />
                 {regPasswordConfirm.length > 0 && regPassword !== regPasswordConfirm && (
                   <p className="text-xs text-destructive mt-1">Las contraseñas no coinciden.</p>
@@ -445,38 +416,24 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
                 <div className="absolute inset-0 flex items-center"><div className="w-full border-t" /></div>
                 <div className="relative flex justify-center text-xs"><span className="bg-card lg:bg-background px-2 text-muted-foreground">o regístrate con</span></div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3">
                 <Button variant="outline" className="w-full" onClick={handleGoogle} disabled={loading}>
                   <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
                   Google
-                </Button>
-                <Button variant="outline" className="w-full" onClick={handleFacebook} disabled={loading}>
-                  <svg className="w-4 h-4 mr-2" fill="#1877F2" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-                  Facebook
                 </Button>
               </div>
             </div>
 
           )}
 
-          {/* Accesos rápidos — Anunciante/Buscador son demo; Administrador usa login real. */}
+          {/* Accesos rápidos — Explorar va al inicio como visitante (sin perfil falso); Administrador usa login real. */}
           <div className="mt-6 pt-4 border-t border-dashed">
             <p className="text-xs text-muted-foreground text-center mb-3">Acceso rápido</p>
-            <div className="grid grid-cols-3 gap-2">
-              <Button variant="outline" size="sm" className="min-w-0 gap-1.5 border-secondary/40 text-secondary hover:bg-secondary/10 hover:text-secondary"
-                onClick={() => enterDemo("anunciante")}>
-                <Megaphone size={14} className="flex-shrink-0" />
-                <span className="truncate">Anunciante</span>
-              </Button>
+            <div className="grid grid-cols-1 gap-2">
               <Button variant="outline" size="sm" className="min-w-0 gap-1.5 border-primary/40 text-primary hover:bg-primary/10 hover:text-primary"
-                onClick={() => enterDemo("buscador")}>
+                onClick={exploreAsGuest}>
                 <Search size={14} className="flex-shrink-0" />
-                <span className="truncate">Buscador</span>
-              </Button>
-              <Button variant="outline" size="sm" className="min-w-0 gap-1.5 border-amber-500/40 text-amber-600 hover:bg-amber-500/10 hover:text-amber-600"
-                onClick={goAdminLogin}>
-                <Crown size={14} className="flex-shrink-0" />
-                <span className="truncate">Admin</span>
+                <span className="truncate">Explorar avisos</span>
               </Button>
             </div>
             <p className="text-[11px] text-muted-foreground text-center mt-3 flex items-center justify-center gap-1.5">
