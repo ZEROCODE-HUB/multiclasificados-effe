@@ -3,21 +3,22 @@ workflows:
     name: iOS Build
     max_build_duration: 60
     instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: Codemagic Key
     environment:
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.effe.multiclasificados
       node: 22
       vars:
-        XCODE_SCHEME: "App"
+        XCODE_SCHEME: App
+        VITE_SUPABASE_URL: $VITE_SUPABASE_URL
+        VITE_SUPABASE_ANON_KEY: $VITE_SUPABASE_ANON_KEY
     scripts:
       - name: Install dependencies
         script: npm ci
       - name: Build React app
         script: npm run build
-        env:
-          VITE_SUPABASE_URL: $CM_VITE_SUPABASE_URL
-          VITE_SUPABASE_ANON_KEY: $CM_VITE_SUPABASE_ANON_KEY
       - name: Add iOS platform
         script: npx cap add ios
       - name: Sync Capacitor
