@@ -148,7 +148,7 @@ export async function signUpWithPassword(input: SignUpInput): Promise<Session | 
 }
 
 // Deep link al que vuelve el OAuth en el APK (registrado en AndroidManifest).
-export const NATIVE_OAUTH_REDIRECT = "pe.effe.clasificados://auth-callback";
+export const NATIVE_OAUTH_REDIRECT = "com.effe.multiclasificados://auth-callback";
 
 // Flujo OAuth unificado. En web redirige a /auth/callback; en el APK (Capacitor)
 // abre el navegador del sistema y vuelve a la app por deep link (lo completa

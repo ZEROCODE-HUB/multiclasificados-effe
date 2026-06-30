@@ -1,7 +1,7 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace = "pe.effe.clasificados"
+    namespace = "com.effe.multiclasificados"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
         applicationId "com.effe.multiclasificados"

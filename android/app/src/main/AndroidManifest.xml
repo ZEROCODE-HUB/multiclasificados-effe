@@ -23,12 +23,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Deep link de regreso del OAuth (Google/Facebook): pe.effe.clasificados://... -->
+            <!-- Deep link de regreso del OAuth (Google/Facebook): com.effe.multiclasificados://... -->
             <intent-filter android:autoVerify="false">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="pe.effe.clasificados" />
+                <data android:scheme="com.effe.multiclasificados" />
             </intent-filter>
 
         </activity>
