@@ -30,7 +30,7 @@ workflows:
       - name: Increment build number
         script: |
           cd ios/App
-          agvtool next-version -all
+          agvtool new-version -all $BUILD_NUMBER
       - name: Build iOS
         script: |
           xcode-project use-profiles
