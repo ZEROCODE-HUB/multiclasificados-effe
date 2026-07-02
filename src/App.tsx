@@ -54,6 +54,8 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<AuthPage />} />
+          {/* Login de staff (admin/superadmin): mismo formulario pero CON hCaptcha. */}
+          <Route path="/auth/staff" element={<AuthPage requireCaptcha />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/buscar" element={<SearchPage />} />
           <Route path="/aviso/:id" element={<ListingDetail />} />

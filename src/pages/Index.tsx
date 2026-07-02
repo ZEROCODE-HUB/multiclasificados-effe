@@ -94,8 +94,19 @@ const Index = () => {
       {/* Header — distinct white bar above hero */}
       <Navbar />
 
-      {/* Hero — Premium editorial, dos columnas balanceadas */}
-      <section className="relative min-h-[460px] md:min-h-[720px] lg:min-h-[780px] flex flex-col gradient-hero overflow-hidden">
+      {/* Móvil: buscador con título en la parte superior (look app) */}
+      <section className="md:hidden gradient-hero px-4 pt-7 pb-6">
+        <h1 className="text-primary-foreground font-extrabold tracking-tight text-2xl leading-snug mb-1.5">
+          Donde los <span className="italic text-secondary font-semibold">negocios</span> suceden.
+        </h1>
+        <p className="text-primary-foreground/80 text-sm leading-relaxed mb-5">
+          Inmuebles, vehículos, maquinaria, empleos y servicios verificados.
+        </p>
+        <HeroSearch />
+      </section>
+
+      {/* Hero — Premium editorial, dos columnas balanceadas (solo desktop) */}
+      <section className="relative min-h-[460px] md:min-h-[720px] lg:min-h-[780px] hidden md:flex flex-col gradient-hero overflow-hidden">
         <img
           src={heroBg}
           alt="Marketplace profesional EFFE Multiclasificados"
@@ -185,8 +196,8 @@ const Index = () => {
         <CategoryGrid />
       </section>
 
-      {/* Benefits — rediseño premium */}
-      <section className="bg-muted/30 border-y">
+      {/* Benefits — rediseño premium (oculto en móvil para un look más app) */}
+      <section className="hidden md:block bg-muted/30 border-y">
         <div className="container mx-auto px-4 py-16 md:py-24">
           <div className="text-center max-w-2xl mx-auto mb-12 md:mb-16">
             <p className="text-xs uppercase tracking-[0.28em] font-bold text-secondary mb-3">Por qué elegirnos</p>
@@ -238,8 +249,8 @@ const Index = () => {
         </div>
       </section>
 
-      {/* Featured Listings */}
-      <section className="container mx-auto px-4 py-14 md:py-20">
+      {/* Featured Listings (oculto en móvil para un look más app) */}
+      <section className="hidden md:block container mx-auto px-4 py-14 md:py-20">
         <div className="flex items-end justify-between mb-8 md:mb-10 gap-4 flex-wrap">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] font-bold text-secondary mb-2">Destacados</p>
@@ -265,8 +276,8 @@ const Index = () => {
         )}
       </section>
 
-      {/* Map teaser */}
-      <section className="bg-primary text-primary-foreground relative overflow-hidden">
+      {/* Map teaser (oculto en móvil para un look más app) */}
+      <section className="hidden md:block bg-primary text-primary-foreground relative overflow-hidden">
         <div className="absolute inset-0 opacity-20">
           <img
             src="https://images.unsplash.com/photo-1524661135-423995f22d0b?w=1600&h=600&fit=crop"
@@ -320,8 +331,8 @@ const Index = () => {
         </div>
       </section>
 
-      {/* Recently published */}
-      <section className="container mx-auto px-4 py-14 md:py-20">
+      {/* Recently published (oculto en móvil para un look más app) */}
+      <section className="hidden md:block container mx-auto px-4 py-14 md:py-20">
         <div className="flex items-end justify-between mb-8 md:mb-10 gap-4 flex-wrap">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] font-bold text-secondary mb-2">Recién publicados</p>
@@ -344,8 +355,8 @@ const Index = () => {
         )}
       </section>
 
-      {/* Brand trust strip */}
-      <section className="border-y bg-muted/30">
+      {/* Brand trust strip (oculto en móvil para un look más app) */}
+      <section className="hidden md:block border-y bg-muted/30">
         <div className="container mx-auto px-4 py-10">
           <p className="text-center text-[10px] uppercase tracking-[0.3em] font-bold text-muted-foreground mb-6">
             Empresas que confían en nosotros
@@ -360,8 +371,8 @@ const Index = () => {
         </div>
       </section>
 
-      {/* How it works */}
-      <section className="gradient-hero text-primary-foreground py-16 md:py-24">
+      {/* How it works (oculto en móvil para un look más app) */}
+      <section className="hidden md:block gradient-hero text-primary-foreground py-16 md:py-24">
         <div className="container mx-auto px-4">
           <div className="text-center max-w-2xl mx-auto mb-12">
             <p className="text-xs uppercase tracking-widest font-bold text-secondary mb-2">Cómo funciona</p>
@@ -396,8 +407,8 @@ const Index = () => {
         </div>
       </section>
 
-      {/* Testimonials */}
-      <section className="container mx-auto px-4 py-14 md:py-20">
+      {/* Testimonials (oculto en móvil para un look más app) */}
+      <section className="hidden md:block container mx-auto px-4 py-14 md:py-20">
         <div className="text-center max-w-2xl mx-auto mb-10 md:mb-14">
           <p className="text-xs uppercase tracking-widest font-bold text-secondary mb-2">Testimonios</p>
           <h2 className="text-2xl md:text-4xl font-bold text-foreground">Confianza que se nota</h2>
@@ -430,8 +441,8 @@ const Index = () => {
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="container mx-auto px-4 pb-14 md:pb-20">
+      {/* CTA (oculto en móvil para un look más app) */}
+      <section className="hidden md:block container mx-auto px-4 pb-14 md:pb-20">
         <div className="relative overflow-hidden rounded-3xl gradient-hero p-8 md:p-14 text-center">
           <div
             className="absolute inset-0 pointer-events-none"
@@ -467,11 +478,13 @@ const Index = () => {
         </div>
       </section>
 
-      {/* Libro de Reclamaciones */}
-      <LibroReclamaciones />
+      {/* Libro de Reclamaciones (oculto en móvil; presente en web por requisito legal) */}
+      <div className="hidden md:block">
+        <LibroReclamaciones />
+      </div>
 
-      {/* Footer */}
-      <footer className="bg-primary text-primary-foreground py-16 md:py-24">
+      {/* Footer (oculto en móvil para un look más app) */}
+      <footer className="hidden md:block bg-primary text-primary-foreground py-16 md:py-24">
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 md:gap-10 mb-12">
             <div className="md:col-span-1">

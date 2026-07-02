@@ -1,6 +1,7 @@
 // Guarda de ruta por rol real (jerarquía de permisos).
-// - Sin sesión  -> redirige a /auth recordando el destino.
-// - Área de staff sin login real de Supabase -> también va a /auth.
+// - Sin sesión  -> redirige al login recordando el destino.
+//     · Área de staff (admin/superadmin) -> /auth/staff (login CON hCaptcha).
+//     · Resto -> /auth (login sin captcha).
 // - Sesión con rol insuficiente -> pantalla "Acceso denegado".
 import { useEffect, useState } from "react";
 import { Link, Navigate, useLocation } from "react-router-dom";
@@ -56,10 +57,13 @@ interface Props {
 export function RequireRole({ min, requireReal = true, children }: Props) {
   const session = useSession();
   const location = useLocation();
-  const loginUrl = `/auth?redirect=${encodeURIComponent(location.pathname)}`;
 
   // El staff (admin/superadmin) DEBE tener 2FA completado (AAL2) para entrar al panel.
   const isStaffArea = min === "admin" || min === "superadmin";
+
+  // El staff va al login CON hCaptcha (/auth/staff); el usuario normal al login
+  // sin captcha (/auth). Así el captcha aparece solo en el acceso de admin.
+  const loginUrl = `${isStaffArea ? "/auth/staff" : "/auth"}?redirect=${encodeURIComponent(location.pathname)}`;
   const [mfaOk, setMfaOk] = useState<boolean | null>(null);
 
   useEffect(() => {
