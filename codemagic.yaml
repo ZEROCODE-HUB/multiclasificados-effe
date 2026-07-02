@@ -27,6 +27,10 @@ workflows:
         script: npx cap add ios
       - name: Sync Capacitor
         script: npx cap sync ios
+      - name: Increment build number
+        script: |
+          cd ios/App
+          agvtool next-version -all
       - name: Build iOS
         script: |
           xcode-project use-profiles
