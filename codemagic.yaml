@@ -24,7 +24,9 @@ workflows:
       - name: Build React app
         script: npm run build
       - name: Add iOS platform
-        script: npx cap add ios
+        script: |
+          npx cap add ios
+          ls ios/App
       - name: Sync Capacitor
         script: npx cap sync ios
       - name: Install CocoaPods
