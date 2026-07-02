@@ -24,16 +24,14 @@ workflows:
       - name: Build React app
         script: npm run build
       - name: Add iOS platform
-        script: |
-          npx cap add ios
-          find ios -name "*.xcworkspace" -o -name "*.xcodeproj" 2>/dev/null
+        script: npx cap add ios
       - name: Sync Capacitor
         script: npx cap sync ios
       - name: Build iOS
         script: |
           xcode-project use-profiles
           xcodebuild \
-            -workspace ios/App/App.xcworkspace \
+            -project ios/App/App.xcodeproj \
             -scheme App \
             -configuration Release \
             -archivePath build/App.xcarchive \
@@ -41,7 +39,7 @@ workflows:
       - name: Export IPA
         script: |
           xcode-project build-ipa \
-            --workspace ios/App/App.xcworkspace \
+            --project ios/App/App.xcodeproj \
             --scheme App
     artifacts:
       - build/ios/ipa/*.ipa
