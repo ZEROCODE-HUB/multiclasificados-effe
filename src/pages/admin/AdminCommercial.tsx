@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { usePagination, TablePagination } from "@/components/TablePagination";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { formatSoles } from "@/lib/pricing";
@@ -114,6 +115,7 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
   // ===== Boletas y facturas (todos los anunciantes, desde la BD) =====
   const [invoices, setInvoices] = useState<AdminInvoice[]>([]);
   const [invoicesLoading, setInvoicesLoading] = useState(true);
+  const invoicesPager = usePagination(invoices, 10, invoices.length);
 
   useEffect(() => {
     fetchSettings().then((rows) => {
@@ -346,7 +348,7 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {invoices.map((inv) => (
+                    {invoicesPager.pageItems.map((inv) => (
                       <TableRow key={inv.id}>
                         <TableCell className="font-mono text-xs">{inv.number}</TableCell>
                         <TableCell className="text-xs capitalize">{inv.type}</TableCell>
@@ -359,6 +361,9 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
                     ))}
                   </TableBody>
                 </Table>
+              )}
+              {!invoicesLoading && invoices.length > 0 && (
+                <TablePagination {...invoicesPager} noun="comprobantes" />
               )}
             </CardContent>
           </Card>

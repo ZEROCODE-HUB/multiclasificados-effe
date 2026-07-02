@@ -186,6 +186,7 @@ export interface Invoice {
   listingTitle: string;
   amount: number;
   detail: string;
+  docNumber?: string;   // DNI/RUC verificado del anunciante
 }
 export function loadInvoices(): Invoice[] {
   try {
@@ -225,6 +226,7 @@ export function addInvoice(
     listingTitle: inv.listingTitle,
     amount: inv.amount,
     detail: inv.detail,
+    docNumber: inv.docNumber,
     id: uniqueInvoiceId(),
     number: inv.number?.trim() || `B001-${String(seq).padStart(6, "0")}`,
     date: new Date().toISOString(),

@@ -24,6 +24,7 @@ import {
   type DurationDays, type PricingSettings, type ExtraPrices,
 } from "@/lib/pricing";
 import { createAndPublishListing } from "@/lib/publish";
+import { verifyDocument } from "@/lib/verifyDoc";
 import { supabase } from "@/lib/supabase";
 
 interface PhotoItem { id: string; url: string; name: string; file: File; }
@@ -53,6 +54,7 @@ const AdvertiserPublish = () => {
   // Guardia: para publicar hay que haber iniciado sesión (cuenta real).
   // Si no hay sesión de Supabase, redirige al login al entrar.
   const [authChecked, setAuthChecked] = useState(false);
+  const [userEmail, setUserEmail] = useState("");
   useEffect(() => {
     let active = true;
     supabase.auth.getSession().then(({ data }) => {
@@ -61,6 +63,7 @@ const AdvertiserPublish = () => {
         navigate("/auth?redirect=/dashboard/anunciante/publicar", { replace: true });
       } else {
         setAuthChecked(true);
+        setUserEmail(data.session.user.email ?? "");
       }
     });
     return () => { active = false; };
@@ -71,6 +74,8 @@ const AdvertiserPublish = () => {
   const [personType, setPersonType] = useState<"natural" | "juridica" | "">("");
   const [docNumber, setDocNumber] = useState("");
   const [verified, setVerified] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verifiedName, setVerifiedName] = useState("");
 
   // Imágenes — solo 2 slots por aviso
   const [mainPhoto, setMainPhoto] = useState<PhotoItem | null>(null);
@@ -98,6 +103,7 @@ const AdvertiserPublish = () => {
   const [publishing, setPublishing] = useState(false);
   const [receiptType, setReceiptType] = useState<"boleta" | "factura">("boleta");
   const [receiptEmail, setReceiptEmail] = useState("");
+  const [receiptEmailTouched, setReceiptEmailTouched] = useState(false);
   const [successOpen, setSuccessOpen] = useState<{ open: boolean; number: string; email: string }>({ open: false, number: "", email: "" });
 
   // Pricing en vivo
@@ -107,6 +113,12 @@ const AdvertiserPublish = () => {
     window.addEventListener("effe:pricing-updated", sync);
     return () => window.removeEventListener("effe:pricing-updated", sync);
   }, []);
+
+  // Precarga el correo del comprobante con el email real de la cuenta, salvo que
+  // el usuario ya haya escrito uno propio.
+  useEffect(() => {
+    if (userEmail && !receiptEmailTouched && !receiptEmail) setReceiptEmail(userEmail);
+  }, [userEmail, receiptEmailTouched, receiptEmail]);
 
   // Restaurar borrador y reanudar flujo tras login
   useEffect(() => {
@@ -121,6 +133,7 @@ const AdvertiserPublish = () => {
       if (d.verified) setVerified(d.verified);
       if (d.personType) setPersonType(d.personType);
       if (d.docNumber) setDocNumber(d.docNumber);
+      if (d.verifiedName) setVerifiedName(d.verifiedName);
       if (d.resumeAtSummary && session) {
         setTimeout(() => setSummaryOpen(true), 200);
       }
@@ -175,12 +188,13 @@ const AdvertiserPublish = () => {
   const persistDraftForLogin = (resumeAtSummary: boolean) => {
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify({
-        form, duration, quantity, extras, verified: true, personType, docNumber, resumeAtSummary,
+        form, duration, quantity, extras, verified: true, personType, docNumber, verifiedName, resumeAtSummary,
       }));
     } catch { /* noop */ }
   };
 
-  const handleVerify = () => {
+  const handleVerify = async () => {
+    if (verifying) return;
     if (personType === "natural" && docNumber.length !== 8) {
       toast({ title: "DNI inválido", description: "El DNI debe tener 8 dígitos.", variant: "destructive" });
       return;
@@ -189,9 +203,36 @@ const AdvertiserPublish = () => {
       toast({ title: "RUC inválido", description: "El RUC debe tener 11 dígitos.", variant: "destructive" });
       return;
     }
+
+    // Verificación real contra Factiliza (a través de la Edge Function).
+    const tipo = personType === "natural" ? "dni" : "ruc";
+    setVerifying(true);
+    let result;
+    try {
+      result = await verifyDocument(tipo, docNumber);
+    } finally {
+      setVerifying(false);
+    }
+
+    if (!result.ok) {
+      toast({
+        title: tipo === "dni" ? "DNI no verificado" : "RUC no verificado",
+        description: result.error ?? "No se pudo verificar el documento. Revisa el número.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const nombre = result.nombre ?? "";
+    setVerifiedName(nombre);
     setVerified(true);
     setVerifyOpen(false);
-    toast({ title: "Identidad verificada", description: `${personType === "natural" ? "DNI" : "RUC"} ${docNumber} confirmado.` });
+    toast({
+      title: "Identidad verificada",
+      description: nombre
+        ? `${personType === "natural" ? "DNI" : "RUC"} ${docNumber} · ${nombre}`
+        : `${personType === "natural" ? "DNI" : "RUC"} ${docNumber} confirmado.`,
+    });
 
     // Tras verificar exige login antes del pago
     if (!session) {
@@ -236,11 +277,12 @@ const AdvertiserPublish = () => {
       navigate("/auth?redirect=/dashboard/anunciante/publicar");
       return;
     }
-    const email = receiptEmail.trim() || "anunciante@effe.pe";
+    const email = receiptEmail.trim() || userEmail || "anunciante@effe.pe";
+    const tipoDoc = personType === "juridica" ? "ruc" : "dni";
     setPublishing(true);
     try {
       // Crea el aviso real + sube imágenes + orden/comprobante + publica con vigencia
-      const { invoiceNumber, published } = await createAndPublishListing({
+      const { invoiceNumber, published, invoiceSaved } = await createAndPublishListing({
         form,
         quantity,
         duration,
@@ -250,7 +292,9 @@ const AdvertiserPublish = () => {
         secondPhoto: hasSecondImageInPackage && secondPhoto ? { file: secondPhoto.file, name: secondPhoto.name } : null,
         receiptType,
         email,
-        advertiserName: session?.name || "Anunciante",
+        advertiserName: verifiedName || session?.name || "Anunciante",
+        docType: tipoDoc,
+        docNumber: docNumber || undefined,
       });
 
       // TODO comprobante se guarda SIEMPRE en "Mis comprobantes" (local), aunque
@@ -258,15 +302,23 @@ const AdvertiserPublish = () => {
       // para que coincida con el comprobante oficial.
       const localInv = addInvoice({
         email,
-        advertiser: session?.name || "Anunciante",
+        advertiser: verifiedName || session?.name || "Anunciante",
         listingTitle: form.title,
         amount: total,
         detail: `${receiptType === "factura" ? "Factura" : "Boleta"} · Aviso ${duration} días`,
+        docNumber: docNumber || undefined,
         number: invoiceNumber || undefined,
       });
 
       setSummaryOpen(false);
       setSuccessOpen({ open: true, number: invoiceNumber || localInv.number, email });
+      if (!invoiceSaved) {
+        toast({
+          title: "Comprobante no registrado en la base de datos",
+          description: "El aviso se publicó, pero el comprobante no se guardó en el servidor. Avísanos para revisarlo.",
+          variant: "destructive",
+        });
+      }
       if (!published) {
         toast({
           title: "Comprobante guardado",
@@ -747,7 +799,7 @@ const AdvertiserPublish = () => {
             <div className="grid grid-cols-2 gap-3">
               <button
                 type="button"
-                onClick={() => { setPersonType("natural"); setDocNumber(""); }}
+                onClick={() => { setPersonType("natural"); setDocNumber(""); setVerifiedName(""); }}
                 className={`p-4 border text-left transition-all ${personType === "natural" ? "border-secondary bg-secondary/10" : "border-border hover:bg-muted/50"}`}
               >
                 <User size={20} className="text-secondary mb-2" />
@@ -756,7 +808,7 @@ const AdvertiserPublish = () => {
               </button>
               <button
                 type="button"
-                onClick={() => { setPersonType("juridica"); setDocNumber(""); }}
+                onClick={() => { setPersonType("juridica"); setDocNumber(""); setVerifiedName(""); }}
                 className={`p-4 border text-left transition-all ${personType === "juridica" ? "border-secondary bg-secondary/10" : "border-border hover:bg-muted/50"}`}
               >
                 <Building2 size={20} className="text-secondary mb-2" />
@@ -770,14 +822,22 @@ const AdvertiserPublish = () => {
                   <Label>{personType === "natural" ? "DNI" : "RUC"}</Label>
                   <Input
                     value={docNumber}
-                    onChange={(e) => setDocNumber(e.target.value.replace(/\D/g, ""))}
+                    onChange={(e) => { setDocNumber(e.target.value.replace(/\D/g, "")); setVerifiedName(""); }}
                     maxLength={personType === "natural" ? 8 : 11}
                     placeholder={personType === "natural" ? "12345678" : "20123456789"}
                     className="mt-1"
+                    disabled={verifying}
                   />
                 </div>
-                <Button onClick={handleVerify} className="gap-2"><ShieldCheck size={14} /> Verificar</Button>
+                <Button onClick={handleVerify} disabled={verifying} className="gap-2">
+                  <ShieldCheck size={14} /> {verifying ? "Verificando…" : "Verificar"}
+                </Button>
               </div>
+            )}
+            {verifiedName && (
+              <p className="text-xs text-success flex items-center gap-1.5">
+                <ShieldCheck size={13} /> {verifiedName}
+              </p>
             )}
           </div>
           <DialogFooter>
@@ -862,7 +922,7 @@ const AdvertiserPublish = () => {
                 <Input
                   type="email"
                   value={receiptEmail}
-                  onChange={(e) => setReceiptEmail(e.target.value)}
+                  onChange={(e) => { setReceiptEmail(e.target.value); setReceiptEmailTouched(true); }}
                   placeholder="tu@correo.com"
                   className="mt-1"
                 />

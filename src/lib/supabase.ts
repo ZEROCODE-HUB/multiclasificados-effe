@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { Capacitor } from "@capacitor/core";
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -17,7 +18,10 @@ export const supabase = createClient(url ?? "", anonKey ?? "", {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    // PKCE: requerido para completar OAuth por deep link en el APK (Capacitor).
-    flowType: "pkce",
+    // PKCE solo en el APK (Capacitor): requerido para completar OAuth por deep
+    // link. En web usamos el flujo implícito para que los enlaces de recuperación
+    // de contraseña funcionen aunque el usuario los abra en otro navegador
+    // (PKCE ataría el enlace al navegador que lo generó y rompería ese caso).
+    flowType: Capacitor.isNativePlatform() ? "pkce" : "implicit",
   },
 });

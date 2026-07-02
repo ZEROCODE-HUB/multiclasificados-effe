@@ -26,6 +26,8 @@ export interface PublishInput {
   receiptType: "boleta" | "factura";
   email: string;
   advertiserName: string;
+  docType?: "dni" | "ruc";
+  docNumber?: string;
 }
 
 const CONDITION_MAP: Record<string, "nuevo" | "usado" | "na"> = {
@@ -40,7 +42,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export async function createAndPublishListing(
   input: PublishInput
-): Promise<{ listingId: string; invoiceNumber: string; published: boolean }> {
+): Promise<{ listingId: string; invoiceNumber: string; published: boolean; invoiceSaved: boolean }> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -66,6 +68,16 @@ export async function createAndPublishListing(
 
   const listingId = listing.id as string;
 
+  // 1.b) Persistir la identidad verificada (Factiliza) en el perfil del usuario,
+  //      para que el DNI/RUC quede en la base de datos y coincida con el comprobante.
+  if (input.docType && input.docNumber) {
+    const { error: pfErr } = await supabase
+      .from("profiles")
+      .update({ doc_type: input.docType, doc_number: input.docNumber, verified: true })
+      .eq("id", user.id);
+    if (pfErr) console.error("[publish] No se pudo guardar el documento en el perfil:", pfErr.message);
+  }
+
   // 2) Subir imágenes al bucket listing-images (carpeta = uid del dueño)
   const photos = [input.mainPhoto, input.secondPhoto].filter(Boolean) as PublishPhoto[];
   let sort = 0;
@@ -90,6 +102,7 @@ export async function createAndPublishListing(
   //    registran (no se ignoran en silencio) para poder diagnosticarlos.
   //    El total ya incluye IGV 18%.
   let invoiceNumber = "";
+  let invoiceSaved = false;
   const subtotal = round2(input.total / 1.18);
   const igv = round2(input.total - subtotal);
   const { data: order, error: oErr } = await supabase
@@ -121,6 +134,7 @@ export async function createAndPublishListing(
         type: input.receiptType,
         email: input.email,
         advertiser_name: input.advertiserName,
+        doc_number: input.docNumber ?? null,
         amount: input.total,
         detail: `Aviso ${input.duration} días · ${input.quantity} unidad(es)`,
       })
@@ -128,6 +142,7 @@ export async function createAndPublishListing(
       .single();
     if (iErr) console.error("[publish] No se pudo generar el comprobante en la BD:", iErr.message);
     invoiceNumber = inv?.number ?? "";
+    invoiceSaved = !iErr && !!inv;
   }
 
   // 4) Publicar: estado active + vigencia (published_at / expires_at).
@@ -139,5 +154,5 @@ export async function createAndPublishListing(
   });
   if (pErr) console.error("[publish] No se pudo activar el aviso:", pErr.message);
 
-  return { listingId, invoiceNumber, published: !pErr };
+  return { listingId, invoiceNumber, published: !pErr, invoiceSaved };
 }
