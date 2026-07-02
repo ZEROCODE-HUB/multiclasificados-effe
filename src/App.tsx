@@ -39,6 +39,7 @@ const SuperRoles = lazy(() => import("./pages/superadmin/SuperRoles.tsx"));
 const SuperAudit = lazy(() => import("./pages/superadmin/SuperAudit.tsx"));
 const SuperConversations = lazy(() => import("./pages/superadmin/SuperConversations.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword.tsx"));
 
 const queryClient = new QueryClient();
 
@@ -57,6 +58,8 @@ const App = () => (
           {/* Login de staff (admin/superadmin): mismo formulario pero CON hCaptcha. */}
           <Route path="/auth/staff" element={<AuthPage requireCaptcha />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
+          {/* Nueva contraseña: destino del enlace del correo de recuperación. */}
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/buscar" element={<SearchPage />} />
           <Route path="/aviso/:id" element={<ListingDetail />} />
           <Route path="/planes" element={<Navigate to="/dashboard/anunciante/publicar" replace />} />

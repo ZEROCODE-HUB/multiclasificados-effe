@@ -1,0 +1,58 @@
+# Edge Function `verify-doc` — Verificación DNI / RUC con Factiliza
+
+Verifica el DNI (persona natural) o RUC (persona jurídica) del anunciante
+consultando la API de Factiliza **desde el servidor**. El token de Factiliza
+vive como secret en Supabase y nunca se expone al navegador.
+
+## 1) Configurar el token (secret)
+
+El token está en tu panel de Factiliza → sección **Token** (botón "Copiar").
+
+```bash
+supabase secrets set FACTILIZA_TOKEN="eyJhbGci...tu-token-completo..."
+```
+
+> Pega el token **completo** (empieza con `eyJhbGci`). Es largo; cópialo con el
+> botón "Copiar" del panel para no truncarlo.
+
+## 2) Desplegar la función
+
+```bash
+supabase functions deploy verify-doc --no-verify-jwt
+```
+
+`--no-verify-jwt` porque la identidad se verifica **antes** del login (igual que
+el flujo actual: primero verificas DNI/RUC, luego inicias sesión para pagar).
+
+## 3) Probar en local (opcional)
+
+```bash
+# crea supabase/functions/.env con:  FACTILIZA_TOKEN=eyJhbGci...
+supabase functions serve verify-doc --no-verify-jwt --env-file supabase/functions/.env
+```
+
+## Contrato
+
+Request (POST JSON):
+
+```json
+{ "tipo": "dni", "numero": "12345678" }
+```
+
+Response OK:
+
+```json
+{ "success": true, "tipo": "dni", "numero": "12345678", "nombre": "JUAN PEREZ", "data": { ... } }
+```
+
+Response error:
+
+```json
+{ "success": false, "error": "No se encontró el documento." }
+```
+
+## Endpoints de Factiliza usados
+
+- DNI: `GET https://api.factiliza.com/v1/dni/info/{dni}`
+- RUC: `GET https://api.factiliza.com/v1/ruc/info/{ruc}`
+- Header: `Authorization: Bearer <FACTILIZA_TOKEN>`
