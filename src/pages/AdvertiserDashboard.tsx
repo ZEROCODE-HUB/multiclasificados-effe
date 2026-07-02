@@ -14,6 +14,8 @@ import { fetchAdvertiserStats, type AdvertiserStatsData } from "@/lib/stats";
 import { fetchConversations, type Conversation } from "@/lib/messaging";
 import { fetchApplicationsForOwner, STATUS_LABEL, type OwnerApplication } from "@/lib/applications";
 import { loadInvoices, formatSoles } from "@/lib/pricing";
+import { getCreditBalance, getCreditsSpent } from "@/lib/credits";
+import { BuyCreditsModal } from "@/components/BuyCreditsModal";
 
 const ROW_STATUS = (s: MyListing["status"]): "Activo" | "Pausado" | "Vencido" =>
   s === "active" ? "Activo" : s === "paused" ? "Pausado" : "Vencido";
@@ -37,6 +39,9 @@ const AdvertiserDashboard = () => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [applications, setApplications] = useState<OwnerApplication[]>([]);
   const [loading, setLoading] = useState(true);
+  const [creditBalance, setCreditBalance] = useState<number | null>(null);
+  const [creditsSpent, setCreditsSpent] = useState<number>(0);
+  const [buyCreditsOpen, setBuyCreditsOpen] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -45,6 +50,11 @@ const AdvertiserDashboard = () => {
       fetchConversations().then(setConversations),
       fetchApplicationsForOwner().then(setApplications),
     ]).finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    getCreditBalance().then(setCreditBalance);
+    getCreditsSpent().then(setCreditsSpent);
   }, []);
 
   const activeCount = listings.filter((l) => l.status === "active").length;
@@ -62,14 +72,8 @@ const AdvertiserDashboard = () => {
 
   const firstName = (session?.name || "").split(" ")[0] || "anunciante";
 
-  // Saldo a partir de los comprobantes reales del usuario.
   const invoices = useMemo(() => loadInvoices(), []);
   const totalComprado = invoices.reduce((a, i) => a + (i.amount || 0), 0);
-  const saldo = [
-    { label: "Saldo total comprado", value: formatSoles(totalComprado), tone: "text-foreground" },
-    { label: "Saldo consumido", value: formatSoles(totalComprado), tone: "text-muted-foreground" },
-    { label: "Saldo restante", value: formatSoles(0), tone: "text-secondary" },
-  ];
   const publishedPct = listings.length ? Math.round((activeCount / listings.length) * 100) : 0;
 
   if (loading) {
@@ -117,21 +121,36 @@ const AdvertiserDashboard = () => {
           ))}
         </div>
 
-        {/* Mi saldo */}
+        {/* Mi saldo de créditos */}
         <Card className="border-2 border-secondary/30">
-          <CardHeader className="pb-3">
+          <CardHeader className="pb-3 flex flex-row items-center justify-between">
             <CardTitle className="text-base md:text-lg flex items-center gap-2">
-              <Wallet size={18} className="text-secondary" /> Mi saldo
+              <Wallet size={18} className="text-secondary" /> Mis créditos
             </CardTitle>
+            <Button size="sm" variant="outline" className="gap-2 text-secondary border-secondary/40" onClick={() => setBuyCreditsOpen(true)}>
+              <TrendingUp size={14} /> Comprar créditos
+            </Button>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {saldo.map((s) => (
-                <div key={s.label} className="border p-3 bg-muted/30">
-                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{s.label}</p>
-                  <p className={`text-xl font-extrabold mt-1 ${s.tone}`}>{s.value}</p>
-                </div>
-              ))}
+              <div className="border p-3 bg-muted/30">
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Créditos disponibles</p>
+                <p className="text-xl font-extrabold mt-1 text-secondary">
+                  {creditBalance === null ? "…" : `${creditBalance.toFixed(2)} cr`}
+                </p>
+              </div>
+              <div className="border p-3 bg-muted/30">
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Créditos usados</p>
+                <p className="text-xl font-extrabold mt-1 text-muted-foreground">
+                  {creditsSpent.toFixed(2)} cr
+                </p>
+              </div>
+              <div className="border p-3 bg-muted/30">
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Total comprado</p>
+                <p className="text-xl font-extrabold mt-1 text-foreground">
+                  {creditBalance === null ? "…" : `${(creditBalance + creditsSpent).toFixed(2)} cr`}
+                </p>
+              </div>
             </div>
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 border-t pt-3">
               <p className="text-sm">
@@ -158,6 +177,19 @@ const AdvertiserDashboard = () => {
             </div>
           </CardContent>
         </Card>
+
+        {/* Modal compra de créditos desde el dashboard */}
+        <BuyCreditsModal
+          open={buyCreditsOpen}
+          onClose={() => setBuyCreditsOpen(false)}
+          creditCost={0}
+          currentBalance={creditBalance ?? 0}
+          onPurchaseComplete={(newBalance) => {
+            setCreditBalance(newBalance);
+            getCreditsSpent().then(setCreditsSpent);
+            setBuyCreditsOpen(false);
+          }}
+        />
 
         {/* Recent listings */}
         <Card>

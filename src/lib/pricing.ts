@@ -26,13 +26,13 @@ export const DEFAULT_SETTINGS: PricingSettings = {
   descPorAviso: 0.06,
   saltos: { 15: 0.14, 30: 0.13, 60: 0.12, 90: 0.11 },
   extras: {
-    img100: 5,
-    img500: 5,
-    pdf100: 5,
-    pdf500: 5,
-    urgente: 10,
-    destacado: 15,
-    confidencial: 8,
+    img100: 0,          // incluida en el precio base (Excel: "Si")
+    img500: 5,          // segunda imagen >100 KB — S/ 5 extra
+    pdf100: 0,          // PDF hasta 100 KB incluido (Excel: "Si")
+    pdf500: 5,          // PDF hasta 500 KB — S/ 5 extra
+    urgente: 5,
+    destacado: 5,
+    confidencial: 0,    // gratuita (Excel: "Si")
   },
 };
 

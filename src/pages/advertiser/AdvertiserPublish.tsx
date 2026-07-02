@@ -13,6 +13,7 @@ import {
 import {
   ImagePlus, X, ArrowLeft, ArrowRight, Star, Check, MapPin, Tag, FileText, Camera,
   ShieldCheck, Building2, User, CreditCard, Receipt, Sparkles, Flame, EyeOff, Lock, Package, Minus, Plus,
+  Wallet, Loader2,
 } from "lucide-react";
 import { categories } from "@/data/mockData";
 import { useEffect, useRef, useState } from "react";
@@ -25,6 +26,8 @@ import {
 } from "@/lib/pricing";
 import { createAndPublishListing } from "@/lib/publish";
 import { verifyDocument } from "@/lib/verifyDoc";
+import { getCreditBalance, spendCredits } from "@/lib/credits";
+import { BuyCreditsModal } from "@/components/BuyCreditsModal";
 import { supabase } from "@/lib/supabase";
 
 interface PhotoItem { id: string; url: string; name: string; file: File; }
@@ -97,13 +100,15 @@ const AdvertiserPublish = () => {
   const [duration, setDuration] = useState<DurationDays>(7);
   const [extras, setExtras] = useState<ExtrasCount>({});
 
-  // Resumen y pago
-  const [summaryOpen, setSummaryOpen] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
+  // Créditos
+  const [creditBalance, setCreditBalance] = useState(0);
+  const [creditLoading, setCreditLoading] = useState(true);
+
+  // Flujo de publicación con créditos
+  const [buyCreditsOpen, setBuyCreditsOpen] = useState(false);
+  const [confirmPublishOpen, setConfirmPublishOpen] = useState(false);
+  const [publishConfirmed, setPublishConfirmed] = useState(false);
   const [publishing, setPublishing] = useState(false);
-  const [receiptType, setReceiptType] = useState<"boleta" | "factura">("boleta");
-  const [receiptEmail, setReceiptEmail] = useState("");
-  const [receiptEmailTouched, setReceiptEmailTouched] = useState(false);
   const [successOpen, setSuccessOpen] = useState<{ open: boolean; number: string; email: string }>({ open: false, number: "", email: "" });
 
   // Pricing en vivo
@@ -114,11 +119,12 @@ const AdvertiserPublish = () => {
     return () => window.removeEventListener("effe:pricing-updated", sync);
   }, []);
 
-  // Precarga el correo del comprobante con el email real de la cuenta, salvo que
-  // el usuario ya haya escrito uno propio.
+  // Cargar saldo de créditos al montar (una vez autenticado)
   useEffect(() => {
-    if (userEmail && !receiptEmailTouched && !receiptEmail) setReceiptEmail(userEmail);
-  }, [userEmail, receiptEmailTouched, receiptEmail]);
+    if (!authChecked) return;
+    setCreditLoading(true);
+    getCreditBalance().then((b) => { setCreditBalance(b); setCreditLoading(false); });
+  }, [authChecked]);
 
   // Restaurar borrador y reanudar flujo tras login
   useEffect(() => {
@@ -135,7 +141,7 @@ const AdvertiserPublish = () => {
       if (d.docNumber) setDocNumber(d.docNumber);
       if (d.verifiedName) setVerifiedName(d.verifiedName);
       if (d.resumeAtSummary && session) {
-        setTimeout(() => setSummaryOpen(true), 200);
+        setTimeout(() => openPublishFlowAfterVerify(), 200);
       }
       localStorage.removeItem(DRAFT_KEY);
     } catch { /* noop */ }
@@ -188,7 +194,8 @@ const AdvertiserPublish = () => {
   const persistDraftForLogin = (resumeAtSummary: boolean) => {
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify({
-        form, duration, quantity, extras, verified: true, personType, docNumber, verifiedName, resumeAtSummary,
+        form, duration, quantity, extras, verified: true, personType, docNumber, verifiedName,
+        resumeAtSummary,
       }));
     } catch { /* noop */ }
   };
@@ -241,48 +248,50 @@ const AdvertiserPublish = () => {
       setTimeout(() => navigate("/auth?redirect=/dashboard/anunciante/publicar"), 400);
       return;
     }
-    // Si ya hay sesión, abre el resumen directamente
-    setConfirmed(false);
-    setTimeout(() => setSummaryOpen(true), 250);
+    // Si ya hay sesión, abre el flujo de publicación
+    setPublishConfirmed(false);
+    setTimeout(() => openPublishFlowAfterVerify(), 250);
   };
 
   const canPublish = form.category && form.title && form.description && form.price && form.location && !!mainPhoto;
 
-  const openSummary = () => {
+  // Decide qué modal abrir según el saldo disponible
+  const openPublishFlowAfterVerify = () => {
+    if (creditBalance >= total) {
+      setPublishConfirmed(false);
+      setConfirmPublishOpen(true);
+    } else {
+      setBuyCreditsOpen(true);
+    }
+  };
+
+  const openPublishFlow = () => {
     if (!canPublish) {
       toast({ title: "Completa los datos requeridos", description: "Faltan campos obligatorios o imágenes.", variant: "destructive" });
       return;
     }
-    // Paso 1: verificar identidad (sin requerir login todavía)
-    if (!verified) {
-      setVerifyOpen(true);
-      return;
-    }
-    // Paso 2: si no hay sesión, exigir login antes de mostrar el pago
     if (!session) {
       persistDraftForLogin(true);
-      toast({ title: "Inicia sesión para pagar", description: "Te llevamos al login y retomamos tu publicación." });
+      toast({ title: "Inicia sesión para publicar", description: "Te llevamos al login y retomamos tu publicación." });
       navigate("/auth?redirect=/dashboard/anunciante/publicar");
       return;
     }
-    // Paso 3: resumen y pago
-    setConfirmed(false);
-    setSummaryOpen(true);
+    openPublishFlowAfterVerify();
   };
 
-  const confirmAndPay = async () => {
-    if (!confirmed || publishing) return;
+  const confirmPublish = async () => {
+    if (!publishConfirmed || publishing) return;
     if (!session) {
       persistDraftForLogin(true);
       navigate("/auth?redirect=/dashboard/anunciante/publicar");
       return;
     }
-    const email = receiptEmail.trim() || userEmail || "anunciante@effe.pe";
+    const email = userEmail || "anunciante@effe.pe";
     const tipoDoc = personType === "juridica" ? "ruc" : "dni";
     setPublishing(true);
     try {
-      // Crea el aviso real + sube imágenes + orden/comprobante + publica con vigencia
-      const { invoiceNumber, published, invoiceSaved } = await createAndPublishListing({
+      // 1) Crear el aviso y publicarlo
+      const { listingId, invoiceNumber, published, invoiceSaved } = await createAndPublishListing({
         form,
         quantity,
         duration,
@@ -290,32 +299,35 @@ const AdvertiserPublish = () => {
         total,
         mainPhoto: mainPhoto ? { file: mainPhoto.file, name: mainPhoto.name } : null,
         secondPhoto: hasSecondImageInPackage && secondPhoto ? { file: secondPhoto.file, name: secondPhoto.name } : null,
-        receiptType,
+        receiptType: "boleta",
         email,
         advertiserName: verifiedName || session?.name || "Anunciante",
         docType: tipoDoc,
         docNumber: docNumber || undefined,
       });
 
-      // TODO comprobante se guarda SIEMPRE en "Mis comprobantes" (local), aunque
-      // el aviso no se haya podido activar. Reutiliza el nº de serie de la BD
-      // para que coincida con el comprobante oficial.
+      // 2) Descontar créditos del saldo
+      await spendCredits(total, listingId);
+      const newBalance = await getCreditBalance();
+      setCreditBalance(newBalance);
+
+      // 3) Guardar comprobante local como respaldo
       const localInv = addInvoice({
         email,
         advertiser: verifiedName || session?.name || "Anunciante",
         listingTitle: form.title,
         amount: total,
-        detail: `${receiptType === "factura" ? "Factura" : "Boleta"} · Aviso ${duration} días`,
+        detail: `Boleta · Aviso ${duration} días · ${total.toFixed(2)} créditos`,
         docNumber: docNumber || undefined,
         number: invoiceNumber || undefined,
       });
 
-      setSummaryOpen(false);
+      setConfirmPublishOpen(false);
       setSuccessOpen({ open: true, number: invoiceNumber || localInv.number, email });
       if (!invoiceSaved) {
         toast({
           title: "Comprobante no registrado en la base de datos",
-          description: "El aviso se publicó, pero el comprobante no se guardó en el servidor. Avísanos para revisarlo.",
+          description: "El aviso se publicó, pero el comprobante no se guardó en el servidor.",
           variant: "destructive",
         });
       }
@@ -728,22 +740,37 @@ const AdvertiserPublish = () => {
             <Card className="border-secondary/40 border-2">
               <CardHeader className="border-b bg-secondary/5">
                 <CardTitle className="text-sm uppercase tracking-widest text-secondary flex items-center gap-2">
-                  <CreditCard size={14} /> Precio del aviso
+                  <Wallet size={14} /> Costo en créditos
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-5 space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">{quantity} aviso{quantity > 1 ? "s" : ""} × {duration} días</span>
-                  <span className="font-bold">{formatSoles(packageBase)}</span>
+                  <span className="font-bold">{packageBase.toFixed(2)} cr</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Adicionales</span>
-                  <span className="font-bold">{formatSoles(extrasSum)}</span>
+                  <span className="font-bold">{extrasSum.toFixed(2)} cr</span>
                 </div>
                 <div className="border-t pt-3 flex items-baseline justify-between">
-                  <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Total (IGV incl.)</span>
-                  <span className="text-3xl font-extrabold text-primary">{formatSoles(total)}</span>
+                  <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Total</span>
+                  <span className="text-3xl font-extrabold text-primary">{total.toFixed(2)} cr</span>
                 </div>
+                <div className="border-t pt-3 flex items-baseline justify-between">
+                  <span className="text-xs text-muted-foreground">Tu saldo</span>
+                  {creditLoading ? (
+                    <Loader2 size={14} className="animate-spin text-muted-foreground" />
+                  ) : (
+                    <span className={`text-sm font-bold ${creditBalance >= total ? "text-success" : "text-destructive"}`}>
+                      {creditBalance.toFixed(2)} cr
+                    </span>
+                  )}
+                </div>
+                {!creditLoading && creditBalance < total && (
+                  <p className="text-[11px] text-destructive">
+                    Faltan {(total - creditBalance).toFixed(2)} créditos. Cómpralos al publicar.
+                  </p>
+                )}
               </CardContent>
             </Card>
 
@@ -773,11 +800,11 @@ const AdvertiserPublish = () => {
             </Card>
 
             <div className="flex flex-col gap-2">
-              <Button variant="hero" size="lg" className="w-full rounded-none" onClick={openSummary}>
+              <Button variant="hero" size="lg" className="w-full rounded-none" onClick={openPublishFlow}>
                 Publicar aviso <ArrowRight size={16} className="ml-1" />
               </Button>
               <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 justify-center text-center">
-                <ShieldCheck size={12} className="text-secondary" /> Al publicar verificarás tu identidad y luego confirmarás el pago.
+                <Wallet size={12} className="text-secondary" /> Se descontarán créditos de tu saldo al publicar.
               </p>
             </div>
           </div>
@@ -846,17 +873,22 @@ const AdvertiserPublish = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Popup resumen + pago */}
-      <Dialog open={summaryOpen} onOpenChange={setSummaryOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      {/* Confirmar publicación (cuando hay saldo suficiente) */}
+      <Dialog open={confirmPublishOpen} onOpenChange={setConfirmPublishOpen}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Resumen de tu aviso</DialogTitle>
-            <DialogDescription>Revisa los datos antes de confirmar el pago.</DialogDescription>
+            <DialogTitle className="flex items-center gap-2">
+              <Wallet size={18} className="text-secondary" /> Confirmar publicación
+            </DialogTitle>
+            <DialogDescription>
+              Se descontarán créditos de tu saldo para publicar este aviso.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
+            {/* Preview del aviso */}
             <div className="flex gap-3 p-3 border bg-muted/30">
-              {mainPhoto && <img src={mainPhoto.url} alt="" className="w-20 h-20 object-cover" />}
+              {mainPhoto && <img src={mainPhoto.url} alt="" className="w-16 h-16 object-cover flex-shrink-0" />}
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] uppercase tracking-widest font-bold text-secondary">
                   {categories.find((c) => c.id === form.category)?.name}
@@ -865,20 +897,14 @@ const AdvertiserPublish = () => {
                 <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
                   <MapPin size={10} /> {form.location}
                 </p>
-                <p className="text-sm font-extrabold text-primary mt-1">
-                  {form.currency === "USD" ? "US$" : "S/"} {Number(form.price).toLocaleString()}
-                </p>
               </div>
             </div>
 
-            <div className="space-y-2 text-sm">
+            {/* Desglose de créditos */}
+            <div className="space-y-2 text-sm border p-3 bg-muted/20">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Paquete</span>
-                <span className="font-bold">{quantity} aviso{quantity > 1 ? "s" : ""} · {duration} días c/u</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Subtotal avisos</span>
-                <span>{formatSoles(packageBase)}</span>
+                <span className="text-muted-foreground">{quantity} aviso{quantity > 1 ? "s" : ""} × {duration} días</span>
+                <span className="font-bold">{packageBase.toFixed(2)} cr</span>
               </div>
               {EXTRA_DEFS.filter((d) => (extras[d.key] ?? 0) > 0).map((d) => {
                 const count = extras[d.key] ?? 0;
@@ -886,65 +912,56 @@ const AdvertiserPublish = () => {
                 return (
                   <div key={d.key} className="flex justify-between text-xs">
                     <span className="text-muted-foreground">+ {d.label} × {count}</span>
-                    <span>{formatSoles(count * unit)}</span>
+                    <span>{(count * unit).toFixed(2)} cr</span>
                   </div>
                 );
               })}
               <div className="border-t pt-2 flex justify-between items-baseline">
-                <span className="font-bold uppercase tracking-wider text-xs">Total (IGV incl.)</span>
-                <span className="text-2xl font-extrabold text-primary">{formatSoles(total)}</span>
+                <span className="font-bold uppercase tracking-wider text-xs">Costo total</span>
+                <span className="text-2xl font-extrabold text-primary">{total.toFixed(2)} cr</span>
               </div>
-            </div>
-
-            {/* Tipo de comprobante */}
-            <div className="space-y-2">
-              <Label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Tipo de comprobante</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setReceiptType("boleta")}
-                  className={`p-3 border text-left transition-all ${receiptType === "boleta" ? "border-secondary bg-secondary/10" : "border-border hover:bg-muted/50"}`}
-                >
-                  <p className="font-bold text-sm">Boleta</p>
-                  <p className="text-[11px] text-muted-foreground">Persona natural</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setReceiptType("factura")}
-                  className={`p-3 border text-left transition-all ${receiptType === "factura" ? "border-secondary bg-secondary/10" : "border-border hover:bg-muted/50"}`}
-                >
-                  <p className="font-bold text-sm">Factura</p>
-                  <p className="text-[11px] text-muted-foreground">Empresa con RUC</p>
-                </button>
-              </div>
-              <div>
-                <Label className="text-xs">Correo para enviar el comprobante</Label>
-                <Input
-                  type="email"
-                  value={receiptEmail}
-                  onChange={(e) => { setReceiptEmail(e.target.value); setReceiptEmailTouched(true); }}
-                  placeholder="tu@correo.com"
-                  className="mt-1"
-                />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Saldo tras publicar</span>
+                <span className="font-semibold text-foreground">{(creditBalance - total).toFixed(2)} cr</span>
               </div>
             </div>
 
             <label className="flex items-start gap-2 p-3 border bg-secondary/5 cursor-pointer">
-              <Checkbox checked={confirmed} onCheckedChange={(v) => setConfirmed(!!v)} className="mt-0.5" />
+              <Checkbox checked={publishConfirmed} onCheckedChange={(v) => setPublishConfirmed(!!v)} className="mt-0.5" />
               <span className="text-xs">
-                Confirmo que la información del aviso es correcta y autorizo la publicación inmediata tras el pago.
+                Confirmo que la información del aviso es correcta y autorizo el descuento de {total.toFixed(2)} créditos de mi saldo.
               </span>
             </label>
           </div>
 
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setSummaryOpen(false)}>Cancelar</Button>
-            <Button onClick={confirmAndPay} disabled={!confirmed || publishing} className="gap-2">
-              <CreditCard size={14} /> {publishing ? "Publicando…" : `Pagar ${formatSoles(total)}`}
+            <Button variant="ghost" onClick={() => setConfirmPublishOpen(false)}>Cancelar</Button>
+            <Button onClick={confirmPublish} disabled={!publishConfirmed || publishing} className="gap-2">
+              {publishing
+                ? <><Loader2 size={14} className="animate-spin" /> Publicando…</>
+                : <><Check size={14} /> Publicar ({total.toFixed(2)} cr)</>
+              }
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal compra de créditos (cuando saldo insuficiente) */}
+      <BuyCreditsModal
+        open={buyCreditsOpen}
+        onClose={() => setBuyCreditsOpen(false)}
+        creditCost={total}
+        currentBalance={creditBalance}
+        onPurchaseComplete={(newBalance) => {
+          setCreditBalance(newBalance);
+          setBuyCreditsOpen(false);
+          // Si ahora el saldo es suficiente, abrir confirmación
+          if (newBalance >= total) {
+            setPublishConfirmed(false);
+            setConfirmPublishOpen(true);
+          }
+        }}
+      />
 
       {/* Confirmación post-pago */}
       <Dialog open={successOpen.open} onOpenChange={(o) => setSuccessOpen((s) => ({ ...s, open: o }))}>
