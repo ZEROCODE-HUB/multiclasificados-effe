@@ -29,19 +29,32 @@ workflows:
           ls ios/App
       - name: Sync Capacitor
         script: npx cap sync ios
-      - name: Install CocoaPods
+      - name: Build iOS
+        scripts:
+      - name: Install dependencies
         script: |
-          cd ios/App
-          pod install --repo-update
+          npm ci
+          npm install @capacitor/ios
+      - name: Build React app
+        script: npm run build
+      - name: Add iOS platform
+        script: npx cap add ios
+      - name: Sync Capacitor
+        script: npx cap sync ios
       - name: Build iOS
         script: |
-          xcode-project use-profiles --automatic-signing
+          xcode-project use-profiles
           xcodebuild \
             -workspace ios/App/App.xcworkspace \
-            -scheme $XCODE_SCHEME \
+            -scheme App \
             -configuration Release \
             -archivePath build/App.xcarchive \
             archive
+      - name: Export IPA
+        script: |
+          xcode-project build-ipa \
+            --workspace ios/App/App.xcworkspace \
+            --scheme App
       - name: Export IPA
         script: |
           xcode-project build-ipa \
