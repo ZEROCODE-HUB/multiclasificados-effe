@@ -10,8 +10,8 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Search, UserCheck, Ban, BadgeCheck, KeyRound, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
-import { fetchAdminUsers, setUserStatus, verifyUser, deleteUser, setUserRole, type AdminUser } from "@/lib/admin";
+import { Search, UserCheck, Ban, BadgeCheck, KeyRound, Trash2, ChevronLeft, ChevronRight, Coins } from "lucide-react";
+import { fetchAdminUsers, setUserStatus, verifyUser, deleteUser, setUserRole, grantCredits, type AdminUser } from "@/lib/admin";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
 
@@ -39,6 +39,9 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
   const [q, setQ] = useState("");
   const [r, setR] = useState("all");
   const [page, setPage] = useState(1);
+  // Diálogo "Otorgar créditos": usuario objetivo + cantidad.
+  const [grantFor, setGrantFor] = useState<AdminUser | null>(null);
+  const [grantAmount, setGrantAmount] = useState("");
 
   const load = () => fetchAdminUsers().then(({ data }) => setUsers(data));
   useEffect(() => { load(); }, []);
@@ -82,6 +85,14 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
         });
       } catch { /* no bloquea el flujo */ }
     });
+
+  const doGrant = () => {
+    if (!grantFor) return;
+    const u = grantFor;
+    const amt = Number(grantAmount);
+    setGrantFor(null);
+    run(`Se otorgaron ${amt} créditos`, u, () => grantCredits(u.id, amt).then(() => undefined));
+  };
 
   const initials = (name: string) => (name || "?").split(" ").map((n) => n[0]).slice(0, 2).join("");
   const primaryRole = (roles: string) => {
@@ -200,6 +211,16 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        <Button
+          size={size}
+          variant={Btn as any}
+          className="text-secondary"
+          title="Otorgar créditos"
+          onClick={() => { setGrantFor(u); setGrantAmount(""); }}
+        >
+          <Coins size={iconSize} />
+        </Button>
 
         <AlertDialog>
           <AlertDialogTrigger asChild>
@@ -361,6 +382,38 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
           )}
         </CardContent>
       </Card>
+
+      {/* Diálogo: otorgar créditos a un usuario */}
+      <AlertDialog open={!!grantFor} onOpenChange={(o) => { if (!o) setGrantFor(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Coins size={18} className="text-secondary" /> Otorgar créditos
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Se sumarán al saldo de <b>{grantFor?.full_name}</b> ({grantFor?.email}). Queda registrado en auditoría.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-1">
+            <Input
+              type="number"
+              min="1"
+              step="1"
+              autoFocus
+              placeholder="Cantidad de créditos (ej. 100)"
+              value={grantAmount}
+              onChange={(e) => setGrantAmount(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && Number(grantAmount) > 0) doGrant(); }}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={doGrant} disabled={!(Number(grantAmount) > 0)}>
+              Otorgar {Number(grantAmount) > 0 ? `${Number(grantAmount)} cr` : ""}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AdminLayout>
   );
 };

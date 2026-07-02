@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,13 +15,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ListingRow } from "@/components/ListingRow";
-import { PlusCircle, ClipboardList, Eye, MessageSquare, TrendingUp, Search, SlidersHorizontal } from "lucide-react";
+import { PlusCircle, ClipboardList, Eye, MessageSquare, TrendingUp, Search, SlidersHorizontal, ImagePlus, Loader2 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
+import { categories } from "@/data/mockData";
 import type { Listing } from "@/data/mockData";
 import {
-  fetchMyListings, updateListing, deleteListing, setListingStatus,
-  type MyListing, type ListingStatus,
+  fetchMyListings, updateListing, deleteListing, setListingStatus, replaceMainListingPhoto,
+  type MyListing, type ListingStatus, type ListingCondition,
 } from "@/lib/listings";
 
 // Agrupa los estados de la BD en las pestañas visibles de la UI.
@@ -50,6 +51,9 @@ interface EditState {
   price: string;
   currency: string;
   location: string;
+  category: string;
+  condition: ListingCondition;
+  imageUrl: string;
 }
 
 const AdvertiserListings = () => {
@@ -61,6 +65,8 @@ const AdvertiserListings = () => {
   // Edición / eliminación
   const [edit, setEdit] = useState<EditState | null>(null);
   const [saving, setSaving] = useState(false);
+  const [photoSaving, setPhotoSaving] = useState(false);
+  const photoRef = useRef<HTMLInputElement>(null);
   const [toDelete, setToDelete] = useState<MyListing | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -71,7 +77,7 @@ const AdvertiserListings = () => {
     });
   }, []);
 
-  const openEdit = (l: Listing) => {
+  const openEdit = (l: MyListing) => {
     setEdit({
       id: l.id,
       title: l.title,
@@ -79,7 +85,33 @@ const AdvertiserListings = () => {
       price: String(l.price ?? ""),
       currency: l.currency || "PEN",
       location: l.location ?? "",
+      category: l.category ?? "",
+      condition: l.condition ?? "na",
+      imageUrl: l.imageUrl ?? "",
     });
+  };
+
+  const changePhoto = async (file: File | undefined) => {
+    if (!file || !edit) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Archivo no válido", description: "Selecciona una imagen.", variant: "destructive" });
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast({ title: "Imagen muy pesada", description: "La foto no debe superar 2 MB.", variant: "destructive" });
+      return;
+    }
+    setPhotoSaving(true);
+    try {
+      const url = await replaceMainListingPhoto(edit.id, file);
+      setEdit((e) => (e ? { ...e, imageUrl: url } : e));
+      setListings((prev) => prev.map((l) => (l.id === edit.id ? { ...l, imageUrl: url } : l)));
+      toast({ title: "Foto actualizada", description: "La portada del aviso se cambió correctamente." });
+    } catch (err) {
+      toast({ title: "No se pudo cambiar la foto", description: err instanceof Error ? err.message : "Intenta nuevamente.", variant: "destructive" });
+    } finally {
+      setPhotoSaving(false);
+    }
   };
 
   const saveEdit = async () => {
@@ -96,12 +128,14 @@ const AdvertiserListings = () => {
         price: Number(edit.price) || 0,
         currency: edit.currency,
         location: edit.location.trim(),
+        category_id: edit.category || undefined,
+        condition: edit.condition,
       });
       // Refleja el cambio en memoria sin recargar todo.
       setListings((prev) =>
         prev.map((l) =>
           l.id === edit.id
-            ? { ...l, title: edit.title.trim(), description: edit.description.trim(), price: Number(edit.price) || 0, currency: edit.currency, location: edit.location.trim() }
+            ? { ...l, title: edit.title.trim(), description: edit.description.trim(), price: Number(edit.price) || 0, currency: edit.currency, location: edit.location.trim(), category: edit.category || l.category, condition: edit.condition }
             : l
         )
       );
@@ -186,7 +220,7 @@ const AdvertiserListings = () => {
                 listing={listing}
                 status={ROW_STATUS[tab]}
                 onView={(l) => navigate(`/aviso/${l.id}`)}
-                onEdit={openEdit}
+                onEdit={() => openEdit(listing)}
                 onDelete={() => setToDelete(listing)}
                 onTogglePause={tab === "activos" || tab === "pausados" ? togglePause : undefined}
               />
@@ -274,6 +308,41 @@ const AdvertiserListings = () => {
           </DialogHeader>
           {edit && (
             <div className="space-y-4">
+              {/* Foto de portada */}
+              <div>
+                <Label>Foto de portada</Label>
+                <div className="mt-1 flex items-center gap-4">
+                  <div className="w-24 h-20 rounded-lg overflow-hidden bg-muted shrink-0 border">
+                    {edit.imageUrl ? (
+                      <img src={edit.imageUrl} alt="Portada" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                        <ImagePlus size={20} />
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <input
+                      ref={photoRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => { changePhoto(e.target.files?.[0]); if (photoRef.current) photoRef.current.value = ""; }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => photoRef.current?.click()}
+                      disabled={photoSaving}
+                      className="gap-2"
+                    >
+                      {photoSaving ? <><Loader2 size={14} className="animate-spin" /> Subiendo…</> : <><ImagePlus size={14} /> Cambiar foto</>}
+                    </Button>
+                    <p className="text-[11px] text-muted-foreground mt-1">JPG o PNG, hasta 2 MB.</p>
+                  </div>
+                </div>
+              </div>
               <div>
                 <Label>Título *</Label>
                 <Input
@@ -282,6 +351,28 @@ const AdvertiserListings = () => {
                   onChange={(e) => setEdit({ ...edit, title: e.target.value })}
                   className="mt-1"
                 />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Label>Categoría</Label>
+                  <Select value={edit.category} onValueChange={(v) => setEdit({ ...edit, category: v })}>
+                    <SelectTrigger className="mt-1"><SelectValue placeholder="Selecciona categoría" /></SelectTrigger>
+                    <SelectContent>
+                      {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Condición</Label>
+                  <Select value={edit.condition} onValueChange={(v) => setEdit({ ...edit, condition: v as ListingCondition })}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="nuevo">Nuevo</SelectItem>
+                      <SelectItem value="usado">Usado</SelectItem>
+                      <SelectItem value="na">No aplica</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div>
                 <Label>Descripción</Label>

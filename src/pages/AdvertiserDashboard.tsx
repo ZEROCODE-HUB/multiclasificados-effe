@@ -13,7 +13,7 @@ import { fetchMyListings, type MyListing } from "@/lib/listings";
 import { fetchAdvertiserStats, type AdvertiserStatsData } from "@/lib/stats";
 import { fetchConversations, type Conversation } from "@/lib/messaging";
 import { fetchApplicationsForOwner, STATUS_LABEL, type OwnerApplication } from "@/lib/applications";
-import { loadInvoices, formatSoles } from "@/lib/pricing";
+import { loadInvoices, formatSoles, avisosBreakdown } from "@/lib/pricing";
 import { getCreditBalance, getCreditsSpent } from "@/lib/credits";
 import { BuyCreditsModal } from "@/components/BuyCreditsModal";
 
@@ -151,6 +151,30 @@ const AdvertiserDashboard = () => {
                   {creditBalance === null ? "…" : `${(creditBalance + creditsSpent).toFixed(2)} cr`}
                 </p>
               </div>
+            </div>
+
+            {/* Cuántos avisos alcanza el saldo, por cada duración */}
+            <div className="border-2 border-secondary/30 bg-secondary/5 p-3">
+              <p className="text-sm flex items-center gap-2 mb-3">
+                <ClipboardList size={16} className="text-secondary" />
+                Con tu saldo{creditBalance === null ? "" : ` (${creditBalance.toFixed(2)} cr)`} puedes publicar:
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {avisosBreakdown(creditBalance ?? 0).map(({ dias, cost, count }) => (
+                  <div key={dias} className="border bg-background p-2.5 text-center">
+                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{dias} días</p>
+                    <p className="text-2xl font-extrabold text-secondary leading-tight mt-0.5">
+                      {creditBalance === null ? "…" : count}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      aviso{count === 1 ? "" : "s"} · {formatSoles(cost)} c/u
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-2">
+                Cálculo sin adicionales; los extras (Destacado, Urgente, etc.) suman al costo de cada aviso.
+              </p>
             </div>
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 border-t pt-3">
               <p className="text-sm">

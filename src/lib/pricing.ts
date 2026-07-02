@@ -16,14 +16,21 @@ export interface ExtraPrices {
 
 export interface PricingSettings {
   base: number; // precio base 1 aviso × 7 días (incluye IGV)
-  descPorAviso: number; // descuento decimal por cada aviso adicional (acumulativo)
+  descPorAviso: number; // descuento decimal por aviso adicional (fallback / retrocompat)
+  // Descuento decimal por CANTIDAD, uno por nivel: índice n (0..10) = descuento
+  // vs. el nivel anterior. n=0 y n=1 → 0. Reemplaza al promedio único.
+  descCantidad?: number[];
   saltos: { 15: number; 30: number; 60: number; 90: number }; // descuento decimal por rango
   extras: ExtraPrices;
 }
 
+// Descuento por cantidad por defecto: 6% por cada aviso adicional (niveles 2..10).
+const DEFAULT_DESC_CANTIDAD = [0, 0, 0.06, 0.06, 0.06, 0.06, 0.06, 0.06, 0.06, 0.06, 0.06];
+
 export const DEFAULT_SETTINGS: PricingSettings = {
   base: 16.14,
   descPorAviso: 0.06,
+  descCantidad: DEFAULT_DESC_CANTIDAD,
   saltos: { 15: 0.14, 30: 0.13, 60: 0.12, 90: 0.11 },
   extras: {
     img100: 0,          // incluida en el precio base (Excel: "Si")
@@ -47,6 +54,9 @@ export function loadSettings(): PricingSettings {
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
+      descCantidad: Array.isArray(parsed?.descCantidad) && parsed.descCantidad.length
+        ? parsed.descCantidad
+        : DEFAULT_DESC_CANTIDAD,
       saltos: { ...DEFAULT_SETTINGS.saltos, ...(parsed?.saltos ?? {}) },
       extras: { ...DEFAULT_SETTINGS.extras, ...(parsed?.extras ?? {}) },
     };
@@ -67,8 +77,17 @@ export function saveSettings(s: PricingSettings) {
 export function priceFor(n: number, dias: 7 | 15 | 30 | 60 | 90, s: PricingSettings = loadSettings()): number {
   // base × cantidad de avisos
   let price = s.base * n;
-  // descuento por volumen aplicado al total: (1 - desc)^(n-1)
-  price = price * Math.pow(1 - s.descPorAviso, Math.max(0, n - 1));
+  // Descuento por volumen: producto de (1 - descuento de cada nivel 2..n).
+  // Si hay tabla por cantidad se usa nivel a nivel; si no, cae al % único.
+  if (s.descCantidad && s.descCantidad.length) {
+    let volFactor = 1;
+    for (let k = 2; k <= n; k++) {
+      volFactor *= 1 - (s.descCantidad[k] ?? s.descPorAviso);
+    }
+    price = price * volFactor;
+  } else {
+    price = price * Math.pow(1 - s.descPorAviso, Math.max(0, n - 1));
+  }
   // factor días: por cada salto duplicar y aplicar descuento
   const steps: Array<{ to: 15 | 30 | 60 | 90; key: 15 | 30 | 60 | 90 }> = [
     { to: 15, key: 15 },
@@ -112,6 +131,32 @@ export function extrasTotal(sel: ExtrasSelection, s: PricingSettings = loadSetti
 
 export function totalPrice(n: number, dias: DurationDays, sel: ExtrasSelection, s: PricingSettings = loadSettings()): number {
   return Math.round((priceForDuration(n, dias, s) + extrasTotal(sel, s)) * 100) / 100;
+}
+
+// Costo de referencia de un aviso estándar: 1 aviso, 7 días, sin adicionales.
+export function standardAdCost(s: PricingSettings = loadSettings()): number {
+  return priceForDuration(1, 7, s);
+}
+
+// Cuántos avisos estándar (7 días) alcanza un saldo de créditos. Sirve para
+// mostrar al usuario "con tu saldo puedes publicar ~N avisos".
+export function avisosForBalance(balance: number, s: PricingSettings = loadSettings()): number {
+  const cost = standardAdCost(s);
+  if (cost <= 0) return 0;
+  return Math.max(0, Math.floor(balance / cost));
+}
+
+// Desglose: cuántos avisos alcanza el saldo por cada duración disponible.
+// Devuelve [{ dias, cost, count }] para 3/7/15/30/60/90 días.
+export const DURATION_OPTIONS: DurationDays[] = [3, 7, 15, 30, 60, 90];
+export function avisosBreakdown(
+  balance: number,
+  s: PricingSettings = loadSettings(),
+): Array<{ dias: DurationDays; cost: number; count: number }> {
+  return DURATION_OPTIONS.map((dias) => {
+    const cost = priceForDuration(1, dias, s);
+    return { dias, cost, count: cost > 0 ? Math.max(0, Math.floor(balance / cost)) : 0 };
+  });
 }
 
 export function buildMatrix(s: PricingSettings = loadSettings()) {

@@ -101,6 +101,12 @@ export default function ListingDetail() {
     fetchReviews(id).then((rs) => setReviewCount(rs.length));
   };
 
+  // Al cambiar de aviso (p. ej. desde "Sigue explorando"), vuelve al inicio de
+  // la página para mostrar el encabezado del nuevo aviso y no quedarse abajo.
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, [id]);
+
   useEffect(() => {
     if (!id) return;
     let mounted = true;

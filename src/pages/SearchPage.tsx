@@ -253,7 +253,7 @@ export default function SearchPage() {
   );
 
   return (
-    <div className={`${view === "map" ? "h-screen" : "min-h-screen"} flex flex-col bg-background`}>
+    <div className={`${view === "map" ? "min-h-screen lg:h-screen" : "min-h-screen"} flex flex-col bg-background`}>
       <Navbar />
 
       {/* Búsqueda en vivo (filtra mientras escribes) */}
@@ -359,9 +359,9 @@ export default function SearchPage() {
           </div>
         </div>
       ) : (
-        <div className="flex-1 flex flex-col lg:grid lg:grid-cols-[480px_1fr] min-h-0">
+        <div className="flex-1 flex flex-col lg:grid lg:grid-cols-[480px_1fr] lg:min-h-0">
           {/* Map - full width on top in mobile, right column on desktop */}
-          <div className="relative bg-muted overflow-hidden h-[55vh] lg:h-auto lg:order-2 shrink-0">
+          <div className="relative bg-muted overflow-hidden h-[45vh] lg:h-auto lg:order-2 shrink-0">
             <img
               src="https://images.unsplash.com/photo-1524661135-423995f22d0b?w=1600&h=1200&fit=crop"
               alt="Mapa interactivo de avisos"
@@ -432,9 +432,9 @@ export default function SearchPage() {
             </div>
           </div>
 
-          {/* List - below map on mobile, left column on desktop */}
-          <div className="flex-1 lg:flex-none overflow-y-auto lg:border-r border-border bg-background lg:order-1 min-h-0">
-            <div className="px-4 lg:px-5 py-3 lg:py-4 border-b border-border sticky top-0 bg-background/95 backdrop-blur z-10">
+          {/* List - below map on mobile (la página hace scroll), columna izquierda con scroll propio en escritorio */}
+          <div className="lg:flex-1 lg:overflow-y-auto lg:border-r border-border bg-background lg:order-1 lg:min-h-0 pb-24 lg:pb-0">
+            <div className="px-4 lg:px-5 py-3 lg:py-4 border-b border-border lg:sticky lg:top-0 bg-background/95 backdrop-blur z-10">
               <p className="text-[10px] lg:text-xs uppercase tracking-[0.2em] font-bold text-secondary">Resultados</p>
               <h1 className="text-base lg:text-lg font-bold text-foreground mt-0.5 lg:mt-1">
                 {listings.length} avisos en el mapa

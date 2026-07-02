@@ -355,6 +355,16 @@ export async function setUserRole(userId: string, role: string) {
   if (error) throw error;
 }
 
+// Otorga créditos a un usuario (solo staff). Valida el rol en el servidor
+// (RPC security definer) y registra la transacción + auditoría. Devuelve el saldo nuevo.
+export async function grantCredits(userId: string, credits: number, reason?: string): Promise<number> {
+  const { data, error } = await supabase.rpc("admin_grant_credits", {
+    p_user: userId, p_credits: credits, p_reason: reason ?? null,
+  });
+  if (error) throw error;
+  return Number(data) || 0;
+}
+
 // Quita un rol a un usuario (solo superadmin).
 export async function removeUserRole(userId: string, role: string) {
   const { error } = await supabase.rpc("admin_remove_role", { p_user: userId, p_role: role });

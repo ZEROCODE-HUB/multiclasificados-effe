@@ -8,6 +8,7 @@ import { LibroReclamaciones } from "@/components/LibroReclamaciones";
 import { type Listing } from "@/data/mockData";
 import { fetchListings } from "@/lib/listings";
 import { fetchPlatformStats, type PlatformStats } from "@/lib/stats";
+import { useSession } from "@/hooks/useSession";
 import { useEffect, useMemo, useState } from "react";
 import heroBg from "@/assets/hero-bg.jpg";
 import { ArrowRight, BadgeCheck, Gem, Headset, Star, TrendingUp, CheckCircle2, ShieldCheck } from "lucide-react";
@@ -69,6 +70,12 @@ const testimonials = [
 ];
 
 const Index = () => {
+  // La barra inferior fija (MobileBottomNav) aparece en móvil solo para
+  // anunciante/buscador logueados; si está, reservamos espacio abajo para que
+  // la última sección (categorías) no quede tapada y sí se pueda alcanzar.
+  const session = useSession();
+  const hasBottomNav = !!session && (session.role === "anunciante" || session.role === "buscador");
+
   // Avisos reales desde Supabase (vacío hasta que existan avisos publicados).
   const [listings, setListings] = useState<Listing[]>([]);
   const [platform, setPlatform] = useState<PlatformStats | null>(null);
@@ -90,7 +97,7 @@ const Index = () => {
   );
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className={`min-h-screen bg-background ${hasBottomNav ? "pb-24 lg:pb-0" : ""}`}>
       {/* Header — distinct white bar above hero */}
       <Navbar />
 
