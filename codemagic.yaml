@@ -24,20 +24,6 @@ workflows:
       - name: Build React app
         script: npm run build
       - name: Add iOS platform
-        script: |
-          npx cap add ios
-          ls ios/App
-      - name: Sync Capacitor
-        script: npx cap sync ios
-      - name: Build iOS
-        scripts:
-      - name: Install dependencies
-        script: |
-          npm ci
-          npm install @capacitor/ios
-      - name: Build React app
-        script: npm run build
-      - name: Add iOS platform
         script: npx cap add ios
       - name: Sync Capacitor
         script: npx cap sync ios
@@ -53,16 +39,3 @@ workflows:
       - name: Export IPA
         script: |
           xcode-project build-ipa \
-            --workspace ios/App/App.xcworkspace \
-            --scheme App
-      - name: Export IPA
-        script: |
-          xcode-project build-ipa \
-            --workspace ios/App/App.xcworkspace \
-            --scheme $XCODE_SCHEME
-    artifacts:
-      - build/ios/ipa/*.ipa
-    publishing:
-      app_store_connect:
-        auth: integration
-        submit_to_testflight: true
