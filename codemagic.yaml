@@ -7,8 +7,6 @@ workflows:
       app_store_connect: Codemagic Key
     environment:
       ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.effe.multiclasificados
         provisioning_profiles:
           - eFFe Multiclasificados AppStore
         certificates:
