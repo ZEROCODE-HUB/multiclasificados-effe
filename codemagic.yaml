@@ -18,7 +18,9 @@ workflows:
         VITE_SUPABASE_ANON_KEY: $VITE_SUPABASE_ANON_KEY
     scripts:
       - name: Install dependencies
-        script: npm ci
+        script: |
+          npm ci
+          npm install @capacitor/ios
       - name: Build React app
         script: npm run build
       - name: Add iOS platform
