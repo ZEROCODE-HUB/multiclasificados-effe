@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { usePagination, TablePagination } from "@/components/TablePagination";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -61,6 +62,7 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
   });
 
   const matrix = buildMatrix(s);
+  const matrixPager = usePagination(matrix, 10, matrix.length);
 
   useEffect(() => {
     const sync = () => setS(loadSettings());
@@ -451,7 +453,7 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {matrix.map((row) => (
+                  {matrixPager.pageItems.map((row) => (
                     <TableRow key={row.n}>
                       <TableCell className="font-bold text-primary">{row.n}</TableCell>
                       <TableCell className="font-mono text-xs">{formatSoles(row.values[7])}</TableCell>
@@ -463,6 +465,7 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
                   ))}
                 </TableBody>
               </Table>
+              <TablePagination {...matrixPager} noun="filas" />
             </CardContent>
           </Card>
         </TabsContent>

@@ -47,6 +47,12 @@ describe("comprobantes (addInvoice)", () => {
     expect(next.number).toBe("B001-000003");
   });
 
+  it("guarda el DNI/RUC verificado en el comprobante", () => {
+    const inv = addInvoice({ ...base, docNumber: "44443333" });
+    expect(inv.docNumber).toBe("44443333");
+    expect(loadInvoices()[0].docNumber).toBe("44443333");
+  });
+
   it("respeta el número de serie oficial (BD) cuando se provee", () => {
     const inv = addInvoice({ ...base, number: "B001-000777" });
     expect(inv.number).toBe("B001-000777");

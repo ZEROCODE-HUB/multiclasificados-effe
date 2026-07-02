@@ -10,7 +10,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Search, UserCheck, UserX, Ban, BadgeCheck, KeyRound, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, UserCheck, Ban, BadgeCheck, KeyRound, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { fetchAdminUsers, setUserStatus, verifyUser, deleteUser, setUserRole, type AdminUser } from "@/lib/admin";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
@@ -28,6 +28,11 @@ const isUuid = (v: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 
 const PAGE_SIZE = 5;
+
+// Base de URL para los enlaces del correo (reset de contraseña). Usa el dominio
+// público si está definido para que el correo apunte a producción aunque el staff
+// dispare la acción desde localhost; si no, cae al origen actual.
+const SITE_URL = import.meta.env.VITE_PUBLIC_SITE_URL || window.location.origin;
 
 const AdminUsers = ({ role }: { role: AdminRole }) => {
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -66,7 +71,7 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
     run("Correo de restablecimiento enviado", u, async () => {
       // Dispara el correo de recuperación de Supabase (no requiere Edge Function).
       const { error } = await supabase.auth.resetPasswordForEmail(u.email, {
-        redirectTo: `${window.location.origin}/auth`,
+        redirectTo: `${SITE_URL}/reset-password`,
       });
       if (error) throw error;
       // Registro de auditoría (best-effort).
@@ -120,40 +125,40 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
     const Btn = compact ? "outline" : "ghost";
     const size: "icon" | "sm" = compact ? "sm" : "icon";
     const iconSize = compact ? 14 : 16;
+    // Un solo botón que alterna según el estado: si está baneado permite
+    // activarlo; en cualquier otro caso permite banearlo.
+    const isBanned = u.status === "banned";
     return (
       <>
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button size={size} variant={Btn as any} className="text-success" title="Activar"><UserCheck size={iconSize} /></Button>
+            <Button
+              size={size}
+              variant={Btn as any}
+              className={isBanned ? "text-success" : "text-destructive"}
+              title={isBanned ? "Activar" : "Banear"}
+            >
+              {isBanned ? <UserCheck size={iconSize} /> : <Ban size={iconSize} />}
+            </Button>
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>¿Activar a {u.full_name}?</AlertDialogTitle>
+              <AlertDialogTitle>
+                {isBanned ? `¿Activar a ${u.full_name}?` : `¿Banear al usuario ${u.full_name}?`}
+              </AlertDialogTitle>
               <AlertDialogDescription>
-                El usuario recibirá acceso completo a la plataforma. Se le notificará por correo.
+                {isBanned
+                  ? "El usuario recibirá acceso completo a la plataforma. Se le notificará por correo."
+                  : "El usuario perderá el acceso de forma permanente. Solo el superadministrador puede revertirlo."}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={() => run("Usuario activado", u, () => setUserStatus(u.id, "active"))}>Activar</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button size={size} variant={Btn as any} className="text-warning" title="Suspender"><UserX size={iconSize} /></Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>¿Suspender a {u.full_name}?</AlertDialogTitle>
-              <AlertDialogDescription>
-                El usuario perderá acceso temporal a la plataforma hasta su reactivación. Se le notificará por correo.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={() => run("Usuario suspendido", u, () => setUserStatus(u.id, "suspended"))}>Suspender</AlertDialogAction>
+              {isBanned ? (
+                <AlertDialogAction onClick={() => run("Usuario activado", u, () => setUserStatus(u.id, "active"))}>Activar</AlertDialogAction>
+              ) : (
+                <AlertDialogAction onClick={() => run("Usuario baneado", u, () => setUserStatus(u.id, "banned"))}>Banear</AlertDialogAction>
+              )}
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
@@ -192,22 +197,6 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
               <AlertDialogAction onClick={() => resetPassword(u)}>Enviar enlace</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button size={size} variant={Btn as any} className="text-destructive" title="Banear"><Ban size={iconSize} /></Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>¿Banear al usuario {u.full_name}?</AlertDialogTitle>
-              <AlertDialogDescription>El usuario perderá el acceso de forma permanente. Solo el superadministrador puede revertirlo.</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={() => run("Usuario baneado", u, () => setUserStatus(u.id, "banned"))}>Banear</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

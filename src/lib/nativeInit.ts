@@ -31,14 +31,12 @@ export async function initNative() {
     });
   } catch { /* @capacitor/app no disponible */ }
   try {
-    // Evita que la vista web se dibuje DEBAJO de la barra de estado:
-    // así el contenido empieza justo bajo la barra y la respeta.
-    await StatusBar.setOverlaysWebView({ overlay: false });
-    // Barra clara (íconos oscuros) acorde al navbar blanco del sistema.
+    // El área segura la maneja MainActivity nativamente (padding con los window
+    // insets), así que dejamos que el WebView ocupe toda la pantalla (overlay:true)
+    // para NO duplicar el margen superior en Android 15+.
+    await StatusBar.setOverlaysWebView({ overlay: true });
+    // Barra clara (íconos oscuros) acorde al fondo blanco de las barras.
     await StatusBar.setStyle({ style: Style.Light });
-    if (Capacitor.getPlatform() === "android") {
-      await StatusBar.setBackgroundColor({ color: "#ffffff" });
-    }
   } catch {
     /* sin barra de estado nativa disponible */
   }
