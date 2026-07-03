@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -13,6 +12,7 @@ import {
 import {
   ImagePlus, X, ArrowLeft, ArrowRight, Star, Check, MapPin, Tag, FileText, Camera,
   ShieldCheck, Building2, User, CreditCard, Receipt, Sparkles, Flame, EyeOff, Lock, Package, Minus, Plus,
+  Wallet, Loader2, Percent,
 } from "lucide-react";
 import { categories } from "@/data/mockData";
 import { useEffect, useRef, useState } from "react";
@@ -20,17 +20,21 @@ import { useNavigate } from "react-router-dom";
 import { useSession } from "@/hooks/useSession";
 import { toast } from "@/hooks/use-toast";
 import {
-  loadSettings, priceForDuration, formatSoles, addInvoice,
+  loadSettings, priceForDuration, formatSoles, addInvoice, avisosBreakdown, solesToCredits,
   type DurationDays, type PricingSettings, type ExtraPrices,
 } from "@/lib/pricing";
 import { createAndPublishListing } from "@/lib/publish";
 import { verifyDocument } from "@/lib/verifyDoc";
+import { getCreditBalance, spendCredits } from "@/lib/credits";
+import { fetchActivePromotions, bestPromoForCategory, applyDiscount, type Promotion } from "@/lib/promotions";
+import { fetchPricingSettings } from "@/lib/pricingRemote";
+import { BuyCreditsModal } from "@/components/BuyCreditsModal";
+import { LocationPicker } from "@/components/LocationPicker";
 import { supabase } from "@/lib/supabase";
 
 interface PhotoItem { id: string; url: string; name: string; file: File; }
 
 const DURATIONS: DurationDays[] = [3, 7, 15, 30, 60, 90];
-const QUANTITIES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 // Extras del paquete (cantidad numérica por cada uno)
 type ExtraKey = "img500" | "pdf500" | "urgente" | "destacado" | "confidencial";
@@ -92,33 +96,43 @@ const AdvertiserPublish = () => {
     condition: "nuevo",
   });
 
-  // Paquete: cantidad, duración, extras (cantidad por tipo)
-  const [quantity, setQuantity] = useState<number>(1);
+  // Coordenadas del aviso (para el mapa del buscador). Se fijan geocodificando
+  // el texto de ubicación o arrastrando el pin en el LocationPicker.
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+
+  // Un aviso a la vez: el precio depende de la duración + adicionales.
+  // La compra "por volumen" vive en el modal de créditos, no aquí.
+  const [quantity] = useState<number>(1);
   const [duration, setDuration] = useState<DurationDays>(7);
   const [extras, setExtras] = useState<ExtrasCount>({});
 
-  // Resumen y pago
-  const [summaryOpen, setSummaryOpen] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
+  // Créditos
+  const [creditBalance, setCreditBalance] = useState(0);
+  const [creditLoading, setCreditLoading] = useState(true);
+  // Promociones vigentes (para descontar automáticamente al publicar).
+  const [promos, setPromos] = useState<Promotion[]>([]);
+
+  // Flujo de publicación con créditos
+  const [buyCreditsOpen, setBuyCreditsOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
-  const [receiptType, setReceiptType] = useState<"boleta" | "factura">("boleta");
-  const [receiptEmail, setReceiptEmail] = useState("");
-  const [receiptEmailTouched, setReceiptEmailTouched] = useState(false);
   const [successOpen, setSuccessOpen] = useState<{ open: boolean; number: string; email: string }>({ open: false, number: "", email: "" });
 
-  // Pricing en vivo
+  // Pricing en vivo: arranca del caché local y se refresca desde la BD.
   const [settings, setSettings] = useState<PricingSettings>(() => loadSettings());
   useEffect(() => {
+    fetchPricingSettings().then(setSettings);
     const sync = () => setSettings(loadSettings());
     window.addEventListener("effe:pricing-updated", sync);
     return () => window.removeEventListener("effe:pricing-updated", sync);
   }, []);
 
-  // Precarga el correo del comprobante con el email real de la cuenta, salvo que
-  // el usuario ya haya escrito uno propio.
+  // Cargar saldo de créditos al montar (una vez autenticado)
   useEffect(() => {
-    if (userEmail && !receiptEmailTouched && !receiptEmail) setReceiptEmail(userEmail);
-  }, [userEmail, receiptEmailTouched, receiptEmail]);
+    if (!authChecked) return;
+    setCreditLoading(true);
+    getCreditBalance().then((b) => { setCreditBalance(b); setCreditLoading(false); });
+    fetchActivePromotions().then(setPromos);
+  }, [authChecked]);
 
   // Restaurar borrador y reanudar flujo tras login
   useEffect(() => {
@@ -127,15 +141,15 @@ const AdvertiserPublish = () => {
       if (!raw) return;
       const d = JSON.parse(raw);
       if (d.form) setForm(d.form);
+      if (d.coords) setCoords(d.coords);
       if (d.duration) setDuration(d.duration);
-      if (d.quantity) setQuantity(d.quantity);
       if (d.extras) setExtras(d.extras);
       if (d.verified) setVerified(d.verified);
       if (d.personType) setPersonType(d.personType);
       if (d.docNumber) setDocNumber(d.docNumber);
       if (d.verifiedName) setVerifiedName(d.verifiedName);
       if (d.resumeAtSummary && session) {
-        setTimeout(() => setSummaryOpen(true), 200);
+        setTimeout(() => openPublishFlowAfterVerify(), 200);
       }
       localStorage.removeItem(DRAFT_KEY);
     } catch { /* noop */ }
@@ -147,7 +161,15 @@ const AdvertiserPublish = () => {
     const c = extras[def.key] ?? 0;
     return acc + c * (settings.extras[def.key as keyof ExtraPrices] ?? 0);
   }, 0);
-  const total = Math.round((packageBase + extrasSum) * 100) / 100;
+  const baseTotal = Math.round((packageBase + extrasSum) * 100) / 100;
+  // Promoción vigente para la categoría elegida (si la hay).
+  const activePromo = bestPromoForCategory(promos, form.category);
+  const promoPct = activePromo?.discount_pct ?? 0;
+  const total = applyDiscount(baseTotal, promoPct);
+  // Costo EN CRÉDITOS (enteros). El dinero (soles) va en `total`/`baseTotal`.
+  const baseCredits = solesToCredits(baseTotal);
+  const totalCredits = solesToCredits(total);
+  const balanceCredits = Math.round(creditBalance);
   // Para la vista previa del aviso individual
   const basePrice = priceForDuration(1, duration, settings);
 
@@ -188,7 +210,8 @@ const AdvertiserPublish = () => {
   const persistDraftForLogin = (resumeAtSummary: boolean) => {
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify({
-        form, duration, quantity, extras, verified: true, personType, docNumber, verifiedName, resumeAtSummary,
+        form, coords, duration, quantity, extras, verified: true, personType, docNumber, verifiedName,
+        resumeAtSummary,
       }));
     } catch { /* noop */ }
   };
@@ -241,81 +264,96 @@ const AdvertiserPublish = () => {
       setTimeout(() => navigate("/auth?redirect=/dashboard/anunciante/publicar"), 400);
       return;
     }
-    // Si ya hay sesión, abre el resumen directamente
-    setConfirmed(false);
-    setTimeout(() => setSummaryOpen(true), 250);
+    // Si ya hay sesión, abre el flujo de publicación
+    setTimeout(() => openPublishFlowAfterVerify(), 250);
   };
 
   const canPublish = form.category && form.title && form.description && form.price && form.location && !!mainPhoto;
 
-  const openSummary = () => {
+  // Decide qué modal abrir según el saldo disponible
+  const openPublishFlowAfterVerify = () => {
+    if (balanceCredits >= totalCredits) {
+      // Tiene créditos: se publica directo y se descuenta (sin cuadro de pagos).
+      doPublish();
+    } else {
+      // No tiene créditos: abre el configurador para comprar.
+      setBuyCreditsOpen(true);
+    }
+  };
+
+  const openPublishFlow = () => {
     if (!canPublish) {
       toast({ title: "Completa los datos requeridos", description: "Faltan campos obligatorios o imágenes.", variant: "destructive" });
       return;
     }
-    // Paso 1: verificar identidad (sin requerir login todavía)
-    if (!verified) {
-      setVerifyOpen(true);
-      return;
-    }
-    // Paso 2: si no hay sesión, exigir login antes de mostrar el pago
     if (!session) {
       persistDraftForLogin(true);
-      toast({ title: "Inicia sesión para pagar", description: "Te llevamos al login y retomamos tu publicación." });
+      toast({ title: "Inicia sesión para publicar", description: "Te llevamos al login y retomamos tu publicación." });
       navigate("/auth?redirect=/dashboard/anunciante/publicar");
       return;
     }
-    // Paso 3: resumen y pago
-    setConfirmed(false);
-    setSummaryOpen(true);
+    openPublishFlowAfterVerify();
   };
 
-  const confirmAndPay = async () => {
-    if (!confirmed || publishing) return;
+  const doPublish = async () => {
+    if (publishing) return;
     if (!session) {
       persistDraftForLogin(true);
       navigate("/auth?redirect=/dashboard/anunciante/publicar");
       return;
     }
-    const email = receiptEmail.trim() || userEmail || "anunciante@effe.pe";
+    const email = userEmail || "anunciante@effe.pe";
     const tipoDoc = personType === "juridica" ? "ruc" : "dni";
     setPublishing(true);
     try {
-      // Crea el aviso real + sube imágenes + orden/comprobante + publica con vigencia
-      const { invoiceNumber, published, invoiceSaved } = await createAndPublishListing({
+      // 1) Crear el aviso y publicarlo
+      const { listingId, invoiceNumber, published, invoiceSaved } = await createAndPublishListing({
         form,
+        lat: coords?.lat ?? null,
+        lng: coords?.lng ?? null,
         quantity,
         duration,
         extras,
         total,
         mainPhoto: mainPhoto ? { file: mainPhoto.file, name: mainPhoto.name } : null,
         secondPhoto: hasSecondImageInPackage && secondPhoto ? { file: secondPhoto.file, name: secondPhoto.name } : null,
-        receiptType,
+        receiptType: "boleta",
         email,
         advertiserName: verifiedName || session?.name || "Anunciante",
         docType: tipoDoc,
         docNumber: docNumber || undefined,
       });
 
-      // TODO comprobante se guarda SIEMPRE en "Mis comprobantes" (local), aunque
-      // el aviso no se haya podido activar. Reutiliza el nº de serie de la BD
-      // para que coincida con el comprobante oficial.
+      // 2) Descontar créditos del saldo (según el costo del aviso)
+      const spent = await spendCredits(totalCredits, listingId);
+      const newBalance = await getCreditBalance();
+      setCreditBalance(newBalance);
+      if (!spent) {
+        // El saldo cambió y ya no alcanza: abrir el configurador para comprar.
+        toast({
+          title: "No se pudieron descontar los créditos",
+          description: "Tu saldo cambió y ya no alcanza. Compra créditos para completar.",
+          variant: "destructive",
+        });
+        setBuyCreditsOpen(true);
+      }
+
+      // 3) Guardar comprobante local como respaldo
       const localInv = addInvoice({
         email,
         advertiser: verifiedName || session?.name || "Anunciante",
         listingTitle: form.title,
         amount: total,
-        detail: `${receiptType === "factura" ? "Factura" : "Boleta"} · Aviso ${duration} días`,
+        detail: `Boleta · Aviso ${duration} días · ${totalCredits} créditos (${formatSoles(total)})`,
         docNumber: docNumber || undefined,
         number: invoiceNumber || undefined,
       });
 
-      setSummaryOpen(false);
       setSuccessOpen({ open: true, number: invoiceNumber || localInv.number, email });
       if (!invoiceSaved) {
         toast({
           title: "Comprobante no registrado en la base de datos",
-          description: "El aviso se publicó, pero el comprobante no se guardó en el servidor. Avísanos para revisarlo.",
+          description: "El aviso se publicó, pero el comprobante no se guardó en el servidor.",
           variant: "destructive",
         });
       }
@@ -580,23 +618,27 @@ const AdvertiserPublish = () => {
                     </Select>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <Label>Ubicación *</Label>
-                    <Input value={form.location} onChange={(e) => updateForm("location", e.target.value)} placeholder="Ej: Lima, Miraflores" className="mt-1" />
-                  </div>
-                  <div>
-                    <Label>Condición</Label>
-                    <Select value={form.condition} onValueChange={(v) => updateForm("condition", v)}>
-                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="nuevo">Nuevo</SelectItem>
-                        <SelectItem value="usado">Usado</SelectItem>
-                        <SelectItem value="reacondicionado">Reacondicionado</SelectItem>
-                        <SelectItem value="na">No aplica</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <LocationPicker
+                  location={form.location}
+                  onLocationChange={(v) => updateForm("location", v)}
+                  lat={coords?.lat ?? null}
+                  lng={coords?.lng ?? null}
+                  onCoordsChange={(la, ln) =>
+                    setCoords(la != null && ln != null ? { lat: la, lng: ln } : null)
+                  }
+                  required
+                />
+                <div className="sm:w-1/2">
+                  <Label>Condición</Label>
+                  <Select value={form.condition} onValueChange={(v) => updateForm("condition", v)}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="nuevo">Nuevo</SelectItem>
+                      <SelectItem value="usado">Usado</SelectItem>
+                      <SelectItem value="reacondicionado">Reacondicionado</SelectItem>
+                      <SelectItem value="na">No aplica</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </CardContent>
             </Card>
@@ -607,37 +649,15 @@ const AdvertiserPublish = () => {
                 <div className="flex items-center gap-3">
                   <span className="w-8 h-8 bg-primary text-primary-foreground text-xs font-extrabold flex items-center justify-center">05</span>
                   <div>
-                    <CardTitle className="text-base flex items-center gap-2"><Package size={16} className="text-secondary" /> ¿Cuántos avisos quieres publicar?</CardTitle>
-                    <CardDescription className="text-xs">Configura tu paquete antes de pasar al pago.</CardDescription>
+                    <CardTitle className="text-base flex items-center gap-2"><Package size={16} className="text-secondary" /> Duración y adicionales</CardTitle>
+                    <CardDescription className="text-xs">Elige cuántos días durará tu aviso y qué extras quieres. El precio se calcula al instante.</CardDescription>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="pt-5 space-y-6">
-                {/* Cantidad */}
-                <div>
-                  <Label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Cantidad de avisos</Label>
-                  <div className="mt-2 grid grid-cols-5 sm:grid-cols-10 gap-2">
-                    {QUANTITIES.map((n) => {
-                      const active = quantity === n;
-                      return (
-                        <button
-                          key={n}
-                          type="button"
-                          onClick={() => setQuantity(n)}
-                          className={`border py-2 text-center text-sm font-bold transition-all ${
-                            active ? "border-secondary bg-secondary/10 ring-2 ring-secondary/30 text-foreground" : "border-border hover:border-secondary/40 hover:bg-muted/50"
-                          }`}
-                        >
-                          {n}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
                 {/* Duración */}
                 <div>
-                  <Label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Duración por aviso</Label>
+                  <Label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Duración del aviso</Label>
                   <div className="mt-2 grid grid-cols-3 md:grid-cols-6 gap-2">
                     {DURATIONS.map((d) => {
                       const p = priceForDuration(1, d, settings);
@@ -664,7 +684,7 @@ const AdvertiserPublish = () => {
                 <div>
                   <Label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Adicionales opcionales</Label>
                   <p className="text-[11px] text-muted-foreground mt-1 mb-2">
-                    Hasta {quantity} unidades por adicional (uno por aviso del paquete).
+                    Actívalos con “+”. Se aplican a tu aviso.
                   </p>
                   <div className="space-y-2">
                     {EXTRA_DEFS.map(({ key, label, sub, icon: Icon }) => {
@@ -694,28 +714,23 @@ const AdvertiserPublish = () => {
                   </div>
                 </div>
 
-                {/* Resumen del paquete */}
+                {/* Resumen del paquete (en créditos) */}
                 <div className="border bg-muted/30 p-4 space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Subtotal por {quantity} aviso{quantity > 1 ? "s" : ""} ({duration} días c/u)</span>
-                    <span className="font-bold">{formatSoles(packageBase)}</span>
+                    <span className="text-muted-foreground">Aviso ({duration} días)</span>
+                    <span className="font-bold">{solesToCredits(packageBase)} cr</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Subtotal por adicionales</span>
-                    <span className="font-bold">{formatSoles(extrasSum)}</span>
+                    <span className="text-muted-foreground">Adicionales</span>
+                    <span className="font-bold">{solesToCredits(extrasSum)} cr</span>
                   </div>
                   <div className="border-t pt-2 flex items-baseline justify-between">
-                    <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Total a pagar (IGV incl.)</span>
-                    <span className="text-2xl font-extrabold text-primary">{formatSoles(total)}</span>
+                    <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Total en créditos</span>
+                    <span className="text-2xl font-extrabold text-primary">{totalCredits} cr</span>
                   </div>
                   <p className="text-[11px] text-muted-foreground pt-1">
-                    El paquete que estás comprando es una referencia. Podrás distribuir tus adicionales libremente entre tus avisos según tu saldo disponible.
+                    Se descontará de tu saldo de créditos al publicar. (Boleta: {formatSoles(total)})
                   </p>
-                  {quantity > 1 && (
-                    <p className="text-[11px] text-muted-foreground">
-                      Tus avisos restantes quedarán disponibles en tu saldo para publicar durante el período de vigencia del paquete.
-                    </p>
-                  )}
                 </div>
               </CardContent>
             </Card>
@@ -728,22 +743,63 @@ const AdvertiserPublish = () => {
             <Card className="border-secondary/40 border-2">
               <CardHeader className="border-b bg-secondary/5">
                 <CardTitle className="text-sm uppercase tracking-widest text-secondary flex items-center gap-2">
-                  <CreditCard size={14} /> Precio del aviso
+                  <Wallet size={14} /> Costo en créditos
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-5 space-y-3">
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">{quantity} aviso{quantity > 1 ? "s" : ""} × {duration} días</span>
-                  <span className="font-bold">{formatSoles(packageBase)}</span>
+                  <span className="text-muted-foreground">Aviso · {duration} días</span>
+                  <span className="font-bold">{solesToCredits(packageBase)} cr</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Adicionales</span>
-                  <span className="font-bold">{formatSoles(extrasSum)}</span>
+                  <span className="font-bold">{solesToCredits(extrasSum)} cr</span>
+                </div>
+                {promoPct > 0 && (
+                  <div className="flex justify-between text-sm text-success">
+                    <span className="flex items-center gap-1">
+                      <Percent size={12} /> Promo {activePromo?.name} (−{promoPct}%)
+                    </span>
+                    <span className="font-bold">−{baseCredits - totalCredits} cr</span>
+                  </div>
+                )}
+                <div className="border-t pt-3 flex items-baseline justify-between">
+                  <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Total</span>
+                  <span className="text-3xl font-extrabold text-primary">
+                    {promoPct > 0 && (
+                      <span className="text-sm font-normal text-muted-foreground line-through mr-2">{baseCredits}</span>
+                    )}
+                    {totalCredits} cr
+                  </span>
                 </div>
                 <div className="border-t pt-3 flex items-baseline justify-between">
-                  <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Total (IGV incl.)</span>
-                  <span className="text-3xl font-extrabold text-primary">{formatSoles(total)}</span>
+                  <span className="text-xs text-muted-foreground">Tu saldo</span>
+                  {creditLoading ? (
+                    <Loader2 size={14} className="animate-spin text-muted-foreground" />
+                  ) : (
+                    <span className={`text-sm font-bold ${balanceCredits >= totalCredits ? "text-success" : "text-destructive"}`}>
+                      {balanceCredits} cr
+                    </span>
+                  )}
                 </div>
+                {!creditLoading && balanceCredits < totalCredits && (
+                  <p className="text-[11px] text-destructive">
+                    Faltan {totalCredits - balanceCredits} créditos. Cómpralos al publicar.
+                  </p>
+                )}
+                {!creditLoading && (
+                  <div className="border-t pt-3 space-y-1">
+                    <p className="text-[11px] uppercase tracking-wider font-bold text-muted-foreground">
+                      Con tu saldo puedes publicar
+                    </p>
+                    {avisosBreakdown(balanceCredits, settings).map(({ dias, count }) => (
+                      <p key={dias} className="text-[11px] text-muted-foreground">
+                        <span className="font-bold text-secondary">~{count} avisos</span> de {dias} días
+                      </p>
+                    ))}
+                    <p className="text-[10px] text-muted-foreground pt-1">Sin adicionales; los extras suman al costo.</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -773,11 +829,11 @@ const AdvertiserPublish = () => {
             </Card>
 
             <div className="flex flex-col gap-2">
-              <Button variant="hero" size="lg" className="w-full rounded-none" onClick={openSummary}>
+              <Button variant="hero" size="lg" className="w-full rounded-none" onClick={openPublishFlow}>
                 Publicar aviso <ArrowRight size={16} className="ml-1" />
               </Button>
               <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 justify-center text-center">
-                <ShieldCheck size={12} className="text-secondary" /> Al publicar verificarás tu identidad y luego confirmarás el pago.
+                <Wallet size={12} className="text-secondary" /> Se descontarán créditos de tu saldo al publicar.
               </p>
             </div>
           </div>
@@ -846,105 +902,26 @@ const AdvertiserPublish = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Popup resumen + pago */}
-      <Dialog open={summaryOpen} onOpenChange={setSummaryOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Resumen de tu aviso</DialogTitle>
-            <DialogDescription>Revisa los datos antes de confirmar el pago.</DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div className="flex gap-3 p-3 border bg-muted/30">
-              {mainPhoto && <img src={mainPhoto.url} alt="" className="w-20 h-20 object-cover" />}
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] uppercase tracking-widest font-bold text-secondary">
-                  {categories.find((c) => c.id === form.category)?.name}
-                </p>
-                <p className="font-bold text-sm line-clamp-2">{form.title}</p>
-                <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                  <MapPin size={10} /> {form.location}
-                </p>
-                <p className="text-sm font-extrabold text-primary mt-1">
-                  {form.currency === "USD" ? "US$" : "S/"} {Number(form.price).toLocaleString()}
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Paquete</span>
-                <span className="font-bold">{quantity} aviso{quantity > 1 ? "s" : ""} · {duration} días c/u</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Subtotal avisos</span>
-                <span>{formatSoles(packageBase)}</span>
-              </div>
-              {EXTRA_DEFS.filter((d) => (extras[d.key] ?? 0) > 0).map((d) => {
-                const count = extras[d.key] ?? 0;
-                const unit = settings.extras[d.key as keyof ExtraPrices] ?? 0;
-                return (
-                  <div key={d.key} className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">+ {d.label} × {count}</span>
-                    <span>{formatSoles(count * unit)}</span>
-                  </div>
-                );
-              })}
-              <div className="border-t pt-2 flex justify-between items-baseline">
-                <span className="font-bold uppercase tracking-wider text-xs">Total (IGV incl.)</span>
-                <span className="text-2xl font-extrabold text-primary">{formatSoles(total)}</span>
-              </div>
-            </div>
-
-            {/* Tipo de comprobante */}
-            <div className="space-y-2">
-              <Label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Tipo de comprobante</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setReceiptType("boleta")}
-                  className={`p-3 border text-left transition-all ${receiptType === "boleta" ? "border-secondary bg-secondary/10" : "border-border hover:bg-muted/50"}`}
-                >
-                  <p className="font-bold text-sm">Boleta</p>
-                  <p className="text-[11px] text-muted-foreground">Persona natural</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setReceiptType("factura")}
-                  className={`p-3 border text-left transition-all ${receiptType === "factura" ? "border-secondary bg-secondary/10" : "border-border hover:bg-muted/50"}`}
-                >
-                  <p className="font-bold text-sm">Factura</p>
-                  <p className="text-[11px] text-muted-foreground">Empresa con RUC</p>
-                </button>
-              </div>
-              <div>
-                <Label className="text-xs">Correo para enviar el comprobante</Label>
-                <Input
-                  type="email"
-                  value={receiptEmail}
-                  onChange={(e) => { setReceiptEmail(e.target.value); setReceiptEmailTouched(true); }}
-                  placeholder="tu@correo.com"
-                  className="mt-1"
-                />
-              </div>
-            </div>
-
-            <label className="flex items-start gap-2 p-3 border bg-secondary/5 cursor-pointer">
-              <Checkbox checked={confirmed} onCheckedChange={(v) => setConfirmed(!!v)} className="mt-0.5" />
-              <span className="text-xs">
-                Confirmo que la información del aviso es correcta y autorizo la publicación inmediata tras el pago.
-              </span>
-            </label>
-          </div>
-
-          <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setSummaryOpen(false)}>Cancelar</Button>
-            <Button onClick={confirmAndPay} disabled={!confirmed || publishing} className="gap-2">
-              <CreditCard size={14} /> {publishing ? "Publicando…" : `Pagar ${formatSoles(total)}`}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Modal compra de créditos — configurador (cuando no hay saldo suficiente) */}
+      <BuyCreditsModal
+        open={buyCreditsOpen}
+        onClose={() => setBuyCreditsOpen(false)}
+        creditCost={totalCredits}
+        currentBalance={balanceCredits}
+        onPurchaseComplete={(newBalance) => {
+          setCreditBalance(newBalance);
+          setBuyCreditsOpen(false);
+          // Tras comprar, si ya alcanza, se publica de inmediato y se descuenta.
+          if (Math.round(newBalance) >= totalCredits) {
+            doPublish();
+          } else {
+            toast({
+              title: "Créditos añadidos",
+              description: `Tu saldo es ${Math.round(newBalance)} cr, pero este aviso cuesta ${totalCredits} cr. Compra un poco más para publicar.`,
+            });
+          }
+        }}
+      />
 
       {/* Confirmación post-pago */}
       <Dialog open={successOpen.open} onOpenChange={(o) => setSuccessOpen((s) => ({ ...s, open: o }))}>
@@ -959,7 +936,7 @@ const AdvertiserPublish = () => {
           </DialogHeader>
           <div className="space-y-3 text-sm">
             <div className="p-3 border bg-muted/30 space-y-1">
-              <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{receiptType === "factura" ? "Factura" : "Boleta"} electrónica</p>
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Boleta electrónica</p>
               <p className="font-mono font-bold">{successOpen.number}</p>
               <p className="text-xs text-muted-foreground">Enviado a <span className="font-semibold text-foreground">{successOpen.email}</span></p>
             </div>

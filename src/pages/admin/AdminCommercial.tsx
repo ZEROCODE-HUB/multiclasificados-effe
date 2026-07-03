@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AdminLayout, AdminRole } from "@/components/AdminLayout";
+import { AdminRole } from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -106,8 +106,10 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
     maintenance_mode: "Modo mantenimiento",
   } as const;
   type SettingKey = keyof typeof SETTING_KEYS;
+  // Valores por defecto ACORDE AL EXCEL: Destacado = S/5 (mismo adicional del
+  // motor); el Excel no contempla comisión ni publicaciones gratis → 0.
   const [settings, setSettings] = useState<Record<SettingKey, any>>({
-    commission_pct: 8, featured_price: 25, free_listings_limit: 3,
+    commission_pct: 0, featured_price: 5, free_listings_limit: 0,
     gateway_stripe: true, gateway_culqi: false, maintenance_mode: false,
   });
   const [savingSettings, setSavingSettings] = useState(false);
@@ -162,7 +164,7 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
   };
 
   return (
-    <AdminLayout role={role} title="Configuración comercial" breadcrumb={["Operación", "Comercial"]}>
+    <>
       <Tabs defaultValue="categorias">
         <TabsList className="w-full overflow-x-auto justify-start no-scrollbar">
           <TabsTrigger value="categorias">Categorías</TabsTrigger>
@@ -369,7 +371,7 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
           </Card>
         </TabsContent>
       </Tabs>
-    </AdminLayout>
+    </>
   );
 };
 

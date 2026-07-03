@@ -78,6 +78,9 @@ export interface MyProfile {
   phone: string;
   verified: boolean;
   status: string;
+  company_name: string;
+  company_ruc: string;
+  avatar_url: string;
 }
 
 export async function fetchMyProfile(): Promise<MyProfile | null> {
@@ -85,7 +88,7 @@ export async function fetchMyProfile(): Promise<MyProfile | null> {
   if (!user) return null;
   const { data } = await supabase
     .from("profiles")
-    .select("full_name, phone, verified, status, email")
+    .select("full_name, phone, verified, status, email, company_name, company_ruc, avatar_url")
     .eq("id", user.id)
     .maybeSingle();
   return {
@@ -95,15 +98,38 @@ export async function fetchMyProfile(): Promise<MyProfile | null> {
     phone: data?.phone ?? "",
     verified: !!data?.verified,
     status: data?.status ?? "active",
+    company_name: data?.company_name ?? "",
+    company_ruc: data?.company_ruc ?? "",
+    avatar_url: data?.avatar_url ?? "",
   };
 }
 
-// Actualiza nombre y teléfono del propio perfil (RLS: profiles_update_own).
-export async function updateMyProfile(patch: { full_name?: string; phone?: string }): Promise<void> {
+// Actualiza datos del propio perfil (RLS: profiles_update_own).
+export async function updateMyProfile(patch: {
+  full_name?: string; phone?: string; company_name?: string; company_ruc?: string; avatar_url?: string;
+}): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("No hay sesión activa.");
   const { error } = await supabase.from("profiles").update(patch).eq("id", user.id);
   if (error) throw error;
+}
+
+// Sube la foto de perfil al bucket `avatars` (carpeta = uid del dueño; RLS lo
+// exige) y guarda la URL pública en el perfil. Devuelve la URL con cache-bust
+// para que la nueva imagen se vea de inmediato en toda la app.
+export async function uploadMyAvatar(file: File): Promise<string> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("No hay sesión activa.");
+  const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+  const path = `${user.id}/avatar.${ext}`;
+  const { error: upErr } = await supabase.storage
+    .from("avatars")
+    .upload(path, file, { upsert: true, contentType: file.type || undefined });
+  if (upErr) throw upErr;
+  const { data: pub } = supabase.storage.from("avatars").getPublicUrl(path);
+  const url = `${pub.publicUrl}?t=${Date.now()}`;
+  await updateMyProfile({ avatar_url: url });
+  return url;
 }
 
 // Destino tras iniciar sesión: el staff aterriza directo en su panel; el resto

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { AdminLayout } from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -64,7 +63,7 @@ const SuperRoles = () => {
   };
 
   return (
-    <AdminLayout role="superadmin" title="Roles y permisos" breadcrumb={["Plataforma", "Roles"]}>
+    <>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {roleCards.map((r) => (
           <Card key={r.key}>
@@ -131,7 +130,7 @@ const SuperRoles = () => {
           </div>
         </CardContent>
       </Card>
-    </AdminLayout>
+    </>
   );
 };
 

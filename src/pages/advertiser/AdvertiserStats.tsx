@@ -42,10 +42,26 @@ const AdvertiserStats = () => {
     { label: "Postulaciones", value: t.applications, icon: Users, color: "text-warning", bg: "bg-warning/10" },
   ];
 
-  const trendData = useMemo(
-    () => (data?.trend ?? []).map((d) => ({ day: fmtDay(d.day), vistas: d.vistas, contactos: d.contactos })),
-    [data],
-  );
+  // El RPC solo devuelve los días CON actividad. Para que el gráfico se vea como
+  // una tendencia continua (y no como 2 puntos sueltos), rellenamos la serie de
+  // los últimos 30 días: los días sin actividad quedan en 0.
+  const trendData = useMemo(() => {
+    const raw = data?.trend ?? [];
+    if (raw.length === 0) return [];
+    const toKey = (dt: Date) =>
+      `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+    const map = new Map(raw.map((d) => [d.day, d]));
+    const out: { day: string; vistas: number; contactos: number }[] = [];
+    const today = new Date();
+    for (let i = 29; i >= 0; i--) {
+      const dt = new Date(today);
+      dt.setDate(today.getDate() - i);
+      const key = toKey(dt);
+      const found = map.get(key);
+      out.push({ day: fmtDay(key), vistas: found?.vistas ?? 0, contactos: found?.contactos ?? 0 });
+    }
+    return out;
+  }, [data]);
 
   const barData = useMemo(
     () =>
@@ -122,8 +138,8 @@ const AdvertiserStats = () => {
                       Sin actividad en los últimos 30 días.
                     </div>
                   ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={trendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                      <AreaChart data={trendData} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
                         <defs>
                           <linearGradient id="colorVistas" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.4} />
@@ -135,8 +151,15 @@ const AdvertiserStats = () => {
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                        <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} allowDecimals={false} />
+                        <XAxis
+                          dataKey="day"
+                          stroke="hsl(var(--muted-foreground))"
+                          fontSize={11}
+                          interval="preserveStartEnd"
+                          minTickGap={28}
+                          tickMargin={8}
+                        />
+                        <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} allowDecimals={false} width={32} />
                         <Tooltip
                           contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
                         />
@@ -179,8 +202,9 @@ const AdvertiserStats = () => {
             <Card>
               <CardHeader><CardTitle className="text-base">Rendimiento por aviso</CardTitle></CardHeader>
               <CardContent>
-                <div className="-mx-6 px-6 overflow-x-auto">
-                  <table className="w-full text-sm min-w-[520px]">
+                {/* Escritorio: tabla */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b text-left text-muted-foreground">
                         <th className="pb-3 font-medium">Aviso</th>
@@ -192,7 +216,7 @@ const AdvertiserStats = () => {
                     <tbody>
                       {tableRows.map((l, i) => (
                         <tr key={i} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                          <td className="py-3 font-medium text-foreground whitespace-nowrap pr-4">{l.title}</td>
+                          <td className="py-3 font-medium text-foreground pr-4">{l.title}</td>
                           <td className="py-3 text-right text-muted-foreground">{l.views}</td>
                           <td className="py-3 text-right text-muted-foreground">{l.contacts}</td>
                           <td className="py-3 text-right text-secondary font-semibold">{l.conversion}</td>
@@ -200,6 +224,29 @@ const AdvertiserStats = () => {
                       ))}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Móvil: tarjetas apiladas (sin scroll horizontal) */}
+                <div className="md:hidden space-y-3">
+                  {tableRows.map((l, i) => (
+                    <div key={i} className="border rounded-xl p-4 bg-card">
+                      <p className="font-semibold text-sm leading-snug line-clamp-2">{l.title}</p>
+                      <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                        <div>
+                          <p className="text-lg font-extrabold text-foreground leading-none">{l.views}</p>
+                          <p className="text-[10px] uppercase tracking-wide text-muted-foreground mt-1">Vistas</p>
+                        </div>
+                        <div>
+                          <p className="text-lg font-extrabold text-foreground leading-none">{l.contacts}</p>
+                          <p className="text-[10px] uppercase tracking-wide text-muted-foreground mt-1">Contactos</p>
+                        </div>
+                        <div>
+                          <p className="text-lg font-extrabold text-secondary leading-none">{l.conversion}</p>
+                          <p className="text-[10px] uppercase tracking-wide text-muted-foreground mt-1">Conversión</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>

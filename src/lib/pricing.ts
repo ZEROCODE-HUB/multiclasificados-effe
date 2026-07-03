@@ -16,23 +16,30 @@ export interface ExtraPrices {
 
 export interface PricingSettings {
   base: number; // precio base 1 aviso × 7 días (incluye IGV)
-  descPorAviso: number; // descuento decimal por cada aviso adicional (acumulativo)
+  descPorAviso: number; // descuento decimal por aviso adicional (fallback / retrocompat)
+  // Descuento decimal por CANTIDAD, uno por nivel: índice n (0..10) = descuento
+  // vs. el nivel anterior. n=0 y n=1 → 0. Reemplaza al promedio único.
+  descCantidad?: number[];
   saltos: { 15: number; 30: number; 60: number; 90: number }; // descuento decimal por rango
   extras: ExtraPrices;
 }
 
+// Descuento por cantidad por defecto: 6% por cada aviso adicional (niveles 2..10).
+const DEFAULT_DESC_CANTIDAD = [0, 0, 0.06, 0.06, 0.06, 0.06, 0.06, 0.06, 0.06, 0.06, 0.06];
+
 export const DEFAULT_SETTINGS: PricingSettings = {
   base: 16.14,
   descPorAviso: 0.06,
+  descCantidad: DEFAULT_DESC_CANTIDAD,
   saltos: { 15: 0.14, 30: 0.13, 60: 0.12, 90: 0.11 },
   extras: {
-    img100: 5,
-    img500: 5,
-    pdf100: 5,
-    pdf500: 5,
-    urgente: 10,
-    destacado: 15,
-    confidencial: 8,
+    img100: 0,          // incluida en el precio base (Excel: "Si")
+    img500: 5,          // segunda imagen >100 KB — S/ 5 extra
+    pdf100: 0,          // PDF hasta 100 KB incluido (Excel: "Si")
+    pdf500: 5,          // PDF hasta 500 KB — S/ 5 extra
+    urgente: 5,
+    destacado: 5,
+    confidencial: 0,    // gratuita (Excel: "Si")
   },
 };
 
@@ -47,6 +54,9 @@ export function loadSettings(): PricingSettings {
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
+      descCantidad: Array.isArray(parsed?.descCantidad) && parsed.descCantidad.length
+        ? parsed.descCantidad
+        : DEFAULT_DESC_CANTIDAD,
       saltos: { ...DEFAULT_SETTINGS.saltos, ...(parsed?.saltos ?? {}) },
       extras: { ...DEFAULT_SETTINGS.extras, ...(parsed?.extras ?? {}) },
     };
@@ -67,18 +77,29 @@ export function saveSettings(s: PricingSettings) {
 export function priceFor(n: number, dias: 7 | 15 | 30 | 60 | 90, s: PricingSettings = loadSettings()): number {
   // base × cantidad de avisos
   let price = s.base * n;
-  // descuento por volumen aplicado al total: (1 - desc)^(n-1)
-  price = price * Math.pow(1 - s.descPorAviso, Math.max(0, n - 1));
-  // factor días: por cada salto duplicar y aplicar descuento
-  const steps: Array<{ to: 15 | 30 | 60 | 90; key: 15 | 30 | 60 | 90 }> = [
-    { to: 15, key: 15 },
-    { to: 30, key: 30 },
-    { to: 60, key: 60 },
-    { to: 90, key: 90 },
+  // Descuento por volumen: producto de (1 - descuento de cada nivel 2..n).
+  // Si hay tabla por cantidad se usa nivel a nivel; si no, cae al % único.
+  if (s.descCantidad && s.descCantidad.length) {
+    let volFactor = 1;
+    for (let k = 2; k <= n; k++) {
+      volFactor *= 1 - (s.descCantidad[k] ?? s.descPorAviso);
+    }
+    price = price * volFactor;
+  } else {
+    price = price * Math.pow(1 - s.descPorAviso, Math.max(0, n - 1));
+  }
+  // Factor días: cada rango parte del anterior multiplicado por la relación de
+  // días y aplicándole el descuento. Según la lista de precios oficial (Excel):
+  // 7→15, 15→30, 30→60 duplican (×2); 60→90 es ×1.5 (90 = 1.5 × 60).
+  const steps: Array<{ to: 15 | 30 | 60 | 90; key: 15 | 30 | 60 | 90; mult: number }> = [
+    { to: 15, key: 15, mult: 2 },
+    { to: 30, key: 30, mult: 2 },
+    { to: 60, key: 60, mult: 2 },
+    { to: 90, key: 90, mult: 1.5 },
   ];
   for (const step of steps) {
     if (dias >= step.to) {
-      price = price * 2 * (1 - s.saltos[step.key]);
+      price = price * step.mult * (1 - s.saltos[step.key]);
     }
   }
   return Math.round(price * 100) / 100;
@@ -112,6 +133,58 @@ export function extrasTotal(sel: ExtrasSelection, s: PricingSettings = loadSetti
 
 export function totalPrice(n: number, dias: DurationDays, sel: ExtrasSelection, s: PricingSettings = loadSettings()): number {
   return Math.round((priceForDuration(n, dias, s) + extrasTotal(sel, s)) * 100) / 100;
+}
+
+// ─── Créditos (enteros, desvinculados del sol) ─────────────────────────────
+// Los precios se calculan en soles (Excel) para el DINERO (boletas), pero al
+// usuario se le cobra en CRÉDITOS: créditos = redondeo(soles × multiplicador).
+// El multiplicador separa el crédito del sol y absorbe los decimales.
+export const CREDIT_MULTIPLIER = 10;
+
+// IGV de Perú (18%). En el Excel los precios ya vienen "con IGV"; esta constante
+// centraliza la tasa para separar subtotal/IGV en boletas y órdenes.
+export const IGV_RATE = 0.18;
+
+// Separa un total (con IGV) en subtotal + IGV. Fuente única para comprobantes.
+export function splitIgv(total: number): { subtotal: number; igv: number } {
+  const subtotal = Math.round((total / (1 + IGV_RATE)) * 100) / 100;
+  return { subtotal, igv: Math.round((total - subtotal) * 100) / 100 };
+}
+
+export function solesToCredits(soles: number): number {
+  return Math.round(soles * CREDIT_MULTIPLIER);
+}
+
+// Costo de un aviso EN CRÉDITOS (entero) según cantidad y duración.
+export function creditsForDuration(n: number, dias: DurationDays, s: PricingSettings = loadSettings()): number {
+  return solesToCredits(priceForDuration(n, dias, s));
+}
+
+// Costo de referencia de un aviso estándar (1 aviso, 7 días): en soles y en créditos.
+export function standardAdCost(s: PricingSettings = loadSettings()): number {
+  return priceForDuration(1, 7, s);
+}
+export function standardAdCredits(s: PricingSettings = loadSettings()): number {
+  return solesToCredits(standardAdCost(s));
+}
+
+// Cuántos avisos estándar (7 días) alcanza un saldo de CRÉDITOS.
+export function avisosForBalance(balanceCredits: number, s: PricingSettings = loadSettings()): number {
+  const cost = standardAdCredits(s);
+  if (cost <= 0) return 0;
+  return Math.max(0, Math.floor(balanceCredits / cost));
+}
+
+// Desglose: cuántos avisos alcanza el saldo por cada duración. `cost` va EN CRÉDITOS.
+export const DURATION_OPTIONS: DurationDays[] = [3, 7, 15, 30, 60, 90];
+export function avisosBreakdown(
+  balanceCredits: number,
+  s: PricingSettings = loadSettings(),
+): Array<{ dias: DurationDays; cost: number; count: number }> {
+  return DURATION_OPTIONS.map((dias) => {
+    const cost = solesToCredits(priceForDuration(1, dias, s));
+    return { dias, cost, count: cost > 0 ? Math.max(0, Math.floor(balanceCredits / cost)) : 0 };
+  });
 }
 
 export function buildMatrix(s: PricingSettings = loadSettings()) {

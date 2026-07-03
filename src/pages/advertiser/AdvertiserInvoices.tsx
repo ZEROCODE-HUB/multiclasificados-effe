@@ -54,36 +54,79 @@ const AdvertiserInvoices = () => {
               Aún no tienes boletas. Se generarán automáticamente al publicar un aviso.
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>N° Comprobante</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Fecha</TableHead>
-                  <TableHead>Aviso</TableHead>
-                  <TableHead>DNI/RUC</TableHead>
-                  <TableHead>Correo</TableHead>
-                  <TableHead className="text-right">Monto</TableHead>
-                  <TableHead>Estado</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              {/* Escritorio: tabla completa */}
+              <div className="hidden md:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>N° Comprobante</TableHead>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead>Aviso</TableHead>
+                      <TableHead>DNI/RUC</TableHead>
+                      <TableHead>Correo</TableHead>
+                      <TableHead className="text-right">Monto</TableHead>
+                      <TableHead>Estado</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {invoices.map((inv) => (
+                      <TableRow key={inv.number}>
+                        <TableCell className="font-mono text-xs">{inv.number}</TableCell>
+                        <TableCell className="text-xs capitalize">{inv.type}</TableCell>
+                        <TableCell className="text-xs">{new Date(inv.date).toLocaleDateString("es-PE")}</TableCell>
+                        <TableCell className="font-medium text-sm">{inv.listingTitle}</TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground">{inv.docNumber || "—"}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{inv.email}</TableCell>
+                        <TableCell className="text-right font-bold">{formatSoles(inv.amount)}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-success border-success/30 bg-success/10">Enviada</Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Móvil: tarjetas apiladas (sin scroll horizontal) */}
+              <div className="md:hidden space-y-3">
                 {invoices.map((inv) => (
-                  <TableRow key={inv.number}>
-                    <TableCell className="font-mono text-xs">{inv.number}</TableCell>
-                    <TableCell className="text-xs capitalize">{inv.type}</TableCell>
-                    <TableCell className="text-xs">{new Date(inv.date).toLocaleDateString("es-PE")}</TableCell>
-                    <TableCell className="font-medium text-sm">{inv.listingTitle}</TableCell>
-                    <TableCell className="font-mono text-xs text-muted-foreground">{inv.docNumber || "—"}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{inv.email}</TableCell>
-                    <TableCell className="text-right font-bold">{formatSoles(inv.amount)}</TableCell>
-                    <TableCell>
+                  <div key={inv.number} className="border rounded-xl p-4 bg-card">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-mono text-xs text-muted-foreground">{inv.number}</p>
+                        <p className="font-semibold text-sm leading-snug mt-0.5 line-clamp-2">{inv.listingTitle}</p>
+                      </div>
+                      <p className="text-lg font-extrabold text-primary whitespace-nowrap">{formatSoles(inv.amount)}</p>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Fecha</p>
+                        <p className="text-foreground">{new Date(inv.date).toLocaleDateString("es-PE")}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Tipo</p>
+                        <p className="text-foreground capitalize">{inv.type}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">DNI/RUC</p>
+                        <p className="font-mono text-foreground">{inv.docNumber || "—"}</p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Correo</p>
+                        <p className="text-foreground truncate">{inv.email}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 pt-3 border-t flex justify-end">
                       <Badge variant="outline" className="text-success border-success/30 bg-success/10">Enviada</Badge>
-                    </TableCell>
-                  </TableRow>
+                    </div>
+                  </div>
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

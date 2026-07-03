@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AdminLayout, AdminRole } from "@/components/AdminLayout";
+import { AdminRole } from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -24,45 +24,62 @@ const COLORS = ["hsl(24 95% 53%)", "hsl(220 56% 30%)", "hsl(160 64% 40%)", "hsl(
 interface Filters { from: string; to: string; cat: string; region: string }
 
 // ===== Filtros reutilizables (controlados) =====
-function ReportFilters({ filters, setFilters, regions, onExport }: {
+// `show` decide qué controles se muestran, para NO exhibir filtros que no
+// aplican a la pestaña (el rango de fechas y categoría/región solo afectan a los
+// datos que sí se filtran; en las series globales no se muestran).
+function ReportFilters({ filters, setFilters, regions, onExport, show = { dates: true, catRegion: true } }: {
   filters: Filters;
   setFilters: React.Dispatch<React.SetStateAction<Filters>>;
   regions: string[];
   onExport: (f: string) => void;
+  show?: { dates?: boolean; catRegion?: boolean };
 }) {
   const upd = (k: keyof Filters, v: string) => setFilters((f) => ({ ...f, [k]: v }));
+  const anyFilter = show.dates || show.catRegion;
   return (
     <div className="flex flex-col lg:flex-row gap-3 lg:items-end justify-between border-b pb-4">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 flex-1">
-        <div>
-          <Label className="text-xs">Desde</Label>
-          <Input type="date" className="h-9 mt-1" value={filters.from} onChange={(e) => upd("from", e.target.value)} />
+      {anyFilter ? (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 flex-1">
+          {show.dates && (
+            <>
+              <div>
+                <Label className="text-xs">Desde</Label>
+                <Input type="date" className="h-9 mt-1" value={filters.from} onChange={(e) => upd("from", e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs">Hasta</Label>
+                <Input type="date" className="h-9 mt-1" value={filters.to} onChange={(e) => upd("to", e.target.value)} />
+              </div>
+            </>
+          )}
+          {show.catRegion && (
+            <>
+              <div>
+                <Label className="text-xs">Categoría</Label>
+                <Select value={filters.cat} onValueChange={(v) => upd("cat", v)}>
+                  <SelectTrigger className="h-9 mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Región</Label>
+                <Select value={filters.region} onValueChange={(v) => upd("region", v)}>
+                  <SelectTrigger className="h-9 mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    {regions.map((r) => <SelectItem key={r} value={r.toLowerCase()}>{r}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          )}
         </div>
-        <div>
-          <Label className="text-xs">Hasta</Label>
-          <Input type="date" className="h-9 mt-1" value={filters.to} onChange={(e) => upd("to", e.target.value)} />
-        </div>
-        <div>
-          <Label className="text-xs">Categoría</Label>
-          <Select value={filters.cat} onValueChange={(v) => upd("cat", v)}>
-            <SelectTrigger className="h-9 mt-1"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas</SelectItem>
-              {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label className="text-xs">Región</Label>
-          <Select value={filters.region} onValueChange={(v) => upd("region", v)}>
-            <SelectTrigger className="h-9 mt-1"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas</SelectItem>
-              {regions.map((r) => <SelectItem key={r} value={r.toLowerCase()}>{r}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+      ) : (
+        <p className="text-xs text-muted-foreground flex-1 self-center">Serie global de la plataforma. Usa el <b>Dashboard en tiempo real</b> para filtrar por fecha, categoría o región.</p>
+      )}
       <div className="flex gap-2 flex-wrap">
         <Button size="sm" variant="outline" className="gap-1.5" onClick={() => onExport("csv")}><FileSpreadsheet size={14} /> CSV</Button>
         <Button size="sm" variant="outline" className="gap-1.5" onClick={() => onExport("xlsx")}><FileSpreadsheet size={14} /> Excel</Button>
@@ -96,9 +113,14 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
     fetchCategoryDistribution().then(() => {});
   }, []);
 
-  // Nombre de categoría para el id seleccionado en el filtro.
-  const selCatName = filters.cat === "all" ? null : categories.find((c) => c.id === filters.cat)?.name ?? null;
-  const matchCat = (cat: string) => !selCatName || cat === selCatName;
+  // Coincidencia de categoría robusta: acepta que el backend devuelva el NOMBRE
+  // o el id/slug, sin distinguir mayúsculas/acentos de más.
+  const matchCat = (cat: string) => {
+    if (filters.cat === "all") return true;
+    const name = categories.find((c) => c.id === filters.cat)?.name ?? filters.cat;
+    const target = cat.trim().toLowerCase();
+    return target === name.trim().toLowerCase() || target === filters.cat.trim().toLowerCase();
+  };
   const matchRegion = (reg: string) => filters.region === "all" || reg.toLowerCase() === filters.region;
 
   // Arrays filtrados (categoría/región) que alimentan los gráficos, respetando el diseño.
@@ -134,7 +156,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
   };
 
   return (
-    <AdminLayout role={role} title="Reportes" breadcrumb={["Operación", "Reportes"]}>
+    <>
       <Card>
         <CardHeader>
           <CardTitle className="text-base md:text-lg">Generación de reportes</CardTitle>
@@ -152,7 +174,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
 
             {/* DASHBOARD EN TIEMPO REAL */}
             <TabsContent value="dashboard" className="pt-4 space-y-5">
-              <ReportFilters filters={filters} setFilters={setFilters} regions={regionNames} onExport={exp} />
+              <ReportFilters filters={filters} setFilters={setFilters} regions={regionNames} onExport={exp} show={{ dates: true, catRegion: true }} />
 
               <div className="flex items-center gap-2 text-xs text-success">
                 <Activity size={14} /> Indicadores actualizados al minuto
@@ -240,7 +262,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
 
             {/* RECLAMOS */}
             <TabsContent value="reclamos" className="pt-4 space-y-5">
-              <ReportFilters filters={filters} setFilters={setFilters} regions={regionNames} onExport={exp} />
+              <ReportFilters filters={filters} setFilters={setFilters} regions={regionNames} onExport={exp} show={{ dates: true, catRegion: false }} />
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Recibidos</p><p className="text-3xl font-extrabold">{claims.recibidos}</p></CardContent></Card>
                 <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Pendientes de solución</p><p className="text-3xl font-extrabold text-warning">{claims.pendientes}</p></CardContent></Card>
@@ -267,7 +289,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
             {/* Resto de tabs filtrables/exportables */}
             {["pagos", "avisos", "usuarios", "postulaciones"].map((tab) => (
               <TabsContent value={tab} key={tab} className="pt-4 space-y-5">
-                <ReportFilters filters={filters} setFilters={setFilters} regions={regionNames} onExport={exp} />
+                <ReportFilters filters={filters} setFilters={setFilters} regions={regionNames} onExport={exp} show={{ dates: false, catRegion: false }} />
                 <Card>
                   <CardHeader><CardTitle className="text-sm capitalize">Reporte de {tab}</CardTitle></CardHeader>
                   <CardContent className="h-72">
@@ -292,7 +314,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
           </Tabs>
         </CardContent>
       </Card>
-    </AdminLayout>
+    </>
   );
 };
 

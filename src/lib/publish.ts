@@ -1,6 +1,7 @@
 // REQ-01: crea un aviso real, sube las imágenes al Storage, genera la orden +
 // comprobante y lo publica con vigencia. Devuelve el id y el número de boleta.
 import { supabase } from "@/lib/supabase";
+import { splitIgv } from "@/lib/pricing";
 
 export interface PublishPhoto {
   file: File;
@@ -17,6 +18,8 @@ export interface PublishInput {
     location: string;
     condition: string;
   };
+  lat?: number | null;
+  lng?: number | null;
   quantity: number;
   duration: number;
   extras: Record<string, number | undefined>;
@@ -38,7 +41,6 @@ const CONDITION_MAP: Record<string, "nuevo" | "usado" | "na"> = {
 };
 
 const sanitize = (n: string) => n.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-40);
-const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export async function createAndPublishListing(
   input: PublishInput
@@ -60,6 +62,8 @@ export async function createAndPublishListing(
       currency: input.form.currency === "USD" ? "USD" : "PEN",
       condition: CONDITION_MAP[input.form.condition] ?? "na",
       location: input.form.location,
+      lat: input.lat ?? null,
+      lng: input.lng ?? null,
       status: "draft",
     })
     .select("id")
@@ -100,11 +104,10 @@ export async function createAndPublishListing(
 
   // 3) Orden + comprobante — TODO comprobante debe guardarse: los errores se
   //    registran (no se ignoran en silencio) para poder diagnosticarlos.
-  //    El total ya incluye IGV 18%.
+  //    El total ya incluye IGV (ver IGV_RATE en el motor de precios).
   let invoiceNumber = "";
   let invoiceSaved = false;
-  const subtotal = round2(input.total / 1.18);
-  const igv = round2(input.total - subtotal);
+  const { subtotal, igv } = splitIgv(input.total);
   const { data: order, error: oErr } = await supabase
     .from("orders")
     .insert({

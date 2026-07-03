@@ -1,6 +1,7 @@
-import { Link, useLocation } from "react-router-dom";
-import { useState } from "react";
+import { Link, useLocation, Outlet, Navigate } from "react-router-dom";
+import { useState, Suspense } from "react";
 import { NavLink } from "@/components/NavLink";
+import { usePermissions, type Can } from "@/hooks/usePermissions";
 import {
   LayoutDashboard,
   ClipboardList,
@@ -36,33 +37,46 @@ async function handleLogout() {
 
 export type AdminRole = "admin" | "superadmin";
 
-type MenuItem = { title: string; url: string; icon: LucideIcon; group?: string };
+type MenuItem = { title: string; url: string; icon: LucideIcon; group?: string; module?: string };
+
+// Módulo de la matriz de permisos por sub-ruta (para filtrar menú y bloquear
+// el acceso directo por URL). Dashboard y Roles no se filtran.
+const MODULE_BY_SUB: Record<string, string> = {
+  avisos: "Gestión de avisos",
+  usuarios: "Gestión de usuarios",
+  comercial: "Configuración comercial",
+  tarifas: "Pagos y planes",
+  conversaciones: "Conversaciones reportadas",
+  reportes: "Reportes",
+  comunicaciones: "Comunicaciones",
+  auditoria: "Auditoría y logs",
+};
 
 const buildMenu = (role: AdminRole): MenuItem[] => {
   const base: MenuItem[] = [
     { title: "Dashboard", url: `/dashboard/${role}`, icon: LayoutDashboard, group: "Principal" },
-    { title: "Gestión de avisos", url: `/dashboard/${role}/avisos`, icon: ClipboardList, group: "Operación" },
-    { title: "Gestión de usuarios", url: `/dashboard/${role}/usuarios`, icon: Users, group: "Operación" },
-    { title: "Config. comercial", url: `/dashboard/${role}/comercial`, icon: Tags, group: "Operación" },
-    { title: "Tarifas y Descuentos", url: `/dashboard/${role}/tarifas`, icon: DollarSign, group: "Operación" },
-    { title: "Denuncias", url: `/dashboard/${role}/conversaciones`, icon: Flag, group: "Operación" },
-    { title: "Reportes", url: `/dashboard/${role}/reportes`, icon: FileBarChart, group: "Operación" },
-    { title: "Comunicaciones", url: `/dashboard/${role}/comunicaciones`, icon: Send, group: "Comunicaciones" },
+    { title: "Gestión de avisos", url: `/dashboard/${role}/avisos`, icon: ClipboardList, group: "Operación", module: "Gestión de avisos" },
+    { title: "Gestión de usuarios", url: `/dashboard/${role}/usuarios`, icon: Users, group: "Operación", module: "Gestión de usuarios" },
+    { title: "Config. comercial", url: `/dashboard/${role}/comercial`, icon: Tags, group: "Operación", module: "Configuración comercial" },
+    { title: "Tarifas y Descuentos", url: `/dashboard/${role}/tarifas`, icon: DollarSign, group: "Operación", module: "Pagos y planes" },
+    { title: "Denuncias", url: `/dashboard/${role}/conversaciones`, icon: Flag, group: "Operación", module: "Conversaciones reportadas" },
+    { title: "Reportes", url: `/dashboard/${role}/reportes`, icon: FileBarChart, group: "Operación", module: "Reportes" },
+    { title: "Comunicaciones", url: `/dashboard/${role}/comunicaciones`, icon: Send, group: "Comunicaciones", module: "Comunicaciones" },
   ];
   if (role === "admin") return base;
   return [
     ...base,
     { title: "Roles y permisos", url: `/dashboard/superadmin/roles`, icon: ShieldCheck, group: "Plataforma" },
-    { title: "Auditoría y logs", url: `/dashboard/superadmin/auditoria`, icon: ScrollText, group: "Plataforma" },
+    { title: "Auditoría y logs", url: `/dashboard/superadmin/auditoria`, icon: ScrollText, group: "Plataforma", module: "Auditoría y logs" },
   ];
 };
 
 const primaryMobile = (role: AdminRole): MenuItem[] => [
   { title: "Inicio", url: `/dashboard/${role}`, icon: LayoutDashboard },
-  { title: "Avisos", url: `/dashboard/${role}/avisos`, icon: ClipboardList },
-  { title: "Usuarios", url: `/dashboard/${role}/usuarios`, icon: Users },
-  { title: "Reportes", url: `/dashboard/${role}/reportes`, icon: FileBarChart },
-  { title: "Comunic.", url: `/dashboard/${role}/comunicaciones`, icon: Send },
+  { title: "Avisos", url: `/dashboard/${role}/avisos`, icon: ClipboardList, module: "Gestión de avisos" },
+  { title: "Usuarios", url: `/dashboard/${role}/usuarios`, icon: Users, module: "Gestión de usuarios" },
+  { title: "Reportes", url: `/dashboard/${role}/reportes`, icon: FileBarChart, module: "Reportes" },
+  { title: "Comunic.", url: `/dashboard/${role}/comunicaciones`, icon: Send, module: "Comunicaciones" },
 ];
 
 interface Props {
@@ -70,17 +84,22 @@ interface Props {
   role: AdminRole;
   title: string;
   breadcrumb?: string[];
+  /** Aplica la matriz de permisos: oculta ítems del menú sin can_view. */
+  can?: Can;
 }
 
-export function AdminLayout({ children, role, title, breadcrumb }: Props) {
-  const menu = buildMenu(role);
+export function AdminLayout({ children, role, title, breadcrumb, can }: Props) {
+  const menu = buildMenu(role).filter((m) => (can ? can(m.module, "view") : true));
   const isSuper = role === "superadmin";
   const groups = Array.from(new Set(menu.map((m) => m.group ?? "")));
 
   return (
-    <div className="min-h-screen flex w-full bg-muted/30">
-      {/* Sidebar desktop */}
-      <aside className="hidden lg:flex lg:w-64 xl:w-72 flex-col bg-sidebar text-sidebar-foreground sticky top-0 h-screen">
+    <div className="h-screen flex w-full bg-muted/30 overflow-hidden">
+      {/* Sidebar desktop — columna con fondo a TODA la altura (evita franja clara
+          bajo el sidebar cuando el contenido supera el alto de pantalla) y el
+          contenido "sticky" adentro. */}
+      <div className="hidden lg:block lg:w-64 xl:w-72 bg-sidebar text-sidebar-foreground h-full">
+      <aside className="flex flex-col h-full">
         <div className="px-6 py-5 border-b border-sidebar-border/40">
           <Link to="/" className="flex items-center gap-2">
             <div className={cn(
@@ -146,9 +165,10 @@ export function AdminLayout({ children, role, title, breadcrumb }: Props) {
           </Button>
         </div>
       </aside>
+      </div>
 
       {/* Main */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         <header className="sticky top-0 z-30 h-14 lg:h-16 flex items-center bg-card/95 backdrop-blur-md border-b px-4 lg:px-8 gap-3">
           <Link to="/" className="lg:hidden flex items-center gap-2">
             <div className={cn(
@@ -184,7 +204,7 @@ export function AdminLayout({ children, role, title, breadcrumb }: Props) {
           </div>
         </header>
 
-        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 lg:py-8 pb-24 lg:pb-8 bg-background">
+        <main className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 lg:px-8 py-5 lg:py-8 pb-24 lg:pb-8 bg-background">
           <div className="w-full space-y-5 md:space-y-6 animate-fade-in">
             <div className="hidden lg:block">
               <h1 className="text-2xl xl:text-3xl font-extrabold text-foreground tracking-tight">{title}</h1>
@@ -194,14 +214,60 @@ export function AdminLayout({ children, role, title, breadcrumb }: Props) {
         </main>
       </div>
 
-      <AdminBottomNav role={role} />
+      <AdminBottomNav role={role} can={can} />
     </div>
   );
 }
 
-function AdminBottomNav({ role }: { role: AdminRole }) {
+// Título y breadcrumb por sub-ruta (lo que va después de /dashboard/{role}).
+const ADMIN_META: Record<string, { title: string; breadcrumb: string[] }> = {
+  "": { title: "Panel de control", breadcrumb: ["Dashboard"] },
+  avisos: { title: "Gestión de avisos", breadcrumb: ["Operación", "Avisos"] },
+  usuarios: { title: "Gestión de usuarios", breadcrumb: ["Operación", "Usuarios"] },
+  comercial: { title: "Configuración comercial", breadcrumb: ["Operación", "Comercial"] },
+  tarifas: { title: "Tarifas y Descuentos", breadcrumb: ["Operación", "Tarifas y Descuentos"] },
+  conversaciones: { title: "Denuncias / Moderación", breadcrumb: ["Operación", "Denuncias"] },
+  reportes: { title: "Reportes", breadcrumb: ["Operación", "Reportes"] },
+  comunicaciones: { title: "Comunicaciones", breadcrumb: ["Comunicaciones", "Centro"] },
+  roles: { title: "Roles y permisos", breadcrumb: ["Plataforma", "Roles"] },
+  auditoria: { title: "Auditoría y registros", breadcrumb: ["Plataforma", "Auditoría"] },
+};
+
+// Shell PERSISTENTE del panel: el sidebar/header se montan una sola vez y solo
+// cambia el contenido (<Outlet/>). Evita el parpadeo del navbar al navegar.
+export function AdminShell() {
   const { pathname } = useLocation();
-  const items = primaryMobile(role);
+  const role: AdminRole = pathname.startsWith("/dashboard/superadmin") ? "superadmin" : "admin";
+  const sub = pathname.replace(`/dashboard/${role}`, "").replace(/^\//, "");
+  const meta = ADMIN_META[sub] ?? { title: "Administración", breadcrumb: [] };
+
+  // Enforcement de la matriz de permisos: solo aplica al rol admin (el superadmin
+  // define la matriz y no está sujeto a ella).
+  const { can, ready } = usePermissions(role === "admin");
+  const mod = MODULE_BY_SUB[sub];
+  // Acceso directo por URL a un módulo sin can_view -> lo mandamos al dashboard.
+  if (role === "admin" && ready && mod && !can(mod, "view")) {
+    return <Navigate to={`/dashboard/${role}`} replace />;
+  }
+
+  return (
+    <AdminLayout role={role} title={meta.title} breadcrumb={meta.breadcrumb} can={can}>
+      <Suspense
+        fallback={
+          <div className="py-20 flex justify-center">
+            <div className="w-8 h-8 rounded-full border-[3px] border-muted border-t-secondary animate-spin" />
+          </div>
+        }
+      >
+        <Outlet />
+      </Suspense>
+    </AdminLayout>
+  );
+}
+
+function AdminBottomNav({ role, can }: { role: AdminRole; can?: Can }) {
+  const { pathname } = useLocation();
+  const items = primaryMobile(role).filter((m) => (can ? can(m.module, "view") : true));
   const home = `/dashboard/${role}`;
   const isActive = (url: string) => (url === home ? pathname === url : pathname.startsWith(url));
   return (

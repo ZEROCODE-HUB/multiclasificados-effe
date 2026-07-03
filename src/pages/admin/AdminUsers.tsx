@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AdminLayout, AdminRole } from "@/components/AdminLayout";
+import { AdminRole } from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -10,8 +10,9 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Search, UserCheck, Ban, BadgeCheck, KeyRound, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
-import { fetchAdminUsers, setUserStatus, verifyUser, deleteUser, setUserRole, type AdminUser } from "@/lib/admin";
+import { Search, UserCheck, Ban, BadgeCheck, KeyRound, Trash2, ChevronLeft, ChevronRight, Coins } from "lucide-react";
+import { fetchAdminUsers, setUserStatus, verifyUser, deleteUser, setUserRole, grantCredits, type AdminUser } from "@/lib/admin";
+import { usePermissions } from "@/hooks/usePermissions";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
 
@@ -20,7 +21,8 @@ const statusMeta: Record<string, { label: string; color: string }> = {
   active:    { label: "Activo",     color: "bg-success/15 text-success border-success/30" },
   pending:   { label: "Pendiente",  color: "bg-warning/15 text-warning border-warning/30" },
   suspended: { label: "Suspendido", color: "bg-destructive/15 text-destructive border-destructive/30" },
-  banned:    { label: "Baneado",    color: "bg-destructive/20 text-destructive border-destructive/40" },
+  // "banned" heredado se muestra también como Suspendido (unificamos el bloqueo).
+  banned:    { label: "Suspendido", color: "bg-destructive/15 text-destructive border-destructive/30" },
 };
 const metaFor = (s: string) => statusMeta[s] ?? statusMeta.active;
 
@@ -35,10 +37,17 @@ const PAGE_SIZE = 5;
 const SITE_URL = import.meta.env.VITE_PUBLIC_SITE_URL || window.location.origin;
 
 const AdminUsers = ({ role }: { role: AdminRole }) => {
+  // Matriz de permisos: solo restringe al rol admin (superadmin = acceso total).
+  const { can } = usePermissions(role === "admin");
+  const canEdit = can("Gestión de usuarios", "edit");
+  const canDelete = can("Gestión de usuarios", "delete");
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [q, setQ] = useState("");
   const [r, setR] = useState("all");
   const [page, setPage] = useState(1);
+  // Diálogo "Otorgar créditos": usuario objetivo + cantidad.
+  const [grantFor, setGrantFor] = useState<AdminUser | null>(null);
+  const [grantAmount, setGrantAmount] = useState("");
 
   const load = () => fetchAdminUsers().then(({ data }) => setUsers(data));
   useEffect(() => { load(); }, []);
@@ -83,6 +92,14 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
       } catch { /* no bloquea el flujo */ }
     });
 
+  const doGrant = () => {
+    if (!grantFor) return;
+    const u = grantFor;
+    const amt = Number(grantAmount);
+    setGrantFor(null);
+    run(`Se otorgaron ${amt} créditos`, u, () => grantCredits(u.id, amt).then(() => undefined));
+  };
+
   const initials = (name: string) => (name || "?").split(" ").map((n) => n[0]).slice(0, 2).join("");
   const primaryRole = (roles: string) => {
     const r0 = roles.split(",")[0] || "buscador";
@@ -125,39 +142,41 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
     const Btn = compact ? "outline" : "ghost";
     const size: "icon" | "sm" = compact ? "sm" : "icon";
     const iconSize = compact ? 14 : 16;
-    // Un solo botón que alterna según el estado: si está baneado permite
-    // activarlo; en cualquier otro caso permite banearlo.
-    const isBanned = u.status === "banned";
+    // Un solo botón que alterna según el estado: si está suspendido permite
+    // reactivarlo; en cualquier otro caso permite suspenderlo.
+    const isSuspended = u.status === "suspended" || u.status === "banned";
     return (
       <>
+        {canEdit && (
+        <>
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <Button
               size={size}
               variant={Btn as any}
-              className={isBanned ? "text-success" : "text-destructive"}
-              title={isBanned ? "Activar" : "Banear"}
+              className={isSuspended ? "text-success" : "text-destructive"}
+              title={isSuspended ? "Reactivar" : "Suspender"}
             >
-              {isBanned ? <UserCheck size={iconSize} /> : <Ban size={iconSize} />}
+              {isSuspended ? <UserCheck size={iconSize} /> : <Ban size={iconSize} />}
             </Button>
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>
-                {isBanned ? `¿Activar a ${u.full_name}?` : `¿Banear al usuario ${u.full_name}?`}
+                {isSuspended ? `¿Reactivar a ${u.full_name}?` : `¿Suspender al usuario ${u.full_name}?`}
               </AlertDialogTitle>
               <AlertDialogDescription>
-                {isBanned
+                {isSuspended
                   ? "El usuario recibirá acceso completo a la plataforma. Se le notificará por correo."
-                  : "El usuario perderá el acceso de forma permanente. Solo el superadministrador puede revertirlo."}
+                  : "El usuario perderá el acceso a la plataforma hasta que se reactive su cuenta."}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              {isBanned ? (
-                <AlertDialogAction onClick={() => run("Usuario activado", u, () => setUserStatus(u.id, "active"))}>Activar</AlertDialogAction>
+              {isSuspended ? (
+                <AlertDialogAction onClick={() => run("Usuario reactivado", u, () => setUserStatus(u.id, "active"))}>Reactivar</AlertDialogAction>
               ) : (
-                <AlertDialogAction onClick={() => run("Usuario baneado", u, () => setUserStatus(u.id, "banned"))}>Banear</AlertDialogAction>
+                <AlertDialogAction onClick={() => run("Usuario suspendido", u, () => setUserStatus(u.id, "suspended"))}>Suspender</AlertDialogAction>
               )}
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -201,6 +220,19 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
           </AlertDialogContent>
         </AlertDialog>
 
+        <Button
+          size={size}
+          variant={Btn as any}
+          className="text-secondary"
+          title="Otorgar créditos"
+          onClick={() => { setGrantFor(u); setGrantAmount(""); }}
+        >
+          <Coins size={iconSize} />
+        </Button>
+        </>
+        )}
+
+        {canDelete && (
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <Button size={size} variant={Btn as any} className="text-destructive" title="Eliminar"><Trash2 size={iconSize} /></Button>
@@ -224,12 +256,13 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        )}
       </>
     );
   };
 
   return (
-    <AdminLayout role={role} title="Gestión de usuarios" breadcrumb={["Operación", "Usuarios"]}>
+    <>
       <Card>
         <CardHeader className="space-y-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -245,8 +278,9 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
               <SelectTrigger className="md:w-44"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos los roles</SelectItem>
-                <SelectItem value="anunciante">Anunciantes</SelectItem>
-                <SelectItem value="buscador">Buscadores</SelectItem>
+                {ASSIGNABLE_ROLES.map((x) => (
+                  <SelectItem key={x.value} value={x.value}>{x.label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -361,7 +395,39 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
           )}
         </CardContent>
       </Card>
-    </AdminLayout>
+
+      {/* Diálogo: otorgar créditos a un usuario */}
+      <AlertDialog open={!!grantFor} onOpenChange={(o) => { if (!o) setGrantFor(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Coins size={18} className="text-secondary" /> Otorgar créditos
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Se sumarán al saldo de <b>{grantFor?.full_name}</b> ({grantFor?.email}). Queda registrado en auditoría.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-1">
+            <Input
+              type="number"
+              min="1"
+              step="1"
+              autoFocus
+              placeholder="Cantidad de créditos (ej. 100)"
+              value={grantAmount}
+              onChange={(e) => setGrantAmount(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && Number(grantAmount) > 0) doGrant(); }}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={doGrant} disabled={!(Number(grantAmount) > 0)}>
+              Otorgar {Number(grantAmount) > 0 ? `${Number(grantAmount)} cr` : ""}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 };
 

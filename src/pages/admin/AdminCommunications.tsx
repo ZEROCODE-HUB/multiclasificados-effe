@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { AdminLayout, AdminRole } from "@/components/AdminLayout";
+import { useState, useMemo } from "react";
+import { AdminRole } from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -12,9 +12,22 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Send, Megaphone, Users, Target, MapPin, Sparkles } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
+// Audiencia base aproximada por segmento y factores por región/interés. Sirven
+// para ESTIMAR destinatarios de forma que la cifra reaccione a la segmentación.
+const SEGMENT_BASE: Record<string, number> = {
+  all: 15420, anunciantes: 4200, "buscadores-perfil": 8600, "buscadores-intereses": 6900,
+  "anunciantes-activos": 2100, pro: 780, inactivos: 3300,
+};
+const REGION_FACTOR: Record<string, number> = {
+  all: 1, lima: 0.42, arequipa: 0.11, trujillo: 0.09, cusco: 0.07, piura: 0.08, chiclayo: 0.06,
+};
+
 const AdminCommunications = ({ role }: { role: AdminRole }) => {
   const [sent, setSent] = useState(0);
   const send = (k: string) => { setSent((s) => s + 1); toast({ title: "Mensaje enviado", description: k }); };
+
+  // Individual — destinatario
+  const [individualTo, setIndividualTo] = useState("");
 
   // Masivo — segmentación avanzada
   const [segment, setSegment] = useState("buscadores-perfil");
@@ -23,8 +36,34 @@ const AdminCommunications = ({ role }: { role: AdminRole }) => {
   const [matchAds, setMatchAds] = useState(false);
   const [copyAdmins, setCopyAdmins] = useState(true);
 
+  // Estimación de destinatarios reactiva a la segmentación elegida.
+  const estimated = useMemo(() => {
+    const base = SEGMENT_BASE[segment] ?? SEGMENT_BASE.all;
+    const regionFactor = REGION_FACTOR[region] ?? 1;
+    const interestFactor = interest === "all" ? 1 : 0.35; // un interés concreto acota la audiencia
+    const matchFactor = matchAds ? 0.6 : 1;
+    return Math.round(base * regionFactor * interestFactor * matchFactor);
+  }, [segment, region, interest, matchAds]);
+
+  // Envío individual: valida y usa el destinatario escrito.
+  const sendIndividual = () => {
+    if (!individualTo.trim()) { toast({ title: "Falta el destinatario", variant: "destructive" }); return; }
+    send(`Individual → ${individualTo.trim()}`);
+    setIndividualTo("");
+  };
+  // Envío masivo: describe la audiencia segmentada en el registro del envío.
+  const sendMasivo = () => {
+    const parts = [
+      segment !== "all" ? segment.replace(/-/g, " ") : "todos",
+      region !== "all" ? region : null,
+      interest !== "all" ? interest : null,
+      matchAds ? "match con avisos" : null,
+    ].filter(Boolean);
+    send(`Masivo · ${parts.join(" · ")} · ~${estimated.toLocaleString()} destinatarios`);
+  };
+
   return (
-    <AdminLayout role={role} title="Comunicaciones" breadcrumb={["Comunicaciones", "Centro"]}>
+    <>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
         <div className="lg:col-span-2">
           <Card>
@@ -41,7 +80,12 @@ const AdminCommunications = ({ role }: { role: AdminRole }) => {
                 <TabsContent value="individual" className="space-y-4 pt-4">
                   <div>
                     <Label>Destinatario</Label>
-                    <Input placeholder="Buscar usuario por nombre o correo..." className="mt-1" />
+                    <Input
+                      value={individualTo}
+                      onChange={(e) => setIndividualTo(e.target.value)}
+                      placeholder="Nombre o correo del destinatario..."
+                      className="mt-1"
+                    />
                   </div>
                   <div>
                     <Label>Asunto</Label>
@@ -51,7 +95,7 @@ const AdminCommunications = ({ role }: { role: AdminRole }) => {
                     <Label>Mensaje</Label>
                     <Textarea rows={6} placeholder="Escribe el contenido..." className="mt-1" />
                   </div>
-                  <Button className="w-full md:w-auto" onClick={() => send("Individual")}>Enviar mensaje</Button>
+                  <Button className="w-full md:w-auto" onClick={sendIndividual}>Enviar mensaje</Button>
                 </TabsContent>
 
                 <TabsContent value="masivo" className="space-y-4 pt-4">
@@ -127,11 +171,11 @@ const AdminCommunications = ({ role }: { role: AdminRole }) => {
                   </label>
 
                   <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                    <Badge variant="outline" className="gap-1"><Users size={12} /> ~15,420 destinatarios estimados</Badge>
+                    <Badge variant="outline" className="gap-1"><Users size={12} /> ~{estimated.toLocaleString()} destinatarios estimados</Badge>
                     <Badge variant="outline">Email + Notificación in-app</Badge>
                     {copyAdmins && <Badge variant="outline" className="text-secondary border-secondary/40">CC: equipo interno</Badge>}
                   </div>
-                  <Button className="w-full md:w-auto" onClick={() => send("Masivo")}>Programar envío</Button>
+                  <Button className="w-full md:w-auto" onClick={sendMasivo}>Programar envío</Button>
                 </TabsContent>
               </Tabs>
             </CardContent>
@@ -157,7 +201,7 @@ const AdminCommunications = ({ role }: { role: AdminRole }) => {
           </CardContent>
         </Card>
       </div>
-    </AdminLayout>
+    </>
   );
 };
 
