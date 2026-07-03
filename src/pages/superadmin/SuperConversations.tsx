@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
-import { AdminLayout, AdminRole } from "@/components/AdminLayout";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AdminRole } from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search, AlertOctagon, ArrowLeft } from "lucide-react";
-import { fetchReports, assignReport, resolveReport, type AdminReport } from "@/lib/admin";
+import { fetchReports, assignReport, resolveReport, fetchConversationBetween, type AdminReport, type ModMessage } from "@/lib/admin";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
 
@@ -25,6 +25,9 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
   const [selected, setSelected] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [me, setMe] = useState<string | null>(null);
+  const [convo, setConvo] = useState<ModMessage[]>([]);
+  const [convoLoading, setConvoLoading] = useState(false);
+  const convoRef = useRef<HTMLDivElement>(null);
 
   const load = () => fetchReports().then(({ data }) => setReports(data));
   useEffect(() => {
@@ -42,6 +45,23 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
   );
   const item = reports.find((r) => r.id === selected);
 
+  // Carga la conversación entre reportante y reportado al abrir una denuncia.
+  useEffect(() => {
+    if (!item) { setConvo([]); return; }
+    setConvoLoading(true);
+    let active = true;
+    fetchConversationBetween(item.reporter_id, item.reported_id).then((msgs) => {
+      if (active) { setConvo(msgs); setConvoLoading(false); }
+    });
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item?.id, item?.reporter_id, item?.reported_id]);
+
+  // Al cargar/cambiar la conversación, baja al último mensaje.
+  useEffect(() => {
+    if (convoRef.current) convoRef.current.scrollTop = convoRef.current.scrollHeight;
+  }, [convo]);
+
   const act = async (label: string, fn: () => Promise<void>) => {
     if (!item || !isUuid(item.id)) { toast({ title: label }); return; }
     try {
@@ -58,8 +78,10 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
   const suspendUser = () => act("Cuenta suspendida", () => resolveReport(item!.id, "ban", item!.reason));
 
   return (
-    <AdminLayout role={role} title="Denuncias / Moderación" breadcrumb={["Operación", "Denuncias"]}>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[calc(100vh-220px)] min-h-[500px]">
+    <>
+      {/* En desktop: dos paneles a altura fija con scroll interno. En móvil: el
+          contenido fluye y hace scroll con la página (incluidos los botones). */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:h-[calc(100vh-220px)] lg:min-h-[500px]">
         <Card className={`lg:col-span-1 flex flex-col ${selected ? "hidden lg:flex" : "flex"}`}>
           <CardHeader className="space-y-2">
             <CardTitle className="text-base md:text-lg">Reclamos</CardTitle>
@@ -119,9 +141,56 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
                   {item.assignee && <p className="text-sm"><span className="text-muted-foreground">Asignada a:</span> {item.assignee}</p>}
                   {item.action_taken && <p className="text-sm"><span className="text-muted-foreground">Acción tomada:</span> {item.action_taken}</p>}
                 </div>
-                <p className="text-[11px] text-muted-foreground text-center">
-                  El historial completo de la conversación entre ambos usuarios se mostrará aquí.
-                </p>
+                <div className="rounded-xl border bg-card p-3">
+                  <p className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground mb-2">
+                    Conversación entre ambos usuarios
+                  </p>
+                  {/* Leyenda: quién es quién */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3 pb-2 border-b">
+                    <span className="flex items-center gap-1.5 text-[11px] font-semibold text-foreground">
+                      <span className="w-2.5 h-2.5 rounded-full bg-muted-foreground/50" />
+                      Denunciante: {item.reporter ?? "—"}
+                    </span>
+                    <span className="flex items-center gap-1.5 text-[11px] font-semibold text-secondary">
+                      Denunciado: {item.reported ?? "—"}
+                      <span className="w-2.5 h-2.5 rounded-full bg-secondary" />
+                    </span>
+                  </div>
+                  {convoLoading ? (
+                    <p className="text-xs text-muted-foreground text-center py-6">Cargando conversación…</p>
+                  ) : convo.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-6">
+                      No hay mensajes registrados entre estos usuarios.
+                    </p>
+                  ) : (
+                    <div ref={convoRef} className="space-y-2 max-h-[45vh] overflow-y-auto pr-1">
+                      {convo.map((m) => {
+                        // Denunciado a la DERECHA; denunciante (y cualquier otro) a la izquierda.
+                        const isDenunciado = item.reported_id != null && m.sender_id === item.reported_id;
+                        const initials = (m.sender_name ?? "?").trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+                        return (
+                          <div key={m.id} className={`flex ${isDenunciado ? "justify-end" : "justify-start"}`}>
+                            <div className={`flex items-end gap-2 max-w-[80%] ${isDenunciado ? "flex-row-reverse" : ""}`}>
+                              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${isDenunciado ? "bg-secondary/25 text-secondary" : "bg-muted-foreground/20 text-foreground"}`}>
+                                {initials || "?"}
+                              </div>
+                              <div className={`rounded-lg px-3 py-2 ${isDenunciado ? "bg-secondary/15" : "bg-muted"}`}>
+                                <p className="text-[10px] font-semibold mb-0.5">
+                                  <span className="text-muted-foreground">{m.sender_name ?? "Usuario"}</span>
+                                  <span className={isDenunciado ? "text-secondary" : "text-muted-foreground/70"}> · {isDenunciado ? "Denunciado" : "Denunciante"}</span>
+                                </p>
+                                <p className="text-sm whitespace-pre-wrap break-words">{m.body}</p>
+                                <p className="text-[9px] text-muted-foreground mt-1 text-right">
+                                  {new Date(m.created_at).toLocaleString("es-PE")}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </CardContent>
               <div className="border-t p-4 flex flex-col sm:flex-row gap-2">
                 <Button variant="outline" className="flex-1" onClick={markReviewing}>Marcar en revisión</Button>
@@ -140,7 +209,7 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
           )}
         </Card>
       </div>
-    </AdminLayout>
+    </>
   );
 };
 

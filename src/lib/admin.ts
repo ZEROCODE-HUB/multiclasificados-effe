@@ -426,8 +426,26 @@ export async function toggleFeatured(listingId: string, featured: boolean) {
 export interface AdminReport {
   id: string; target_type: string; reason: string; category: string | null; status: string;
   action_taken: string | null; reporter: string | null; reported: string | null;
-  reported_id: string | null; listing_id: string | null; listing_title: string | null;
+  reporter_id: string | null; reported_id: string | null;
+  listing_id: string | null; listing_title: string | null;
   assigned_to: string | null; assignee: string | null; created_at: string;
+}
+
+// Un mensaje de la conversación entre dos usuarios (vista de moderación).
+export interface ModMessage {
+  id: string; sender_id: string; sender_name: string | null; body: string;
+  status: string; created_at: string; listing_title: string | null;
+}
+
+// Trae todos los mensajes intercambiados entre dos usuarios (para moderar una
+// denuncia). Solo funciona con sesión de staff (RLS vía RPC security definer).
+export async function fetchConversationBetween(a: string | null, b: string | null): Promise<ModMessage[]> {
+  if (!a || !b) return [];
+  try {
+    const { data, error } = await supabase.rpc("admin_conversation_between", { p_a: a, p_b: b });
+    if (error) throw error;
+    return (data ?? []) as ModMessage[];
+  } catch { return []; }
 }
 
 export async function fetchReports(): Promise<{ data: AdminReport[]; real: boolean }> {
@@ -440,7 +458,7 @@ export async function fetchReports(): Promise<{ data: AdminReport[]; real: boole
   const mapped: AdminReport[] = mockReports.map((r) => ({
     id: r.id, target_type: "user", reason: r.reason, category: null,
     status: r.status === "Abierto" ? "open" : r.status === "En revisión" ? "reviewing" : "resolved",
-    action_taken: null, reporter: r.reporter, reported: r.reported, reported_id: null,
+    action_taken: null, reporter: r.reporter, reported: r.reported, reporter_id: null, reported_id: null,
     listing_id: null, listing_title: null, assigned_to: null, assignee: null, created_at: r.date,
   }));
   return { data: mapped, real: false };
@@ -569,6 +587,22 @@ export async function setRolePermission(p: RolePermission) {
     p_view: p.can_view, p_edit: p.can_edit, p_approve: p.can_approve, p_delete: p.can_delete,
   });
   if (error) throw error;
+}
+
+export interface MyPermission {
+  module: string; can_view: boolean; can_edit: boolean; can_approve: boolean; can_delete: boolean;
+}
+
+// Permisos efectivos del usuario actual (agregados de sus roles vía get_my_permissions).
+// Se usa para aplicar la matriz de "Roles y permisos": ocultar módulos y gatear acciones.
+export async function getMyPermissions(): Promise<Record<string, MyPermission>> {
+  try {
+    const { data, error } = await supabase.rpc("get_my_permissions");
+    if (error) throw error;
+    const out: Record<string, MyPermission> = {};
+    ((data as MyPermission[]) ?? []).forEach((p) => { out[p.module] = p; });
+    return out;
+  } catch { return {}; }
 }
 
 export async function assignRole(userId: string, role: string) {

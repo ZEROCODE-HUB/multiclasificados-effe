@@ -20,7 +20,7 @@ import { useNavigate } from "react-router-dom";
 import { useSession } from "@/hooks/useSession";
 import { toast } from "@/hooks/use-toast";
 import {
-  loadSettings, priceForDuration, formatSoles, addInvoice, avisosBreakdown,
+  loadSettings, priceForDuration, formatSoles, addInvoice, avisosBreakdown, solesToCredits,
   type DurationDays, type PricingSettings, type ExtraPrices,
 } from "@/lib/pricing";
 import { createAndPublishListing } from "@/lib/publish";
@@ -29,6 +29,7 @@ import { getCreditBalance, spendCredits } from "@/lib/credits";
 import { fetchActivePromotions, bestPromoForCategory, applyDiscount, type Promotion } from "@/lib/promotions";
 import { fetchPricingSettings } from "@/lib/pricingRemote";
 import { BuyCreditsModal } from "@/components/BuyCreditsModal";
+import { LocationPicker } from "@/components/LocationPicker";
 import { supabase } from "@/lib/supabase";
 
 interface PhotoItem { id: string; url: string; name: string; file: File; }
@@ -95,6 +96,10 @@ const AdvertiserPublish = () => {
     condition: "nuevo",
   });
 
+  // Coordenadas del aviso (para el mapa del buscador). Se fijan geocodificando
+  // el texto de ubicación o arrastrando el pin en el LocationPicker.
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+
   // Un aviso a la vez: el precio depende de la duración + adicionales.
   // La compra "por volumen" vive en el modal de créditos, no aquí.
   const [quantity] = useState<number>(1);
@@ -136,6 +141,7 @@ const AdvertiserPublish = () => {
       if (!raw) return;
       const d = JSON.parse(raw);
       if (d.form) setForm(d.form);
+      if (d.coords) setCoords(d.coords);
       if (d.duration) setDuration(d.duration);
       if (d.extras) setExtras(d.extras);
       if (d.verified) setVerified(d.verified);
@@ -160,6 +166,10 @@ const AdvertiserPublish = () => {
   const activePromo = bestPromoForCategory(promos, form.category);
   const promoPct = activePromo?.discount_pct ?? 0;
   const total = applyDiscount(baseTotal, promoPct);
+  // Costo EN CRÉDITOS (enteros). El dinero (soles) va en `total`/`baseTotal`.
+  const baseCredits = solesToCredits(baseTotal);
+  const totalCredits = solesToCredits(total);
+  const balanceCredits = Math.round(creditBalance);
   // Para la vista previa del aviso individual
   const basePrice = priceForDuration(1, duration, settings);
 
@@ -200,7 +210,7 @@ const AdvertiserPublish = () => {
   const persistDraftForLogin = (resumeAtSummary: boolean) => {
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify({
-        form, duration, quantity, extras, verified: true, personType, docNumber, verifiedName,
+        form, coords, duration, quantity, extras, verified: true, personType, docNumber, verifiedName,
         resumeAtSummary,
       }));
     } catch { /* noop */ }
@@ -262,7 +272,7 @@ const AdvertiserPublish = () => {
 
   // Decide qué modal abrir según el saldo disponible
   const openPublishFlowAfterVerify = () => {
-    if (creditBalance >= total) {
+    if (balanceCredits >= totalCredits) {
       // Tiene créditos: se publica directo y se descuenta (sin cuadro de pagos).
       doPublish();
     } else {
@@ -299,6 +309,8 @@ const AdvertiserPublish = () => {
       // 1) Crear el aviso y publicarlo
       const { listingId, invoiceNumber, published, invoiceSaved } = await createAndPublishListing({
         form,
+        lat: coords?.lat ?? null,
+        lng: coords?.lng ?? null,
         quantity,
         duration,
         extras,
@@ -313,7 +325,7 @@ const AdvertiserPublish = () => {
       });
 
       // 2) Descontar créditos del saldo (según el costo del aviso)
-      const spent = await spendCredits(total, listingId);
+      const spent = await spendCredits(totalCredits, listingId);
       const newBalance = await getCreditBalance();
       setCreditBalance(newBalance);
       if (!spent) {
@@ -332,7 +344,7 @@ const AdvertiserPublish = () => {
         advertiser: verifiedName || session?.name || "Anunciante",
         listingTitle: form.title,
         amount: total,
-        detail: `Boleta · Aviso ${duration} días · ${total.toFixed(2)} créditos`,
+        detail: `Boleta · Aviso ${duration} días · ${totalCredits} créditos (${formatSoles(total)})`,
         docNumber: docNumber || undefined,
         number: invoiceNumber || undefined,
       });
@@ -606,23 +618,27 @@ const AdvertiserPublish = () => {
                     </Select>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <Label>Ubicación *</Label>
-                    <Input value={form.location} onChange={(e) => updateForm("location", e.target.value)} placeholder="Ej: Lima, Miraflores" className="mt-1" />
-                  </div>
-                  <div>
-                    <Label>Condición</Label>
-                    <Select value={form.condition} onValueChange={(v) => updateForm("condition", v)}>
-                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="nuevo">Nuevo</SelectItem>
-                        <SelectItem value="usado">Usado</SelectItem>
-                        <SelectItem value="reacondicionado">Reacondicionado</SelectItem>
-                        <SelectItem value="na">No aplica</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <LocationPicker
+                  location={form.location}
+                  onLocationChange={(v) => updateForm("location", v)}
+                  lat={coords?.lat ?? null}
+                  lng={coords?.lng ?? null}
+                  onCoordsChange={(la, ln) =>
+                    setCoords(la != null && ln != null ? { lat: la, lng: ln } : null)
+                  }
+                  required
+                />
+                <div className="sm:w-1/2">
+                  <Label>Condición</Label>
+                  <Select value={form.condition} onValueChange={(v) => updateForm("condition", v)}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="nuevo">Nuevo</SelectItem>
+                      <SelectItem value="usado">Usado</SelectItem>
+                      <SelectItem value="reacondicionado">Reacondicionado</SelectItem>
+                      <SelectItem value="na">No aplica</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </CardContent>
             </Card>
@@ -698,22 +714,22 @@ const AdvertiserPublish = () => {
                   </div>
                 </div>
 
-                {/* Resumen del paquete */}
+                {/* Resumen del paquete (en créditos) */}
                 <div className="border bg-muted/30 p-4 space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Aviso ({duration} días)</span>
-                    <span className="font-bold">{formatSoles(packageBase)}</span>
+                    <span className="font-bold">{solesToCredits(packageBase)} cr</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Adicionales</span>
-                    <span className="font-bold">{formatSoles(extrasSum)}</span>
+                    <span className="font-bold">{solesToCredits(extrasSum)} cr</span>
                   </div>
                   <div className="border-t pt-2 flex items-baseline justify-between">
-                    <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Total a pagar (IGV incl.)</span>
-                    <span className="text-2xl font-extrabold text-primary">{formatSoles(total)}</span>
+                    <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Total en créditos</span>
+                    <span className="text-2xl font-extrabold text-primary">{totalCredits} cr</span>
                   </div>
                   <p className="text-[11px] text-muted-foreground pt-1">
-                    Se descontará de tu saldo de créditos al publicar.
+                    Se descontará de tu saldo de créditos al publicar. (Boleta: {formatSoles(total)})
                   </p>
                 </div>
               </CardContent>
@@ -733,27 +749,27 @@ const AdvertiserPublish = () => {
               <CardContent className="p-5 space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Aviso · {duration} días</span>
-                  <span className="font-bold">{packageBase.toFixed(2)} cr</span>
+                  <span className="font-bold">{solesToCredits(packageBase)} cr</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Adicionales</span>
-                  <span className="font-bold">{extrasSum.toFixed(2)} cr</span>
+                  <span className="font-bold">{solesToCredits(extrasSum)} cr</span>
                 </div>
                 {promoPct > 0 && (
                   <div className="flex justify-between text-sm text-success">
                     <span className="flex items-center gap-1">
                       <Percent size={12} /> Promo {activePromo?.name} (−{promoPct}%)
                     </span>
-                    <span className="font-bold">−{(baseTotal - total).toFixed(2)} cr</span>
+                    <span className="font-bold">−{baseCredits - totalCredits} cr</span>
                   </div>
                 )}
                 <div className="border-t pt-3 flex items-baseline justify-between">
                   <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Total</span>
                   <span className="text-3xl font-extrabold text-primary">
                     {promoPct > 0 && (
-                      <span className="text-sm font-normal text-muted-foreground line-through mr-2">{baseTotal.toFixed(2)}</span>
+                      <span className="text-sm font-normal text-muted-foreground line-through mr-2">{baseCredits}</span>
                     )}
-                    {total.toFixed(2)} cr
+                    {totalCredits} cr
                   </span>
                 </div>
                 <div className="border-t pt-3 flex items-baseline justify-between">
@@ -761,14 +777,14 @@ const AdvertiserPublish = () => {
                   {creditLoading ? (
                     <Loader2 size={14} className="animate-spin text-muted-foreground" />
                   ) : (
-                    <span className={`text-sm font-bold ${creditBalance >= total ? "text-success" : "text-destructive"}`}>
-                      {creditBalance.toFixed(2)} cr
+                    <span className={`text-sm font-bold ${balanceCredits >= totalCredits ? "text-success" : "text-destructive"}`}>
+                      {balanceCredits} cr
                     </span>
                   )}
                 </div>
-                {!creditLoading && creditBalance < total && (
+                {!creditLoading && balanceCredits < totalCredits && (
                   <p className="text-[11px] text-destructive">
-                    Faltan {(total - creditBalance).toFixed(2)} créditos. Cómpralos al publicar.
+                    Faltan {totalCredits - balanceCredits} créditos. Cómpralos al publicar.
                   </p>
                 )}
                 {!creditLoading && (
@@ -776,7 +792,7 @@ const AdvertiserPublish = () => {
                     <p className="text-[11px] uppercase tracking-wider font-bold text-muted-foreground">
                       Con tu saldo puedes publicar
                     </p>
-                    {avisosBreakdown(creditBalance, settings).map(({ dias, count }) => (
+                    {avisosBreakdown(balanceCredits, settings).map(({ dias, count }) => (
                       <p key={dias} className="text-[11px] text-muted-foreground">
                         <span className="font-bold text-secondary">~{count} avisos</span> de {dias} días
                       </p>
@@ -890,18 +906,18 @@ const AdvertiserPublish = () => {
       <BuyCreditsModal
         open={buyCreditsOpen}
         onClose={() => setBuyCreditsOpen(false)}
-        creditCost={total}
-        currentBalance={creditBalance}
+        creditCost={totalCredits}
+        currentBalance={balanceCredits}
         onPurchaseComplete={(newBalance) => {
           setCreditBalance(newBalance);
           setBuyCreditsOpen(false);
           // Tras comprar, si ya alcanza, se publica de inmediato y se descuenta.
-          if (newBalance >= total) {
+          if (Math.round(newBalance) >= totalCredits) {
             doPublish();
           } else {
             toast({
               title: "Créditos añadidos",
-              description: `Tu saldo es ${newBalance.toFixed(2)} cr, pero este aviso cuesta ${total.toFixed(2)} cr. Compra un poco más para publicar.`,
+              description: `Tu saldo es ${Math.round(newBalance)} cr, pero este aviso cuesta ${totalCredits} cr. Compra un poco más para publicar.`,
             });
           }
         }}

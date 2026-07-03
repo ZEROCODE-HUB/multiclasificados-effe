@@ -20,6 +20,8 @@ interface CardRow {
   currency: string;
   category_id: string;
   location: string | null;
+  lat: number | string | null;
+  lng: number | string | null;
   featured: boolean;
   views: number | null;
   published_at: string | null;
@@ -37,6 +39,8 @@ export function mapCard(r: CardRow): Listing {
     currency: r.currency || "PEN",
     category: r.category_id,
     location: r.location ?? "",
+    lat: r.lat != null ? Number(r.lat) : null,
+    lng: r.lng != null ? Number(r.lng) : null,
     imageUrl: r.image_url ?? FALLBACK_IMG,
     date: (r.published_at ?? r.created_at ?? new Date().toISOString()).slice(0, 10),
     featured: !!r.featured,
@@ -175,7 +179,7 @@ export async function fetchMyListings(): Promise<MyListing[]> {
     const { data, error } = await supabase
       .from("listings")
       .select(
-        "id, title, description, price, currency, category_id, condition, location, featured, views, status, published_at, expires_at, created_at, listing_images(url, sort_order)"
+        "id, title, description, price, currency, category_id, condition, location, lat, lng, featured, views, status, published_at, expires_at, created_at, listing_images(url, sort_order)"
       )
       .eq("owner_id", user.id)
       .order("created_at", { ascending: false });
@@ -192,6 +196,8 @@ export async function fetchMyListings(): Promise<MyListing[]> {
         currency: r.currency || "PEN",
         category: r.category_id,
         location: r.location ?? "",
+        lat: r.lat != null ? Number(r.lat) : null,
+        lng: r.lng != null ? Number(r.lng) : null,
         imageUrl: imgs[0]?.url || FALLBACK_IMG,
         date: (r.published_at ?? r.created_at ?? new Date().toISOString()).slice(0, 10),
         featured: !!r.featured,
@@ -214,6 +220,8 @@ export interface ListingPatch {
   price?: number;
   currency?: string;
   location?: string;
+  lat?: number | null;
+  lng?: number | null;
   category_id?: string;
   condition?: ListingCondition;
 }

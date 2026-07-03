@@ -115,6 +115,18 @@ export function notificationText(n: AppNotification): string {
     }
     case "listing_enabled":
       return `"${(p.listing_title as string) || "Tu aviso"}" volvió a estar visible`;
+    case "moderation_warning": {
+      const reason = (p.reason as string) || "";
+      const note = (p.note as string) || "";
+      const base = reason ? `Advertencia por: ${reason}` : "Recibiste una advertencia de moderación";
+      return note ? `${base}. ${note}` : base;
+    }
+    case "account_suspended": {
+      const reason = (p.reason as string) || "";
+      return reason
+        ? `Tu cuenta fue suspendida: ${reason}`
+        : "Tu cuenta fue suspendida por moderación";
+    }
     default:
       return n.title || "Notificación";
   }

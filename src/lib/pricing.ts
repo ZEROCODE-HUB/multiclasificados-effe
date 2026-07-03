@@ -88,16 +88,18 @@ export function priceFor(n: number, dias: 7 | 15 | 30 | 60 | 90, s: PricingSetti
   } else {
     price = price * Math.pow(1 - s.descPorAviso, Math.max(0, n - 1));
   }
-  // factor días: por cada salto duplicar y aplicar descuento
-  const steps: Array<{ to: 15 | 30 | 60 | 90; key: 15 | 30 | 60 | 90 }> = [
-    { to: 15, key: 15 },
-    { to: 30, key: 30 },
-    { to: 60, key: 60 },
-    { to: 90, key: 90 },
+  // Factor días: cada rango parte del anterior multiplicado por la relación de
+  // días y aplicándole el descuento. Según la lista de precios oficial (Excel):
+  // 7→15, 15→30, 30→60 duplican (×2); 60→90 es ×1.5 (90 = 1.5 × 60).
+  const steps: Array<{ to: 15 | 30 | 60 | 90; key: 15 | 30 | 60 | 90; mult: number }> = [
+    { to: 15, key: 15, mult: 2 },
+    { to: 30, key: 30, mult: 2 },
+    { to: 60, key: 60, mult: 2 },
+    { to: 90, key: 90, mult: 1.5 },
   ];
   for (const step of steps) {
     if (dias >= step.to) {
-      price = price * 2 * (1 - s.saltos[step.key]);
+      price = price * step.mult * (1 - s.saltos[step.key]);
     }
   }
   return Math.round(price * 100) / 100;
@@ -133,29 +135,55 @@ export function totalPrice(n: number, dias: DurationDays, sel: ExtrasSelection, 
   return Math.round((priceForDuration(n, dias, s) + extrasTotal(sel, s)) * 100) / 100;
 }
 
-// Costo de referencia de un aviso estándar: 1 aviso, 7 días, sin adicionales.
+// ─── Créditos (enteros, desvinculados del sol) ─────────────────────────────
+// Los precios se calculan en soles (Excel) para el DINERO (boletas), pero al
+// usuario se le cobra en CRÉDITOS: créditos = redondeo(soles × multiplicador).
+// El multiplicador separa el crédito del sol y absorbe los decimales.
+export const CREDIT_MULTIPLIER = 10;
+
+// IGV de Perú (18%). En el Excel los precios ya vienen "con IGV"; esta constante
+// centraliza la tasa para separar subtotal/IGV en boletas y órdenes.
+export const IGV_RATE = 0.18;
+
+// Separa un total (con IGV) en subtotal + IGV. Fuente única para comprobantes.
+export function splitIgv(total: number): { subtotal: number; igv: number } {
+  const subtotal = Math.round((total / (1 + IGV_RATE)) * 100) / 100;
+  return { subtotal, igv: Math.round((total - subtotal) * 100) / 100 };
+}
+
+export function solesToCredits(soles: number): number {
+  return Math.round(soles * CREDIT_MULTIPLIER);
+}
+
+// Costo de un aviso EN CRÉDITOS (entero) según cantidad y duración.
+export function creditsForDuration(n: number, dias: DurationDays, s: PricingSettings = loadSettings()): number {
+  return solesToCredits(priceForDuration(n, dias, s));
+}
+
+// Costo de referencia de un aviso estándar (1 aviso, 7 días): en soles y en créditos.
 export function standardAdCost(s: PricingSettings = loadSettings()): number {
   return priceForDuration(1, 7, s);
 }
-
-// Cuántos avisos estándar (7 días) alcanza un saldo de créditos. Sirve para
-// mostrar al usuario "con tu saldo puedes publicar ~N avisos".
-export function avisosForBalance(balance: number, s: PricingSettings = loadSettings()): number {
-  const cost = standardAdCost(s);
-  if (cost <= 0) return 0;
-  return Math.max(0, Math.floor(balance / cost));
+export function standardAdCredits(s: PricingSettings = loadSettings()): number {
+  return solesToCredits(standardAdCost(s));
 }
 
-// Desglose: cuántos avisos alcanza el saldo por cada duración disponible.
-// Devuelve [{ dias, cost, count }] para 3/7/15/30/60/90 días.
+// Cuántos avisos estándar (7 días) alcanza un saldo de CRÉDITOS.
+export function avisosForBalance(balanceCredits: number, s: PricingSettings = loadSettings()): number {
+  const cost = standardAdCredits(s);
+  if (cost <= 0) return 0;
+  return Math.max(0, Math.floor(balanceCredits / cost));
+}
+
+// Desglose: cuántos avisos alcanza el saldo por cada duración. `cost` va EN CRÉDITOS.
 export const DURATION_OPTIONS: DurationDays[] = [3, 7, 15, 30, 60, 90];
 export function avisosBreakdown(
-  balance: number,
+  balanceCredits: number,
   s: PricingSettings = loadSettings(),
 ): Array<{ dias: DurationDays; cost: number; count: number }> {
   return DURATION_OPTIONS.map((dias) => {
-    const cost = priceForDuration(1, dias, s);
-    return { dias, cost, count: cost > 0 ? Math.max(0, Math.floor(balance / cost)) : 0 };
+    const cost = solesToCredits(priceForDuration(1, dias, s));
+    return { dias, cost, count: cost > 0 ? Math.max(0, Math.floor(balanceCredits / cost)) : 0 };
   });
 }
 

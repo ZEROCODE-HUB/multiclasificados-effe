@@ -1,6 +1,8 @@
 // Sistema de créditos pre-pagados.
-// 1 crédito = 1 sol (S/). El saldo se descuenta al publicar un aviso.
+// Los créditos están desvinculados del sol: 1 sol = 10 créditos (CREDIT_MULTIPLIER).
+// El saldo se descuenta al publicar un aviso.
 import { supabase } from "@/lib/supabase";
+import { splitIgv } from "@/lib/pricing";
 
 export interface CreditPackage {
   id: string;
@@ -77,8 +79,6 @@ export async function getCreditPackages(): Promise<CreditPackage[]> {
 
 // ─── Compra de créditos (simula pago; sin gateway real aún) ───────────────
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
-
 export async function purchaseCredits(
   pkg: CreditPackage,
   invoiceData: PurchaseInvoiceData,
@@ -87,8 +87,7 @@ export async function purchaseCredits(
   if (!user) throw new Error("Debes iniciar sesión para comprar créditos.");
 
   const total = pkg.price_soles;
-  const subtotal = round2(total / 1.18);
-  const igv = round2(total - subtotal);
+  const { subtotal, igv } = splitIgv(total);
 
   // 1) Crear orden
   const { data: order, error: oErr } = await supabase

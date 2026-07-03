@@ -23,8 +23,8 @@ export function CreditsBalance({ variant = "chip" }: { variant?: "chip" | "row" 
 
   if (!session) return null;
 
-  const label = balance === null ? "…" : `${balance.toFixed(2)} cr`;
-  const avisos = balance === null ? null : avisosForBalance(balance);
+  const label = balance === null ? "…" : `${Math.round(balance)} cr`;
+  const avisos = balance === null ? null : avisosForBalance(Math.round(balance));
   const avisosLabel = avisos === null ? "" : `≈ ${avisos} aviso${avisos === 1 ? "" : "s"}`;
 
   return (

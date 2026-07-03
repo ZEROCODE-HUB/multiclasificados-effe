@@ -63,8 +63,10 @@ vi.mock("@/hooks/use-toast", () => ({ toast: (...a: unknown[]) => toast(...a) })
 
 import AdvertiserPublish from "@/pages/advertiser/AdvertiserPublish";
 
-// Costo esperado de 1 aviso × 7 días con la matriz por defecto (base 16.14).
-const COST = 16.14;
+// Costo de 1 aviso × 7 días con la matriz por defecto (base 16.14).
+// El DINERO va en soles; el usuario se cobra en CRÉDITOS = soles × 10 (redondeado).
+const COST_SOLES = 16.14;
+const COST_CREDITS = 161; // solesToCredits(16.14) = round(161.4)
 
 // Precarga el formulario vía el borrador que el componente restaura al montar.
 const seedDraft = () => {
@@ -96,20 +98,20 @@ beforeEach(() => {
 
 describe("AdvertiserPublish — secuencia del flujo de publicación con créditos", () => {
   it("CON CRÉDITOS: al pulsar Publicar publica directo y descuenta (sin cuadro de pagos)", async () => {
-    getCreditBalance.mockResolvedValue(100); // saldo suficiente
+    getCreditBalance.mockResolvedValue(1000); // saldo suficiente (créditos)
     seedDraft();
     render(<AdvertiserPublish />);
 
-    // El formulario se cargó (borrador restaurado) y el saldo se leyó (100.00 cr).
+    // El formulario se cargó (borrador restaurado) y el saldo se leyó (1000 cr).
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("100.00 cr");
+    await screen.findByText("1000 cr");
 
     uploadMainPhoto();
     fireEvent.click(screen.getByRole("button", { name: /publicar aviso/i }));
 
-    // Publica directo: crea el aviso y descuenta el costo.
+    // Publica directo: crea el aviso y descuenta el costo en créditos.
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
-    expect(spendCredits).toHaveBeenCalledWith(COST, "L1");
+    expect(spendCredits).toHaveBeenCalledWith(COST_CREDITS, "L1");
 
     // Muestra el éxito y NO abre el configurador de compra.
     await screen.findByText(/pago confirmado/i);
@@ -136,7 +138,7 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
   });
 
   it("CON PROMOCIÓN: aplica el descuento al costo al publicar (50% → 8.07)", async () => {
-    getCreditBalance.mockResolvedValue(100);
+    getCreditBalance.mockResolvedValue(1000);
     fetchActivePromotions.mockResolvedValue([
       { id: "p1", name: "Día de la Madre", discount_pct: 50, starts_at: "", ends_at: "", category_ids: ["inmuebles"], is_active: true },
     ]);
@@ -150,14 +152,14 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     fireEvent.click(screen.getByRole("button", { name: /publicar aviso/i }));
 
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
-    // 16.14 × (1 − 0.50) = 8.07
-    expect(spendCredits).toHaveBeenCalledWith(8.07, "L1");
+    // Dinero: 16.14 × (1 − 0.50) = 8.07 soles. Créditos: round(8.07 × 10) = 81.
+    expect(spendCredits).toHaveBeenCalledWith(81, "L1");
     expect(createAndPublishListing).toHaveBeenCalledWith(expect.objectContaining({ total: 8.07 }));
   });
 
   it("POST-COMPRA: tras comprar en el configurador, recién publica y descuenta", async () => {
     getCreditBalance.mockResolvedValue(0); // arranca sin saldo → abre el configurador
-    purchaseCredits.mockResolvedValue({ newBalance: 100, orderId: "o1", invoiceNumber: "B001-000100" });
+    purchaseCredits.mockResolvedValue({ newBalance: 1000, orderId: "o1", invoiceNumber: "B001-000100" });
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
@@ -174,7 +176,7 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     // Al acreditarse y cubrir el costo, publica automáticamente y descuenta.
     await waitFor(() => expect(purchaseCredits).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
-    expect(spendCredits).toHaveBeenCalledWith(COST, "L1");
+    expect(spendCredits).toHaveBeenCalledWith(COST_CREDITS, "L1");
     await screen.findByText(/pago confirmado/i);
   });
 });

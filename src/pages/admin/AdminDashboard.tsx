@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AdminLayout, AdminRole } from "@/components/AdminLayout";
+import { AdminRole } from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -72,7 +72,7 @@ const AdminDashboard = ({ role }: Props) => {
 
 
   return (
-    <AdminLayout role={role} title="Panel de control" breadcrumb={["Dashboard"]}>
+    <>
       {/* Greeting */}
       <div className="relative overflow-hidden rounded-2xl gradient-hero text-primary-foreground p-5 md:p-7">
         <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-secondary/30 blur-3xl" />
@@ -88,18 +88,6 @@ const AdminDashboard = ({ role }: Props) => {
             <ArrowUpRight size={18} /> Generar reporte
           </Button>
         </div>
-      </div>
-
-      {/* Category filter */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Filtrar por categoría:</span>
-        <Select value={catFilter} onValueChange={setCatFilter}>
-          <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas las categorías</SelectItem>
-            {allCats.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-          </SelectContent>
-        </Select>
       </div>
 
       {/* KPIs */}
@@ -168,10 +156,22 @@ const AdminDashboard = ({ role }: Props) => {
         </Card>
       </div>
 
-      {/* Detalle por aviso (vendido / no vendido) */}
+      {/* Detalle por aviso (vendido / no vendido) — con filtro por categoría */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base md:text-lg">Detalle por aviso</CardTitle>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <CardTitle className="text-base md:text-lg">Detalle por aviso</CardTitle>
+            <div className="flex items-center gap-2">
+              <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Categoría:</span>
+              <Select value={catFilter} onValueChange={setCatFilter}>
+                <SelectTrigger className="w-48 h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas las categorías</SelectItem>
+                  {allCats.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>
@@ -253,7 +253,7 @@ const AdminDashboard = ({ role }: Props) => {
           )}
         </CardContent>
       </Card>
-    </AdminLayout>
+    </>
   );
 };
 

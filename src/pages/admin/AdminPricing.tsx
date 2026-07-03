@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AdminLayout, AdminRole } from "@/components/AdminLayout";
+import { AdminRole } from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,7 @@ import {
   loadSettings,
   saveSettings,
   formatSoles,
+  CREDIT_MULTIPLIER,
 } from "@/lib/pricing";
 import {
   getCreditPackages, upsertCreditPackage, deleteCreditPackage, getAllCreditPackages,
@@ -272,7 +273,7 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
   const allCatsSelected = offerForm.category_ids.length === categories.length;
 
   return (
-    <AdminLayout role={role} title="Tarifas y Descuentos" breadcrumb={["Operación", "Tarifas y Descuentos"]}>
+    <>
       <Tabs defaultValue="descuentos">
         <TabsList className="w-full overflow-x-auto justify-start no-scrollbar">
           <TabsTrigger value="descuentos">Parámetros de descuento</TabsTrigger>
@@ -641,7 +642,7 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
                   <Wallet size={16} className="text-secondary" /> Paquetes de créditos
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  1 crédito = 1 sol (S/). Los usuarios compran créditos en paquetes y los gastan al publicar.
+                  1 sol = 10 créditos. Los usuarios compran créditos en paquetes y los gastan al publicar.
                 </CardDescription>
               </div>
               <Button size="sm" className="gap-2" onClick={openNewPkg}><Plus size={14} /> Nuevo paquete</Button>
@@ -712,7 +713,7 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Label>Créditos (1 cr = S/ 1)</Label>
+                    <Label>Créditos (1 sol = 10 cr)</Label>
                     <Input
                       type="number"
                       step="1"
@@ -756,18 +757,21 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
                     </label>
                   </div>
                 </div>
-                {(pkgForm.credits_amount ?? 0) > 0 && (pkgForm.price_soles ?? 0) > 0 && (
-                  <p className="text-xs text-muted-foreground border p-2 bg-muted/30">
-                    Precio por crédito: <span className="font-semibold text-foreground">
-                      {formatSoles((pkgForm.price_soles ?? 0) / (pkgForm.credits_amount ?? 1))}
-                    </span>
-                    {(pkgForm.price_soles ?? 0) < (pkgForm.credits_amount ?? 0) && (
-                      <span className="text-success ml-2">
-                        ({(((pkgForm.credits_amount ?? 0) - (pkgForm.price_soles ?? 0)) / (pkgForm.credits_amount ?? 1) * 100).toFixed(0)}% de descuento)
-                      </span>
-                    )}
-                  </p>
-                )}
+                {(pkgForm.credits_amount ?? 0) > 0 && (pkgForm.price_soles ?? 0) > 0 && (() => {
+                  const cr = pkgForm.credits_amount ?? 0;
+                  const soles = pkgForm.price_soles ?? 0;
+                  // Valor nominal en soles del paquete: créditos ÷ multiplicador (1 sol = 10 cr).
+                  const face = cr / CREDIT_MULTIPLIER;
+                  const disc = face > soles ? Math.round(((face - soles) / face) * 100) : 0;
+                  return (
+                    <p className="text-xs text-muted-foreground border p-2 bg-muted/30">
+                      Valor nominal: <span className="font-semibold text-foreground">{formatSoles(face)}</span>
+                      {disc > 0 && (
+                        <span className="text-success ml-2">({disc}% de descuento sobre el nominal)</span>
+                      )}
+                    </p>
+                  );
+                })()}
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setPkgDialog({ open: false, editing: null })}>Cancelar</Button>
@@ -779,7 +783,7 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
           </Dialog>
         </TabsContent>
       </Tabs>
-    </AdminLayout>
+    </>
   );
 };
 

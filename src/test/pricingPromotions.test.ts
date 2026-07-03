@@ -3,7 +3,10 @@ import { describe, it, expect, vi } from "vitest";
 // promotions.ts importa supabase; lo mockeamos (los helpers probados son puros).
 vi.mock("@/lib/supabase", () => ({ supabase: {} }));
 
-import { priceFor, type PricingSettings } from "@/lib/pricing";
+import {
+  priceFor, priceForDuration, solesToCredits, creditsForDuration, CREDIT_MULTIPLIER,
+  DEFAULT_SETTINGS, type PricingSettings,
+} from "@/lib/pricing";
 import { bestPromoForCategory, applyDiscount, type Promotion } from "@/lib/promotions";
 
 // Settings con descuento por cantidad DISTINTO por nivel (no uniforme):
@@ -48,5 +51,33 @@ describe("Req 2 — helpers de promoción", () => {
   it("aplica el descuento al costo (caso Día de la Madre: 100 → 50)", () => {
     expect(applyDiscount(100, 50)).toBe(50);
     expect(applyDiscount(16.14, 50)).toBe(8.07);
+  });
+});
+
+describe("Créditos — enteros y desvinculados del sol (×10)", () => {
+  it("el multiplicador separa el crédito del sol", () => {
+    expect(CREDIT_MULTIPLIER).toBe(10);
+    // 16.14 soles NO es 16.14 créditos: es 161.
+    expect(solesToCredits(16.14)).toBe(161);
+  });
+
+  it("siempre devuelve un ENTERO, aun con decimales feos y promociones", () => {
+    // Recorre toda la matriz del Excel + promociones de 10% a 90%.
+    for (let n = 1; n <= 10; n++) {
+      for (const dias of [7, 15, 30, 60, 90] as const) {
+        const soles = priceForDuration(n, dias, DEFAULT_SETTINGS);
+        expect(Number.isInteger(creditsForDuration(n, dias, DEFAULT_SETTINGS))).toBe(true);
+        for (let pct = 10; pct <= 90; pct += 10) {
+          const conPromo = solesToCredits(applyDiscount(soles, pct));
+          expect(Number.isInteger(conPromo)).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("no aparecen decimales tipo '16.14': el estándar 1×7 son 161 créditos", () => {
+    expect(creditsForDuration(1, 7, DEFAULT_SETTINGS)).toBe(161);
+    // Promo −50% sobre el estándar: 161 → 81 (round(8.07 × 10)).
+    expect(solesToCredits(applyDiscount(priceFor(1, 7, DEFAULT_SETTINGS), 50))).toBe(81);
   });
 });

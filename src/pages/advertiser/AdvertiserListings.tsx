@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ListingRow } from "@/components/ListingRow";
+import { LocationPicker } from "@/components/LocationPicker";
 import { PlusCircle, ClipboardList, Eye, MessageSquare, TrendingUp, Search, SlidersHorizontal, ImagePlus, Loader2 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
@@ -51,6 +52,8 @@ interface EditState {
   price: string;
   currency: string;
   location: string;
+  lat: number | null;
+  lng: number | null;
   category: string;
   condition: ListingCondition;
   imageUrl: string;
@@ -85,6 +88,8 @@ const AdvertiserListings = () => {
       price: String(l.price ?? ""),
       currency: l.currency || "PEN",
       location: l.location ?? "",
+      lat: l.lat ?? null,
+      lng: l.lng ?? null,
       category: l.category ?? "",
       condition: l.condition ?? "na",
       imageUrl: l.imageUrl ?? "",
@@ -128,6 +133,8 @@ const AdvertiserListings = () => {
         price: Number(edit.price) || 0,
         currency: edit.currency,
         location: edit.location.trim(),
+        lat: edit.lat,
+        lng: edit.lng,
         category_id: edit.category || undefined,
         condition: edit.condition,
       });
@@ -135,7 +142,7 @@ const AdvertiserListings = () => {
       setListings((prev) =>
         prev.map((l) =>
           l.id === edit.id
-            ? { ...l, title: edit.title.trim(), description: edit.description.trim(), price: Number(edit.price) || 0, currency: edit.currency, location: edit.location.trim(), category: edit.category || l.category, condition: edit.condition }
+            ? { ...l, title: edit.title.trim(), description: edit.description.trim(), price: Number(edit.price) || 0, currency: edit.currency, location: edit.location.trim(), lat: edit.lat, lng: edit.lng, category: edit.category || l.category, condition: edit.condition }
             : l
         )
       );
@@ -404,14 +411,13 @@ const AdvertiserListings = () => {
                   </Select>
                 </div>
               </div>
-              <div>
-                <Label>Ubicación</Label>
-                <Input
-                  value={edit.location}
-                  onChange={(e) => setEdit({ ...edit, location: e.target.value })}
-                  className="mt-1"
-                />
-              </div>
+              <LocationPicker
+                location={edit.location}
+                onLocationChange={(v) => setEdit({ ...edit, location: v })}
+                lat={edit.lat}
+                lng={edit.lng}
+                onCoordsChange={(la, ln) => setEdit({ ...edit, lat: la, lng: ln })}
+              />
             </div>
           )}
           <DialogFooter className="gap-2">

@@ -136,19 +136,19 @@ const AdvertiserDashboard = () => {
               <div className="border p-3 bg-muted/30">
                 <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Créditos disponibles</p>
                 <p className="text-xl font-extrabold mt-1 text-secondary">
-                  {creditBalance === null ? "…" : `${creditBalance.toFixed(2)} cr`}
+                  {creditBalance === null ? "…" : `${Math.round(creditBalance)} cr`}
                 </p>
               </div>
               <div className="border p-3 bg-muted/30">
                 <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Créditos usados</p>
                 <p className="text-xl font-extrabold mt-1 text-muted-foreground">
-                  {creditsSpent.toFixed(2)} cr
+                  {Math.round(creditsSpent)} cr
                 </p>
               </div>
               <div className="border p-3 bg-muted/30">
                 <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Total comprado</p>
                 <p className="text-xl font-extrabold mt-1 text-foreground">
-                  {creditBalance === null ? "…" : `${(creditBalance + creditsSpent).toFixed(2)} cr`}
+                  {creditBalance === null ? "…" : `${Math.round(creditBalance + creditsSpent)} cr`}
                 </p>
               </div>
             </div>
@@ -157,17 +157,17 @@ const AdvertiserDashboard = () => {
             <div className="border-2 border-secondary/30 bg-secondary/5 p-3">
               <p className="text-sm flex items-center gap-2 mb-3">
                 <ClipboardList size={16} className="text-secondary" />
-                Con tu saldo{creditBalance === null ? "" : ` (${creditBalance.toFixed(2)} cr)`} puedes publicar:
+                Con tu saldo{creditBalance === null ? "" : ` (${Math.round(creditBalance)} cr)`} puedes publicar:
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {avisosBreakdown(creditBalance ?? 0).map(({ dias, cost, count }) => (
+                {avisosBreakdown(Math.round(creditBalance ?? 0)).map(({ dias, cost, count }) => (
                   <div key={dias} className="border bg-background p-2.5 text-center">
                     <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{dias} días</p>
                     <p className="text-2xl font-extrabold text-secondary leading-tight mt-0.5">
                       {creditBalance === null ? "…" : count}
                     </p>
                     <p className="text-[10px] text-muted-foreground">
-                      aviso{count === 1 ? "" : "s"} · {formatSoles(cost)} c/u
+                      aviso{count === 1 ? "" : "s"} · {cost} cr c/u
                     </p>
                   </div>
                 ))}
