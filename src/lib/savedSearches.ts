@@ -23,6 +23,22 @@ export interface SavedSearch {
   last_notified_at: string | null;
 }
 
+// Mensaje que se muestra al intentar guardar una búsqueda con filtros repetidos.
+export const DUPLICATE_SEARCH_MSG = "El filtro ya existe: ya tienes una búsqueda guardada con estos mismos filtros.";
+
+// Clave canónica de los FILTROS de una búsqueda (q, categoría, precio).
+// El orden (`sort`) es una preferencia de visualización, no un filtro, así que
+// NO cuenta para detectar duplicados. Normaliza para comparar sin ambigüedad.
+export function filtersKey(c: SavedSearchCriteria): string {
+  const norm = {
+    q: (c.q ?? "").trim().toLowerCase(),
+    category: c.category ?? "",
+    priceMin: c.priceMin ?? null,
+    priceMax: c.priceMax ?? null,
+  };
+  return JSON.stringify(norm);
+}
+
 export async function fetchSavedSearches(): Promise<SavedSearch[]> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
@@ -52,6 +68,13 @@ export async function createSavedSearch(
   if (criteria.priceMin != null) clean.priceMin = criteria.priceMin;
   if (criteria.priceMax != null) clean.priceMax = criteria.priceMax;
   if (criteria.sort) clean.sort = criteria.sort;
+
+  // No permitir dos búsquedas guardadas con los MISMOS filtros.
+  const existing = await fetchSavedSearches();
+  const key = filtersKey(clean);
+  if (existing.some((s) => filtersKey(s.criteria) === key)) {
+    throw new Error(DUPLICATE_SEARCH_MSG);
+  }
 
   const { data, error } = await supabase
     .from("saved_searches")

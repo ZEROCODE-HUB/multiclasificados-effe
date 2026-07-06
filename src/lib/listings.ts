@@ -20,6 +20,8 @@ interface CardRow {
   currency: string;
   category_id: string;
   location: string | null;
+  lat: number | string | null;
+  lng: number | string | null;
   featured: boolean;
   views: number | null;
   published_at: string | null;
@@ -37,6 +39,8 @@ export function mapCard(r: CardRow): Listing {
     currency: r.currency || "PEN",
     category: r.category_id,
     location: r.location ?? "",
+    lat: r.lat != null ? Number(r.lat) : null,
+    lng: r.lng != null ? Number(r.lng) : null,
     imageUrl: r.image_url ?? FALLBACK_IMG,
     date: (r.published_at ?? r.created_at ?? new Date().toISOString()).slice(0, 10),
     featured: !!r.featured,
@@ -156,9 +160,12 @@ export async function searchListings(f: SearchFilters): Promise<Listing[]> {
 export type ListingStatus =
   | "draft" | "pending" | "active" | "paused" | "expired" | "rejected" | "sold";
 
+export type ListingCondition = "nuevo" | "usado" | "na";
+
 export interface MyListing extends Listing {
   status: ListingStatus;
   expiresAt: string | null;
+  condition: ListingCondition;
 }
 
 // Avisos del anunciante actual (todos sus estados). Usa la tabla `listings`
@@ -172,7 +179,7 @@ export async function fetchMyListings(): Promise<MyListing[]> {
     const { data, error } = await supabase
       .from("listings")
       .select(
-        "id, title, description, price, currency, category_id, location, featured, views, status, published_at, expires_at, created_at, listing_images(url, sort_order)"
+        "id, title, description, price, currency, category_id, condition, location, lat, lng, featured, views, status, published_at, expires_at, created_at, listing_images(url, sort_order)"
       )
       .eq("owner_id", user.id)
       .order("created_at", { ascending: false });
@@ -189,6 +196,8 @@ export async function fetchMyListings(): Promise<MyListing[]> {
         currency: r.currency || "PEN",
         category: r.category_id,
         location: r.location ?? "",
+        lat: r.lat != null ? Number(r.lat) : null,
+        lng: r.lng != null ? Number(r.lng) : null,
         imageUrl: imgs[0]?.url || FALLBACK_IMG,
         date: (r.published_at ?? r.created_at ?? new Date().toISOString()).slice(0, 10),
         featured: !!r.featured,
@@ -196,6 +205,7 @@ export async function fetchMyListings(): Promise<MyListing[]> {
         views: Number(r.views) || 0,
         status: r.status as ListingStatus,
         expiresAt: r.expires_at ?? null,
+        condition: (r.condition ?? "na") as ListingCondition,
       };
     });
   } catch {
@@ -210,12 +220,43 @@ export interface ListingPatch {
   price?: number;
   currency?: string;
   location?: string;
+  lat?: number | null;
+  lng?: number | null;
+  category_id?: string;
+  condition?: ListingCondition;
 }
 
 // Actualiza un aviso del usuario (RLS permite editar solo los propios).
 export async function updateListing(id: string, patch: ListingPatch): Promise<void> {
   const { error } = await supabase.from("listings").update(patch).eq("id", id);
   if (error) throw error;
+}
+
+// Reemplaza la imagen principal (sort_order 0) de un aviso propio: sube el
+// archivo al bucket listing-images (carpeta = uid/listingId, exigido por RLS),
+// borra la portada anterior y registra la nueva. Devuelve la URL pública.
+export async function replaceMainListingPhoto(listingId: string, file: File): Promise<string> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("No hay sesión activa.");
+  const sanitize = (n: string) => n.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-40);
+  const path = `${user.id}/${listingId}/0-${Date.now()}-${sanitize(file.name)}`;
+
+  const { error: upErr } = await supabase.storage
+    .from("listing-images")
+    .upload(path, file, { upsert: true, contentType: file.type || undefined });
+  if (upErr) throw upErr;
+
+  const { data: pub } = supabase.storage.from("listing-images").getPublicUrl(path);
+  const url = pub.publicUrl;
+
+  // Reemplaza la portada: quita la fila anterior con sort_order 0 y agrega la nueva.
+  await supabase.from("listing_images").delete().eq("listing_id", listingId).eq("sort_order", 0);
+  const { error: insErr } = await supabase
+    .from("listing_images")
+    .insert({ listing_id: listingId, storage_path: path, url, sort_order: 0 });
+  if (insErr) throw insErr;
+
+  return url;
 }
 
 // Cambia el estado (pausar/activar) de un aviso propio.

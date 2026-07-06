@@ -21,6 +21,7 @@ import { NotificationsBell } from "@/components/NotificationsBell";
 import { signOut } from "@/lib/auth";
 import { BrandMark } from "@/components/BrandMark";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
+import { CreditsBalance } from "@/components/CreditsBalance";
 
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -140,6 +141,8 @@ export function Navbar() {
               </Link>
             </>
           )}
+
+          <CreditsBalance />
 
           <DropdownMenu>
             <DropdownMenuTrigger className="flex items-center gap-2 ml-2 pl-1.5 pr-3 py-1.5 border border-border hover:border-secondary/50 hover:bg-muted/50 transition-all outline-none rounded-none">
@@ -264,6 +267,7 @@ export function Navbar() {
                 <p className="px-3 py-2 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground">
                   Mi cuenta
                 </p>
+                <CreditsBalance variant="row" />
                 {mobileOverflow.map((it) => (
                   <Link
                     key={it.label}

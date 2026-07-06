@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { AdminLayout } from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -23,7 +22,7 @@ const SuperAudit = () => {
     () =>
       logs.filter((l) =>
         q === "" ||
-        [l.actor, l.action, l.entity].some((f) => f.toLowerCase().includes(q.toLowerCase())),
+        [l.actor, l.action, l.entity].some((f) => (f ?? "").toLowerCase().includes(q.toLowerCase())),
       ),
     [logs, q],
   );
@@ -52,7 +51,7 @@ const SuperAudit = () => {
   };
 
   return (
-    <AdminLayout role="superadmin" title="Auditoría y registros" breadcrumb={["Plataforma", "Auditoría"]}>
+    <>
       <Card>
         <CardHeader className="space-y-3">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -152,7 +151,7 @@ const SuperAudit = () => {
           </div>
         </CardContent>
       </Card>
-    </AdminLayout>
+    </>
   );
 };
 

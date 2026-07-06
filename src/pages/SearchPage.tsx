@@ -5,11 +5,13 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ListingCard } from "@/components/ListingCard";
+import { ListingsMap } from "@/components/ListingsMap";
 import { Navbar } from "@/components/Navbar";
 import { categories, type Listing } from "@/data/mockData";
 import { searchListings, fetchListingsByOwner, type SortKey } from "@/lib/listings";
 import { useSession } from "@/hooks/useSession";
-import { createSavedSearch } from "@/lib/savedSearches";
+import { useFavorites } from "@/hooks/useFavorites";
+import { createSavedSearch, DUPLICATE_SEARCH_MSG } from "@/lib/savedSearches";
 import { toast } from "@/hooks/use-toast";
 import {
   Search,
@@ -27,17 +29,6 @@ import {
 type ViewMode = "list" | "map";
 type Layout = "grid" | "list";
 
-const PIN_POSITIONS = [
-  { x: "22%", y: "28%" },
-  { x: "48%", y: "42%" },
-  { x: "65%", y: "30%" },
-  { x: "35%", y: "60%" },
-  { x: "72%", y: "62%" },
-  { x: "55%", y: "75%" },
-  { x: "18%", y: "70%" },
-  { x: "82%", y: "45%" },
-];
-
 const formatPrice = (price: number, currency: string) =>
   currency === "USD" ? `US$ ${(price / 1000).toFixed(0)}K` : `S/ ${price.toLocaleString()}`;
 
@@ -45,6 +36,7 @@ export default function SearchPage() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const session = useSession();
+  const { isFavorite, toggle } = useFavorites();
   const initialView = (params.get("view") as ViewMode) || "list";
   const [view, setView] = useState<ViewMode>(initialView);
   const [layout, setLayout] = useState<Layout>("grid");
@@ -90,7 +82,34 @@ export default function SearchPage() {
       );
       toast({ title: "Búsqueda guardada", description: "La verás en 'Mis búsquedas' y recibirás alertas de nuevos avisos." });
     } catch (e) {
-      toast({ title: "No se pudo guardar", description: e instanceof Error ? e.message : "Intenta de nuevo.", variant: "destructive" });
+      const msg = e instanceof Error ? e.message : "Intenta de nuevo.";
+      if (msg === DUPLICATE_SEARCH_MSG) {
+        // Filtros repetidos: aviso claro, no un error.
+        toast({ title: "El filtro ya existe", description: "Ya tienes una búsqueda guardada con estos mismos filtros." });
+      } else {
+        toast({ title: "No se pudo guardar", description: msg, variant: "destructive" });
+      }
+    }
+  };
+
+  // Guardar/quitar de favoritos desde la lista del mapa (mismo patrón que ListingCard).
+  const handleFav = async (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!session?.supabase) {
+      toast({ title: "Inicia sesión", description: "Crea una cuenta para guardar favoritos." });
+      navigate("/auth?redirect=/buscar?view=map");
+      return;
+    }
+    try {
+      const res = await toggle(id);
+      if (res === null) {
+        toast({ title: "Disponible con avisos reales" });
+        return;
+      }
+      toast({ title: res ? "Guardado en favoritos" : "Quitado de favoritos" });
+    } catch {
+      toast({ title: "No se pudo actualizar el favorito", variant: "destructive" });
     }
   };
 
@@ -253,7 +272,7 @@ export default function SearchPage() {
   );
 
   return (
-    <div className={`${view === "map" ? "h-screen" : "min-h-screen"} flex flex-col bg-background`}>
+    <div className={`${view === "map" ? "min-h-screen lg:h-screen" : "min-h-screen"} flex flex-col bg-background`}>
       <Navbar />
 
       {/* Búsqueda en vivo (filtra mientras escribes) */}
@@ -359,82 +378,20 @@ export default function SearchPage() {
           </div>
         </div>
       ) : (
-        <div className="flex-1 flex flex-col lg:grid lg:grid-cols-[480px_1fr] min-h-0">
+        <div className="flex-1 flex flex-col lg:grid lg:grid-cols-[480px_1fr] lg:min-h-0">
           {/* Map - full width on top in mobile, right column on desktop */}
-          <div className="relative bg-muted overflow-hidden h-[55vh] lg:h-auto lg:order-2 shrink-0">
-            <img
-              src="https://images.unsplash.com/photo-1524661135-423995f22d0b?w=1600&h=1200&fit=crop"
-              alt="Mapa interactivo de avisos"
-              className="absolute inset-0 w-full h-full object-cover"
+          <div className="relative bg-muted overflow-hidden h-[45vh] lg:h-auto lg:order-2 shrink-0">
+            <ListingsMap
+              listings={listings}
+              active={active}
+              onActive={setActive}
+              hrefFor={(id) => (session?.supabase ? `/aviso/${id}` : `/auth?redirect=/aviso/${id}`)}
             />
-            <div className="absolute inset-0 bg-primary/10" />
-            <div
-              className="absolute inset-0 opacity-20 pointer-events-none"
-              style={{
-                backgroundImage:
-                  "linear-gradient(to right, hsl(var(--primary)/.3) 1px, transparent 1px), linear-gradient(to bottom, hsl(var(--primary)/.3) 1px, transparent 1px)",
-                backgroundSize: "60px 60px",
-              }}
-            />
-
-            {listings.map((l, i) => {
-              const pos = PIN_POSITIONS[i % PIN_POSITIONS.length];
-              const isActive = active === l.id;
-              return (
-                <Link
-                  key={l.id}
-                  to={session?.supabase ? `/aviso/${l.id}` : `/auth?redirect=/aviso/${l.id}`}
-                  onMouseEnter={() => setActive(l.id)}
-                  onClick={(e) => {
-                    if (window.innerWidth < 1024 && !isActive) {
-                      e.preventDefault();
-                      setActive(l.id);
-                    }
-                  }}
-                  className="absolute -translate-x-1/2 -translate-y-1/2 group"
-                  style={{ left: pos.x, top: pos.y, zIndex: isActive ? 30 : 10 }}
-                >
-                  <div
-                    className={`px-2.5 py-1 lg:px-3 lg:py-1.5 rounded-full text-[11px] lg:text-xs font-bold shadow-lg transition-all ${
-                      isActive
-                        ? "bg-primary text-primary-foreground scale-110 ring-4 ring-primary/20"
-                        : "bg-secondary text-secondary-foreground ring-2 lg:ring-4 ring-secondary/20 hover:scale-110"
-                    }`}
-                  >
-                    {formatPrice(l.price, l.currency)}
-                  </div>
-                  {isActive && (
-                    <div className="hidden lg:block absolute top-full left-1/2 -translate-x-1/2 mt-3 w-64 bg-card border border-border shadow-2xl overflow-hidden animate-fade-in">
-                      <div className="aspect-[4/3] bg-muted">
-                        <img src={l.imageUrl} alt={l.title} className="w-full h-full object-cover" />
-                      </div>
-                      <div className="p-3">
-                        <span className="text-[10px] uppercase tracking-wider font-bold text-secondary">
-                          {l.category}
-                        </span>
-                        <h4 className="text-sm font-semibold text-foreground line-clamp-1 mt-1">{l.title}</h4>
-                        {session?.supabase ? (
-                          <p className="text-base font-extrabold text-primary mt-1">
-                            {formatPrice(l.price, l.currency)}
-                          </p>
-                        ) : (
-                          <p className="text-xs text-secondary font-semibold mt-1">Ver detalle</p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </Link>
-              );
-            })}
-
-            <div className="absolute bottom-3 right-3 px-2 py-1 bg-card/90 backdrop-blur text-[10px] text-muted-foreground rounded">
-              Vista de mapa demo · Próximamente con datos reales
-            </div>
           </div>
 
-          {/* List - below map on mobile, left column on desktop */}
-          <div className="flex-1 lg:flex-none overflow-y-auto lg:border-r border-border bg-background lg:order-1 min-h-0">
-            <div className="px-4 lg:px-5 py-3 lg:py-4 border-b border-border sticky top-0 bg-background/95 backdrop-blur z-10">
+          {/* List - below map on mobile (la página hace scroll), columna izquierda con scroll propio en escritorio */}
+          <div className="lg:flex-1 lg:overflow-y-auto lg:border-r border-border bg-background lg:order-1 lg:min-h-0 pb-24 lg:pb-0">
+            <div className="px-4 lg:px-5 py-3 lg:py-4 border-b border-border lg:sticky lg:top-0 bg-background/95 backdrop-blur z-10">
               <p className="text-[10px] lg:text-xs uppercase tracking-[0.2em] font-bold text-secondary">Resultados</p>
               <h1 className="text-base lg:text-lg font-bold text-foreground mt-0.5 lg:mt-1">
                 {listings.length} avisos en el mapa
@@ -462,10 +419,14 @@ export default function SearchPage() {
                         {l.category}
                       </span>
                       <button
-                        onClick={(e) => e.preventDefault()}
-                        className="text-muted-foreground hover:text-secondary"
+                        onClick={(e) => handleFav(e, l.id)}
+                        className="text-muted-foreground hover:text-secondary transition-colors"
+                        aria-label={isFavorite(l.id) ? "Quitar de favoritos" : "Guardar en favoritos"}
                       >
-                        <Heart size={14} />
+                        <Heart
+                          size={14}
+                          className={isFavorite(l.id) ? "text-secondary fill-secondary" : ""}
+                        />
                       </button>
                     </div>
                     <h3 className="font-semibold text-sm text-foreground line-clamp-2 mt-1">{l.title}</h3>

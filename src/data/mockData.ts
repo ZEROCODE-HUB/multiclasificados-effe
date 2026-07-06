@@ -31,6 +31,8 @@ export interface Listing {
   featured: boolean;
   advertiser: string;
   views: number;
+  lat?: number | null;
+  lng?: number | null;
 }
 
 export const featuredListings: Listing[] = [

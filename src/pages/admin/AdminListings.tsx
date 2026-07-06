@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AdminLayout, AdminRole } from "@/components/AdminLayout";
+import { AdminRole } from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -15,8 +15,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Search, Eye, ChevronLeft, ChevronRight, MapPin, Calendar, Tag, User, Ban, RotateCcw, Flag } from "lucide-react";
 import { AdminListingStatus } from "@/data/adminMockData";
 import { toast } from "@/hooks/use-toast";
-import { disableListing, loadDisabled, loadReports, ReportEntry } from "@/lib/pricing";
-import { fetchAdminListings, setListingStatus, type AdminListingRow } from "@/lib/admin";
+import { disableListing, loadDisabled } from "@/lib/pricing";
+import { fetchAdminListings, setListingStatus, fetchReports, type AdminListingRow, type AdminReport } from "@/lib/admin";
+import { usePermissions } from "@/hooks/usePermissions";
 import { fetchListingImages } from "@/lib/listings";
 
 const statusColor: Record<AdminListingStatus, string> = {
@@ -24,6 +25,13 @@ const statusColor: Record<AdminListingStatus, string> = {
   Activo: "bg-success/15 text-success border-success/30",
   Rechazado: "bg-destructive/15 text-destructive border-destructive/30",
   Destacado: "bg-secondary/15 text-secondary border-secondary/30",
+};
+
+// Estado de una denuncia (tabla `reports`): etiqueta y color para la pestaña "Reportados".
+const REPORT_STATUS: Record<string, { label: string; cls: string }> = {
+  open: { label: "Pendiente", cls: "bg-warning/15 text-warning border-warning/30" },
+  reviewing: { label: "En revisión", cls: "bg-secondary/15 text-secondary border-secondary/30" },
+  resolved: { label: "Resuelto", cls: "bg-success/15 text-success border-success/30" },
 };
 
 // Forma que consume el diseño (igual que el mock original), derivada del dato real.
@@ -52,6 +60,9 @@ const mapRow = (r: AdminListingRow): Listing => ({
 const PAGE_SIZE = 5;
 
 const AdminListings = ({ role }: { role: AdminRole }) => {
+  // Matriz de permisos: habilitar/deshabilitar avisos requiere can_edit (solo aplica al rol admin).
+  const { can } = usePermissions(role === "admin");
+  const canModerate = can("Gestión de avisos", "edit");
   const [rows, setRows] = useState<Listing[]>([]);
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<string>("all");
@@ -59,15 +70,19 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
   const [detail, setDetail] = useState<Listing | null>(null);
   const [disableTarget, setDisableTarget] = useState<{ id: string; title: string; advertiser: string } | null>(null);
   const [disableReason, setDisableReason] = useState("");
-  const [reports, setReports] = useState<ReportEntry[]>(() => loadReports());
+  const [reports, setReports] = useState<AdminReport[]>([]);
   const [disabled, setDisabled] = useState<Record<string, string>>(() => loadDisabled());
   const [detailImg, setDetailImg] = useState<string | null>(null);
   const [imgLoading, setImgLoading] = useState(false);
 
   const load = () => fetchAdminListings().then(({ data }) => setRows(data.map(mapRow)));
+  // Avisos reportados REALES desde la BD (tabla `reports`), solo target_type "listing".
+  // Los reportes de usuarios se gestionan en "Denuncias / Moderación".
+  const loadReportedListings = () =>
+    fetchReports().then(({ data }) => setReports(data.filter((r) => r.target_type === "listing")));
   useEffect(() => {
     load();
-    setReports(loadReports());
+    loadReportedListings();
     setDisabled(loadDisabled());
   }, []);
 
@@ -86,7 +101,7 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
     () =>
       rows.filter((l) =>
         (filter === "all" || l.status === filter) &&
-        (q === "" || l.title.toLowerCase().includes(q.toLowerCase()) || l.id.toLowerCase().includes(q.toLowerCase())),
+        (q === "" || l.title.toLowerCase().includes(q.toLowerCase()) || l.advertiser.toLowerCase().includes(q.toLowerCase())),
       ),
     [rows, q, filter],
   );
@@ -136,7 +151,7 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
   };
 
   return (
-    <AdminLayout role={role} title="Gestión de avisos" breadcrumb={["Operación", "Avisos"]}>
+    <>
       <Tabs defaultValue="todos">
         <TabsList>
           <TabsTrigger value="todos">Todos los avisos</TabsTrigger>
@@ -155,7 +170,7 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
               <div className="flex flex-col md:flex-row gap-3">
                 <div className="relative flex-1">
                   <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                  <Input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Buscar por ID o título..." className="pl-9" />
+                  <Input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Buscar por nombre o anunciante..." className="pl-9" />
                 </div>
                 <Select value={filter} onValueChange={(v) => { setFilter(v); setPage(1); }}>
                   <SelectTrigger className="md:w-48"><SelectValue /></SelectTrigger>
@@ -175,8 +190,7 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>ID</TableHead>
-                      <TableHead>Título</TableHead>
+                      <TableHead>Nombre del aviso</TableHead>
                       <TableHead>Anunciante</TableHead>
                       <TableHead>Categoría</TableHead>
                       <TableHead>Precio</TableHead>
@@ -189,7 +203,6 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
                       const isDisabled = l.status === "Rechazado" || !!disabled[l.id];
                       return (
                         <TableRow key={l.id}>
-                          <TableCell className="font-mono text-xs">{l.id}</TableCell>
                           <TableCell className="font-medium">{l.title}</TableCell>
                           <TableCell className="text-muted-foreground">{l.advertiser}</TableCell>
                           <TableCell><Badge variant="outline">{l.category}</Badge></TableCell>
@@ -206,7 +219,7 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
                               <Button size="icon" variant="ghost" title="Ver detalle" onClick={() => setDetail(l)}>
                                 <Eye size={16} />
                               </Button>
-                              {isDisabled ? (
+                              {canModerate && (isDisabled ? (
                                 <Button
                                   size="icon"
                                   variant="ghost"
@@ -226,7 +239,7 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
                               >
                                 <Ban size={16} />
                               </Button>
-                              )}
+                              ))}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -244,7 +257,6 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
                     <div key={l.id} className="border p-4 bg-card listing-shadow">
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <div className="min-w-0">
-                          <p className="text-[10px] font-mono text-muted-foreground">{l.id}</p>
                           <p className="font-semibold text-foreground text-sm truncate">{l.title}</p>
                           <p className="text-xs text-muted-foreground">{l.advertiser}</p>
                         </div>
@@ -260,7 +272,7 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
                       </div>
                       <div className="grid grid-cols-2 gap-1.5">
                         <Button size="sm" variant="outline" onClick={() => setDetail(l)}><Eye size={14} /> Ver</Button>
-                        {isDisabled ? (
+                        {canModerate && (isDisabled ? (
                           <Button size="sm" variant="outline" className="text-success" onClick={() => enableListing(l)}>
                             <RotateCcw size={14} /> Habilitar
                           </Button>
@@ -269,7 +281,7 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
                             onClick={() => setDisableTarget({ id: l.id, title: l.title, advertiser: l.advertiser })}>
                             <Ban size={14} /> Deshabilitar
                           </Button>
-                        )}
+                        ))}
                       </div>
                     </div>
                   );
@@ -312,25 +324,29 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
               ) : (
                 <div className="space-y-3">
                   {reports.map((r) => {
-                    const isDisabled = !!disabled[r.listingId];
+                    const rowMatch = rows.find((x) => x.id === r.listing_id);
+                    const isDisabled = rowMatch?.status === "Rechazado" || !!disabled[r.listing_id ?? ""];
+                    const st = REPORT_STATUS[r.status] ?? { label: r.status, cls: "" };
                     return (
                       <div key={r.id} className="border p-4 bg-card">
                         <div className="flex items-start justify-between gap-3 flex-wrap">
                           <div className="min-w-0 flex-1">
-                            <p className="text-[10px] font-mono text-muted-foreground">{r.id} · Aviso {r.listingId}</p>
-                            <p className="font-semibold text-foreground text-sm">{r.listingTitle}</p>
-                            {r.category && <Badge variant="outline" className="mt-1">{r.category}</Badge>}
+                            <p className="font-semibold text-foreground text-sm">{r.listing_title ?? "Aviso"}</p>
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                              {r.category && <Badge variant="outline">{r.category}</Badge>}
+                              <Badge variant="outline" className={st.cls}>{st.label}</Badge>
+                            </div>
                             <p className="text-sm text-foreground mt-2"><span className="text-muted-foreground">Motivo:</span> {r.reason}</p>
                             <p className="text-xs text-muted-foreground mt-1">
-                              Reportado por <b>{r.reportedBy}</b> · {new Date(r.date).toLocaleString("es-PE")}
+                              Reportado por <b>{r.reporter ?? "Usuario"}</b> · {new Date(r.created_at).toLocaleString("es-PE")}
                             </p>
                           </div>
                           <div className="flex flex-col gap-2">
                             {isDisabled ? (
                               <Badge variant="outline" className="bg-destructive/15 text-destructive border-destructive/30">Deshabilitado</Badge>
-                            ) : (
+                            ) : canModerate && (
                               <Button size="sm" variant="outline" className="text-destructive gap-1"
-                                onClick={() => setDisableTarget({ id: r.listingId, title: r.listingTitle, advertiser: "Anunciante" })}>
+                                onClick={() => setDisableTarget({ id: r.listing_id ?? "", title: r.listing_title ?? "Aviso", advertiser: r.reported ?? "Anunciante" })}>
                                 <Ban size={14} /> Deshabilitar
                               </Button>
                             )}
@@ -354,7 +370,6 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
               <DialogHeader>
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-[10px] font-mono text-muted-foreground">{detail.id}</p>
                     <DialogTitle className="text-lg md:text-xl">{detail.title}</DialogTitle>
                     <DialogDescription>{detail.advertiser}</DialogDescription>
                   </div>
@@ -411,7 +426,7 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </AdminLayout>
+    </>
   );
 };
 
