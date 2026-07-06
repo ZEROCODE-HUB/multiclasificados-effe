@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, Check, Search, MessageSquare, ClipboardCheck, Star, AlertTriangle, ShieldAlert } from "lucide-react";
+import { Bell, Check, Search, MessageSquare, ClipboardCheck, Star, AlertTriangle, ShieldAlert, Megaphone } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,6 +15,7 @@ import {
 
 const iconFor = (type: string) => {
   switch (type) {
+    case "admin_message": return Megaphone;
     case "saved_search_match": return Search;
     case "new_message": return MessageSquare;
     case "application_status": return ClipboardCheck;

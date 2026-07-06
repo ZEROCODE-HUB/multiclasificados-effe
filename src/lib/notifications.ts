@@ -90,6 +90,8 @@ export function unsubscribeNotifications(channel: RealtimeChannel | null) {
 export function notificationText(n: AppNotification): string {
   const p = n.payload || {};
   switch (n.type) {
+    case "admin_message":
+      return (p.body as string) || n.title || "Mensaje del equipo";
     case "saved_search_match": {
       const count = Number(p.count ?? 0);
       const name = (p.name as string) || "tu búsqueda";

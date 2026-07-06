@@ -21,6 +21,8 @@ const ResetPassword = () => {
   // "checking": esperando a que el token del enlace cree la sesión de recuperación.
   // "ready": hay sesión, se puede cambiar la clave. "invalid": enlace inválido/expirado.
   const [phase, setPhase] = useState<"checking" | "ready" | "invalid">("checking");
+  // Motivo cuando el enlace es inválido: distingue "ya usado/expirado" del resto.
+  const [reason, setReason] = useState<"expired" | "generic">("generic");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [show, setShow] = useState(false);
@@ -29,7 +31,17 @@ const ResetPassword = () => {
   useEffect(() => {
     let settled = false;
     const markReady = () => { settled = true; setPhase("ready"); };
-    const markInvalid = () => { settled = true; setPhase("invalid"); };
+    const markInvalid = (why: "expired" | "generic" = "generic") => {
+      settled = true; setReason(why); setPhase("invalid");
+    };
+
+    // Si Supabase ya rechazó el enlace, vuelve con el error en el hash
+    // (#error=access_denied&error_code=otp_expired). Lo detectamos al instante
+    // en vez de esperar el timeout: pasa cuando un escáner de correo ya consumió
+    // el enlace de un solo uso antes de tu clic.
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const errCode = hash.get("error_code") || hash.get("error");
+    if (errCode) { markInvalid(errCode.includes("expired") || errCode === "access_denied" ? "expired" : "generic"); return; }
 
     // Caso principal (cross-browser): el enlace del correo trae ?token_hash=...&type=recovery.
     // verifyOtp canjea ese token por una sesión temporal SIN depender de PKCE, así
@@ -38,7 +50,7 @@ const ResetPassword = () => {
     const type = (params.get("type") ?? "recovery") as EmailOtpType;
     if (tokenHash) {
       supabase.auth.verifyOtp({ type, token_hash: tokenHash }).then(({ error }) => {
-        if (error) markInvalid(); else markReady();
+        if (error) markInvalid("expired"); else markReady();
       });
       return () => { settled = true; };
     }
@@ -96,7 +108,9 @@ const ResetPassword = () => {
           {phase === "invalid" && (
             <div className="space-y-4 text-center py-2">
               <p className="text-sm text-muted-foreground">
-                El enlace de recuperación no es válido o ya expiró. Solicita uno nuevo desde el inicio de sesión.
+                {reason === "expired"
+                  ? "Este enlace ya se usó o expiró. Los enlaces de recuperación son de un solo uso; algunos proveedores de correo (Gmail, antivirus) los abren automáticamente y los invalidan. Solicita uno nuevo y ábrelo apenas llegue."
+                  : "El enlace de recuperación no es válido. Solicita uno nuevo desde el inicio de sesión."}
               </p>
               <Button className="w-full" onClick={() => navigate("/auth", { replace: true })}>
                 Ir al inicio de sesión

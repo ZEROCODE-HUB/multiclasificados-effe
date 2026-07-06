@@ -10,7 +10,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Search, UserCheck, Ban, BadgeCheck, KeyRound, Trash2, ChevronLeft, ChevronRight, Coins } from "lucide-react";
+import { Search, UserCheck, Ban, BadgeCheck, KeyRound, Trash2, ChevronLeft, ChevronRight, Coins, Copy, Check, Loader2 } from "lucide-react";
 import { fetchAdminUsers, setUserStatus, verifyUser, deleteUser, setUserRole, grantCredits, type AdminUser } from "@/lib/admin";
 import { usePermissions } from "@/hooks/usePermissions";
 import { supabase } from "@/lib/supabase";
@@ -31,11 +31,6 @@ const isUuid = (v: string) =>
 
 const PAGE_SIZE = 5;
 
-// Base de URL para los enlaces del correo (reset de contraseña). Usa el dominio
-// público si está definido para que el correo apunte a producción aunque el staff
-// dispare la acción desde localhost; si no, cae al origen actual.
-const SITE_URL = import.meta.env.VITE_PUBLIC_SITE_URL || window.location.origin;
-
 const AdminUsers = ({ role }: { role: AdminRole }) => {
   // Matriz de permisos: solo restringe al rol admin (superadmin = acceso total).
   const { can } = usePermissions(role === "admin");
@@ -48,6 +43,11 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
   // Diálogo "Otorgar créditos": usuario objetivo + cantidad.
   const [grantFor, setGrantFor] = useState<AdminUser | null>(null);
   const [grantAmount, setGrantAmount] = useState("");
+  // Diálogo "Enlace de restablecimiento": usuario, enlace generado y estado.
+  const [resetFor, setResetFor] = useState<AdminUser | null>(null);
+  const [resetLink, setResetLink] = useState<string | null>(null);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const load = () => fetchAdminUsers().then(({ data }) => setUsers(data));
   useEffect(() => { load(); }, []);
@@ -76,21 +76,36 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
     }
   };
 
-  const resetPassword = (u: AdminUser) =>
-    run("Correo de restablecimiento enviado", u, async () => {
-      // Dispara el correo de recuperación de Supabase (no requiere Edge Function).
-      const { error } = await supabase.auth.resetPasswordForEmail(u.email, {
-        redirectTo: `${SITE_URL}/reset-password`,
-      });
-      if (error) throw error;
-      // Registro de auditoría (best-effort).
-      try {
-        await supabase.rpc("log_audit", {
-          p_action: "reset_password", p_entity_type: "user", p_entity_id: u.id,
-          p_metadata: { email: u.email },
-        });
-      } catch { /* no bloquea el flujo */ }
-    });
+  // Genera un enlace SEGURO de restablecimiento (token_hash) vía Edge Function y
+  // lo muestra para que el staff lo comparta con el usuario. No usa el correo de
+  // Supabase (cuyo token de un solo uso queman los escáneres de enlaces).
+  const openReset = (u: AdminUser) => {
+    setResetFor(u); setResetLink(null); setCopied(false);
+    if (!isUuid(u.id)) return; // usuario demo (sin backend): solo abre el diálogo
+    setResetLoading(true);
+    supabase.functions
+      .invoke("admin-reset-password", { body: { user_id: u.id } })
+      .then(({ data, error }) => {
+        const err = error?.message || (data as { error?: string })?.error;
+        if (err || !(data as { link?: string })?.link) throw new Error(err || "No se pudo generar el enlace");
+        setResetLink((data as { link: string }).link);
+      })
+      .catch((e) =>
+        toast({ title: "No se pudo generar el enlace", description: e?.message ?? "Error", variant: "destructive" }),
+      )
+      .finally(() => setResetLoading(false));
+  };
+
+  const copyReset = async () => {
+    if (!resetLink) return;
+    try {
+      await navigator.clipboard.writeText(resetLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast({ title: "No se pudo copiar", variant: "destructive" });
+    }
+  };
 
   const doGrant = () => {
     if (!grantFor) return;
@@ -202,23 +217,15 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
           </AlertDialogContent>
         </AlertDialog>
 
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button size={size} variant={Btn as any} className="text-primary" title="Restablecer contraseña"><KeyRound size={iconSize} /></Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>¿Restablecer la contraseña de {u.full_name}?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Se enviará un correo a {u.email} con un enlace para crear una nueva contraseña.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={() => resetPassword(u)}>Enviar enlace</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <Button
+          size={size}
+          variant={Btn as any}
+          className="text-primary"
+          title="Restablecer contraseña"
+          onClick={() => openReset(u)}
+        >
+          <KeyRound size={iconSize} />
+        </Button>
 
         <Button
           size={size}
@@ -424,6 +431,44 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
             <AlertDialogAction onClick={doGrant} disabled={!(Number(grantAmount) > 0)}>
               Otorgar {Number(grantAmount) > 0 ? `${Number(grantAmount)} cr` : ""}
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Enlace seguro de restablecimiento de contraseña */}
+      <AlertDialog open={!!resetFor} onOpenChange={(o) => { if (!o) { setResetFor(null); setResetLink(null); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <KeyRound size={18} className="text-primary" /> Enlace de restablecimiento
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Comparte este enlace con <b>{resetFor?.full_name}</b> ({resetFor?.email}) por WhatsApp o el medio que uses.
+              Al abrirlo podrá crear una nueva contraseña. Es de un solo uso y caduca en 1 hora.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="py-1">
+            {resetLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground py-4 justify-center">
+                <Loader2 size={16} className="animate-spin" /> Generando enlace seguro…
+              </div>
+            ) : resetLink ? (
+              <div className="flex items-center gap-2">
+                <Input readOnly value={resetLink} className="text-xs" onFocus={(e) => e.currentTarget.select()} />
+                <Button size="icon" variant="outline" onClick={copyReset} title="Copiar enlace">
+                  {copied ? <Check size={16} className="text-success" /> : <Copy size={16} />}
+                </Button>
+              </div>
+            ) : !resetFor || isUuid(resetFor.id) ? (
+              <p className="text-sm text-muted-foreground py-2">No se pudo generar el enlace. Cierra e inténtalo de nuevo.</p>
+            ) : (
+              <p className="text-sm text-muted-foreground py-2">Usuario de demostración: sin backend para generar el enlace.</p>
+            )}
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cerrar</AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
