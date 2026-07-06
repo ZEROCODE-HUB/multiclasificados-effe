@@ -17,6 +17,8 @@ const FCM_SA = JSON.parse(Deno.env.get("FCM_SERVICE_ACCOUNT") || "{}");
 function bodyFor(type: string, payload: Record<string, unknown>): string {
   const p = payload || {};
   switch (type) {
+    case "admin_message":
+      return p.body ? `${p.body}` : "Tienes un nuevo mensaje del equipo";
     case "new_message":
       return p.preview ? `${p.preview}` : "Tienes un nuevo mensaje";
     case "saved_search_match":

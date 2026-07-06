@@ -27,6 +27,9 @@ import {
   Copy,
   Send,
   ClipboardCheck,
+  FileText,
+  Upload,
+  X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
@@ -39,6 +42,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { useSession } from "@/hooks/useSession";
 import { useFavorites } from "@/hooks/useFavorites";
@@ -74,6 +78,29 @@ export default function ListingDetail() {
   const [myApp, setMyApp] = useState<ApplicationStatus | null>(null);
   const [applyOpen, setApplyOpen] = useState(false);
   const [applyMsg, setApplyMsg] = useState("");
+  const [applyCv, setApplyCv] = useState<File | null>(null);
+  const [applying, setApplying] = useState(false);
+
+  const closeApply = () => {
+    setApplyOpen(false);
+    setApplyMsg("");
+    setApplyCv(null);
+  };
+
+  const onPickCv = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
+    if (file && file.type !== "application/pdf") {
+      toast({ title: "Formato no válido", description: "El CV debe ser un PDF.", variant: "destructive" });
+      e.target.value = "";
+      return;
+    }
+    if (file && file.size > 5 * 1024 * 1024) {
+      toast({ title: "Archivo muy grande", description: "El PDF no puede superar los 5 MB.", variant: "destructive" });
+      e.target.value = "";
+      return;
+    }
+    setApplyCv(file);
+  };
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   // Guardia: el detalle del aviso solo es visible con sesión iniciada.
@@ -262,18 +289,24 @@ export default function ListingDetail() {
 
   const handleApply = async () => {
     if (!id) return;
+    if (!applyCv) {
+      toast({ title: "Adjunta tu CV", description: "Sube tu CV en formato PDF para postular.", variant: "destructive" });
+      return;
+    }
+    setApplying(true);
     try {
-      await applyToListing(id, applyMsg);
+      await applyToListing(id, applyMsg, applyCv);
       setMyApp("pending");
-      setApplyOpen(false);
-      setApplyMsg("");
-      toast({ title: "Postulación enviada", description: "El anunciante revisará tu postulación." });
+      closeApply();
+      toast({ title: "Postulación enviada", description: "El anunciante recibió tu CV y revisará tu postulación." });
     } catch (e) {
       toast({
         title: "No se pudo postular",
         description: e instanceof Error ? e.message : "Intenta nuevamente.",
         variant: "destructive",
       });
+    } finally {
+      setApplying(false);
     }
   };
 
@@ -723,7 +756,7 @@ export default function ListingDetail() {
       </Dialog>
 
       {/* Postulación dialog */}
-      <Dialog open={applyOpen} onOpenChange={setApplyOpen}>
+      <Dialog open={applyOpen} onOpenChange={(o) => (o ? setApplyOpen(true) : closeApply())}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Postular a este aviso</DialogTitle>
@@ -731,20 +764,53 @@ export default function ListingDetail() {
               Tu postulación se enviará a {listing.advertiser || "el anunciante"}.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            <Label htmlFor="applymsg">Mensaje (opcional)</Label>
-            <Textarea
-              id="applymsg"
-              rows={4}
-              value={applyMsg}
-              onChange={(e) => setApplyMsg(e.target.value)}
-              placeholder="Preséntate o cuenta por qué te interesa este aviso…"
-            />
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>CV en PDF <span className="text-destructive">*</span></Label>
+              {applyCv ? (
+                <div className="flex items-center gap-2 rounded-md border border-secondary/40 bg-secondary/5 px-3 py-2 text-sm">
+                  <FileText size={16} className="text-secondary shrink-0" />
+                  <span className="truncate flex-1">{applyCv.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => setApplyCv(null)}
+                    className="text-muted-foreground hover:text-destructive shrink-0"
+                    aria-label="Quitar archivo"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+              ) : (
+                <label
+                  htmlFor="applycv"
+                  className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-border px-3 py-4 text-sm text-muted-foreground hover:border-secondary hover:text-secondary transition-colors"
+                >
+                  <Upload size={16} /> Selecciona tu CV (PDF, máx. 5 MB)
+                </label>
+              )}
+              <Input
+                id="applycv"
+                type="file"
+                accept="application/pdf"
+                className="hidden"
+                onChange={onPickCv}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="applymsg">Mensaje (opcional)</Label>
+              <Textarea
+                id="applymsg"
+                rows={4}
+                value={applyMsg}
+                onChange={(e) => setApplyMsg(e.target.value)}
+                placeholder="Preséntate o cuenta por qué te interesa este aviso…"
+              />
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setApplyOpen(false)}>Cancelar</Button>
-            <Button onClick={handleApply} className="gap-2">
-              <ClipboardCheck size={14} /> Enviar postulación
+            <Button variant="ghost" onClick={closeApply} disabled={applying}>Cancelar</Button>
+            <Button onClick={handleApply} className="gap-2" disabled={applying || !applyCv}>
+              <ClipboardCheck size={14} /> {applying ? "Enviando…" : "Enviar postulación"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -630,3 +630,51 @@ export async function setSetting(key: string, value: any, label?: string) {
   const { error } = await supabase.rpc("set_setting", { p_key: key, p_value: value, p_label: label || null });
   if (error) throw error;
 }
+
+// ------------------------------------------------------------------ Comunicaciones
+// Centro de mensajes del panel: envíos REALES (in-app + push, y email opcional)
+// vía las RPCs security-definer de la migración 0039_admin_communications.
+
+// Nº real de destinatarios de una audiencia ("all" | "anunciante" | "buscador").
+export async function fetchAudienceCount(audience: string): Promise<number> {
+  const { data, error } = await supabase.rpc("admin_audience_count", { p_audience: audience });
+  if (error) throw error;
+  return Number(data) || 0;
+}
+
+// Envío individual. target = email, nombre o uuid. Devuelve el destinatario
+// resuelto, o null si no se encontró a nadie con ese dato.
+export async function sendIndividualMessage(
+  target: string, title: string, body: string, email: boolean,
+): Promise<{ sent: number; recipient: string | null }> {
+  const { data, error } = await supabase.rpc("admin_send_message", {
+    p_target: target, p_title: title, p_body: body, p_email: email,
+  });
+  if (error) throw error;
+  return (data as { sent: number; recipient: string | null }) ?? { sent: 0, recipient: null };
+}
+
+// Envío masivo a una audiencia real. Devuelve el nº de destinatarios alcanzados.
+export async function broadcastMessage(
+  audience: string, title: string, body: string, email: boolean, copyStaff: boolean,
+): Promise<number> {
+  const { data, error } = await supabase.rpc("admin_broadcast", {
+    p_audience: audience, p_title: title, p_body: body, p_email: email, p_copy_staff: copyStaff,
+  });
+  if (error) throw error;
+  return Number(data) || 0;
+}
+
+// Estadísticas reales del Centro de mensajes (tarjeta "Resumen de envíos").
+export interface CommRecent { action: string; title: string | null; recipients: number; created_at: string }
+export interface CommStats { today: number; total: number; recent: CommRecent[] }
+
+export async function fetchCommStats(): Promise<CommStats> {
+  try {
+    const { data, error } = await supabase.rpc("admin_comm_stats");
+    if (error) throw error;
+    const d = (data as CommStats) ?? null;
+    if (d) return { today: d.today ?? 0, total: d.total ?? 0, recent: d.recent ?? [] };
+  } catch { /* fallback */ }
+  return { today: 0, total: 0, recent: [] };
+}
