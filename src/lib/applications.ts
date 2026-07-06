@@ -1,16 +1,60 @@
-// REQ-06: postulaciones a avisos (estados: Pendiente, En Revisión, Aceptada, Rechazada).
+// REQ-06: postulaciones a empleos.
+// Flujo: el postulante sube su CV en PDF al postular; el dueño del aviso lo
+// recibe en su panel y actualiza el estado de seguimiento del candidato
+// (Recibido → En revisión → En entrevista → Aceptada / Rechazada).
 import { supabase } from "@/lib/supabase";
 
-export type ApplicationStatus = "pending" | "reviewed" | "accepted" | "rejected";
+export type ApplicationStatus =
+  | "pending"
+  | "reviewed"
+  | "interview"
+  | "accepted"
+  | "rejected";
 
+// Etiquetas visibles del estado de la postulación (español).
 export const STATUS_LABEL: Record<ApplicationStatus, string> = {
-  pending: "Pendiente",
+  pending: "Recibido",
   reviewed: "En revisión",
+  interview: "En entrevista",
   accepted: "Aceptada",
   rejected: "Rechazada",
 };
 
-export async function applyToListing(listingId: string, message: string): Promise<void> {
+// Orden lógico del seguimiento (para pintar el flujo de izquierda a derecha).
+export const STATUS_FLOW: ApplicationStatus[] = [
+  "pending",
+  "reviewed",
+  "interview",
+  "accepted",
+  "rejected",
+];
+
+const CV_BUCKET = "cvs";
+const MAX_CV_BYTES = 5 * 1024 * 1024; // 5 MB (el bucket también lo limita)
+
+// Sube el CV (PDF) del postulante al bucket privado y devuelve la ruta guardada
+// (que queda en job_applications.cv_url y sirve para generar el enlace firmado).
+async function uploadCv(userId: string, listingId: string, file: File): Promise<string> {
+  if (file.type !== "application/pdf") {
+    throw new Error("El CV debe estar en formato PDF.");
+  }
+  if (file.size > MAX_CV_BYTES) {
+    throw new Error("El PDF no puede superar los 5 MB.");
+  }
+  const path = `${userId}/${listingId}-${Date.now()}.pdf`;
+  const { error } = await supabase.storage
+    .from(CV_BUCKET)
+    .upload(path, file, { contentType: "application/pdf", upsert: false });
+  if (error) throw new Error("No se pudo subir el PDF. Intenta nuevamente.");
+  return path;
+}
+
+// Postula a un aviso de empleo. El CV en PDF es obligatorio.
+export async function applyToListing(
+  listingId: string,
+  message: string,
+  cvFile: File
+): Promise<void> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -24,12 +68,23 @@ export async function applyToListing(listingId: string, message: string): Promis
   if (owner?.owner_id === user.id) {
     throw new Error("No puedes postular a tu propio aviso.");
   }
+
+  const cvUrl = await uploadCv(user.id, listingId, cvFile);
+
   const { error } = await supabase.from("job_applications").insert({
     listing_id: listingId,
     applicant_id: user.id,
     message: message.trim() || null,
+    cv_url: cvUrl,
   });
-  if (error) throw error;
+  if (error) {
+    // Si el registro falla (p. ej. ya postulaste antes), no dejar el PDF huérfano.
+    await supabase.storage.from(CV_BUCKET).remove([cvUrl]);
+    if ((error as { code?: string }).code === "23505") {
+      throw new Error("Ya postulaste a este aviso.");
+    }
+    throw error;
+  }
 }
 
 // Estado de la postulación del usuario actual a un aviso (o null si no postuló).
@@ -52,6 +107,7 @@ export interface OwnerApplication {
   listing_id: string;
   applicant_id: string;
   message: string | null;
+  cv_url: string | null;
   status: ApplicationStatus;
   created_at: string;
   listing_title: string;
@@ -63,7 +119,7 @@ export async function fetchApplicationsForOwner(): Promise<OwnerApplication[]> {
   try {
     const { data, error } = await supabase
       .from("job_applications")
-      .select("id, listing_id, applicant_id, message, status, created_at, listings(title)")
+      .select("id, listing_id, applicant_id, message, cv_url, status, created_at, listings(title)")
       .order("created_at", { ascending: false });
     if (error) throw error;
     const rows = data ?? [];
@@ -84,6 +140,7 @@ export async function fetchApplicationsForOwner(): Promise<OwnerApplication[]> {
       listing_id: r.listing_id,
       applicant_id: r.applicant_id,
       message: r.message,
+      cv_url: r.cv_url,
       status: r.status,
       created_at: r.created_at,
       listing_title: r.listings?.title ?? "Aviso",
@@ -92,6 +149,16 @@ export async function fetchApplicationsForOwner(): Promise<OwnerApplication[]> {
   } catch {
     return [];
   }
+}
+
+// Genera un enlace firmado (temporal) para descargar/ver el CV del postulante.
+// Requiere que el usuario sea el dueño del aviso (o el propio postulante/staff).
+export async function getCvSignedUrl(cvUrl: string): Promise<string | null> {
+  const { data, error } = await supabase.storage
+    .from(CV_BUCKET)
+    .createSignedUrl(cvUrl, 300); // 5 minutos
+  if (error) return null;
+  return data?.signedUrl ?? null;
 }
 
 export async function updateApplicationStatus(id: string, status: ApplicationStatus): Promise<void> {
