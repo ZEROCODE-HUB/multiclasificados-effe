@@ -2,6 +2,7 @@ import { Link, useLocation, Outlet, Navigate } from "react-router-dom";
 import { useState, Suspense } from "react";
 import { NavLink } from "@/components/NavLink";
 import { usePermissions, type Can } from "@/hooks/usePermissions";
+import { useSession } from "@/hooks/useSession";
 import {
   LayoutDashboard,
   ClipboardList,
@@ -93,6 +94,13 @@ export function AdminLayout({ children, role, title, breadcrumb, can }: Props) {
   const isSuper = role === "superadmin";
   const groups = Array.from(new Set(menu.map((m) => m.group ?? "")));
 
+  // Identidad real del usuario logueado (nombre/correo/iniciales), con
+  // respaldo genérico si fuera una sesión demo sin correo.
+  const session = useSession();
+  const displayName = session?.name || (isSuper ? "Super Admin" : "Administrador");
+  const displayEmail = session?.email || (isSuper ? "Super administrador" : "Administrador");
+  const displayInitials = session?.initials || (isSuper ? "SA" : "AD");
+
   return (
     <div className="h-screen flex w-full bg-muted/30 overflow-hidden">
       {/* Sidebar desktop — columna con fondo a TODA la altura (evita franja clara
@@ -147,11 +155,11 @@ export function AdminLayout({ children, role, title, breadcrumb, can }: Props) {
               "w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold",
               isSuper ? "bg-gradient-to-br from-secondary to-primary text-white" : "bg-secondary text-secondary-foreground"
             )}>
-              {isSuper ? "SA" : "AD"}
+              {displayInitials}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{isSuper ? "Super Admin" : "Admin Demo"}</p>
-              <p className="text-[10px] text-sidebar-foreground/50 truncate">{isSuper ? "superadmin@effe.pe" : "admin@effe.pe"}</p>
+              <p className="text-sm font-medium truncate">{displayName}</p>
+              <p className="text-[10px] text-sidebar-foreground/50 truncate">{displayEmail}</p>
             </div>
           </div>
           <Button
@@ -193,12 +201,12 @@ export function AdminLayout({ children, role, title, breadcrumb, can }: Props) {
               <Bell size={18} />
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-secondary rounded-full" />
             </button>
-            <span className="hidden md:inline text-sm text-muted-foreground">{isSuper ? "Super Admin" : "Admin Demo"}</span>
+            <span className="hidden md:inline text-sm text-muted-foreground truncate max-w-[220px]" title={displayEmail}>{displayEmail}</span>
             <div className={cn(
               "w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shadow-sm",
               isSuper ? "bg-gradient-to-br from-secondary to-primary text-white" : "bg-secondary text-secondary-foreground"
             )}>
-              {isSuper ? "SA" : "AD"}
+              {displayInitials}
             </div>
             <AdminHamburger role={role} menu={menu} />
           </div>
