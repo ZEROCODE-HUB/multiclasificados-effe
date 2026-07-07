@@ -494,7 +494,12 @@ export default function ListingDetail() {
           <section>
             <h2 className="text-xs uppercase tracking-[0.2em] font-bold text-secondary mb-3">Ubicación</h2>
             <h3 className="text-2xl font-bold text-foreground mb-6">{listing.location}</h3>
-            <div className="relative h-72 md:h-96 bg-muted overflow-hidden border border-border">
+            {/* isolate + translateZ(0): fuerzan a este contenedor a ser su propia
+                capa de composición aislada, para que el recorte overflow-hidden
+                "atrape" al pin de precio y a los controles de zoom (overlays
+                absolutos sobre el iframe) y no se escapen al hacer scroll en
+                WebView/GPU (se veían pegados arriba en móvil y web). */}
+            <div className="relative h-72 md:h-96 bg-muted overflow-hidden border border-border isolate [transform:translateZ(0)]">
               {typeof listing.lat === "number" && typeof listing.lng === "number" ? (
                 <ListingLocationMap lat={listing.lat} lng={listing.lng} price={listing.price} currency={listing.currency} />
               ) : (
