@@ -1,70 +1,62 @@
-# Envío de correos del Centro de mensajes (Edge Function `send-email`)
+# Correo del Centro de mensajes — qué falta y por qué
 
-La pantalla **Comunicaciones** (`/dashboard/{admin,superadmin}/comunicaciones`) ya
-envía notificaciones **in-app + push** reales. Si marcas la casilla *"Enviar también
-por correo electrónico"*, además se inserta una fila `channel='email'` en
-`notifications`, y el trigger `notifications_email` llama a la Edge Function
-`send-email`, que manda el correo vía **[Resend](https://resend.com)**.
+## Estado: TODO listo del lado técnico ✅
 
-Para que el email funcione en producción sigue estos pasos.
+| Pieza | Estado |
+|---|---|
+| Función `send-email` desplegada | ✅ hecho |
+| Trigger `notifications_email` (BD → función) | ✅ hecho |
+| `RESEND_API_KEY` (proveedor de correo) | ✅ ya existía |
+| Pipeline completo probado (entrega real confirmada) | ✅ hecho |
+| **Dominio de envío verificado** | ❌ **falta — es lo único** |
 
----
-
-## Paso 0 — Aplicar la migración de BD
-
-```bash
-supabase link --project-ref prhbgniwymaaevnisyov   # si aún no está enlazado
-supabase db push                                   # aplica 0039_admin_communications.sql
-```
-
-Esto crea las RPCs `admin_send_message`, `admin_broadcast`, `admin_audience_count`
-y el trigger `notifications_email`. **Los envíos in-app y push ya funcionan solo con
-este paso** (no necesitan Resend).
-
-## Paso 1 — Crear cuenta y API key en Resend (tú)
-
-1. Entra a https://resend.com y crea una cuenta.
-2. **API Keys → Create API Key** → copia la clave (`re_...`).
-3. **Domains → Add Domain**: agrega y verifica tu dominio (registros DNS que te da
-   Resend). Sin dominio verificado solo puedes enviar desde `onboarding@resend.dev`
-   y a tu propio correo (modo pruebas).
-
-## Paso 2 — Desplegar la función y cargar los secretos (tú)
-
-```bash
-# Subir la función
-supabase functions deploy send-email --no-verify-jwt
-
-# Secretos (SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY ya los provee Supabase)
-supabase secrets set RESEND_API_KEY="re_tu_api_key"
-supabase secrets set EMAIL_FROM="eFFe Clasificados <no-reply@tudominio.com>"
-```
-
-> `--no-verify-jwt` porque la función la invoca el trigger de la BD (pg_net), no un
-> usuario con sesión. La función igualmente ignora cualquier fila que no sea
-> `channel='email'`.
-
-## Paso 3 — (una vez) habilitar pg_net para el trigger
-
-El trigger usa `pg_net` para el POST HTTP. La migración ejecuta
-`create extension if not exists pg_net` (ya venía de `0026_push_trigger.sql`), así
-que normalmente no hay que hacer nada extra.
+El sistema YA envía correos. Ahora mismo solo llegan a `oscarmijael7w7@gmail.com`
+(el dueño de la cuenta Resend), porque Resend está en **modo prueba** sin dominio
+verificado. En cuanto se verifique un dominio, el correo llega a **cualquier usuario**.
 
 ---
 
-## Cómo verificar
+## Lo único que necesitas
 
-1. En el panel, envía un mensaje individual a tu propio correo con la casilla de
-   email marcada.
-2. Revisa **Resend → Logs** para ver el correo entregado.
-3. Si no llega: revisa `supabase functions logs send-email`. Errores típicos:
-   - `falta RESEND_API_KEY` → no cargaste el secreto.
-   - `422 domain is not verified` → verifica el dominio o usa `onboarding@resend.dev`.
+**Verificar un dominio de envío.** Elige UNA de estas dos formas gratuitas:
 
-## Notas
+### Opción A — Dominio propio en Resend (recomendada)
+Requiere: un dominio que controles (p. ej. `coleffe.com`) + acceso a su DNS.
+1. https://resend.com/domains → **Add Domain** → tu dominio.
+2. Resend te da **3 registros DNS** (SPF, DKIM, return-path). Pégalos en tu DNS.
+3. Botón **Verify** (tarda de minutos a horas).
+4. Avísame → configuro `EMAIL_FROM="eFFe Clasificados <no-reply@tudominio>"`.
 
-- Sin `RESEND_API_KEY`, la función no falla el envío: registra un aviso y no manda
-  correo (los envíos in-app + push siguen funcionando).
-- El remitente `EMAIL_FROM` debe pertenecer a un dominio verificado en Resend.
-- Cambiar de proveedor (SMTP, SendGrid, etc.) solo requiere reescribir el `fetch`
-  de `supabase/functions/send-email/index.ts`; el resto (trigger, RPCs, UI) no cambia.
+### Opción B — Gmail SMTP (sin dominio, $0)
+Requiere: una cuenta `@gmail.com` con verificación en 2 pasos.
+1. Google → Seguridad → **Contraseñas de aplicación** → genera una.
+2. Me la pasas → cambio `send-email` para enviar por SMTP de Gmail.
+- Límite ~500 correos/día y más riesgo de spam en envíos masivos grandes.
+
+---
+
+## Por qué NO se puede hacer "solo con Supabase"
+
+Supabase **no es un proveedor de correo**. Lo único de email que trae es el mailer
+de **autenticación** (confirmación de registro, reset de contraseña): solo sirve para
+esos correos, está limitado a ~2–4 por hora, y el propio Supabase dice que es "solo
+para pruebas" — y para producción te pide conectar un SMTP externo igual.
+
+Para enviar un correo a un usuario **siempre** hace falta un servicio de correo
+(Resend, Gmail, SendGrid, SES…). Esto es así en cualquier plataforma, no solo
+Supabase: los servidores de correo **rechazan** (o mandan a spam) a quien envía en
+nombre de un dominio que no ha demostrado controlar. La verificación del dominio
+(los registros DNS) es justamente esa prueba. Sin ella, ningún proveedor entrega a
+terceros — es el mecanismo anti-spam de todo el correo de internet.
+
+**Costo:** Resend es gratis (3.000 correos/mes). Verificar el dominio es gratis. Lo
+único que a veces cuesta es comprar un dominio (~$12/año), y es $0 si ya tienes uno.
+
+---
+
+## Alternativa sin correo (0 configuración)
+
+Las notificaciones **in-app** (campana dentro de la app) y **push** (al celular en el
+APK) **YA funcionan solo con Supabase**, sin proveedor, sin dominio, sin costo. Si no
+quieres lidiar con el correo, se puede quitar la casilla de email del Centro de
+mensajes y quedarte con in-app + push, que le llegan al usuario igual.
