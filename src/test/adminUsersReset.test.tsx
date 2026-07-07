@@ -79,6 +79,21 @@ describe("AdminUsers — enlace seguro de restablecimiento", () => {
     );
   });
 
+  it("cuando el correo se envía (emailed=true) muestra la confirmación, sin enlace", async () => {
+    invoke.mockResolvedValue({
+      data: { ok: true, email: "ana@correo.com", emailed: true, link: null },
+      error: null,
+    });
+    render(<AdminUsers role="superadmin" />);
+    await screen.findAllByText("Ana García");
+    fireEvent.click(screen.getAllByTitle("Restablecer contraseña")[0]);
+    await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: "Correo enviado" })));
+    // Muestra la confirmación de envío.
+    expect((await screen.findAllByText(/Correo de recuperación enviado a/)).length).toBeGreaterThan(0);
+    // No se muestra ningún enlace (el correo es la vía de entrega).
+    expect(screen.queryByDisplayValue(/token_hash=abc123/)).toBeNull();
+  });
+
   it("muestra error si la Edge Function falla", async () => {
     invoke.mockResolvedValue({ data: null, error: { message: "No autorizado" } });
     render(<AdminUsers role="superadmin" />);
