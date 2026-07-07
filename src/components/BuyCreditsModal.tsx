@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FocusEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -13,6 +13,7 @@ import {
   type DurationDays, type ExtrasSelection, type PricingSettings, type ExtraPrices,
 } from "@/lib/pricing";
 import { fetchPricingSettings } from "@/lib/pricingRemote";
+import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 
 interface Props {
   open: boolean;
@@ -48,6 +49,9 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
   const [receiptType, setReceiptType] = useState<"boleta" | "factura">("boleta");
 
   const deficit = Math.max(0, creditCost - currentBalance);
+
+  // En el APK, reserva el alto del teclado y centra el campo enfocado.
+  const { kbPad, scrollFocusedIntoView } = useKeyboardInset();
 
   // Al abrir: recarga la matriz de precios vigente desde la base de datos.
   useEffect(() => {
@@ -104,17 +108,12 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
   const balanceAfter = currentBalance + creditsToBuy;
   const coversAd = balanceAfter >= creditCost;
 
-  // En móvil, al enfocar DNI/correo el teclado tapa el campo (el modal no
-  // alcanzaba a mostrarlos). Tras un instante —para que el teclado ya esté
-  // abierto y la vista redimensionada— desplazamos el campo al centro visible.
-  const scrollIntoViewOnFocus = (e: FocusEvent<HTMLInputElement>) => {
-    const el = e.currentTarget;
-    setTimeout(() => el.scrollIntoView({ block: "center", behavior: "smooth" }), 300);
-  };
-
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        className="sm:max-w-lg max-h-[90vh] overflow-y-auto"
+        style={kbPad ? { paddingBottom: kbPad + 24 } : undefined}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Wallet size={18} className="text-secondary" /> Comprar créditos
@@ -241,14 +240,14 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
           </div>
           <div>
             <Label className="text-xs">{personType === "natural" ? "DNI (8 dígitos)" : "RUC (11 dígitos)"}</Label>
-            <Input value={docNumber} onFocus={scrollIntoViewOnFocus}
+            <Input value={docNumber} onFocus={scrollFocusedIntoView}
               onChange={(e) => setDocNumber(e.target.value.replace(/\D/g, ""))}
               maxLength={personType === "natural" ? 8 : 11}
               placeholder={personType === "natural" ? "12345678" : "20123456789"} className="mt-1" />
           </div>
           <div>
             <Label className="text-xs">Correo para el comprobante</Label>
-            <Input type="email" value={email} onFocus={scrollIntoViewOnFocus}
+            <Input type="email" value={email} onFocus={scrollFocusedIntoView}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="tu@correo.com" className="mt-1" />
           </div>

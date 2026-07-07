@@ -25,6 +25,8 @@ import {
   Building2,
   Users,
   Copy,
+  MessageCircle,
+  Link2,
   Send,
   ClipboardCheck,
   FileText,
@@ -46,6 +48,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { useSession } from "@/hooks/useSession";
 import { useFavorites } from "@/hooks/useFavorites";
+import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 import { ListingReviews } from "@/components/ListingReviews";
 import { ListingLocationMap } from "@/components/ListingLocationMap";
 import { fetchSellerInfo, fetchReviews } from "@/lib/reviews";
@@ -53,6 +56,13 @@ import { applyToListing, fetchMyApplication, STATUS_LABEL, type ApplicationStatu
 import { Checkbox } from "@/components/ui/checkbox";
 import { loadSold, markSold } from "@/lib/pricing";
 import { reportListing, reportUser, LISTING_REPORT_REASONS, USER_REPORT_REASONS } from "@/lib/reports";
+import { shareListingWhatsApp, copyListingLink, shareListingSystem, canSystemShare } from "@/lib/share";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/lib/supabase";
 import { getOrCreateConversation, sendMessage } from "@/lib/messaging";
@@ -71,6 +81,9 @@ export default function ListingDetail() {
   const [related, setRelated] = useState<Listing[]>([]);
   const session = useSession();
   const { isFavorite, toggle } = useFavorites();
+  // En el APK, reserva el alto del teclado y centra el campo enfocado en los
+  // diálogos con texto (mensaje, postulación, reportes).
+  const { kbPad, scrollFocusedIntoView } = useKeyboardInset();
   const fav = isFavorite(listing.id);
 
   // Reseñas (rating real del vendedor) + postulación del usuario
@@ -443,7 +456,40 @@ export default function ListingDetail() {
               >
                 <Heart size={14} className={fav ? "fill-secondary text-secondary" : ""} /> {fav ? "Guardado" : "Guardar"}
               </Button>
-              <Button variant="outline" size="sm" className="gap-2 rounded-full"><Share2 size={14} /> Compartir</Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-2 rounded-full"><Share2 size={14} /> Compartir</Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-52">
+                  <DropdownMenuItem
+                    className="gap-2"
+                    onClick={() => shareListingWhatsApp(listing.title, listing.id)}
+                  >
+                    <MessageCircle size={16} className="text-[#25D366]" /> WhatsApp
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="gap-2"
+                    onClick={async () => {
+                      const ok = await copyListingLink(listing.id);
+                      toast({
+                        title: ok ? "Enlace copiado" : "No se pudo copiar",
+                        description: ok ? "Ya puedes pegarlo donde quieras." : "Inténtalo de nuevo.",
+                        variant: ok ? undefined : "destructive",
+                      });
+                    }}
+                  >
+                    <Link2 size={16} /> Copiar enlace
+                  </DropdownMenuItem>
+                  {canSystemShare() && (
+                    <DropdownMenuItem
+                      className="gap-2"
+                      onClick={() => shareListingSystem(listing.title, listing.id)}
+                    >
+                      <Share2 size={16} /> Más opciones…
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button variant="outline" size="sm" className="gap-2 rounded-full" onClick={() => requireAuthOrRun(() => setReportOpen(true))}>
                 <Flag size={14} /> Reportar
               </Button>
@@ -706,7 +752,11 @@ export default function ListingDetail() {
 
       {/* Message dialog */}
       <Dialog open={messageOpen} onOpenChange={setMessageOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent
+          className="sm:max-w-lg max-h-[90vh] overflow-y-auto"
+          onFocusCapture={scrollFocusedIntoView}
+          style={kbPad ? { paddingBottom: kbPad + 24 } : undefined}
+        >
           <DialogHeader>
             <DialogTitle>Enviar mensaje a {listing.advertiser}</DialogTitle>
             <DialogDescription>
@@ -766,7 +816,11 @@ export default function ListingDetail() {
 
       {/* Postulación dialog */}
       <Dialog open={applyOpen} onOpenChange={(o) => (o ? setApplyOpen(true) : closeApply())}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent
+          className="sm:max-w-md max-h-[90vh] overflow-y-auto"
+          onFocusCapture={scrollFocusedIntoView}
+          style={kbPad ? { paddingBottom: kbPad + 24 } : undefined}
+        >
           <DialogHeader>
             <DialogTitle>Postular a este aviso</DialogTitle>
             <DialogDescription>
@@ -827,7 +881,11 @@ export default function ListingDetail() {
 
       {/* Report dialog */}
       <Dialog open={reportOpen} onOpenChange={setReportOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent
+          className="sm:max-w-md max-h-[90vh] overflow-y-auto"
+          onFocusCapture={scrollFocusedIntoView}
+          style={kbPad ? { paddingBottom: kbPad + 24 } : undefined}
+        >
           <DialogHeader>
             <DialogTitle>Reportar aviso</DialogTitle>
             <DialogDescription>Cuéntanos qué problema observas con "{listing.title}".</DialogDescription>
@@ -860,7 +918,11 @@ export default function ListingDetail() {
 
       {/* Reportar usuario (REQ-10) */}
       <Dialog open={userReportOpen} onOpenChange={setUserReportOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent
+          className="sm:max-w-md max-h-[90vh] overflow-y-auto"
+          onFocusCapture={scrollFocusedIntoView}
+          style={kbPad ? { paddingBottom: kbPad + 24 } : undefined}
+        >
           <DialogHeader>
             <DialogTitle>Reportar usuario</DialogTitle>
             <DialogDescription>Cuéntanos qué problema observas con {listing.advertiser || "este anunciante"}.</DialogDescription>
