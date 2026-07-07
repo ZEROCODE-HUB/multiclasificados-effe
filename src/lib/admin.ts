@@ -492,6 +492,9 @@ const AUDIT_ACTION_LABELS: Record<string, string> = {
   assign_report: "Asignó reporte",
   resolve_report: "Resolvió reporte",
   set_setting: "Cambió configuración",
+  send_message: "Envió mensaje",
+  broadcast: "Envió comunicado masivo",
+  grant_credits: "Otorgó créditos",
 };
 
 // Traducción del tipo de entidad afectada.
@@ -501,6 +504,14 @@ const AUDIT_ENTITY_LABELS: Record<string, string> = {
   report: "Reporte",
   role: "Rol",
   setting: "Configuración",
+  audience: "Audiencia",
+};
+
+// Traducción del segmento de audiencia (comunicados masivos) a español.
+const AUDIENCE_LABELS: Record<string, string> = {
+  all: "Todos",
+  anunciante: "Anunciantes",
+  buscador: "Buscadores",
 };
 
 export function auditActionLabel(action: string): string {
@@ -540,6 +551,7 @@ export async function fetchAuditLogs(): Promise<{ data: AuditRow[]; real: boolea
         if (type === "user") name = userMap.get(id) ?? id.slice(0, 8);
         else if (type === "listing") name = listingMap.get(id) ?? id.slice(0, 8);
         else if (type === "report") name = id.slice(0, 8);
+        else if (type === "audience") name = AUDIENCE_LABELS[id] ?? id;
         return `${label}: ${name}`;
       };
 
