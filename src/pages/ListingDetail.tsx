@@ -496,7 +496,7 @@ export default function ListingDetail() {
             <h3 className="text-2xl font-bold text-foreground mb-6">{listing.location}</h3>
             <div className="relative h-72 md:h-96 bg-muted overflow-hidden border border-border">
               {typeof listing.lat === "number" && typeof listing.lng === "number" ? (
-                <ListingLocationMap lat={listing.lat} lng={listing.lng} />
+                <ListingLocationMap lat={listing.lat} lng={listing.lng} price={listing.price} currency={listing.currency} />
               ) : (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center px-4">
                   <div className="w-12 h-12 rounded-full bg-secondary text-secondary-foreground flex items-center justify-center shadow-2xl ring-8 ring-secondary/20">
