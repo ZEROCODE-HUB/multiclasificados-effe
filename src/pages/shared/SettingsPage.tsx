@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BadgeCheck, ShieldAlert, Loader2 } from "lucide-react";
+import { BadgeCheck, ShieldAlert, Loader2, Eye, EyeOff } from "lucide-react";
 import { fetchMyProfile, updateMyProfile, uploadMyAvatar, type MyProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
@@ -29,6 +29,10 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
   const [newPwd, setNewPwd] = useState("");
   const [confPwd, setConfPwd] = useState("");
   const [changingPwd, setChangingPwd] = useState(false);
+  // Ver/ocultar cada campo de contraseña (el "ojito").
+  const [showCur, setShowCur] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConf, setShowConf] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
   // Alto del teclado en móvil: se usa como espacio inferior para que los
   // últimos campos (datos de empresa) puedan subir por encima del teclado.
@@ -281,40 +285,73 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
               <CardContent className="space-y-4">
                 <div>
                   <Label htmlFor="cur-pwd">Contraseña actual</Label>
-                  <Input
-                    id="cur-pwd"
-                    type="password"
-                    placeholder="••••••••"
-                    className="mt-1"
-                    autoComplete="current-password"
-                    value={curPwd}
-                    onChange={(e) => setCurPwd(e.target.value)}
-                  />
+                  <div className="relative mt-1">
+                    <Input
+                      id="cur-pwd"
+                      type={showCur ? "text" : "password"}
+                      placeholder="••••••••"
+                      className="pr-10"
+                      autoComplete="current-password"
+                      value={curPwd}
+                      onChange={(e) => setCurPwd(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCur((s) => !s)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      tabIndex={-1}
+                      aria-label={showCur ? "Ocultar contraseña" : "Mostrar contraseña"}
+                    >
+                      {showCur ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <Label htmlFor="new-pwd">Nueva contraseña</Label>
-                  <Input
-                    id="new-pwd"
-                    type="password"
-                    placeholder="Mínimo 8 caracteres"
-                    className="mt-1"
-                    autoComplete="new-password"
-                    value={newPwd}
-                    onChange={(e) => setNewPwd(e.target.value)}
-                  />
+                  <div className="relative mt-1">
+                    <Input
+                      id="new-pwd"
+                      type={showNew ? "text" : "password"}
+                      placeholder="Mínimo 8 caracteres"
+                      className="pr-10"
+                      autoComplete="new-password"
+                      value={newPwd}
+                      onChange={(e) => setNewPwd(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNew((s) => !s)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      tabIndex={-1}
+                      aria-label={showNew ? "Ocultar contraseña" : "Mostrar contraseña"}
+                    >
+                      {showNew ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <Label htmlFor="conf-pwd">Confirmar contraseña</Label>
-                  <Input
-                    id="conf-pwd"
-                    type="password"
-                    placeholder="Repite la contraseña"
-                    className="mt-1"
-                    autoComplete="new-password"
-                    value={confPwd}
-                    onChange={(e) => setConfPwd(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter" && !changingPwd) changePassword(); }}
-                  />
+                  <div className="relative mt-1">
+                    <Input
+                      id="conf-pwd"
+                      type={showConf ? "text" : "password"}
+                      placeholder="Repite la contraseña"
+                      className="pr-10"
+                      autoComplete="new-password"
+                      value={confPwd}
+                      onChange={(e) => setConfPwd(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter" && !changingPwd) changePassword(); }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConf((s) => !s)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      tabIndex={-1}
+                      aria-label={showConf ? "Ocultar contraseña" : "Mostrar contraseña"}
+                    >
+                      {showConf ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </div>
                 <Button variant="hero" onClick={changePassword} disabled={changingPwd}>
                   {changingPwd ? <><Loader2 size={16} className="animate-spin mr-2" /> Actualizando…</> : "Actualizar contraseña"}
