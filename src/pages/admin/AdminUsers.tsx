@@ -88,9 +88,9 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
       .invoke("admin-reset-password", { body: { user_id: u.id } })
       .then(({ data, error }) => {
         const err = error?.message || (data as { error?: string })?.error;
-        if (err || !(data as { link?: string })?.link) throw new Error(err || "No se pudo generar el enlace");
-        const d = data as { link: string; emailed?: boolean };
-        setResetLink(d.link);
+        const d = data as { link?: string; emailed?: boolean };
+        if (err || (!d?.emailed && !d?.link)) throw new Error(err || "No se pudo procesar el restablecimiento");
+        setResetLink(d.link ?? null);
         setResetEmailed(!!d.emailed);
         if (d.emailed) {
           toast({ title: "Correo enviado", description: `Enviamos el enlace de recuperación a ${u.email}.` });
@@ -462,16 +462,16 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
           <div className="py-1 space-y-2">
             {resetLoading ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground py-4 justify-center">
-                <Loader2 size={16} className="animate-spin" /> Generando enlace seguro y enviando correo…
+                <Loader2 size={16} className="animate-spin" /> Enviando correo de recuperación…
+              </div>
+            ) : resetEmailed ? (
+              <div className="flex items-start gap-2 rounded-md bg-success/10 text-success text-sm font-medium px-3 py-3">
+                <Check size={16} className="mt-0.5 shrink-0" />
+                <span>Correo de recuperación enviado a <b>{resetFor?.email}</b>. El usuario recibirá el enlace para crear una nueva contraseña (válido 1 hora).</span>
               </div>
             ) : resetLink ? (
               <>
-                {resetEmailed && (
-                  <div className="flex items-center gap-2 rounded-md bg-success/10 text-success text-xs font-medium px-3 py-2">
-                    <Check size={14} /> Correo enviado a {resetFor?.email}
-                  </div>
-                )}
-                <p className="text-[11px] text-muted-foreground">{resetEmailed ? "También puedes compartir el enlace directamente:" : "Enlace de recuperación:"}</p>
+                <p className="text-[11px] text-muted-foreground">No se pudo enviar el correo automáticamente. Comparte este enlace con el usuario:</p>
                 <div className="flex items-center gap-2">
                   <Input readOnly value={resetLink} className="text-xs" onFocus={(e) => e.currentTarget.select()} />
                   <Button size="icon" variant="outline" onClick={copyReset} title="Copiar enlace">
@@ -480,9 +480,9 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
                 </div>
               </>
             ) : !resetFor || isUuid(resetFor.id) ? (
-              <p className="text-sm text-muted-foreground py-2">No se pudo generar el enlace. Cierra e inténtalo de nuevo.</p>
+              <p className="text-sm text-muted-foreground py-2">No se pudo procesar el restablecimiento. Cierra e inténtalo de nuevo.</p>
             ) : (
-              <p className="text-sm text-muted-foreground py-2">Usuario de demostración: sin backend para generar el enlace.</p>
+              <p className="text-sm text-muted-foreground py-2">Usuario de demostración: sin backend para restablecer.</p>
             )}
           </div>
 
