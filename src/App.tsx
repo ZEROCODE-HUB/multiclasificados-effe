@@ -1,6 +1,6 @@
 import { lazy, Suspense } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate, Outlet } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -67,24 +67,29 @@ const App = () => (
           <Route path="/mapa" element={<Navigate to="/buscar?view=map" replace />} />
 
 
-          {/* Advertiser */}
-          <Route path="/dashboard/anunciante" element={<AdvertiserDashboard />} />
-          <Route path="/dashboard/anunciante/publicar" element={<AdvertiserPublish />} />
-          <Route path="/dashboard/anunciante/avisos" element={<AdvertiserListings />} />
-          <Route path="/dashboard/anunciante/mensajes" element={<MessagesPage role="anunciante" />} />
-          <Route path="/dashboard/anunciante/postulaciones" element={<AdvertiserApplications />} />
-          <Route path="/dashboard/anunciante/estadisticas" element={<AdvertiserStats />} />
-          <Route path="/dashboard/anunciante/configuracion" element={<SettingsPage role="anunciante" />} />
-          <Route path="/dashboard/anunciante/boletas" element={<AdvertiserInvoices />} />
+          {/* Paneles de usuario (anunciante/buscador): exigen sesión REAL de
+              Supabase. Sin sesión válida se redirige al login (así ya no se
+              muestran paneles/perfiles vacíos ni identidades fantasma). */}
+          <Route element={<RequireRole min="buscador"><Outlet /></RequireRole>}>
+            {/* Advertiser */}
+            <Route path="/dashboard/anunciante" element={<AdvertiserDashboard />} />
+            <Route path="/dashboard/anunciante/publicar" element={<AdvertiserPublish />} />
+            <Route path="/dashboard/anunciante/avisos" element={<AdvertiserListings />} />
+            <Route path="/dashboard/anunciante/mensajes" element={<MessagesPage role="anunciante" />} />
+            <Route path="/dashboard/anunciante/postulaciones" element={<AdvertiserApplications />} />
+            <Route path="/dashboard/anunciante/estadisticas" element={<AdvertiserStats />} />
+            <Route path="/dashboard/anunciante/configuracion" element={<SettingsPage role="anunciante" />} />
+            <Route path="/dashboard/anunciante/boletas" element={<AdvertiserInvoices />} />
 
-          {/* Seeker */}
-          <Route path="/dashboard/buscador" element={<SeekerDashboard />} />
-          <Route path="/dashboard/buscador/buscar" element={<SeekerSearch />} />
-          <Route path="/dashboard/buscador/favoritos" element={<SeekerFavorites />} />
-          <Route path="/dashboard/buscador/busquedas" element={<SeekerSearches />} />
-          <Route path="/dashboard/buscador/mensajes" element={<MessagesPage role="buscador" />} />
-          <Route path="/dashboard/buscador/alertas" element={<Navigate to="/dashboard/buscador" replace />} />
-          <Route path="/dashboard/buscador/configuracion" element={<SettingsPage role="buscador" />} />
+            {/* Seeker */}
+            <Route path="/dashboard/buscador" element={<SeekerDashboard />} />
+            <Route path="/dashboard/buscador/buscar" element={<SeekerSearch />} />
+            <Route path="/dashboard/buscador/favoritos" element={<SeekerFavorites />} />
+            <Route path="/dashboard/buscador/busquedas" element={<SeekerSearches />} />
+            <Route path="/dashboard/buscador/mensajes" element={<MessagesPage role="buscador" />} />
+            <Route path="/dashboard/buscador/alertas" element={<Navigate to="/dashboard/buscador" replace />} />
+            <Route path="/dashboard/buscador/configuracion" element={<SettingsPage role="buscador" />} />
+          </Route>
 
           {/* Admin — shell persistente (sidebar/header no se remontan al navegar) */}
           <Route element={<RequireRole min="admin"><AdminShell /></RequireRole>}>

@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BadgeCheck, ShieldAlert, Loader2 } from "lucide-react";
 import { fetchMyProfile, updateMyProfile, uploadMyAvatar, type MyProfile } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
 import { Capacitor } from "@capacitor/core";
 import { Keyboard } from "@capacitor/keyboard";
@@ -23,6 +24,11 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
   const [avatarUrl, setAvatarUrl] = useState("");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Cambio de contraseña (pestaña Seguridad).
+  const [curPwd, setCurPwd] = useState("");
+  const [newPwd, setNewPwd] = useState("");
+  const [confPwd, setConfPwd] = useState("");
+  const [changingPwd, setChangingPwd] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
   // Alto del teclado en móvil: se usa como espacio inferior para que los
   // últimos campos (datos de empresa) puedan subir por encima del teclado.
@@ -63,6 +69,42 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
     setUploadingPhoto(false);
   };
 
+  // Cambia la contraseña: verifica la actual reautenticando y luego actualiza.
+  const changePassword = async () => {
+    if (!curPwd) {
+      toast({ title: "Falta la contraseña actual", variant: "destructive" });
+      return;
+    }
+    if (newPwd.length < 8) {
+      toast({ title: "Contraseña muy corta", description: "La nueva contraseña debe tener al menos 8 caracteres.", variant: "destructive" });
+      return;
+    }
+    if (newPwd !== confPwd) {
+      toast({ title: "Las contraseñas no coinciden", description: "La nueva contraseña y su confirmación deben ser iguales.", variant: "destructive" });
+      return;
+    }
+    setChangingPwd(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const email = user?.email;
+      if (!email) throw new Error("No hay una sesión activa.");
+      // Verifica que la contraseña actual sea correcta reautenticando.
+      const { error: reauthErr } = await supabase.auth.signInWithPassword({ email, password: curPwd });
+      if (reauthErr) {
+        toast({ title: "Contraseña actual incorrecta", description: "Verifica tu contraseña actual e inténtalo de nuevo.", variant: "destructive" });
+        return;
+      }
+      const { error } = await supabase.auth.updateUser({ password: newPwd });
+      if (error) throw error;
+      toast({ title: "Contraseña actualizada", description: "Tu nueva contraseña ya está activa." });
+      setCurPwd(""); setNewPwd(""); setConfPwd("");
+    } catch (e: any) {
+      toast({ title: "No se pudo actualizar la contraseña", description: e?.message ?? "Error", variant: "destructive" });
+    } finally {
+      setChangingPwd(false);
+    }
+  };
+
   // Móvil (Capacitor): al abrir/cerrar el teclado, reservamos abajo el alto del
   // teclado como espacio para poder desplazar cualquier campo por encima de él.
   useEffect(() => {
@@ -89,7 +131,7 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
 
   const initials = profile?.full_name
     ? profile.full_name.trim().split(/\s+/).map((n) => n[0]).slice(0, 2).join("").toUpperCase()
-    : role === "anunciante" ? "JM" : "AG";
+    : "";
 
   const save = async () => {
     if (!profile) { toast({ title: "Inicia sesión para editar tu perfil." }); return; }
@@ -238,18 +280,45 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
               <CardHeader><CardTitle>Seguridad de la cuenta</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <Label>Contraseña actual</Label>
-                  <Input type="password" placeholder="••••••••" className="mt-1" />
+                  <Label htmlFor="cur-pwd">Contraseña actual</Label>
+                  <Input
+                    id="cur-pwd"
+                    type="password"
+                    placeholder="••••••••"
+                    className="mt-1"
+                    autoComplete="current-password"
+                    value={curPwd}
+                    onChange={(e) => setCurPwd(e.target.value)}
+                  />
                 </div>
                 <div>
-                  <Label>Nueva contraseña</Label>
-                  <Input type="password" placeholder="Mínimo 8 caracteres" className="mt-1" />
+                  <Label htmlFor="new-pwd">Nueva contraseña</Label>
+                  <Input
+                    id="new-pwd"
+                    type="password"
+                    placeholder="Mínimo 8 caracteres"
+                    className="mt-1"
+                    autoComplete="new-password"
+                    value={newPwd}
+                    onChange={(e) => setNewPwd(e.target.value)}
+                  />
                 </div>
                 <div>
-                  <Label>Confirmar contraseña</Label>
-                  <Input type="password" placeholder="Repite la contraseña" className="mt-1" />
+                  <Label htmlFor="conf-pwd">Confirmar contraseña</Label>
+                  <Input
+                    id="conf-pwd"
+                    type="password"
+                    placeholder="Repite la contraseña"
+                    className="mt-1"
+                    autoComplete="new-password"
+                    value={confPwd}
+                    onChange={(e) => setConfPwd(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !changingPwd) changePassword(); }}
+                  />
                 </div>
-                <Button variant="hero">Actualizar contraseña</Button>
+                <Button variant="hero" onClick={changePassword} disabled={changingPwd}>
+                  {changingPwd ? <><Loader2 size={16} className="animate-spin mr-2" /> Actualizando…</> : "Actualizar contraseña"}
+                </Button>
               </CardContent>
             </Card>
           </TabsContent>
