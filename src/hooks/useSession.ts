@@ -6,6 +6,8 @@ export interface Session {
   role: SessionRole;
   name: string;
   initials: string;
+  /** Correo del usuario (solo en sesión real de Supabase). */
+  email?: string;
   /** true cuando la sesión proviene de Supabase (no de los botones demo). */
   supabase?: boolean;
 }
@@ -52,7 +54,7 @@ export function clearSession() {
 function sameSession(a: Session | null, b: Session | null) {
   if (a === b) return true;
   if (!a || !b) return false;
-  return a.role === b.role && a.name === b.name && a.initials === b.initials;
+  return a.role === b.role && a.name === b.name && a.initials === b.initials && a.email === b.email;
 }
 
 export function useSession(): Session | null {

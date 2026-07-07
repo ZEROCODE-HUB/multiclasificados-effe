@@ -67,7 +67,7 @@ export async function syncSession(): Promise<Session | null> {
     "Usuario";
   const initials = profile?.initials || initialsFrom(name);
 
-  return setSessionData({ role, name, initials, supabase: true });
+  return setSessionData({ role, name, initials, email: user.email ?? undefined, supabase: true });
 }
 
 // Perfil propio del usuario logueado (para su panel de Configuración).
