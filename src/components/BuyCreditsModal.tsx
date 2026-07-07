@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FocusEvent } from "react";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -103,6 +103,14 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
 
   const balanceAfter = currentBalance + creditsToBuy;
   const coversAd = balanceAfter >= creditCost;
+
+  // En móvil, al enfocar DNI/correo el teclado tapa el campo (el modal no
+  // alcanzaba a mostrarlos). Tras un instante —para que el teclado ya esté
+  // abierto y la vista redimensionada— desplazamos el campo al centro visible.
+  const scrollIntoViewOnFocus = (e: FocusEvent<HTMLInputElement>) => {
+    const el = e.currentTarget;
+    setTimeout(() => el.scrollIntoView({ block: "center", behavior: "smooth" }), 300);
+  };
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -233,14 +241,15 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
           </div>
           <div>
             <Label className="text-xs">{personType === "natural" ? "DNI (8 dígitos)" : "RUC (11 dígitos)"}</Label>
-            <Input value={docNumber}
+            <Input value={docNumber} onFocus={scrollIntoViewOnFocus}
               onChange={(e) => setDocNumber(e.target.value.replace(/\D/g, ""))}
               maxLength={personType === "natural" ? 8 : 11}
               placeholder={personType === "natural" ? "12345678" : "20123456789"} className="mt-1" />
           </div>
           <div>
             <Label className="text-xs">Correo para el comprobante</Label>
-            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+            <Input type="email" value={email} onFocus={scrollIntoViewOnFocus}
+              onChange={(e) => setEmail(e.target.value)}
               placeholder="tu@correo.com" className="mt-1" />
           </div>
         </div>
