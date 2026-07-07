@@ -25,11 +25,14 @@ export function ListingLocationMap({ lat, lng, price, currency, span = 0.02 }: L
 
   return (
     <>
+      {/* Mapa estático (pointer-events-none): no se puede arrastrar ni hacer
+          zoom, así el centro es siempre la ubicación y el pin queda fijo. */}
       <iframe
         title="Ubicación en el mapa"
         src={src}
         loading="lazy"
-        className="absolute inset-0 w-full h-full border-0"
+        tabIndex={-1}
+        className="pointer-events-none absolute inset-0 w-full h-full border-0 select-none"
         referrerPolicy="no-referrer-when-downgrade"
       />
       {/* Pin de precio (naranja), centrado sobre la ubicación. */}
