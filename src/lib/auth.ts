@@ -84,7 +84,12 @@ export interface MyProfile {
 }
 
 export async function fetchMyProfile(): Promise<MyProfile | null> {
-  const { data: { user } } = await supabase.auth.getUser();
+  // Usamos la sesión local (getSession) en vez de getUser(): getUser hace una
+  // llamada de red para revalidar el token que, con la sesión OAuth de Google,
+  // a veces falla y dejaba el formulario de Configuración vacío pese a estar
+  // logueado. getSession lee la sesión ya validada (misma fuente que syncSession).
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user;
   if (!user) return null;
   const { data } = await supabase
     .from("profiles")
@@ -108,7 +113,8 @@ export async function fetchMyProfile(): Promise<MyProfile | null> {
 export async function updateMyProfile(patch: {
   full_name?: string; phone?: string; company_name?: string; company_ruc?: string; avatar_url?: string;
 }): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user;
   if (!user) throw new Error("No hay sesión activa.");
   const { error } = await supabase.from("profiles").update(patch).eq("id", user.id);
   if (error) throw error;
@@ -118,7 +124,8 @@ export async function updateMyProfile(patch: {
 // exige) y guarda la URL pública en el perfil. Devuelve la URL con cache-bust
 // para que la nueva imagen se vea de inmediato en toda la app.
 export async function uploadMyAvatar(file: File): Promise<string> {
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user;
   if (!user) throw new Error("No hay sesión activa.");
   const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
   const path = `${user.id}/avatar.${ext}`;
