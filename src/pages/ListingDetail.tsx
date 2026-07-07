@@ -47,6 +47,7 @@ import { toast } from "@/hooks/use-toast";
 import { useSession } from "@/hooks/useSession";
 import { useFavorites } from "@/hooks/useFavorites";
 import { ListingReviews } from "@/components/ListingReviews";
+import { ListingLocationMap } from "@/components/ListingLocationMap";
 import { fetchSellerInfo, fetchReviews } from "@/lib/reviews";
 import { applyToListing, fetchMyApplication, STATUS_LABEL, type ApplicationStatus } from "@/lib/applications";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -489,21 +490,24 @@ export default function ListingDetail() {
             </ul>
           </section>
 
-          {/* Location mock */}
+          {/* Ubicación */}
           <section>
             <h2 className="text-xs uppercase tracking-[0.2em] font-bold text-secondary mb-3">Ubicación</h2>
             <h3 className="text-2xl font-bold text-foreground mb-6">{listing.location}</h3>
             <div className="relative h-72 md:h-96 bg-muted overflow-hidden border border-border">
-              <img src="https://images.unsplash.com/photo-1569336415962-a4bd9f69cd83?w=1600&h=900&fit=crop" alt="Mapa de ubicación" className="w-full h-full object-cover" />
-              <div className="absolute inset-0 bg-gradient-to-t from-background/40 to-transparent" />
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-2">
-                <div className="w-12 h-12 rounded-full bg-secondary text-secondary-foreground flex items-center justify-center shadow-2xl ring-8 ring-secondary/20 animate-pulse">
-                  <MapPin size={20} />
+              {typeof listing.lat === "number" && typeof listing.lng === "number" ? (
+                <ListingLocationMap lat={listing.lat} lng={listing.lng} />
+              ) : (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center px-4">
+                  <div className="w-12 h-12 rounded-full bg-secondary text-secondary-foreground flex items-center justify-center shadow-2xl ring-8 ring-secondary/20">
+                    <MapPin size={20} />
+                  </div>
+                  <span className="px-3 py-1 bg-primary text-primary-foreground text-xs font-bold rounded-full shadow-lg">
+                    {listing.location}
+                  </span>
+                  <p className="text-xs text-muted-foreground mt-1">Este aviso aún no tiene una ubicación exacta en el mapa.</p>
                 </div>
-                <span className="px-3 py-1 bg-primary text-primary-foreground text-xs font-bold rounded-full shadow-lg">
-                  {listing.location}
-                </span>
-              </div>
+              )}
             </div>
             <p className="text-xs text-muted-foreground mt-3">Ubicación aproximada por seguridad. La dirección exacta se comparte tras coordinar con el anunciante.</p>
           </section>
