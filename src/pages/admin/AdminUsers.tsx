@@ -47,6 +47,7 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
   const [resetFor, setResetFor] = useState<AdminUser | null>(null);
   const [resetLink, setResetLink] = useState<string | null>(null);
   const [resetLoading, setResetLoading] = useState(false);
+  const [resetEmailed, setResetEmailed] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const load = () => fetchAdminUsers().then(({ data }) => setUsers(data));
@@ -80,7 +81,7 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
   // lo muestra para que el staff lo comparta con el usuario. No usa el correo de
   // Supabase (cuyo token de un solo uso queman los escáneres de enlaces).
   const openReset = (u: AdminUser) => {
-    setResetFor(u); setResetLink(null); setCopied(false);
+    setResetFor(u); setResetLink(null); setCopied(false); setResetEmailed(false);
     if (!isUuid(u.id)) return; // usuario demo (sin backend): solo abre el diálogo
     setResetLoading(true);
     supabase.functions
@@ -88,7 +89,14 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
       .then(({ data, error }) => {
         const err = error?.message || (data as { error?: string })?.error;
         if (err || !(data as { link?: string })?.link) throw new Error(err || "No se pudo generar el enlace");
-        setResetLink((data as { link: string }).link);
+        const d = data as { link: string; emailed?: boolean };
+        setResetLink(d.link);
+        setResetEmailed(!!d.emailed);
+        if (d.emailed) {
+          toast({ title: "Correo enviado", description: `Enviamos el enlace de recuperación a ${u.email}.` });
+        } else {
+          toast({ title: "Enlace generado", description: "No se pudo enviar el correo; comparte el enlace manualmente." });
+        }
       })
       .catch((e) =>
         toast({ title: "No se pudo generar el enlace", description: e?.message ?? "Error", variant: "destructive" }),
@@ -436,30 +444,41 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
       </AlertDialog>
 
       {/* Enlace seguro de restablecimiento de contraseña */}
-      <AlertDialog open={!!resetFor} onOpenChange={(o) => { if (!o) { setResetFor(null); setResetLink(null); } }}>
+      <AlertDialog open={!!resetFor} onOpenChange={(o) => { if (!o) { setResetFor(null); setResetLink(null); setResetEmailed(false); } }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-              <KeyRound size={18} className="text-primary" /> Enlace de restablecimiento
+              <KeyRound size={18} className="text-primary" /> Restablecer contraseña
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Comparte este enlace con <b>{resetFor?.full_name}</b> ({resetFor?.email}) por WhatsApp o el medio que uses.
-              Al abrirlo podrá crear una nueva contraseña. Es de un solo uso y caduca en 1 hora.
+              {resetEmailed ? (
+                <>Le enviamos un correo a <b>{resetFor?.full_name}</b> ({resetFor?.email}) con el enlace para crear una nueva contraseña. El enlace caduca en 1 hora.</>
+              ) : (
+                <>Comparte este enlace con <b>{resetFor?.full_name}</b> ({resetFor?.email}) por WhatsApp o el medio que uses. Al abrirlo podrá crear una nueva contraseña. Es de un solo uso y caduca en 1 hora.</>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
 
-          <div className="py-1">
+          <div className="py-1 space-y-2">
             {resetLoading ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground py-4 justify-center">
-                <Loader2 size={16} className="animate-spin" /> Generando enlace seguro…
+                <Loader2 size={16} className="animate-spin" /> Generando enlace seguro y enviando correo…
               </div>
             ) : resetLink ? (
-              <div className="flex items-center gap-2">
-                <Input readOnly value={resetLink} className="text-xs" onFocus={(e) => e.currentTarget.select()} />
-                <Button size="icon" variant="outline" onClick={copyReset} title="Copiar enlace">
-                  {copied ? <Check size={16} className="text-success" /> : <Copy size={16} />}
-                </Button>
-              </div>
+              <>
+                {resetEmailed && (
+                  <div className="flex items-center gap-2 rounded-md bg-success/10 text-success text-xs font-medium px-3 py-2">
+                    <Check size={14} /> Correo enviado a {resetFor?.email}
+                  </div>
+                )}
+                <p className="text-[11px] text-muted-foreground">{resetEmailed ? "También puedes compartir el enlace directamente:" : "Enlace de recuperación:"}</p>
+                <div className="flex items-center gap-2">
+                  <Input readOnly value={resetLink} className="text-xs" onFocus={(e) => e.currentTarget.select()} />
+                  <Button size="icon" variant="outline" onClick={copyReset} title="Copiar enlace">
+                    {copied ? <Check size={16} className="text-success" /> : <Copy size={16} />}
+                  </Button>
+                </div>
+              </>
             ) : !resetFor || isUuid(resetFor.id) ? (
               <p className="text-sm text-muted-foreground py-2">No se pudo generar el enlace. Cierra e inténtalo de nuevo.</p>
             ) : (
