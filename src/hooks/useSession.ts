@@ -14,29 +14,24 @@ export interface Session {
 
 const KEY = "effe_session";
 
-const defaultsByRole: Record<SessionRole, { name: string; initials: string }> = {
-  anunciante: { name: "Juan Mendoza", initials: "JM" },
-  buscador: { name: "Ana García", initials: "AG" },
-  admin: { name: "Admin eFFe", initials: "AE" },
-  superadmin: { name: "Super Admin", initials: "SA" },
-};
-
 export function getSession(): Session | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as Session;
+    const s = JSON.parse(raw) as Session;
+    // Solo son válidas las sesiones reales de Supabase. Cualquier sesión local
+    // sin este flag es un resto heredado (p.ej. una sesión demo antigua
+    // "Juan Mendoza"/"Ana García" de versiones previas) y se descarta —y se
+    // borra— para no mostrar identidades ni datos falsos.
+    if (!s?.supabase) {
+      localStorage.removeItem(KEY);
+      return null;
+    }
+    return s;
   } catch {
     return null;
   }
-}
-
-export function setSession(role: SessionRole) {
-  const s: Session = { role, ...defaultsByRole[role] };
-  localStorage.setItem(KEY, JSON.stringify(s));
-  window.dispatchEvent(new Event("effe-session"));
-  return s;
 }
 
 // Guarda una sesión completa (usado por la autenticación real de Supabase).
