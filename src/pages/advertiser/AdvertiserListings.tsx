@@ -15,7 +15,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ListingRow } from "@/components/ListingRow";
+import { PublishDraftDialog } from "@/components/PublishDraftDialog";
 import { LocationPicker } from "@/components/LocationPicker";
+import { useSession } from "@/hooks/useSession";
+import { supabase } from "@/lib/supabase";
 import { PlusCircle, ClipboardList, Eye, MessageSquare, TrendingUp, Search, SlidersHorizontal, ImagePlus, Loader2 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
@@ -37,11 +40,12 @@ const TAB_OF: Record<ListingStatus, TabKey | null> = {
   draft: "borradores",
   pending: "borradores",
 };
-const ROW_STATUS: Record<TabKey, "Activo" | "Pausado" | "Vencido"> = {
+const ROW_STATUS: Record<TabKey, "Activo" | "Pausado" | "Vencido" | "Borrador"> = {
   activos: "Activo",
   pausados: "Pausado",
   vencidos: "Vencido",
-  borradores: "Pausado",
+  // Un borrador nunca se publicó: llamarlo "Pausado" hacía creer que estuvo activo.
+  borradores: "Borrador",
 };
 
 // Estado del formulario de edición.
@@ -73,11 +77,19 @@ const AdvertiserListings = () => {
   const [toDelete, setToDelete] = useState<MyListing | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Borrador que se está publicando (cobro + activación) desde su fila.
+  const [toPublish, setToPublish] = useState<MyListing | null>(null);
+  const session = useSession();
+  const [userEmail, setUserEmail] = useState("");
+
+  const reload = () => fetchMyListings().then(setListings);
+
   useEffect(() => {
     fetchMyListings().then((rows) => {
       setListings(rows);
       setLoading(false);
     });
+    supabase.auth.getSession().then(({ data }) => setUserEmail(data.session?.user.email ?? ""));
   }, []);
 
   const openEdit = (l: MyListing) => {
@@ -230,6 +242,11 @@ const AdvertiserListings = () => {
                 onEdit={() => openEdit(listing)}
                 onDelete={() => setToDelete(listing)}
                 onTogglePause={tab === "activos" || tab === "pausados" ? togglePause : undefined}
+                {...(tab === "borradores" && listing.status === "draft"
+                  // `pending` también cae en esta pestaña, pero está en revisión:
+                  // publicarlo lo saltaría la moderación.
+                  ? { onPublish: () => setToPublish(listing) }
+                  : {})}
               />
             </div>
           ))}
@@ -448,6 +465,16 @@ const AdvertiserListings = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Publicar un borrador: cobra y activa el aviso que YA existe en la BD.
+          No lo vuelve a crear ni resube las imágenes. */}
+      <PublishDraftDialog
+        draft={toPublish}
+        email={userEmail}
+        fallbackName={session?.name ?? "Anunciante"}
+        onClose={() => setToPublish(null)}
+        onPublished={reload}
+      />
     </DashboardLayout>
   );
 };

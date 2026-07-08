@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Eye, MapPin, Calendar, MoreVertical, Edit, Pause, Play, Trash2 } from "lucide-react";
+import { Eye, MapPin, Calendar, MoreVertical, Edit, Pause, Play, Trash2, Rocket } from "lucide-react";
 import type { Listing } from "@/data/mockData";
 import {
   DropdownMenu,
@@ -12,21 +12,25 @@ import {
 
 interface ListingRowProps {
   listing: Listing;
-  status?: "Activo" | "Pausado" | "Vencido";
+  status?: "Activo" | "Pausado" | "Vencido" | "Borrador";
   onView?: (listing: Listing) => void;
   onEdit?: (listing: Listing) => void;
   onDelete?: (listing: Listing) => void;
   onTogglePause?: (listing: Listing) => void;
+  /** Solo en borradores: cobra y activa el aviso ya guardado. */
+  onPublish?: (listing: Listing) => void;
 }
 
 const statusStyles: Record<string, string> = {
   Activo: "bg-success text-success-foreground",
   Pausado: "bg-warning text-warning-foreground",
   Vencido: "bg-destructive text-destructive-foreground",
+  // Un borrador no está "pausado": nunca llegó a publicarse.
+  Borrador: "bg-muted text-muted-foreground border border-border",
 };
 
-export function ListingRow({ listing, status = "Activo", onView, onEdit, onDelete, onTogglePause }: ListingRowProps) {
-  const hasActions = !!(onView || onEdit || onDelete || onTogglePause);
+export function ListingRow({ listing, status = "Activo", onView, onEdit, onDelete, onTogglePause, onPublish }: ListingRowProps) {
+  const hasActions = !!(onView || onEdit || onDelete || onTogglePause || onPublish);
   return (
     <div className="group flex flex-col sm:flex-row gap-0 sm:gap-4 bg-card border border-border overflow-hidden hover:shadow-md hover:border-secondary/40 transition-all">
       {/* Image - prominent on mobile (full width), compact on desktop */}
@@ -59,6 +63,11 @@ export function ListingRow({ listing, status = "Activo", onView, onEdit, onDelet
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              {onPublish && (
+                <DropdownMenuItem onSelect={() => onPublish(listing)}>
+                  <Rocket size={14} className="mr-2" /> Publicar
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onSelect={() => onEdit?.(listing)}>
                 <Edit size={14} className="mr-2" /> Editar
               </DropdownMenuItem>
@@ -99,6 +108,12 @@ export function ListingRow({ listing, status = "Activo", onView, onEdit, onDelet
           <div className="flex gap-1.5">
             {hasActions ? (
               <>
+                {/* Solo borradores: retoma el aviso guardado y lo publica. */}
+                {onPublish && (
+                  <Button size="sm" className="h-8 px-3 text-xs gap-1" onClick={() => onPublish(listing)}>
+                    <Rocket size={13} /> Publicar
+                  </Button>
+                )}
                 <Button variant="outline" size="sm" className="h-8 px-3 text-xs gap-1" onClick={() => onEdit?.(listing)}>
                   <Edit size={13} /> Editar
                 </Button>

@@ -166,6 +166,11 @@ export interface MyListing extends Listing {
   status: ListingStatus;
   expiresAt: string | null;
   condition: ListingCondition;
+  // Plan elegido antes de pagar (ver 0041_listing_draft_plan.sql). Solo tiene
+  // valor en los borradores: en un aviso publicado el plan real está en su orden.
+  planDurationDays: number | null;
+  planQuantity: number | null;
+  planExtras: Record<string, number | undefined> | null;
 }
 
 // Avisos del anunciante actual (todos sus estados). Usa la tabla `listings`
@@ -179,7 +184,7 @@ export async function fetchMyListings(): Promise<MyListing[]> {
     const { data, error } = await supabase
       .from("listings")
       .select(
-        "id, title, description, price, currency, category_id, condition, location, lat, lng, featured, views, status, published_at, expires_at, created_at, listing_images(url, sort_order)"
+        "id, title, description, price, currency, category_id, condition, location, lat, lng, featured, views, status, published_at, expires_at, created_at, plan_duration_days, plan_quantity, plan_extras, listing_images(url, sort_order)"
       )
       .eq("owner_id", user.id)
       .order("created_at", { ascending: false });
@@ -206,6 +211,9 @@ export async function fetchMyListings(): Promise<MyListing[]> {
         status: r.status as ListingStatus,
         expiresAt: r.expires_at ?? null,
         condition: (r.condition ?? "na") as ListingCondition,
+        planDurationDays: r.plan_duration_days != null ? Number(r.plan_duration_days) : null,
+        planQuantity: r.plan_quantity != null ? Number(r.plan_quantity) : null,
+        planExtras: (r.plan_extras ?? null) as Record<string, number | undefined> | null,
       };
     });
   } catch {
