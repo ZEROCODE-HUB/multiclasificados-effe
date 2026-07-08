@@ -11,8 +11,8 @@ import {
 } from "@/components/ui/dialog";
 import {
   ImagePlus, X, ArrowLeft, ArrowRight, Star, Check, MapPin, Tag, FileText, Camera,
-  ShieldCheck, Building2, User, CreditCard, Receipt, Sparkles, Flame, EyeOff, Lock, Package, Minus, Plus,
-  Wallet, Loader2, Percent, AlertCircle, CheckCircle2, Save,
+  ShieldCheck, CreditCard, Receipt, Sparkles, Flame, EyeOff, Lock, Package, Minus, Plus,
+  Wallet, Loader2, Percent, Save,
 } from "lucide-react";
 import { categories } from "@/data/mockData";
 import { useEffect, useRef, useState } from "react";
@@ -24,7 +24,7 @@ import {
   type DurationDays, type PricingSettings, type ExtraPrices,
 } from "@/lib/pricing";
 import { createAndPublishListing, saveListingDraft } from "@/lib/publish";
-import { verifyDocument } from "@/lib/verifyDoc";
+import { VerifyIdentityDialog, type ConfirmedIdentity, type PersonType } from "@/components/VerifyIdentityDialog";
 import { getCreditBalance, spendCredits } from "@/lib/credits";
 import { fetchActivePromotions, bestPromoForCategory, applyDiscount, type Promotion } from "@/lib/promotions";
 import { fetchPricingSettings } from "@/lib/pricingRemote";
@@ -75,18 +75,15 @@ const AdvertiserPublish = () => {
   }, [navigate]);
 
   // Verificación de identidad (se solicita al presionar "Publicar aviso").
-  // `verifiedName`/`docData` = lo que devolvió RENIEC/SUNAT vía Factiliza.
-  // `verified` = el usuario CONFIRMÓ que esa ficha es suya. Son distintos a
-  // propósito: consultar el documento no equivale a aceptar los datos, y sin la
-  // confirmación explícita no se publica nada.
+  // El cuadro vive en <VerifyIdentityDialog>; aquí solo guardamos el RESULTADO
+  // confirmado, que alimenta el comprobante. `verified` = el usuario confirmó que
+  // la ficha de RENIEC/SUNAT es suya: consultar el documento no equivale a
+  // aceptarlo, y sin confirmación explícita no se publica nada.
   const [verifyOpen, setVerifyOpen] = useState(false);
-  const [personType, setPersonType] = useState<"natural" | "juridica" | "">("");
+  const [personType, setPersonType] = useState<PersonType>("");
   const [docNumber, setDocNumber] = useState("");
   const [verified, setVerified] = useState(false);
-  const [verifying, setVerifying] = useState(false);
   const [verifiedName, setVerifiedName] = useState("");
-  const [docData, setDocData] = useState<Record<string, unknown> | null>(null);
-  const [docError, setDocError] = useState("");
 
   // Imágenes — solo 2 slots por aviso
   const [mainPhoto, setMainPhoto] = useState<PhotoItem | null>(null);
@@ -245,97 +242,30 @@ const AdvertiserPublish = () => {
     } catch { /* noop */ }
   };
 
-  // Consulta automática a Factiliza en cuanto el documento tiene la longitud
-  // exacta (DNI 8 / RUC 11). Antes esto era un botón "Verificar" que, al
-  // acertar, publicaba de inmediato: el usuario nunca llegaba a ver —ni a
-  // confirmar— el nombre que devolvía RENIEC. Ahora solo trae la ficha.
-  useEffect(() => {
-    if (!verifyOpen) return;
-    const requiredLen = personType === "natural" ? 8 : 11;
-    setDocError("");
-    if (!personType || docNumber.length !== requiredLen) {
-      setVerifiedName("");
-      setDocData(null);
-      setVerifying(false);
-      return;
-    }
-    // La Edge Function `verify-doc` exige sesión (consulta datos personales y
-    // consume saldo de Factiliza). Sin sesión ni la llamamos.
-    if (!hasSession) return;
-
-    const tipo = personType === "natural" ? "dni" : "ruc";
-    let cancelled = false;
-    setVerifying(true);
-    setVerifiedName("");
-    setDocData(null);
-    verifyDocument(tipo, docNumber)
-      .then((r) => {
-        if (cancelled) return;
-        if (r.ok) {
-          setVerifiedName(r.nombre ?? "");
-          setDocData(r.data ?? null);
-        } else {
-          setDocError(r.error ?? "No se pudo verificar el documento. Revisa el número.");
-        }
-      })
-      .catch(() => { if (!cancelled) setDocError("No se pudo verificar el documento."); })
-      .finally(() => { if (!cancelled) setVerifying(false); });
-    return () => { cancelled = true; };
-    // `hasSession` y no `session`: depender del objeto lo re-dispararía en cada
-    // render si su identidad cambiara, gastando una consulta de Factiliza cada vez.
-  }, [verifyOpen, personType, docNumber, hasSession]);
-
-  // Campo de la ficha de Factiliza; "" si no viene o llega vacío.
-  const docField = (k: string): string => {
-    const v = docData?.[k];
-    return typeof v === "string" && v.trim() ? v.trim() : "";
-  };
-  const docUbigeo = [docField("distrito"), docField("provincia"), docField("departamento")]
-    .filter(Boolean).join(" - ");
-  const docDireccion = docField("direccion_completa")
-    || [docField("direccion"), docUbigeo].filter(Boolean).join(", ");
-  const docRows: Array<[string, string]> = personType === "juridica"
-    ? [
-        ["RUC", docNumber],
-        ["Estado", docField("estado")],
-        ["Condición", docField("condicion")],
-        ["Domicilio fiscal", docDireccion],
-      ]
-    : [
-        ["DNI", docNumber],
-        ["Domicilio", docDireccion],
-      ];
-
-  // El usuario confirma que la ficha que devolvió RENIEC/SUNAT es suya. Recién
-  // aquí `verified` pasa a true y se puede publicar.
+  // El usuario confirmó que la ficha de RENIEC/SUNAT es suya. Recién aquí
+  // `verified` pasa a true y se puede publicar.
   //
-  // Confirmar es ahora el punto de envío real (encadena la publicación), así que
-  // lleva el mismo guard SÍNCRONO que `doPublish`: dos toques seguidos —o el
+  // Confirmar es el punto de envío real (encadena la publicación), así que lleva
+  // el mismo guard SÍNCRONO que `doPublish`: dos toques seguidos —o el
   // ghost-click de touch→click en el WebView de Android— leerían el mismo
   // `verified === false` del closure y encadenarían dos publicaciones.
   const confirmingRef = useRef(false);
-  const confirmIdentity = () => {
-    if (!verifiedName || confirmingRef.current) return;
+  const confirmIdentity = (identity: ConfirmedIdentity) => {
+    if (confirmingRef.current) return;
     confirmingRef.current = true;
+    setPersonType(identity.personType);
+    setDocNumber(identity.docNumber);
+    setVerifiedName(identity.name);
     setVerified(true);
     setVerifyOpen(false);
     toast({
       title: "Identidad confirmada",
-      description: `${personType === "natural" ? "DNI" : "RUC"} ${docNumber} · ${verifiedName}`,
+      description: `${identity.docType.toUpperCase()} ${identity.docNumber} · ${identity.name}`,
     });
     setTimeout(() => {
       confirmingRef.current = false;
       openPublishFlowAfterVerify();
     }, 250);
-  };
-
-  // Cambiar el documento (o el tipo de persona) invalida una confirmación previa:
-  // si no, se confirmaba un DNI y se publicaba con otro.
-  const resetIdentity = () => {
-    setVerified(false);
-    setVerifiedName("");
-    setDocData(null);
-    setDocError("");
   };
 
   const canPublish = form.category && form.title && form.description && form.price && form.location && !!mainPhoto;
@@ -1055,92 +985,16 @@ const AdvertiserPublish = () => {
 
 
 
-      {/* Popup verificación — el documento se consulta contra RENIEC/SUNAT y el
-          usuario debe confirmar la ficha devuelta antes de publicar. */}
-      <Dialog open={verifyOpen} onOpenChange={(o) => { if (!o) setVerifyOpen(false); }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Verifica tu identidad</DialogTitle>
-            <DialogDescription>
-              Antes de publicar, indícanos si publicas como persona natural o jurídica.
-              Validaremos tu documento y deberás confirmar los datos.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => { setPersonType("natural"); setDocNumber(""); resetIdentity(); }}
-                className={`p-4 border text-left transition-all ${personType === "natural" ? "border-secondary bg-secondary/10" : "border-border hover:bg-muted/50"}`}
-              >
-                <User size={20} className="text-secondary mb-2" />
-                <p className="font-bold text-sm">Persona natural</p>
-                <p className="text-[11px] text-muted-foreground">DNI · 8 dígitos</p>
-              </button>
-              <button
-                type="button"
-                onClick={() => { setPersonType("juridica"); setDocNumber(""); resetIdentity(); }}
-                className={`p-4 border text-left transition-all ${personType === "juridica" ? "border-secondary bg-secondary/10" : "border-border hover:bg-muted/50"}`}
-              >
-                <Building2 size={20} className="text-secondary mb-2" />
-                <p className="font-bold text-sm">Persona jurídica</p>
-                <p className="text-[11px] text-muted-foreground">RUC · 11 dígitos</p>
-              </button>
-            </div>
-            {personType && (
-              <div>
-                <Label>{personType === "natural" ? "DNI" : "RUC"}</Label>
-                <Input
-                  value={docNumber}
-                  onChange={(e) => { setDocNumber(e.target.value.replace(/\D/g, "")); resetIdentity(); }}
-                  maxLength={personType === "natural" ? 8 : 11}
-                  placeholder={personType === "natural" ? "12345678" : "20123456789"}
-                  inputMode="numeric"
-                  className="mt-1"
-                  disabled={verifying}
-                />
-
-                {verifying && (
-                  <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Loader2 size={13} className="animate-spin" /> Verificando en Factiliza…
-                  </p>
-                )}
-
-                {/* Ficha real devuelta por RENIEC/SUNAT: es lo que el usuario confirma. */}
-                {!verifying && verifiedName && (
-                  <div className="mt-2 rounded-md border border-success/40 bg-success/5 p-2.5 text-xs space-y-1.5">
-                    <p className="flex items-center gap-1.5 font-semibold text-success">
-                      <CheckCircle2 size={14} /> {personType === "natural" ? "Identidad encontrada" : "Empresa encontrada"}
-                    </p>
-                    <p className="font-medium text-foreground leading-snug">{verifiedName}</p>
-                    <dl className="space-y-0.5">
-                      {docRows.filter(([, v]) => v).map(([label, value]) => (
-                        <div key={label} className="flex gap-2">
-                          <dt className="shrink-0 text-muted-foreground">{label}:</dt>
-                          <dd className="text-foreground break-words">{value}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                    <p className="pt-1 text-muted-foreground">¿Estos datos son tuyos? Confírmalos para continuar.</p>
-                  </div>
-                )}
-
-                {!verifying && docError && (
-                  <p className="mt-2 flex items-start gap-1.5 text-xs text-destructive">
-                    <AlertCircle size={13} className="mt-0.5 shrink-0" /> {docError}
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setVerifyOpen(false)}>Cancelar</Button>
-            <Button onClick={confirmIdentity} disabled={verifying || !verifiedName} className="gap-2">
-              <ShieldCheck size={14} /> Confirmar y continuar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Verificación de identidad — consulta RENIEC/SUNAT y exige confirmación.
+          Componente compartido con la publicación de borradores. */}
+      <VerifyIdentityDialog
+        open={verifyOpen}
+        onOpenChange={setVerifyOpen}
+        enabled={hasSession}
+        defaultPersonType={personType}
+        defaultDocNumber={docNumber}
+        onConfirmed={confirmIdentity}
+      />
 
       {/* Modal compra de créditos — configurador (cuando no hay saldo suficiente) */}
       <BuyCreditsModal
