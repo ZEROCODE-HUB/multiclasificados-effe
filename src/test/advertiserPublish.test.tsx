@@ -26,7 +26,9 @@ vi.mock("@/lib/publish", () => ({
   createAndPublishListing: (...a: unknown[]) => createAndPublishListing(...a),
 }));
 
-vi.mock("@/lib/verifyDoc", () => ({ verifyDocument: vi.fn() }));
+vi.mock("@/lib/verifyDoc", () => ({
+  verifyDocument: vi.fn().mockResolvedValue({ ok: true, nombre: "JUAN PEREZ", data: {} }),
+}));
 
 // Promociones: mockeamos solo la carga; los helpers (bestPromoForCategory/applyDiscount) son reales.
 const fetchActivePromotions = vi.fn().mockResolvedValue([]);
@@ -171,6 +173,8 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     // Completa datos del comprobante y compra.
     fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "12345678" } });
     fireEvent.change(screen.getByPlaceholderText("tu@correo.com"), { target: { value: "comprador@correo.com" } });
+    // El DNI se autoverifica con Factiliza; esperamos a que confirme antes de comprar.
+    await screen.findByText("JUAN PEREZ");
     fireEvent.click(screen.getByRole("button", { name: /comprar/i }));
 
     // Al acreditarse y cubrir el costo, publica automáticamente y descuenta.

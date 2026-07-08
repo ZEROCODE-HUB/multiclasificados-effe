@@ -209,8 +209,10 @@ const AdvertiserPublish = () => {
 
   const persistDraftForLogin = (resumeAtSummary: boolean) => {
     try {
+      // `verified` va tal cual: marcarlo siempre en true pintaba el badge
+      // "DNI verificado" al volver del login sin haber verificado nada.
       localStorage.setItem(DRAFT_KEY, JSON.stringify({
-        form, coords, duration, quantity, extras, verified: true, personType, docNumber, verifiedName,
+        form, coords, duration, quantity, extras, verified, personType, docNumber, verifiedName,
         resumeAtSummary,
       }));
     } catch { /* noop */ }
@@ -224,6 +226,16 @@ const AdvertiserPublish = () => {
     }
     if (personType === "juridica" && docNumber.length !== 11) {
       toast({ title: "RUC inválido", description: "El RUC debe tener 11 dígitos.", variant: "destructive" });
+      return;
+    }
+
+    // La verificación consulta datos personales y consume saldo de Factiliza, así
+    // que la Edge Function `verify-doc` exige sesión: pedimos login ANTES de
+    // gastar la consulta, no después.
+    if (!session) {
+      persistDraftForLogin(false);
+      toast({ title: "Inicia sesión para verificar", description: "Te llevamos al login y retomamos tu publicación." });
+      setTimeout(() => navigate("/auth?redirect=/dashboard/anunciante/publicar"), 400);
       return;
     }
 
@@ -257,14 +269,7 @@ const AdvertiserPublish = () => {
         : `${personType === "natural" ? "DNI" : "RUC"} ${docNumber} confirmado.`,
     });
 
-    // Tras verificar exige login antes del pago
-    if (!session) {
-      persistDraftForLogin(true);
-      toast({ title: "Inicia sesión para pagar", description: "Te llevamos al login y retomamos tu publicación." });
-      setTimeout(() => navigate("/auth?redirect=/dashboard/anunciante/publicar"), 400);
-      return;
-    }
-    // Si ya hay sesión, abre el flujo de publicación
+    // Ya hay sesión garantizada (se exigió arriba): abre el flujo de publicación.
     setTimeout(() => openPublishFlowAfterVerify(), 250);
   };
 

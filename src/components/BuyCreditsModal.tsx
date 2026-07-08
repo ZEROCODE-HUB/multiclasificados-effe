@@ -5,7 +5,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Wallet, ShieldCheck, User, Building2, Check, Loader2, Minus, Plus } from "lucide-react";
+import { Wallet, ShieldCheck, User, Building2, Check, CheckCircle2, AlertCircle, Loader2, Minus, Plus } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { purchaseCredits, type CreditPackage, type PurchaseInvoiceData } from "@/lib/credits";
 import {
@@ -14,6 +14,10 @@ import {
 } from "@/lib/pricing";
 import { fetchPricingSettings } from "@/lib/pricingRemote";
 import { useKeyboardInset } from "@/hooks/useKeyboardInset";
+import { verifyDocument } from "@/lib/verifyDoc";
+
+// Correo válido para el comprobante.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 interface Props {
   open: boolean;
@@ -48,10 +52,74 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
   const [email, setEmail] = useState("");
   const [receiptType, setReceiptType] = useState<"boleta" | "factura">("boleta");
 
+  // Verificación del documento con Factiliza (nombre/razón social + datos).
+  const [verifiedName, setVerifiedName] = useState("");
+  const [docData, setDocData] = useState<Record<string, unknown> | null>(null);
+  const [verifyingDoc, setVerifyingDoc] = useState(false);
+  const [docError, setDocError] = useState("");
+
   const deficit = Math.max(0, creditCost - currentBalance);
 
   // En el APK, reserva el alto del teclado y centra el campo enfocado.
   const { kbPad, scrollFocusedIntoView } = useKeyboardInset();
+
+  // Al completar el documento (DNI 8 / RUC 11) lo consultamos automáticamente en
+  // Factiliza y mostramos el nombre/razón social y los datos disponibles.
+  useEffect(() => {
+    const docType = personType === "natural" ? "dni" : "ruc";
+    const requiredLen = personType === "natural" ? 8 : 11;
+    setDocError("");
+    if (docNumber.length !== requiredLen) {
+      setVerifiedName("");
+      setDocData(null);
+      setVerifyingDoc(false);
+      return;
+    }
+    let cancelled = false;
+    setVerifyingDoc(true);
+    setVerifiedName("");
+    setDocData(null);
+    verifyDocument(docType, docNumber)
+      .then((r) => {
+        if (cancelled) return;
+        if (r.ok) {
+          setVerifiedName(r.nombre ?? "");
+          setDocData(r.data ?? null);
+        } else {
+          setDocError(r.error ?? "No se pudo verificar el documento.");
+        }
+      })
+      .catch(() => { if (!cancelled) setDocError("No se pudo verificar el documento."); })
+      .finally(() => { if (!cancelled) setVerifyingDoc(false); });
+    return () => { cancelled = true; };
+  }, [docNumber, personType]);
+
+  const emailValid = EMAIL_RE.test(email.trim());
+  // Campo de Factiliza; "" si no viene o viene vacío (varios llegan en blanco).
+  const docField = (k: string): string => {
+    const v = docData?.[k];
+    return typeof v === "string" && v.trim() ? v.trim() : "";
+  };
+
+  // Ficha a mostrar tras verificar. Factiliza devuelve `direccion_completa` con
+  // el ubigeo ya concatenado; si falta, la armamos con dirección + ubigeo.
+  const ubigeo = [docField("distrito"), docField("provincia"), docField("departamento")]
+    .filter(Boolean).join(" - ");
+  const direccion = docField("direccion_completa")
+    || [docField("direccion"), ubigeo].filter(Boolean).join(", ");
+
+  const docRows: Array<[string, string]> = personType === "natural"
+    ? [
+        ["DNI", docNumber],
+        ["Domicilio", direccion],
+      ]
+    : [
+        ["RUC", docNumber],
+        ["Estado", docField("estado")],
+        ["Condición", docField("condicion")],
+        ["Tipo", docField("tipo_contribuyente")],
+        ["Domicilio fiscal", direccion],
+      ];
 
   // Al abrir: recarga la matriz de precios vigente desde la base de datos.
   useEffect(() => {
@@ -70,8 +138,15 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
 
   const handleBuy = async () => {
     if (creditsToBuy <= 0) { toast({ title: "Selecciona qué comprar", variant: "destructive" }); return; }
-    if (!docNumber.trim()) { toast({ title: "Ingresa tu documento", variant: "destructive" }); return; }
-    if (!email.trim()) { toast({ title: "Ingresa tu correo", variant: "destructive" }); return; }
+    if (!verifiedName) {
+      toast({
+        title: personType === "natural" ? "Verifica tu DNI" : "Verifica tu RUC",
+        description: "Ingresa un documento válido para continuar (se valida automáticamente).",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!emailValid) { toast({ title: "Ingresa un correo válido", variant: "destructive" }); return; }
     setBuying(true);
     try {
       const detailExtras = EXTRA_DEFS.filter((d) => extras[d.key]).map((d) => d.label);
@@ -86,7 +161,7 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
       const invoiceData: PurchaseInvoiceData = {
         receiptType,
         email: email.trim(),
-        advertiserName: "",
+        advertiserName: verifiedName,
         docType: personType === "natural" ? "dni" : "ruc",
         docNumber: docNumber.trim(),
       };
@@ -239,23 +314,59 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
             </button>
           </div>
           <div>
-            <Label className="text-xs">{personType === "natural" ? "DNI (8 dígitos)" : "RUC (11 dígitos)"}</Label>
+            <Label className="text-xs">
+              {personType === "natural" ? "DNI (8 dígitos)" : "RUC (11 dígitos)"} <span className="text-destructive">*</span>
+            </Label>
             <Input value={docNumber} onFocus={scrollFocusedIntoView}
               onChange={(e) => setDocNumber(e.target.value.replace(/\D/g, ""))}
               maxLength={personType === "natural" ? 8 : 11}
+              inputMode="numeric"
               placeholder={personType === "natural" ? "12345678" : "20123456789"} className="mt-1" />
+
+            {/* Resultado de la verificación con Factiliza */}
+            {verifyingDoc && (
+              <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Loader2 size={13} className="animate-spin" /> Verificando en Factiliza…
+              </p>
+            )}
+            {!verifyingDoc && verifiedName && (
+              <div className="mt-2 rounded-md border border-success/40 bg-success/5 p-2.5 text-xs space-y-1.5">
+                <p className="flex items-center gap-1.5 font-semibold text-success">
+                  <CheckCircle2 size={14} /> {personType === "natural" ? "Identidad verificada" : "Empresa verificada"}
+                </p>
+                <p className="font-medium text-foreground leading-snug">{verifiedName}</p>
+                {/* Ficha de Factiliza. Omitimos las filas que llegan vacías. */}
+                <dl className="space-y-0.5">
+                  {docRows.filter(([, v]) => v).map(([label, value]) => (
+                    <div key={label} className="flex gap-2">
+                      <dt className="shrink-0 text-muted-foreground">{label}:</dt>
+                      <dd className="text-foreground break-words">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            )}
+            {!verifyingDoc && docError && (
+              <p className="mt-2 flex items-start gap-1.5 text-xs text-destructive">
+                <AlertCircle size={13} className="mt-0.5 shrink-0" /> {docError}
+              </p>
+            )}
           </div>
           <div>
-            <Label className="text-xs">Correo para el comprobante</Label>
+            <Label className="text-xs">Correo para el comprobante <span className="text-destructive">*</span></Label>
             <Input type="email" value={email} onFocus={scrollFocusedIntoView}
               onChange={(e) => setEmail(e.target.value)}
+              inputMode="email"
               placeholder="tu@correo.com" className="mt-1" />
+            {email.length > 0 && !emailValid && (
+              <p className="mt-1 text-xs text-destructive">Ingresa un correo válido.</p>
+            )}
           </div>
         </div>
 
         <DialogFooter className="gap-2 pt-2">
           <Button variant="ghost" onClick={onClose} disabled={buying}>Cancelar</Button>
-          <Button onClick={handleBuy} disabled={buying || creditsToBuy <= 0} className="gap-2">
+          <Button onClick={handleBuy} disabled={buying || creditsToBuy <= 0 || verifyingDoc || !verifiedName || !emailValid} className="gap-2">
             {buying
               ? <><Loader2 size={14} className="animate-spin" /> Procesando…</>
               : <><ShieldCheck size={14} /> Comprar {creditsToBuy} cr — {formatSoles(solesTotal)}</>}
