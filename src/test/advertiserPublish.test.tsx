@@ -26,8 +26,11 @@ vi.mock("@/lib/publish", () => ({
   createAndPublishListing: (...a: unknown[]) => createAndPublishListing(...a),
 }));
 
+// Verificación de documento contra Factiliza (RENIEC/SUNAT). Por defecto el
+// documento existe; los tests que prueban el rechazo la sobreescriben.
+const verifyDocument = vi.fn();
 vi.mock("@/lib/verifyDoc", () => ({
-  verifyDocument: vi.fn().mockResolvedValue({ ok: true, nombre: "JUAN PEREZ", data: {} }),
+  verifyDocument: (...a: unknown[]) => verifyDocument(...a),
 }));
 
 // Promociones: mockeamos solo la carga; los helpers (bestPromoForCategory/applyDiscount) son reales.
@@ -85,6 +88,17 @@ const uploadMainPhoto = () => {
   fireEvent.change(fileInput);
 };
 
+// Publicar exige verificar el documento contra RENIEC/SUNAT y confirmar la ficha
+// devuelta. Pulsa "Publicar aviso", completa el DNI y confirma; al confirmar se
+// encadena el flujo de publicación (publica o abre el configurador de compra).
+const publishAndConfirmIdentity = async () => {
+  fireEvent.click(screen.getByRole("button", { name: /publicar aviso/i }));
+  fireEvent.click(await screen.findByRole("button", { name: /persona natural/i }));
+  fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "12345678" } });
+  await screen.findByText("JUAN PEREZ");
+  fireEvent.click(screen.getByRole("button", { name: /confirmar y continuar/i }));
+};
+
 beforeEach(() => {
   localStorage.clear();
   getCreditBalance.mockReset();
@@ -96,6 +110,7 @@ beforeEach(() => {
   navigate.mockClear();
   toast.mockClear();
   fetchActivePromotions.mockReset().mockResolvedValue([]);
+  verifyDocument.mockReset().mockResolvedValue({ ok: true, nombre: "JUAN PEREZ", data: {} });
 });
 
 describe("AdvertiserPublish — secuencia del flujo de publicación con créditos", () => {
@@ -109,7 +124,7 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     await screen.findByText("1000 cr");
 
     uploadMainPhoto();
-    fireEvent.click(screen.getByRole("button", { name: /publicar aviso/i }));
+    await publishAndConfirmIdentity();
 
     // Publica directo: crea el aviso y descuenta el costo en créditos.
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
@@ -127,7 +142,7 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     await screen.findByDisplayValue("Casa bonita");
 
     uploadMainPhoto();
-    fireEvent.click(screen.getByRole("button", { name: /publicar aviso/i }));
+    await publishAndConfirmIdentity();
 
     // Se abre el modal configurador (anuncios/días/extras → créditos).
     await screen.findByText(/créditos a comprar/i);
@@ -151,7 +166,7 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     await screen.findByText(/Día de la Madre/i);
 
     uploadMainPhoto();
-    fireEvent.click(screen.getByRole("button", { name: /publicar aviso/i }));
+    await publishAndConfirmIdentity();
 
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
     // Dinero: 16.14 × (1 − 0.50) = 8.07 soles. Créditos: round(8.07 × 10) = 81.
@@ -167,7 +182,7 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     await screen.findByDisplayValue("Casa bonita");
 
     uploadMainPhoto();
-    fireEvent.click(screen.getByRole("button", { name: /publicar aviso/i }));
+    await publishAndConfirmIdentity();
     await screen.findByText(/créditos a comprar/i);
 
     // Completa datos del comprobante y compra.
@@ -182,5 +197,77 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
     expect(spendCredits).toHaveBeenCalledWith(COST_CREDITS, "L1");
     await screen.findByText(/pago confirmado/i);
+  });
+});
+
+describe("AdvertiserPublish — la identidad se valida contra RENIEC/SUNAT", () => {
+  it("NO publica sin verificar: pulsar Publicar abre el cuadro de identidad", async () => {
+    getCreditBalance.mockResolvedValue(1000); // saldo de sobra: nada más lo frena
+    seedDraft();
+    render(<AdvertiserPublish />);
+    await screen.findByDisplayValue("Casa bonita");
+    uploadMainPhoto();
+
+    fireEvent.click(screen.getByRole("button", { name: /publicar aviso/i }));
+
+    await screen.findByText(/verifica tu identidad/i);
+    expect(createAndPublishListing).not.toHaveBeenCalled();
+    expect(spendCredits).not.toHaveBeenCalled();
+  });
+
+  it("DNI FALSO (12345678): Factiliza no lo encuentra, se muestra el error y NO se publica", async () => {
+    verifyDocument.mockResolvedValue({ ok: false, error: "No se encontró el documento." });
+    getCreditBalance.mockResolvedValue(1000);
+    seedDraft();
+    render(<AdvertiserPublish />);
+    await screen.findByDisplayValue("Casa bonita");
+    uploadMainPhoto();
+
+    fireEvent.click(screen.getByRole("button", { name: /publicar aviso/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /persona natural/i }));
+    fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "12345678" } });
+
+    // Se consultó de verdad y el error de RENIEC llega al usuario.
+    await waitFor(() => expect(verifyDocument).toHaveBeenCalledWith("dni", "12345678"));
+    await screen.findByText(/no se encontró el documento/i);
+
+    // "Confirmar y continuar" sigue bloqueado: sin ficha no hay nada que confirmar.
+    expect(screen.getByRole("button", { name: /confirmar y continuar/i })).toBeDisabled();
+    expect(createAndPublishListing).not.toHaveBeenCalled();
+    expect(spendCredits).not.toHaveBeenCalled();
+  });
+
+  it("consulta Factiliza UNA sola vez por documento (no en cada render)", async () => {
+    getCreditBalance.mockResolvedValue(1000);
+    seedDraft();
+    render(<AdvertiserPublish />);
+    await screen.findByDisplayValue("Casa bonita");
+    uploadMainPhoto();
+
+    fireEvent.click(screen.getByRole("button", { name: /publicar aviso/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /persona natural/i }));
+    fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "12345678" } });
+    await screen.findByText("JUAN PEREZ");
+
+    // Cada consulta cuesta saldo de Factiliza y expone datos personales.
+    expect(verifyDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it("un borrador con {verified:true} en localStorage NO salta la verificación", async () => {
+    getCreditBalance.mockResolvedValue(1000);
+    // El borrador vive en localStorage: el usuario puede editarlo a mano.
+    localStorage.setItem("effe:publish-draft", JSON.stringify({
+      form: { category: "inmuebles", title: "Casa bonita", description: "Descripción larga del aviso", price: "100", currency: "PEN", location: "Lima", condition: "nuevo" },
+      duration: 7, quantity: 1, extras: {},
+      verified: true, verifiedName: "QUIEN SEA", personType: "natural", docNumber: "12345678",
+    }));
+    render(<AdvertiserPublish />);
+    await screen.findByDisplayValue("Casa bonita");
+    uploadMainPhoto();
+
+    fireEvent.click(screen.getByRole("button", { name: /publicar aviso/i }));
+
+    await screen.findByText(/verifica tu identidad/i);
+    expect(createAndPublishListing).not.toHaveBeenCalled();
   });
 });

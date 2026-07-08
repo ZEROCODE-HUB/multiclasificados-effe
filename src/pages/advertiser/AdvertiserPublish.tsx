@@ -12,7 +12,7 @@ import {
 import {
   ImagePlus, X, ArrowLeft, ArrowRight, Star, Check, MapPin, Tag, FileText, Camera,
   ShieldCheck, Building2, User, CreditCard, Receipt, Sparkles, Flame, EyeOff, Lock, Package, Minus, Plus,
-  Wallet, Loader2, Percent,
+  Wallet, Loader2, Percent, AlertCircle, CheckCircle2,
 } from "lucide-react";
 import { categories } from "@/data/mockData";
 import { useEffect, useRef, useState } from "react";
@@ -52,6 +52,7 @@ const DRAFT_KEY = "effe:publish-draft";
 
 const AdvertiserPublish = () => {
   const session = useSession();
+  const hasSession = !!session;
   const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -73,13 +74,19 @@ const AdvertiserPublish = () => {
     return () => { active = false; };
   }, [navigate]);
 
-  // Verificación de identidad (se solicita al presionar "Publicar aviso")
+  // Verificación de identidad (se solicita al presionar "Publicar aviso").
+  // `verifiedName`/`docData` = lo que devolvió RENIEC/SUNAT vía Factiliza.
+  // `verified` = el usuario CONFIRMÓ que esa ficha es suya. Son distintos a
+  // propósito: consultar el documento no equivale a aceptar los datos, y sin la
+  // confirmación explícita no se publica nada.
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [personType, setPersonType] = useState<"natural" | "juridica" | "">("");
   const [docNumber, setDocNumber] = useState("");
   const [verified, setVerified] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [verifiedName, setVerifiedName] = useState("");
+  const [docData, setDocData] = useState<Record<string, unknown> | null>(null);
+  const [docError, setDocError] = useState("");
 
   // Imágenes — solo 2 slots por aviso
   const [mainPhoto, setMainPhoto] = useState<PhotoItem | null>(null);
@@ -115,6 +122,15 @@ const AdvertiserPublish = () => {
   // Flujo de publicación con créditos
   const [buyCreditsOpen, setBuyCreditsOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  // Guard SÍNCRONO contra el doble envío. `publishing` es state: no se actualiza
+  // hasta el siguiente render, así que dos toques seguidos (o el ghost-click de
+  // touch→click en el WebView de Android) leen ambos `publishing === false` del
+  // mismo closure y pasan el guard. Un ref se actualiza al instante.
+  const publishingRef = useRef(false);
+  // Aviso YA publicado al que solo le faltó el cobro (spend_credits devolvió
+  // false porque el saldo cambió). Al comprar créditos hay que cobrar ESTE
+  // aviso, no publicar uno nuevo: eso creaba un duplicado.
+  const pendingChargeListingId = useRef<string | null>(null);
   const [successOpen, setSuccessOpen] = useState<{ open: boolean; number: string; email: string }>({ open: false, number: "", email: "" });
 
   // Pricing en vivo: arranca del caché local y se refresca desde la BD.
@@ -144,12 +160,16 @@ const AdvertiserPublish = () => {
       if (d.coords) setCoords(d.coords);
       if (d.duration) setDuration(d.duration);
       if (d.extras) setExtras(d.extras);
-      if (d.verified) setVerified(d.verified);
+      // `verified`/`verifiedName` NO se restauran: verificar exige sesión, así que
+      // un borrador guardado antes del login jamás pudo verificarse de verdad.
+      // Restaurarlos solo servía para que cualquiera se saltara la verificación
+      // escribiendo `{"verified":true}` en el borrador de localStorage.
       if (d.personType) setPersonType(d.personType);
       if (d.docNumber) setDocNumber(d.docNumber);
-      if (d.verifiedName) setVerifiedName(d.verifiedName);
+      // Al volver del login se retoma la publicación por el cuadro de identidad,
+      // no publicando directamente: el documento aún está sin verificar.
       if (d.resumeAtSummary && session) {
-        setTimeout(() => openPublishFlowAfterVerify(), 200);
+        setTimeout(() => setVerifyOpen(true), 200);
       }
       localStorage.removeItem(DRAFT_KEY);
     } catch { /* noop */ }
@@ -209,68 +229,107 @@ const AdvertiserPublish = () => {
 
   const persistDraftForLogin = (resumeAtSummary: boolean) => {
     try {
-      // `verified` va tal cual: marcarlo siempre en true pintaba el badge
-      // "DNI verificado" al volver del login sin haber verificado nada.
+      // Ni `verified` ni `verifiedName` se guardan: el borrador vive en
+      // localStorage, donde el usuario puede editarlo, y al restaurarlo se
+      // ignoran de todos modos. La verificación se rehace tras el login.
       localStorage.setItem(DRAFT_KEY, JSON.stringify({
-        form, coords, duration, quantity, extras, verified, personType, docNumber, verifiedName,
+        form, coords, duration, quantity, extras, personType, docNumber,
         resumeAtSummary,
       }));
     } catch { /* noop */ }
   };
 
-  const handleVerify = async () => {
-    if (verifying) return;
-    if (personType === "natural" && docNumber.length !== 8) {
-      toast({ title: "DNI inválido", description: "El DNI debe tener 8 dígitos.", variant: "destructive" });
-      return;
-    }
-    if (personType === "juridica" && docNumber.length !== 11) {
-      toast({ title: "RUC inválido", description: "El RUC debe tener 11 dígitos.", variant: "destructive" });
-      return;
-    }
-
-    // La verificación consulta datos personales y consume saldo de Factiliza, así
-    // que la Edge Function `verify-doc` exige sesión: pedimos login ANTES de
-    // gastar la consulta, no después.
-    if (!session) {
-      persistDraftForLogin(false);
-      toast({ title: "Inicia sesión para verificar", description: "Te llevamos al login y retomamos tu publicación." });
-      setTimeout(() => navigate("/auth?redirect=/dashboard/anunciante/publicar"), 400);
-      return;
-    }
-
-    // Verificación real contra Factiliza (a través de la Edge Function).
-    const tipo = personType === "natural" ? "dni" : "ruc";
-    setVerifying(true);
-    let result;
-    try {
-      result = await verifyDocument(tipo, docNumber);
-    } finally {
+  // Consulta automática a Factiliza en cuanto el documento tiene la longitud
+  // exacta (DNI 8 / RUC 11). Antes esto era un botón "Verificar" que, al
+  // acertar, publicaba de inmediato: el usuario nunca llegaba a ver —ni a
+  // confirmar— el nombre que devolvía RENIEC. Ahora solo trae la ficha.
+  useEffect(() => {
+    if (!verifyOpen) return;
+    const requiredLen = personType === "natural" ? 8 : 11;
+    setDocError("");
+    if (!personType || docNumber.length !== requiredLen) {
+      setVerifiedName("");
+      setDocData(null);
       setVerifying(false);
-    }
-
-    if (!result.ok) {
-      toast({
-        title: tipo === "dni" ? "DNI no verificado" : "RUC no verificado",
-        description: result.error ?? "No se pudo verificar el documento. Revisa el número.",
-        variant: "destructive",
-      });
       return;
     }
+    // La Edge Function `verify-doc` exige sesión (consulta datos personales y
+    // consume saldo de Factiliza). Sin sesión ni la llamamos.
+    if (!hasSession) return;
 
-    const nombre = result.nombre ?? "";
-    setVerifiedName(nombre);
+    const tipo = personType === "natural" ? "dni" : "ruc";
+    let cancelled = false;
+    setVerifying(true);
+    setVerifiedName("");
+    setDocData(null);
+    verifyDocument(tipo, docNumber)
+      .then((r) => {
+        if (cancelled) return;
+        if (r.ok) {
+          setVerifiedName(r.nombre ?? "");
+          setDocData(r.data ?? null);
+        } else {
+          setDocError(r.error ?? "No se pudo verificar el documento. Revisa el número.");
+        }
+      })
+      .catch(() => { if (!cancelled) setDocError("No se pudo verificar el documento."); })
+      .finally(() => { if (!cancelled) setVerifying(false); });
+    return () => { cancelled = true; };
+    // `hasSession` y no `session`: depender del objeto lo re-dispararía en cada
+    // render si su identidad cambiara, gastando una consulta de Factiliza cada vez.
+  }, [verifyOpen, personType, docNumber, hasSession]);
+
+  // Campo de la ficha de Factiliza; "" si no viene o llega vacío.
+  const docField = (k: string): string => {
+    const v = docData?.[k];
+    return typeof v === "string" && v.trim() ? v.trim() : "";
+  };
+  const docUbigeo = [docField("distrito"), docField("provincia"), docField("departamento")]
+    .filter(Boolean).join(" - ");
+  const docDireccion = docField("direccion_completa")
+    || [docField("direccion"), docUbigeo].filter(Boolean).join(", ");
+  const docRows: Array<[string, string]> = personType === "juridica"
+    ? [
+        ["RUC", docNumber],
+        ["Estado", docField("estado")],
+        ["Condición", docField("condicion")],
+        ["Domicilio fiscal", docDireccion],
+      ]
+    : [
+        ["DNI", docNumber],
+        ["Domicilio", docDireccion],
+      ];
+
+  // El usuario confirma que la ficha que devolvió RENIEC/SUNAT es suya. Recién
+  // aquí `verified` pasa a true y se puede publicar.
+  //
+  // Confirmar es ahora el punto de envío real (encadena la publicación), así que
+  // lleva el mismo guard SÍNCRONO que `doPublish`: dos toques seguidos —o el
+  // ghost-click de touch→click en el WebView de Android— leerían el mismo
+  // `verified === false` del closure y encadenarían dos publicaciones.
+  const confirmingRef = useRef(false);
+  const confirmIdentity = () => {
+    if (!verifiedName || confirmingRef.current) return;
+    confirmingRef.current = true;
     setVerified(true);
     setVerifyOpen(false);
     toast({
-      title: "Identidad verificada",
-      description: nombre
-        ? `${personType === "natural" ? "DNI" : "RUC"} ${docNumber} · ${nombre}`
-        : `${personType === "natural" ? "DNI" : "RUC"} ${docNumber} confirmado.`,
+      title: "Identidad confirmada",
+      description: `${personType === "natural" ? "DNI" : "RUC"} ${docNumber} · ${verifiedName}`,
     });
+    setTimeout(() => {
+      confirmingRef.current = false;
+      openPublishFlowAfterVerify();
+    }, 250);
+  };
 
-    // Ya hay sesión garantizada (se exigió arriba): abre el flujo de publicación.
-    setTimeout(() => openPublishFlowAfterVerify(), 250);
+  // Cambiar el documento (o el tipo de persona) invalida una confirmación previa:
+  // si no, se confirmaba un DNI y se publicaba con otro.
+  const resetIdentity = () => {
+    setVerified(false);
+    setVerifiedName("");
+    setDocData(null);
+    setDocError("");
   };
 
   const canPublish = form.category && form.title && form.description && form.price && form.location && !!mainPhoto;
@@ -297,11 +356,69 @@ const AdvertiserPublish = () => {
       navigate("/auth?redirect=/dashboard/anunciante/publicar");
       return;
     }
+    // Identidad verificada contra RENIEC/SUNAT y confirmada por el usuario.
+    // Sin esto se publicaba sin pedir documento alguno cuando ya había saldo:
+    // el cuadro de verificación existía pero NADIE lo abría.
+    if (!verified) {
+      setVerifyOpen(true);
+      return;
+    }
     openPublishFlowAfterVerify();
   };
 
+  // Tras publicar con éxito dejamos el formulario vacío. Así, cerrar el modal de
+  // confirmación con Esc / clic afuera / la X ya no deja al usuario frente a un
+  // formulario completo que puede volver a enviar: `canPublish` pasa a false y
+  // republicar el mismo aviso se vuelve imposible por construcción.
+  const resetPublishForm = () => {
+    setForm({ category: "", title: "", description: "", price: "", currency: "PEN", location: "", condition: "nuevo" });
+    setMainPhoto(null);
+    setSecondPhoto(null);
+    setCoords(null);
+    setExtras({});
+    setDuration(7);
+    localStorage.removeItem(DRAFT_KEY);
+  };
+
+  // Cobra un aviso que ya quedó publicado pero cuyo descuento de créditos falló.
+  // Publicar de nuevo crearía un aviso duplicado; aquí solo se descuenta.
+  const chargePendingListing = async (listingId: string) => {
+    if (publishingRef.current) return;
+    publishingRef.current = true;
+    setPublishing(true);
+    const email = userEmail || "anunciante@effe.pe";
+    try {
+      const spent = await spendCredits(totalCredits, listingId);
+      const newBalance = await getCreditBalance();
+      setCreditBalance(newBalance);
+      if (!spent) {
+        toast({
+          title: "No se pudieron descontar los créditos",
+          description: "Tu saldo sigue sin alcanzar para este aviso.",
+          variant: "destructive",
+        });
+        return;
+      }
+      pendingChargeListingId.current = null;
+      const localInv = addInvoice({
+        email,
+        advertiser: verifiedName || session?.name || "Anunciante",
+        listingTitle: form.title,
+        amount: total,
+        detail: `Boleta · Aviso ${duration} días · ${totalCredits} créditos (${formatSoles(total)})`,
+        docNumber: docNumber || undefined,
+      });
+      setSuccessOpen({ open: true, number: localInv.number, email });
+      resetPublishForm();
+    } finally {
+      publishingRef.current = false;
+      setPublishing(false);
+    }
+  };
+
   const doPublish = async () => {
-    if (publishing) return;
+    // Ref, no state: cierra la ventana entre dos clics dentro del mismo render.
+    if (publishingRef.current) return;
     if (!session) {
       persistDraftForLogin(true);
       navigate("/auth?redirect=/dashboard/anunciante/publicar");
@@ -309,6 +426,7 @@ const AdvertiserPublish = () => {
     }
     const email = userEmail || "anunciante@effe.pe";
     const tipoDoc = personType === "juridica" ? "ruc" : "dni";
+    publishingRef.current = true;
     setPublishing(true);
     try {
       // 1) Crear el aviso y publicarlo
@@ -334,14 +452,19 @@ const AdvertiserPublish = () => {
       const newBalance = await getCreditBalance();
       setCreditBalance(newBalance);
       if (!spent) {
-        // El saldo cambió y ya no alcanza: abrir el configurador para comprar.
+        // El saldo cambió y ya no alcanza. El aviso YA está publicado: lo dejamos
+        // anotado para cobrarlo tras la compra (sin republicarlo) y no mostramos
+        // "¡Pago confirmado!" por algo que todavía no se cobró.
+        pendingChargeListingId.current = listingId;
         toast({
           title: "No se pudieron descontar los créditos",
           description: "Tu saldo cambió y ya no alcanza. Compra créditos para completar.",
           variant: "destructive",
         });
         setBuyCreditsOpen(true);
+        return;
       }
+      pendingChargeListingId.current = null;
 
       // 3) Guardar comprobante local como respaldo
       const localInv = addInvoice({
@@ -355,6 +478,8 @@ const AdvertiserPublish = () => {
       });
 
       setSuccessOpen({ open: true, number: invoiceNumber || localInv.number, email });
+      // Publicado y cobrado: vaciamos el formulario para que no se pueda reenviar.
+      resetPublishForm();
       if (!invoiceSaved) {
         toast({
           title: "Comprobante no registrado en la base de datos",
@@ -375,6 +500,7 @@ const AdvertiserPublish = () => {
         variant: "destructive",
       });
     } finally {
+      publishingRef.current = false;
       setPublishing(false);
     }
   };
@@ -834,8 +960,12 @@ const AdvertiserPublish = () => {
             </Card>
 
             <div className="flex flex-col gap-2">
-              <Button variant="hero" size="lg" className="w-full rounded-none" onClick={openPublishFlow}>
-                Publicar aviso <ArrowRight size={16} className="ml-1" />
+              {/* `disabled` solo mientras se publica: si faltan campos dejamos el
+                  botón activo para que openPublishFlow explique QUÉ falta. */}
+              <Button variant="hero" size="lg" className="w-full rounded-none" onClick={openPublishFlow} disabled={publishing}>
+                {publishing
+                  ? <><Loader2 size={16} className="mr-1 animate-spin" /> Publicando…</>
+                  : <>Publicar aviso <ArrowRight size={16} className="ml-1" /></>}
               </Button>
               <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 justify-center text-center">
                 <Wallet size={12} className="text-secondary" /> Se descontarán créditos de tu saldo al publicar.
@@ -847,20 +977,22 @@ const AdvertiserPublish = () => {
 
 
 
-      {/* Popup verificación */}
-      <Dialog open={verifyOpen} onOpenChange={setVerifyOpen}>
+      {/* Popup verificación — el documento se consulta contra RENIEC/SUNAT y el
+          usuario debe confirmar la ficha devuelta antes de publicar. */}
+      <Dialog open={verifyOpen} onOpenChange={(o) => { if (!o) setVerifyOpen(false); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Verifica tu identidad</DialogTitle>
             <DialogDescription>
               Antes de publicar, indícanos si publicas como persona natural o jurídica.
+              Validaremos tu documento y deberás confirmar los datos.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <button
                 type="button"
-                onClick={() => { setPersonType("natural"); setDocNumber(""); setVerifiedName(""); }}
+                onClick={() => { setPersonType("natural"); setDocNumber(""); resetIdentity(); }}
                 className={`p-4 border text-left transition-all ${personType === "natural" ? "border-secondary bg-secondary/10" : "border-border hover:bg-muted/50"}`}
               >
                 <User size={20} className="text-secondary mb-2" />
@@ -869,7 +1001,7 @@ const AdvertiserPublish = () => {
               </button>
               <button
                 type="button"
-                onClick={() => { setPersonType("juridica"); setDocNumber(""); setVerifiedName(""); }}
+                onClick={() => { setPersonType("juridica"); setDocNumber(""); resetIdentity(); }}
                 className={`p-4 border text-left transition-all ${personType === "juridica" ? "border-secondary bg-secondary/10" : "border-border hover:bg-muted/50"}`}
               >
                 <Building2 size={20} className="text-secondary mb-2" />
@@ -878,31 +1010,56 @@ const AdvertiserPublish = () => {
               </button>
             </div>
             {personType && (
-              <div className="flex gap-2 items-end">
-                <div className="flex-1">
-                  <Label>{personType === "natural" ? "DNI" : "RUC"}</Label>
-                  <Input
-                    value={docNumber}
-                    onChange={(e) => { setDocNumber(e.target.value.replace(/\D/g, "")); setVerifiedName(""); }}
-                    maxLength={personType === "natural" ? 8 : 11}
-                    placeholder={personType === "natural" ? "12345678" : "20123456789"}
-                    className="mt-1"
-                    disabled={verifying}
-                  />
-                </div>
-                <Button onClick={handleVerify} disabled={verifying} className="gap-2">
-                  <ShieldCheck size={14} /> {verifying ? "Verificando…" : "Verificar"}
-                </Button>
+              <div>
+                <Label>{personType === "natural" ? "DNI" : "RUC"}</Label>
+                <Input
+                  value={docNumber}
+                  onChange={(e) => { setDocNumber(e.target.value.replace(/\D/g, "")); resetIdentity(); }}
+                  maxLength={personType === "natural" ? 8 : 11}
+                  placeholder={personType === "natural" ? "12345678" : "20123456789"}
+                  inputMode="numeric"
+                  className="mt-1"
+                  disabled={verifying}
+                />
+
+                {verifying && (
+                  <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Loader2 size={13} className="animate-spin" /> Verificando en Factiliza…
+                  </p>
+                )}
+
+                {/* Ficha real devuelta por RENIEC/SUNAT: es lo que el usuario confirma. */}
+                {!verifying && verifiedName && (
+                  <div className="mt-2 rounded-md border border-success/40 bg-success/5 p-2.5 text-xs space-y-1.5">
+                    <p className="flex items-center gap-1.5 font-semibold text-success">
+                      <CheckCircle2 size={14} /> {personType === "natural" ? "Identidad encontrada" : "Empresa encontrada"}
+                    </p>
+                    <p className="font-medium text-foreground leading-snug">{verifiedName}</p>
+                    <dl className="space-y-0.5">
+                      {docRows.filter(([, v]) => v).map(([label, value]) => (
+                        <div key={label} className="flex gap-2">
+                          <dt className="shrink-0 text-muted-foreground">{label}:</dt>
+                          <dd className="text-foreground break-words">{value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                    <p className="pt-1 text-muted-foreground">¿Estos datos son tuyos? Confírmalos para continuar.</p>
+                  </div>
+                )}
+
+                {!verifying && docError && (
+                  <p className="mt-2 flex items-start gap-1.5 text-xs text-destructive">
+                    <AlertCircle size={13} className="mt-0.5 shrink-0" /> {docError}
+                  </p>
+                )}
               </div>
             )}
-            {verifiedName && (
-              <p className="text-xs text-success flex items-center gap-1.5">
-                <ShieldCheck size={13} /> {verifiedName}
-              </p>
-            )}
           </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setVerifyOpen(false)}>Más tarde</Button>
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" onClick={() => setVerifyOpen(false)}>Cancelar</Button>
+            <Button onClick={confirmIdentity} disabled={verifying || !verifiedName} className="gap-2">
+              <ShieldCheck size={14} /> Confirmar y continuar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -918,7 +1075,11 @@ const AdvertiserPublish = () => {
           setBuyCreditsOpen(false);
           // Tras comprar, si ya alcanza, se publica de inmediato y se descuenta.
           if (Math.round(newBalance) >= totalCredits) {
-            doPublish();
+            // Si el aviso ya se publicó y solo faltaba el cobro, se cobra ese
+            // aviso. Llamar a doPublish() aquí publicaría un duplicado.
+            const pending = pendingChargeListingId.current;
+            if (pending) chargePendingListing(pending);
+            else doPublish();
           } else {
             toast({
               title: "Créditos añadidos",
