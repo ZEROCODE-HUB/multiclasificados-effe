@@ -30,7 +30,8 @@ vi.mock("@/lib/publish", () => ({
   createAndPublishListing: (...a: unknown[]) => createAndPublishListing(...a),
 }));
 
-vi.mock("@/lib/verifyDoc", () => ({
+vi.mock("@/lib/verifyDoc", async (orig) => ({
+  ...(await (orig() as Promise<Record<string, unknown>>)),
   verifyDocument: vi.fn().mockResolvedValue({ ok: true, nombre: "JUAN PEREZ", data: {} }),
 }));
 

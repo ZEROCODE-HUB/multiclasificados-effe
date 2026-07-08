@@ -14,7 +14,7 @@ import {
 } from "@/lib/pricing";
 import { fetchPricingSettings } from "@/lib/pricingRemote";
 import { useKeyboardInset } from "@/hooks/useKeyboardInset";
-import { verifyDocument } from "@/lib/verifyDoc";
+import { verifyDocument, normalizeDocNumber } from "@/lib/verifyDoc";
 
 // Correo válido para el comprobante.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -317,9 +317,10 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
             <Label className="text-xs">
               {personType === "natural" ? "DNI (8 dígitos)" : "RUC (11 dígitos)"} <span className="text-destructive">*</span>
             </Label>
+            {/* Sin `maxLength`: recortaría el texto pegado antes de quitarle los
+                espacios. El tope lo aplica normalizeDocNumber, ya sobre dígitos. */}
             <Input value={docNumber} onFocus={scrollFocusedIntoView}
-              onChange={(e) => setDocNumber(e.target.value.replace(/\D/g, ""))}
-              maxLength={personType === "natural" ? 8 : 11}
+              onChange={(e) => setDocNumber(normalizeDocNumber(e.target.value, personType === "natural" ? 8 : 11))}
               inputMode="numeric"
               placeholder={personType === "natural" ? "12345678" : "20123456789"} className="mt-1" />
 

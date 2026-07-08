@@ -29,7 +29,9 @@ vi.mock("@/lib/publish", () => ({
 // Verificación de documento contra Factiliza (RENIEC/SUNAT). Por defecto el
 // documento existe; los tests que prueban el rechazo la sobreescriben.
 const verifyDocument = vi.fn();
-vi.mock("@/lib/verifyDoc", () => ({
+vi.mock("@/lib/verifyDoc", async (orig) => ({
+  // normalizeDocNumber va REAL: es lo que limpia lo que el usuario pega.
+  ...(await (orig() as Promise<Record<string, unknown>>)),
   verifyDocument: (...a: unknown[]) => verifyDocument(...a),
 }));
 

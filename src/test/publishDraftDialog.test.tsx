@@ -30,7 +30,10 @@ vi.mock("@/lib/publish", () => ({
 }));
 
 const verifyDocument = vi.fn();
-vi.mock("@/lib/verifyDoc", () => ({ verifyDocument: (...a: unknown[]) => verifyDocument(...a) }));
+vi.mock("@/lib/verifyDoc", async (orig) => ({
+  ...(await (orig() as Promise<Record<string, unknown>>)),
+  verifyDocument: (...a: unknown[]) => verifyDocument(...a),
+}));
 
 vi.mock("@/lib/promotions", async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>);

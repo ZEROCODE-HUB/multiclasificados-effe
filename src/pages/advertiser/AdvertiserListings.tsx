@@ -289,7 +289,9 @@ const AdvertiserListings = () => {
 
         <Tabs defaultValue="activos">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-            <div className="-mx-4 sm:mx-0 px-4 sm:px-0 overflow-x-auto scrollbar-hide">
+            {/* El margen negativo debe igualar el padding de <main> (px-3 en móvil).
+                Con -mx-4 la tira sobresalía 4px y la página entera scrolleaba en horizontal. */}
+            <div className="-mx-3 sm:mx-0 px-3 sm:px-0 overflow-x-auto scrollbar-hide">
               <TabsList className="w-max">
                 <TabsTrigger value="activos">Activos ({byTab("activos").length})</TabsTrigger>
                 <TabsTrigger value="pausados">Pausados ({byTab("pausados").length})</TabsTrigger>

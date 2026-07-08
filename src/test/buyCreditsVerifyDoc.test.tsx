@@ -14,7 +14,11 @@ vi.mock("@/lib/credits", () => ({ purchaseCredits: (...a: unknown[]) => purchase
 vi.mock("@/hooks/use-toast", () => ({ toast: vi.fn() }));
 
 const verifyDocument = vi.fn();
-vi.mock("@/lib/verifyDoc", () => ({ verifyDocument: (...a: unknown[]) => verifyDocument(...a) }));
+vi.mock("@/lib/verifyDoc", async (orig) => ({
+  // normalizeDocNumber va REAL: es lo que limpia lo que el usuario pega.
+  ...(await (orig() as Promise<Record<string, unknown>>)),
+  verifyDocument: (...a: unknown[]) => verifyDocument(...a),
+}));
 
 import { BuyCreditsModal } from "@/components/BuyCreditsModal";
 
@@ -95,6 +99,19 @@ describe("BuyCreditsModal — verificación de documento con Factiliza + campos 
     expect(screen.getByText("HABIDO")).toBeInTheDocument();
     expect(screen.getByText(/GARCILASO DE LA VEGA/)).toBeInTheDocument();
     expect(screen.queryByText("Tipo:")).not.toBeInTheDocument();
+  });
+
+  it("pegar el DNI CON ESPACIO conserva los 8 dígitos y verifica", async () => {
+    verifyDocument.mockResolvedValue({ ok: true, nombre: "MAMANI GOMEZ, REBECA", data: {} });
+    open();
+
+    // Formato habitual al copiar un DNI. Antes el maxLength del input recortaba
+    // "4444 5555" a "4444 555" y quedaban 7 dígitos: nunca se consultaba.
+    fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "4444 5555" } });
+
+    expect((screen.getByPlaceholderText("12345678") as HTMLInputElement).value).toBe("44445555");
+    await waitFor(() => expect(verifyDocument).toHaveBeenCalledWith("dni", "44445555"));
+    await screen.findByText("MAMANI GOMEZ, REBECA");
   });
 
   it("NO consulta si el DNI está incompleto", async () => {

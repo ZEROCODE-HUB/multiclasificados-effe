@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BadgeCheck, ShieldAlert, Loader2, Eye, EyeOff } from "lucide-react";
 import { fetchMyProfile, updateMyProfile, uploadMyAvatar, type MyProfile } from "@/lib/auth";
+import { normalizeDocNumber } from "@/lib/verifyDoc";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
 import { Capacitor } from "@capacitor/core";
@@ -263,9 +264,8 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
                       <Label>RUC</Label>
                       <Input
                         value={companyRuc}
-                        onChange={(e) => setCompanyRuc(e.target.value.replace(/\D/g, ""))}
+                        onChange={(e) => setCompanyRuc(normalizeDocNumber(e.target.value, 11))}
                         inputMode="numeric"
-                        maxLength={11}
                         placeholder="20123456789"
                         className="mt-1"
                       />

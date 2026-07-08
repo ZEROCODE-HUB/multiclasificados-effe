@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { verifyDocument } from "@/lib/verifyDoc";
+import { verifyDocument, normalizeDocNumber } from "@/lib/verifyDoc";
 
 export type PersonType = "natural" | "juridica" | "";
 
@@ -159,8 +159,7 @@ export function VerifyIdentityDialog({
               <Label>{personType === "natural" ? "DNI" : "RUC"}</Label>
               <Input
                 value={docNumber}
-                onChange={(e) => { setDocNumber(e.target.value.replace(/\D/g, "")); resetIdentity(); }}
-                maxLength={personType === "natural" ? 8 : 11}
+                onChange={(e) => { setDocNumber(normalizeDocNumber(e.target.value, personType === "natural" ? 8 : 11)); resetIdentity(); }}
                 placeholder={personType === "natural" ? "12345678" : "20123456789"}
                 inputMode="numeric"
                 className="mt-1"
