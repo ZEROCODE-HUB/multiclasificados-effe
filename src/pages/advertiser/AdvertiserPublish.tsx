@@ -12,7 +12,7 @@ import {
 import {
   ImagePlus, X, ArrowLeft, ArrowRight, Star, Check, MapPin, Tag, FileText, Camera,
   ShieldCheck, Building2, User, CreditCard, Receipt, Sparkles, Flame, EyeOff, Lock, Package, Minus, Plus,
-  Wallet, Loader2, Percent, AlertCircle, CheckCircle2,
+  Wallet, Loader2, Percent, AlertCircle, CheckCircle2, Save,
 } from "lucide-react";
 import { categories } from "@/data/mockData";
 import { useEffect, useRef, useState } from "react";
@@ -23,7 +23,7 @@ import {
   loadSettings, priceForDuration, formatSoles, addInvoice, avisosBreakdown, solesToCredits,
   type DurationDays, type PricingSettings, type ExtraPrices,
 } from "@/lib/pricing";
-import { createAndPublishListing } from "@/lib/publish";
+import { createAndPublishListing, saveListingDraft } from "@/lib/publish";
 import { verifyDocument } from "@/lib/verifyDoc";
 import { getCreditBalance, spendCredits } from "@/lib/credits";
 import { fetchActivePromotions, bestPromoForCategory, applyDiscount, type Promotion } from "@/lib/promotions";
@@ -127,6 +127,12 @@ const AdvertiserPublish = () => {
   // touch→click en el WebView de Android) leen ambos `publishing === false` del
   // mismo closure y pasan el guard. Un ref se actualiza al instante.
   const publishingRef = useRef(false);
+  // Guardado en "Mis borradores". `draftListingId` recuerda el aviso ya creado:
+  // guardar dos veces lo ACTUALIZA, y publicar después reutiliza ese mismo aviso
+  // en vez de crear otro.
+  const [savingDraft, setSavingDraft] = useState(false);
+  const savingDraftRef = useRef(false);
+  const draftListingId = useRef<string | null>(null);
   // Aviso YA publicado al que solo le faltó el cobro (spend_credits devolvió
   // false porque el saldo cambió). Al comprar créditos hay que cobrar ESTE
   // aviso, no publicar uno nuevo: eso creaba un duplicado.
@@ -377,7 +383,60 @@ const AdvertiserPublish = () => {
     setCoords(null);
     setExtras({});
     setDuration(7);
+    draftListingId.current = null; // el borrador ya se convirtió en aviso publicado
     localStorage.removeItem(DRAFT_KEY);
+  };
+
+  // "Guardar en mis borradores": deja el aviso en la BD con status=draft, sin
+  // cobrar ni pedir identidad. Guardar dos veces actualiza el mismo aviso.
+  const saveDraft = async () => {
+    if (savingDraftRef.current || publishingRef.current) return;
+
+    // Sin sesión no hay dónde guardarlo (owner_id): guardamos el borrador local
+    // y lo retomamos tras el login, igual que hace "Publicar".
+    if (!session) {
+      persistDraftForLogin(false);
+      toast({ title: "Inicia sesión para guardar", description: "Te llevamos al login y retomamos tu aviso." });
+      navigate("/auth?redirect=/dashboard/anunciante/publicar");
+      return;
+    }
+    // `title` y `category_id` son NOT NULL en la BD: sin ellos no hay borrador.
+    if (!form.title.trim() || !form.category) {
+      toast({
+        title: "Falta lo mínimo para guardar",
+        description: "Ponle al menos un título y una categoría al aviso.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    savingDraftRef.current = true;
+    setSavingDraft(true);
+    try {
+      const id = await saveListingDraft({
+        form, lat: coords?.lat ?? null, lng: coords?.lng ?? null,
+        quantity, duration, extras,
+        mainPhoto: mainPhoto ? { file: mainPhoto.file, name: mainPhoto.name } : null,
+        secondPhoto: secondPhoto ? { file: secondPhoto.file, name: secondPhoto.name } : null,
+        draftId: draftListingId.current,
+      });
+      draftListingId.current = id;
+      // El borrador local ya no hace falta: la fuente de verdad pasa a ser la BD.
+      localStorage.removeItem(DRAFT_KEY);
+      toast({
+        title: "Guardado en tus borradores",
+        description: "Lo encuentras en Mis avisos › Borradores. Puedes publicarlo cuando quieras.",
+      });
+    } catch (err: unknown) {
+      toast({
+        title: "No se pudo guardar el borrador",
+        description: err instanceof Error ? err.message : "Inténtalo de nuevo.",
+        variant: "destructive",
+      });
+    } finally {
+      savingDraftRef.current = false;
+      setSavingDraft(false);
+    }
   };
 
   // Cobra un aviso que ya quedó publicado pero cuyo descuento de créditos falló.
@@ -438,6 +497,9 @@ const AdvertiserPublish = () => {
         duration,
         extras,
         total,
+        // Si ya se guardó como borrador, se publica ESE aviso: sin esto quedarían
+        // dos, uno en borradores y otro activo.
+        draftId: draftListingId.current,
         mainPhoto: mainPhoto ? { file: mainPhoto.file, name: mainPhoto.name } : null,
         secondPhoto: hasSecondImageInPackage && secondPhoto ? { file: secondPhoto.file, name: secondPhoto.name } : null,
         receiptType: "boleta",
@@ -962,13 +1024,29 @@ const AdvertiserPublish = () => {
             <div className="flex flex-col gap-2">
               {/* `disabled` solo mientras se publica: si faltan campos dejamos el
                   botón activo para que openPublishFlow explique QUÉ falta. */}
-              <Button variant="hero" size="lg" className="w-full rounded-none" onClick={openPublishFlow} disabled={publishing}>
+              <Button variant="hero" size="lg" className="w-full rounded-none" onClick={openPublishFlow} disabled={publishing || savingDraft}>
                 {publishing
                   ? <><Loader2 size={16} className="mr-1 animate-spin" /> Publicando…</>
                   : <>Publicar aviso <ArrowRight size={16} className="ml-1" /></>}
               </Button>
+
+              {/* Guardar sin pagar: el aviso queda en "Mis avisos › Borradores".
+                  No exige identidad ni créditos — no se cobra nada. */}
+              <Button
+                variant="outline"
+                size="lg"
+                className="w-full rounded-none"
+                onClick={saveDraft}
+                disabled={publishing || savingDraft}
+              >
+                {savingDraft
+                  ? <><Loader2 size={16} className="mr-1 animate-spin" /> Guardando…</>
+                  : <><Save size={16} className="mr-1.5" /> Guardar en mis borradores</>}
+              </Button>
+
               <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 justify-center text-center">
                 <Wallet size={12} className="text-secondary" /> Se descontarán créditos de tu saldo al publicar.
+                Guardar como borrador es gratis.
               </p>
             </div>
           </div>
