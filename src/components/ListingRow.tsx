@@ -100,12 +100,14 @@ export function ListingRow({ listing, status = "Activo", onView, onEdit, onDelet
           <span className="flex items-center gap-1"><Calendar size={11} /> {listing.date}</span>
         </div>
 
-        <div className="flex items-center justify-between gap-3 mt-auto pt-2 border-t border-dashed">
+        {/* Envuelve en móvil: con 3 acciones (4 en un borrador, por "Publicar") no
+            caben junto al precio y el último botón se salía de la tarjeta. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mt-auto pt-2 border-t border-dashed">
           <p className="text-lg font-extrabold text-primary">
             <span className="text-xs font-bold text-secondary mr-1">{listing.currency}</span>
             {listing.price.toLocaleString()}
           </p>
-          <div className="flex gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             {hasActions ? (
               <>
                 {/* Solo borradores: retoma el aviso guardado y lo publica. */}
