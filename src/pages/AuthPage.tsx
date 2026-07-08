@@ -119,7 +119,10 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
       }
       // 2) Login real. En el login de USUARIO (/auth, sin captcha) rechazamos las
       // cuentas de staff: un admin debe entrar por /auth/staff.
-      const logged = await signInWithPassword(email, password, { rejectStaff: !requireCaptcha });
+      // Cada puerta vigila su lado: /auth rechaza al personal, /auth/staff rechaza
+      // a quien no lo es.
+      const logged = await signInWithPassword(email, password,
+        isStaff ? { requireStaff: true } : { rejectStaff: true });
       toast.success("¡Bienvenido de vuelta!");
       // El staff aterriza directo en su panel; el resto, donde pidió ir o al inicio.
       navigate(landingPath(logged, redirectTo));

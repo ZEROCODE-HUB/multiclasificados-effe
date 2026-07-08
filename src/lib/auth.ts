@@ -172,53 +172,56 @@ function isStaffPath(path: string): boolean {
   );
 }
 
-// Mientras se evalúa un login de usuario que podría ser de staff (y por tanto
-// rechazado), el puente de auth (SupabaseAuthBridge) NO debe sincronizar la
-// sesión: si lo hiciera, persistiría la sesión de admin por un instante y
-// dispararía la redirección al panel ANTES de que alcancemos a cerrarla. Esta
-// bandera se lo indica.
+// Mientras se comprueba el rol de una cuenta recién autenticada (y que por tanto
+// todavía puede ser rechazada), el puente de auth (SupabaseAuthBridge) NO debe
+// sincronizar la sesión: si lo hiciera, la persistiría por un instante y
+// dispararía la redirección ANTES de que alcancemos a cerrarla. Esta bandera se
+// lo indica.
 let blockingStaffLogin = false;
 export function isBlockingStaffLogin(): boolean {
   return blockingStaffLogin;
 }
 
+// ¿La cuenta tiene rol de staff? `null` = no se pudo averiguar (red caída, RLS,
+// timeout). Quien llama trata el `null` como motivo de rechazo, en las dos
+// direcciones: asumir cualquier cosa abriría justo el agujero que esto cierra.
+async function fetchIsStaff(userId: string): Promise<boolean | null> {
+  const { data, error } = await supabase.from("user_roles").select("role").eq("user_id", userId);
+  if (error || !data) return null;
+  return data.some((r: { role: SessionRole }) => STAFF_ROLES.includes(r.role));
+}
+
+/**
+ * Las dos puertas de entrada son excluyentes y cada una vigila su lado:
+ *  - `rejectStaff`  → /auth: el personal NO entra por el login de usuario.
+ *  - `requireStaff` → /auth/staff: un usuario normal NO entra por el de admin.
+ * En ambos casos la cuenta rechazada recibe el MISMO mensaje que una contraseña
+ * equivocada, y su sesión se cierra antes de persistirla.
+ */
 export async function signInWithPassword(
   email: string,
   password: string,
-  opts?: { rejectStaff?: boolean },
+  opts?: { rejectStaff?: boolean; requireStaff?: boolean },
 ): Promise<Session | null> {
-  // Se activa ANTES de autenticar: el evento SIGNED_IN puede dispararse durante
-  // la propia llamada, así que el puente ya debe estar silenciado.
-  if (opts?.rejectStaff) blockingStaffLogin = true;
+  const checksRole = !!(opts?.rejectStaff || opts?.requireStaff);
+  // Se activa ANTES de autenticar: el evento SIGNED_IN se dispara durante la
+  // propia llamada, así que el puente ya debe estar silenciado.
+  if (checksRole) blockingStaffLogin = true;
   try {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
 
-    // Login de USUARIO: si la cuenta es de staff (admin/superadmin), la
-    // rechazamos como si las credenciales fueran inválidas y cerramos la sesión
-    // recién creada ANTES de persistirla (sin redirección automática al panel).
-    if (opts?.rejectStaff) {
+    if (checksRole) {
       const { data: { session } } = await supabase.auth.getSession();
-      const user = session?.user;
-      if (user) {
-        const { data: roles, error: rolesErr } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", user.id);
+      const userId = session?.user?.id;
+      const isStaff = userId ? await fetchIsStaff(userId) : null;
 
-        // Falla CERRADA: si no podemos comprobar los roles (red caída, RLS,
-        // timeout), no asumimos que la cuenta es de usuario. Dejarlo pasar
-        // abriría justo el agujero que este bloque existe para cerrar.
-        const isStaff =
-          rolesErr || !roles
-            ? true
-            : roles.some((r: { role: SessionRole }) => STAFF_ROLES.includes(r.role));
-
-        if (isStaff) {
-          await supabase.auth.signOut();
-          clearSession();
-          throw new Error(INVALID_CREDENTIALS_MSG);
-        }
+      // Falla CERRADA: con `isStaff === null` (rol desconocido) se rechaza siempre.
+      const rejected = opts?.requireStaff ? isStaff !== true : isStaff !== false;
+      if (rejected) {
+        await supabase.auth.signOut();
+        clearSession();
+        throw new Error(INVALID_CREDENTIALS_MSG);
       }
     }
 
@@ -232,11 +235,11 @@ export async function signInWithPassword(
     // correo y contraseña vuelve a recibir notificaciones.
     //
     // El orden importa; va al final, ya con la sesión validada:
-    //  - después del descarte de staff, o dejaríamos el teléfono asociado al
-    //    admin que acabamos de rechazar y le llegarían aquí SUS push;
+    //  - después de la comprobación de rol, o dejaríamos el teléfono asociado a
+    //    la cuenta que acabamos de rechazar y le llegarían aquí SUS push;
     //  - después de syncSession(), o un usuario baneado registraría su
     //    dispositivo justo antes de que lo echemos, y seguiría recibiendo push.
-    if (opts?.rejectStaff) savePushToken();
+    if (checksRole) savePushToken();
 
     return session;
   } finally {

@@ -77,13 +77,15 @@ describe("AuthPage — el admin no entra por el login de usuario", () => {
     expect(toastSuccess).toHaveBeenCalled();
   });
 
-  it("LOGIN STAFF: un admin SÍ entra y va a su panel (rejectStaff:false)", async () => {
+  it("LOGIN STAFF: un admin SÍ entra y va a su panel (requireStaff:true)", async () => {
     signInSpy.mockResolvedValueOnce({ role: "admin", supabase: true });
     renderLogin(true);
 
     submit("admin@correo.com", "claveadmin");
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith("/dashboard/admin"));
-    expect(signInSpy).toHaveBeenCalledWith("admin@correo.com", "claveadmin", { rejectStaff: false });
+    // /auth/staff no se limita a "no rechazar staff": EXIGE que la cuenta lo sea,
+    // así un usuario normal tampoco entra por esta puerta.
+    expect(signInSpy).toHaveBeenCalledWith("admin@correo.com", "claveadmin", { requireStaff: true });
   });
 });
