@@ -12,6 +12,12 @@ export interface Session {
   supabase?: boolean;
 }
 
+// Roles de staff (personal de la plataforma). Se usan para dos cosas opuestas:
+// darles el panel admin y NEGARLES los paneles de usuario.
+export function isStaffRole(role: SessionRole | undefined | null): boolean {
+  return role === "admin" || role === "superadmin";
+}
+
 const KEY = "effe_session";
 
 export function getSession(): Session | null {

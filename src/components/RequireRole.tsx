@@ -3,11 +3,13 @@
 //     · Área de staff (admin/superadmin) -> /auth/staff (login CON hCaptcha).
 //     · Resto -> /auth (login sin captcha).
 // - Sesión con rol insuficiente -> pantalla "Acceso denegado".
+// - Staff en un área de usuario -> "Acceso denegado" (la jerarquía NO se hereda
+//   hacia abajo: el admin administra la plataforma, no opera como usuario).
 import { useEffect, useState } from "react";
 import { Link, Navigate, useLocation } from "react-router-dom";
 import { ShieldAlert, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useSession, type SessionRole } from "@/hooks/useSession";
+import { useSession, isStaffRole, type SessionRole } from "@/hooks/useSession";
 import { getMfaState } from "@/lib/mfa";
 import { MfaGate } from "@/components/MfaGate";
 
@@ -19,7 +21,7 @@ const RANK: Record<SessionRole, number> = {
   superadmin: 3,
 };
 
-function AccessDenied({ role }: { role: SessionRole }) {
+function AccessDenied({ role, staffInUserArea = false }: { role: SessionRole; staffInUserArea?: boolean }) {
   // Panel destino según el rol actual del usuario.
   const home =
     role === "superadmin" ? "/dashboard/superadmin"
@@ -34,8 +36,9 @@ function AccessDenied({ role }: { role: SessionRole }) {
         </div>
         <h1 className="text-xl font-extrabold text-foreground">Acceso denegado</h1>
         <p className="text-sm text-muted-foreground mt-2">
-          Tu cuenta no tiene permisos para esta sección. Si crees que es un error,
-          contacta al superadministrador.
+          {staffInUserArea
+            ? "Las cuentas de administración no pueden usar los paneles de usuario. Usa tu panel de administración."
+            : "Tu cuenta no tiene permisos para esta sección. Si crees que es un error, contacta al superadministrador."}
         </p>
         <div className="flex gap-2 justify-center mt-6">
           <Link to={home}><Button variant="outline">Ir a mi panel</Button></Link>
@@ -75,6 +78,14 @@ export function RequireRole({ min, requireReal = true, children }: Props) {
 
   if (!session) return <Navigate to={loginUrl} replace />;
   if (requireReal && !session.supabase) return <Navigate to={loginUrl} replace />;
+
+  // El staff NO entra a los paneles de usuario. La jerarquía RANK solo sirve
+  // para exigir un rol MÍNIMO en el área de staff; hacia abajo no se hereda
+  // (si no, admin(2) >= buscador(0) le abriría todo el panel de usuario).
+  if (!isStaffArea && isStaffRole(session.role)) {
+    return <AccessDenied role={session.role} staffInUserArea />;
+  }
+
   if (RANK[session.role] < RANK[min]) return <AccessDenied role={session.role} />;
 
   if (isStaffArea) {
