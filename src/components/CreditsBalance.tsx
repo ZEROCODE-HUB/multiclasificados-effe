@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
-import { Wallet, Plus } from "lucide-react";
+import { Coins, Plus } from "lucide-react";
 import { getCreditBalance, getCreditsSpent } from "@/lib/credits";
 import { BuyCreditsModal } from "@/components/BuyCreditsModal";
 import { useSession } from "@/hooks/useSession";
 import { avisosForBalance } from "@/lib/pricing";
 
-// Chip de saldo de créditos para la barra superior. Visible para CUALQUIER
-// usuario con sesión (anunciante, buscador, admin…), no solo el anunciante.
+// Chip de saldo de créditos para la barra superior. Visible para cualquier
+// usuario con sesión (anunciante y buscador), no solo el anunciante. El staff
+// queda fuera: los créditos sirven para publicar avisos, y el admin no puede
+// (lo oculta el Navbar; ver RequireRole).
 // Al pulsarlo abre el modal de compra. Variante compacta por defecto y una
 // versión "full" (fila) para el menú móvil.
 export function CreditsBalance({ variant = "chip" }: { variant?: "chip" | "row" }) {
@@ -35,7 +37,7 @@ export function CreditsBalance({ variant = "chip" }: { variant?: "chip" | "row" 
           className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm font-medium hover:bg-muted/50 w-full"
         >
           <span className="flex items-center gap-3">
-            <Wallet size={16} className="text-secondary" />
+            <Coins size={16} className="text-secondary" />
             <span className="flex flex-col items-start leading-tight">
               Mis créditos
               {avisos !== null && <span className="text-[11px] text-muted-foreground font-normal">{avisosLabel} disponibles</span>}
@@ -51,7 +53,7 @@ export function CreditsBalance({ variant = "chip" }: { variant?: "chip" | "row" 
           title={avisos === null ? "Mis créditos · Comprar" : `Mis créditos · ${avisosLabel} · Comprar`}
           className="flex items-center gap-1.5 px-3 py-1.5 border border-border hover:border-secondary/50 hover:bg-muted/50 transition-all rounded-none"
         >
-          <Wallet size={16} className="text-secondary" />
+          <Coins size={16} className="text-secondary" />
           <span className="text-xs font-semibold text-foreground">{label}</span>
           <Plus size={13} className="text-muted-foreground" />
         </button>
