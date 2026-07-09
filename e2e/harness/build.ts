@@ -18,11 +18,19 @@ const STUBS = path.join(DIR, "stubs.ts");
 
 const STUBBED = new Set(["@/lib/admin", "@/hooks/usePermissions", "@/lib/supabase", "@/hooks/use-toast"]);
 
-let cached: Promise<string> | null = null;
+/** Qué componente montar y qué módulos cortarle. Por defecto, AdminUsers. */
+export interface HarnessOpts {
+  entry?: string;
+  stubs?: string;
+  stubbed?: string[];
+}
 
-const build = async (): Promise<string> => {
+const cached = new Map<string, Promise<string>>();
+
+const build = async ({ entry = "main.tsx", stubs = STUBS, stubbed }: HarnessOpts): Promise<string> => {
+  const corta = stubbed ? new Set(stubbed) : STUBBED;
   const bundle = await esbuild.build({
-    entryPoints: [path.join(DIR, "main.tsx")],
+    entryPoints: [path.join(DIR, entry)],
     bundle: true,
     format: "iife",
     jsx: "automatic",
@@ -34,7 +42,7 @@ const build = async (): Promise<string> => {
         name: "alias-src",
         setup(b) {
           b.onResolve({ filter: /^@\// }, async (args) => {
-            if (STUBBED.has(args.path)) return { path: STUBS };
+            if (corta.has(args.path)) return { path: stubs };
             const r = await b.resolve("./" + args.path.slice(2), {
               resolveDir: SRC,
               kind: "import-statement",
@@ -57,5 +65,9 @@ const build = async (): Promise<string> => {
     + `<script>${bundle.outputFiles[0].text}</script>`;
 };
 
-/** Cacheado por proceso: cada worker de Playwright compila una sola vez. */
-export const harnessHtml = () => (cached ??= build());
+/** Cacheado por proceso y por entrada: cada worker compila cada harness una vez. */
+export const harnessHtml = (opts: HarnessOpts = {}) => {
+  const key = opts.entry ?? "main.tsx";
+  if (!cached.has(key)) cached.set(key, build(opts));
+  return cached.get(key)!;
+};
