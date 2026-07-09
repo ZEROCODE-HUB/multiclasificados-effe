@@ -22,8 +22,8 @@ import { supabase } from "@/lib/supabase";
 import { PlusCircle, ClipboardList, Eye, MessageSquare, TrendingUp, Search, SlidersHorizontal, ImagePlus, Loader2 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
-import { categories } from "@/data/mockData";
 import type { Listing } from "@/data/mockData";
+import { useCategories } from "@/hooks/useCategories";
 import {
   fetchMyListings, updateListing, deleteListing, setListingStatus, replaceMainListingPhoto,
   type MyListing, type ListingStatus, type ListingCondition,
@@ -65,6 +65,7 @@ interface EditState {
 
 const AdvertiserListings = () => {
   const navigate = useNavigate();
+  const categories = useCategories();
   const [listings, setListings] = useState<MyListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");

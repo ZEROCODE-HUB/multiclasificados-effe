@@ -3,7 +3,8 @@ import { Navbar } from "@/components/Navbar";
 import { ListingCard } from "@/components/ListingCard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { categories, type Listing } from "@/data/mockData";
+import { type Listing } from "@/data/mockData";
+import { useCategories } from "@/hooks/useCategories";
 import { fetchListingById, fetchListingImages, fetchListings, trackEvent } from "@/lib/listings";
 import {
   ChevronRight,
@@ -71,6 +72,7 @@ import { getOrCreateConversation, sendMessage } from "@/lib/messaging";
 export default function ListingDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const categories = useCategories();
   // Placeholder neutro hasta cargar el aviso real (sin datos ficticios).
   const EMPTY: Listing = {
     id: id ?? "", title: "", description: "", price: 0, currency: "PEN",

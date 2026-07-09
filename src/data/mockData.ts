@@ -1,22 +1,5 @@
-import { Car, Home, Briefcase, Smartphone, Package, Wrench, GraduationCap, Sparkles } from "lucide-react";
-
-export interface Category {
-  id: string;
-  name: string;
-  icon: React.ElementType;
-  count: number;
-}
-
-export const categories: Category[] = [
-  { id: "inmuebles", name: "Inmuebles", icon: Home, count: 1245 },
-  { id: "vehiculos", name: "Vehículos", icon: Car, count: 892 },
-  { id: "empleos", name: "Empleos", icon: Briefcase, count: 2103 },
-  { id: "tecnologia", name: "Tecnología", icon: Smartphone, count: 756 },
-  { id: "productos", name: "Productos", icon: Package, count: 1320 },
-  { id: "servicios", name: "Servicios", icon: Wrench, count: 1890 },
-  { id: "educacion-finanzas", name: "Educación y Finanzas", icon: GraduationCap, count: 321 },
-  { id: "salud-belleza-moda", name: "Salud, Belleza y Moda", icon: Sparkles, count: 467 },
-];
+// Las categorías ya no viven aquí: las define el staff y se leen de la BD.
+// Ver `src/lib/categories.ts` y el hook `useCategories()`.
 
 export interface Listing {
   id: string;

@@ -12,7 +12,7 @@ import {
   PieChart, Pie, Cell,
 } from "recharts";
 import { toast } from "@/hooks/use-toast";
-import { categories } from "@/data/mockData";
+import { useCategories } from "@/hooks/useCategories";
 import {
   fetchCategoryDistribution, fetchCategoryRevenue, fetchRegionDistribution,
   fetchClaimsSummary, fetchGrowthSeries, type ClaimsSummary,
@@ -34,6 +34,7 @@ function ReportFilters({ filters, setFilters, regions, onExport, show = { dates:
   onExport: (f: string) => void;
   show?: { dates?: boolean; catRegion?: boolean };
 }) {
+  const categories = useCategories();
   const upd = (k: keyof Filters, v: string) => setFilters((f) => ({ ...f, [k]: v }));
   const anyFilter = show.dates || show.catRegion;
   return (
@@ -90,6 +91,7 @@ function ReportFilters({ filters, setFilters, regions, onExport, show = { dates:
 }
 
 const AdminReports = ({ role }: { role: AdminRole }) => {
+  const categories = useCategories();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [filters, setFilters] = useState<Filters>({ from: "", to: "", cat: "all", region: "all" });
 

@@ -7,7 +7,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { ListingCard } from "@/components/ListingCard";
 import { ListingsMap } from "@/components/ListingsMap";
 import { Navbar } from "@/components/Navbar";
-import { categories, type Listing } from "@/data/mockData";
+import { type Listing } from "@/data/mockData";
+import { useCategories } from "@/hooks/useCategories";
 import { searchListings, fetchListingsByOwner, type SortKey } from "@/lib/listings";
 import { useSession } from "@/hooks/useSession";
 import { useFavorites } from "@/hooks/useFavorites";
@@ -33,6 +34,7 @@ const formatPrice = (price: number, currency: string) =>
   currency === "USD" ? `US$ ${(price / 1000).toFixed(0)}K` : `S/ ${price.toLocaleString()}`;
 
 export default function SearchPage() {
+  const categories = useCategories();
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const session = useSession();
@@ -213,7 +215,7 @@ export default function SearchPage() {
         </div>
       </div>
     ),
-    [view, params, category]
+    [view, params, category, categories]
   );
 
 
