@@ -185,7 +185,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Gratuitos por categoría */}
                 <Card>
-                  <CardHeader><CardTitle className="text-sm">Avisos gratuitos por categoría</CardTitle></CardHeader>
+                  <CardHeader><CardTitle className="text-sm">Avisos por categoría</CardTitle></CardHeader>
                   <CardContent className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={freeByCategory}>
@@ -224,7 +224,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
 
                 {/* Gratuitos por región */}
                 <Card>
-                  <CardHeader><CardTitle className="text-sm">Avisos gratuitos por región</CardTitle></CardHeader>
+                  <CardHeader><CardTitle className="text-sm">Avisos por región</CardTitle></CardHeader>
                   <CardContent className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
