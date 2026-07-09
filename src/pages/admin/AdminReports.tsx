@@ -153,7 +153,12 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
       title = `Reporte de ${activeTab}`;
       rows = revenueSeries.map((r) => ({ Mes: r.mes, "Ingresos S/": r.ingresos, "Usuarios nuevos": r.usuarios }));
     }
-    exportRows(format, `reporte-${activeTab}`, `${title}${stamp}`, rows);
+    try {
+      exportRows(format, `reporte-${activeTab}`, `${title}${stamp}`, rows);
+    } catch {
+      toast({ title: "No se pudo exportar el reporte", variant: "destructive" });
+      return;
+    }
     toast({ title: "Reporte exportado", description: `${activeTab}.${format}` });
   };
 
