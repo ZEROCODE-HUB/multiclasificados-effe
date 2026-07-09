@@ -4,12 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ListingPreviewDialog } from "@/components/ListingPreviewDialog";
 import { Search, AlertOctagon, ArrowLeft, Eye } from "lucide-react";
-import {
-  fetchReports, assignReport, resolveReport, fetchConversationBetween, fetchAdminListing,
-  type AdminReport, type ModMessage, type AdminListingDetail,
-} from "@/lib/admin";
+import { fetchReports, assignReport, resolveReport, fetchConversationBetween, type AdminReport, type ModMessage } from "@/lib/admin";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
 
@@ -20,15 +17,6 @@ const statusMeta: Record<string, { label: string; color: string }> = {
   resolved:  { label: "Resuelto",    color: "bg-success/15 text-success border-success/30" },
 };
 const metaFor = (s: string) => statusMeta[s] ?? statusMeta.open;
-
-// Estado del aviso (tabla listings) → etiqueta legible para el moderador.
-const listingStatusLabel: Record<string, string> = {
-  active: "Activo", paused: "Pausado", pending: "Pendiente",
-  rejected: "Rechazado", draft: "Borrador", expired: "Expirado",
-};
-
-const money = (price: number, currency: string) =>
-  `${currency === "USD" ? "$" : "S/"} ${Number(price ?? 0).toLocaleString("es-PE", { minimumFractionDigits: 2 })}`;
 
 const isUuid = (v: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
@@ -43,9 +31,7 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
   // Hay una acción de moderación en vuelo: bloquea los botones hasta que vuelva.
   const [busy, setBusy] = useState(false);
   // Aviso denunciado, que se muestra en un diálogo sin salir de la denuncia.
-  const [avisoOpen, setAvisoOpen] = useState(false);
-  const [aviso, setAviso] = useState<AdminListingDetail | null>(null);
-  const [avisoEstado, setAvisoEstado] = useState<"cargando" | "listo" | "error">("cargando");
+  const [avisoId, setAvisoId] = useState<string | null>(null);
   const convoRef = useRef<HTMLDivElement>(null);
 
   const load = () => fetchReports().then(({ data }) => setReports(data));
@@ -93,20 +79,6 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
       toast({ title: "No se pudo completar", description: e?.message ?? "Error", variant: "destructive" });
     } finally {
       setBusy(false);
-    }
-  };
-
-  const verAviso = async () => {
-    if (!item?.listing_id) return;
-    setAvisoOpen(true);
-    setAviso(null);
-    setAvisoEstado("cargando");
-    try {
-      const l = await fetchAdminListing(item.listing_id);
-      setAviso(l);
-      setAvisoEstado(l ? "listo" : "error");
-    } catch {
-      setAvisoEstado("error");
     }
   };
 
@@ -188,7 +160,7 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
                   {/* Denuncia sobre un aviso: sin esto el moderador no puede ver
                       qué se publicó. Se abre aquí mismo, sin salir de la denuncia. */}
                   {item.target_type === "listing" && item.listing_id && (
-                    <Button variant="outline" size="sm" className="mt-1 gap-1.5" onClick={verAviso}>
+                    <Button variant="outline" size="sm" className="mt-1 gap-1.5" onClick={() => setAvisoId(item.listing_id)}>
                       <Eye size={14} /> Ver aviso
                     </Button>
                   )}
@@ -266,66 +238,12 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
         </Card>
       </div>
 
-      {/* Aviso denunciado. Se carga con admin_get_listing: la vista pública solo
-          expone avisos activos, y el denunciado suele estar ya deshabilitado. */}
-      <Dialog open={avisoOpen} onOpenChange={setAvisoOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-base pr-6">{aviso?.title ?? item?.listing_title ?? "Aviso denunciado"}</DialogTitle>
-            <DialogDescription className="text-xs">Aviso denunciado por: {item?.reason ?? "—"}</DialogDescription>
-          </DialogHeader>
-
-          {avisoEstado === "cargando" && (
-            <p className="text-sm text-muted-foreground py-8 text-center">Cargando el aviso…</p>
-          )}
-          {avisoEstado === "error" && (
-            <p className="text-sm text-muted-foreground py-8 text-center">
-              No se pudo cargar el aviso. Puede haber sido eliminado.
-            </p>
-          )}
-
-          {avisoEstado === "listo" && aviso && (
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline">{listingStatusLabel[aviso.status] ?? aviso.status}</Badge>
-                {aviso.featured && <Badge variant="outline">Destacado</Badge>}
-                {aviso.urgent && <Badge variant="outline">Urgente</Badge>}
-                <span className="text-lg font-bold text-secondary ml-auto">{money(aviso.price, aviso.currency)}</span>
-              </div>
-
-              {aviso.images.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {aviso.images.map((url) => (
-                    <img key={url} src={url} alt="" className="w-full h-28 object-cover rounded-lg border" />
-                  ))}
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                <p><span className="text-muted-foreground">Anunciante:</span> {aviso.advertiser ?? "—"}</p>
-                <p><span className="text-muted-foreground">Vistas:</span> {aviso.views}</p>
-                {aviso.category_id && <p><span className="text-muted-foreground">Categoría:</span> {aviso.category_id}</p>}
-                {aviso.location && <p><span className="text-muted-foreground">Ubicación:</span> {aviso.location}</p>}
-                {aviso.condition && <p><span className="text-muted-foreground">Estado:</span> {aviso.condition}</p>}
-                <p><span className="text-muted-foreground">Publicado:</span> {(aviso.published_at ?? aviso.created_at).slice(0, 10)}</p>
-              </div>
-
-              {aviso.description && (
-                <div>
-                  <p className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground mb-1">Descripción</p>
-                  <p className="text-sm whitespace-pre-wrap break-words">{aviso.description}</p>
-                </div>
-              )}
-
-              {aviso.rejection_reason && (
-                <p className="text-sm text-destructive">
-                  <span className="text-muted-foreground">Motivo del rechazo:</span> {aviso.rejection_reason}
-                </p>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <ListingPreviewDialog
+        listingId={avisoId}
+        reason={item?.reason}
+        fallbackTitle={item?.listing_title}
+        onClose={() => setAvisoId(null)}
+      />
     </>
   );
 };

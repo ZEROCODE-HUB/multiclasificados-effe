@@ -19,6 +19,7 @@ import { disableListing, loadDisabled } from "@/lib/pricing";
 import { fetchAdminListings, setListingStatus, fetchReports, type AdminListingRow, type AdminReport } from "@/lib/admin";
 import { usePermissions } from "@/hooks/usePermissions";
 import { fetchListingImages } from "@/lib/listings";
+import { ListingPreviewDialog } from "@/components/ListingPreviewDialog";
 
 const statusColor: Record<AdminListingStatus, string> = {
   Pendiente: "bg-warning/15 text-warning border-warning/30",
@@ -71,6 +72,8 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
   const [disableTarget, setDisableTarget] = useState<{ id: string; title: string; advertiser: string } | null>(null);
   const [disableReason, setDisableReason] = useState("");
   const [reports, setReports] = useState<AdminReport[]>([]);
+  // Aviso denunciado que se está inspeccionando desde la pestaña "Reportados".
+  const [reportado, setReportado] = useState<AdminReport | null>(null);
   const [disabled, setDisabled] = useState<Record<string, string>>(() => loadDisabled());
   const [detailImg, setDetailImg] = useState<string | null>(null);
   const [imgLoading, setImgLoading] = useState(false);
@@ -342,6 +345,12 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
                             </p>
                           </div>
                           <div className="flex flex-col gap-2">
+                            {/* Sin esto hay que decidir si deshabilitar un aviso sin haberlo visto. */}
+                            {r.listing_id && (
+                              <Button size="sm" variant="outline" className="gap-1" onClick={() => setReportado(r)}>
+                                <Eye size={14} /> Ver aviso
+                              </Button>
+                            )}
                             {isDisabled ? (
                               <Badge variant="outline" className="bg-destructive/15 text-destructive border-destructive/30">Deshabilitado</Badge>
                             ) : canModerate && (
@@ -361,6 +370,14 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Aviso denunciado, con su descripción e imágenes (admin_get_listing). */}
+      <ListingPreviewDialog
+        listingId={reportado?.listing_id ?? null}
+        reason={reportado?.reason}
+        fallbackTitle={reportado?.listing_title}
+        onClose={() => setReportado(null)}
+      />
 
       {/* Detail dialog */}
       <Dialog open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
