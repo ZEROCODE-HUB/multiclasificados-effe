@@ -523,6 +523,28 @@ export async function resolveReport(reportId: string, action: "dismiss" | "warn"
   if (error) throw error;
 }
 
+// El aviso denunciado, tal como lo ve el moderador.
+export interface AdminListingDetail {
+  id: string; title: string; description: string | null; price: number; currency: string;
+  condition: string | null; category_id: string | null; subcategory_id: string | null;
+  location: string | null; status: string; featured: boolean; urgent: boolean; views: number;
+  rejection_reason: string | null; published_at: string | null; created_at: string;
+  advertiser: string | null; advertiser_id: string | null; images: string[];
+}
+
+/**
+ * Trae el aviso completo para moderación (admin_get_listing, 0044). No sirve la
+ * vista `listing_cards`: filtra `status = 'active'`, y un aviso denunciado suele
+ * estar deshabilitado justo por eso. Devuelve null si no existe o no hay permiso.
+ */
+export async function fetchAdminListing(listingId: string): Promise<AdminListingDetail | null> {
+  const { data, error } = await supabase.rpc("admin_get_listing", { p_id: listingId });
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return null;
+  return { ...row, images: row.images ?? [] } as AdminListingDetail;
+}
+
 // ------------------------------------------------------------------ Auditoría
 export interface AuditRow { id: string; actor: string; action: string; entity: string; ip: string; time: string }
 

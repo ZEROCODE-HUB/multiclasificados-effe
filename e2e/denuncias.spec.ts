@@ -2,7 +2,6 @@ import { test, expect } from "@playwright/test";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { harnessHtml } from "./harness/build";
-import { LISTING_ID } from "./harness/denunciasStubs";
 
 /**
  * Lo que jsdom no puede afirmar: que Chromium ignore de verdad los clics sobre un
@@ -25,13 +24,26 @@ const abrirDenuncia = async (page: import("@playwright/test").Page) => {
   await expect(page.getByText("Detalle de la denuncia")).toBeVisible();
 };
 
-test('"Ver aviso" lleva al aviso denunciado, en una pestaña nueva', async ({ page }) => {
+test('"Ver aviso" muestra el aviso sin navegar a ninguna parte', async ({ page }) => {
   await abrirDenuncia(page);
+  const antes = page.url();
 
-  const link = page.getByRole("link", { name: "Ver aviso" });
-  await expect(link).toBeVisible();
-  await expect(link).toHaveAttribute("href", `/aviso/${LISTING_ID}`);
-  await expect(link).toHaveAttribute("target", "_blank");
+  await page.getByRole("button", { name: "Ver aviso" }).click();
+
+  const dialogo = page.getByRole("dialog");
+  await expect(dialogo).toBeVisible();
+  await expect(dialogo).toContainText("Bonita casa en la sierra");
+  await expect(dialogo).toContainText("Oscar Mijael Pérez García");
+  await expect(dialogo).toContainText("Rechazado"); // deshabilitado y aun así visible
+  await expect(dialogo).toContainText("Removido por moderación");
+
+  // Lo que pidió el usuario: que no lo saque a /aviso/:id.
+  expect(page.url()).toBe(antes);
+  await expect(page.getByRole("link", { name: "Ver aviso" })).toHaveCount(0);
+
+  // Y la denuncia sigue debajo al cerrar.
+  await page.keyboard.press("Escape");
+  await expect(page.getByText("Detalle de la denuncia")).toBeVisible();
 });
 
 test('"Marcar en revisión" no admite un segundo clic mientras trabaja', async ({ page }) => {

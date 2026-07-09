@@ -6,11 +6,13 @@ import type { AdminReport } from "@/lib/admin";
 const fetchReports = vi.fn();
 const assignReport = vi.fn();
 const resolveReport = vi.fn();
+const fetchAdminListing = vi.fn();
 
 vi.mock("@/lib/admin", () => ({
   fetchReports: (...a: unknown[]) => fetchReports(...a),
   assignReport: (...a: unknown[]) => assignReport(...a),
   resolveReport: (...a: unknown[]) => resolveReport(...a),
+  fetchAdminListing: (...a: unknown[]) => fetchAdminListing(...a),
   fetchConversationBetween: async () => [],
 }));
 
@@ -47,37 +49,82 @@ const abrirDenuncia = async () => {
   await screen.findByText("Detalle de la denuncia");
 };
 
+const AVISO = {
+  id: LISTING, title: "Casa", description: "Bonita casa en la sierra", price: 120000, currency: "PEN",
+  condition: "Usado", category_id: "inmuebles", subcategory_id: null, location: "Áncash",
+  status: "rejected", featured: false, urgent: false, views: 42,
+  rejection_reason: "Removido por moderación", published_at: "2026-07-01T00:00:00Z",
+  created_at: "2026-07-01T00:00:00Z", advertiser: "Oscar Mijael Pérez García",
+  advertiser_id: "66666666-6666-4666-8666-666666666666", images: ["https://cdn/1.jpg"],
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   getUser.mockResolvedValue({ data: { user: { id: MOD } } });
   assignReport.mockResolvedValue(undefined);
   resolveReport.mockResolvedValue(undefined);
+  fetchAdminListing.mockResolvedValue(AVISO);
   conReporte({});
 });
 
-describe('denuncia sobre un aviso: acceso al contenido reportado', () => {
-  it('ofrece "Ver aviso" apuntando al aviso denunciado, en otra pestaña', async () => {
-    await abrirDenuncia();
+const verAviso = () => fireEvent.click(screen.getByRole("button", { name: /Ver aviso/ }));
 
-    const link = screen.getByRole("link", { name: /Ver aviso/ });
-    expect(link).toHaveAttribute("href", `/aviso/${LISTING}`);
-    expect(link).toHaveAttribute("target", "_blank");
-    // Sin esto la pestaña nueva podría manipular la del panel.
-    expect(link.getAttribute("rel")).toContain("noopener");
+describe("denuncia sobre un aviso: el moderador ve el contenido reportado", () => {
+  it("muestra la información del aviso sin sacar al moderador de la denuncia", async () => {
+    await abrirDenuncia();
+    verAviso();
+
+    // Se pide el aviso denunciado, no otro.
+    await waitFor(() => expect(fetchAdminListing).toHaveBeenCalledWith(LISTING));
+
+    const dialogo = await screen.findByRole("dialog");
+    expect(dialogo).toHaveTextContent("Bonita casa en la sierra");
+    expect(dialogo).toHaveTextContent("Oscar Mijael Pérez García");
+    expect(dialogo).toHaveTextContent("S/ 120,000.00");
+    expect(dialogo).toHaveTextContent("42"); // vistas
+
+    // La denuncia sigue detrás: no se navegó a ningún sitio.
+    expect(screen.getByText("Detalle de la denuncia")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Ver aviso/ })).toBeNull();
   });
 
-  it('si la denuncia es sobre un usuario no hay aviso que ver', async () => {
+  it("un aviso deshabilitado se ve igual, con su motivo de rechazo", async () => {
+    await abrirDenuncia();
+    verAviso();
+
+    const dialogo = await screen.findByRole("dialog");
+    expect(dialogo).toHaveTextContent("Rechazado");
+    expect(dialogo).toHaveTextContent("Removido por moderación");
+  });
+
+  it("si el aviso ya no existe, lo dice en vez de quedarse cargando", async () => {
+    fetchAdminListing.mockResolvedValue(null);
+    await abrirDenuncia();
+    verAviso();
+
+    expect(await screen.findByText(/No se pudo cargar el aviso/)).toBeInTheDocument();
+  });
+
+  it("si el backend falla, tampoco se queda colgado", async () => {
+    fetchAdminListing.mockRejectedValue(new Error("no autorizado"));
+    await abrirDenuncia();
+    verAviso();
+
+    expect(await screen.findByText(/No se pudo cargar el aviso/)).toBeInTheDocument();
+  });
+
+  it("si la denuncia es sobre un usuario no hay aviso que ver", async () => {
     conReporte({ target_type: "user", listing_id: null, listing_title: null });
     await abrirDenuncia();
 
-    expect(screen.queryByRole("link", { name: /Ver aviso/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Ver aviso/ })).toBeNull();
   });
 
-  it('no ofrece el enlace si el aviso no viene identificado', async () => {
+  it("no ofrece el botón si el aviso no viene identificado", async () => {
     conReporte({ target_type: "listing", listing_id: null });
     await abrirDenuncia();
 
-    expect(screen.queryByRole("link", { name: /Ver aviso/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Ver aviso/ })).toBeNull();
   });
 });
 

@@ -40,6 +40,14 @@ const lento = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // --- @/lib/admin
 export const fetchReports = async () => ({ data: [reporte()], real: true });
 export const fetchConversationBetween = async () => [];
+export const fetchAdminListing = async () => ({
+  id: LISTING_ID, title: "Casa", description: "Bonita casa en la sierra", price: 120000,
+  currency: "PEN", condition: "Usado", category_id: "inmuebles", subcategory_id: null,
+  location: "Áncash", status: "rejected", featured: false, urgent: false, views: 42,
+  rejection_reason: "Removido por moderación", published_at: "2026-07-01T00:00:00Z",
+  created_at: "2026-07-01T00:00:00Z", advertiser: "Oscar Mijael Pérez García",
+  advertiser_id: "66666666-6666-4666-8666-666666666666", images: [],
+});
 export const assignReport = async () => {
   calls.assign++;
   await lento(300); // la petición tarda: es la ventana en la que se cuela el doble toque
