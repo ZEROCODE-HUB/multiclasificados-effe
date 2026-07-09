@@ -40,7 +40,7 @@ vi.mock("@/lib/supabase", () => {
 });
 
 import { fetchAuditLogs } from "@/lib/admin";
-import { exportCSV } from "@/lib/exportReport";
+import { exportCSV, exportExcel } from "@/lib/exportReport";
 
 beforeEach(() => {
   h.gte.length = 0;
@@ -140,5 +140,53 @@ describe("exportCSV — codificación que Excel entiende", () => {
     const i = bytes.indexOf(0xc3);
     expect(i).toBeGreaterThan(-1);
     expect(bytes[i + 1]).toBe(0xa9);
+  });
+
+  // El historial se baja como .xls justamente porque el CSV no puede declarar
+  // anchos y Excel tapa las fechas con "#######".
+  describe("exportExcel — el .xls que descarga el historial", () => {
+    const html = async () =>
+      new TextDecoder("utf-8", { ignoreBOM: true }).decode(await leerBytes(cap.blob!));
+
+    it("declara un ancho por columna, y la fecha entra entera", async () => {
+      exportExcel("auditoria", [{ Registro: "L-1", "Fecha y hora": "07/07/2026 19:45" }], "Historial");
+      const h = await html();
+
+      const cols = [...h.matchAll(/<col style="width:(\d+)px">/g)].map((m) => Number(m[1]));
+      expect(cols).toHaveLength(2);
+
+      // "07/07/2026 19:45" son 16 caracteres: la columna debe darles lugar.
+      expect(cols[1]).toBeGreaterThanOrEqual(16 * 8);
+      // Y ninguna columna se dispara a lo ancho de la pantalla.
+      cols.forEach((c) => expect(c).toBeLessThanOrEqual(360));
+    });
+
+    it("el ancho lo manda el valor más largo, no solo la cabecera", async () => {
+      exportExcel("auditoria", [{ IP: "superadmin@multiclasificados.com" }], "Historial");
+      const [ancho] = [...(await html()).matchAll(/width:(\d+)px/g)].map((m) => Number(m[1]));
+      expect(ancho).toBeGreaterThan("IP".length * 8 + 24);
+    });
+
+    it("lleva BOM y mimetype de Excel, y respeta las tildes", async () => {
+      exportExcel("auditoria", [{ Acción: "Cambió configuración" }], "Historial");
+      const h = await html();
+
+      expect(h.startsWith("﻿")).toBe(true);
+      expect(cap.blob!.type).toBe("application/vnd.ms-excel");
+      expect(h).toContain("Cambió configuración");
+      expect(h).toContain("<meta charset=\"utf-8\">");
+    });
+
+    it("escapa el HTML: un '&' o un '<' en el dato no rompen la tabla", async () => {
+      exportExcel("auditoria", [{ Actor: 'a&b <script>x</script> "c"' }], "Historial");
+      const h = await html();
+
+      expect(h).toContain("a&amp;b &lt;script&gt;x&lt;/script&gt; &quot;c&quot;");
+      expect(h).not.toContain("<script>");
+    });
+
+    it("sin filas no explota", async () => {
+      expect(() => exportExcel("auditoria", [], "Historial")).not.toThrow();
+    });
   });
 });

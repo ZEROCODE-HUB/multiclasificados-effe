@@ -38,14 +38,33 @@ export function exportCSV(filename: string, rows: Row[]) {
   descargar(new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8;" }), `${filename}.csv`);
 }
 
+function escaparHTML(v: string | number): string {
+  return String(v ?? "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// Excel abre las columnas con el ancho por defecto (~8 caracteres). Si el valor
+// es una fecha y no entra, no encoge la celda: la rellena con "#######". Un CSV
+// no tiene dónde declarar el ancho; el HTML de Excel sí, vía <col>.
+function anchoPx(header: string, rows: Row[]): number {
+  const largos = rows.map((r) => String(r[header] ?? "").length);
+  const max = Math.max(header.length, ...(largos.length ? largos : [0]));
+  return Math.min(360, Math.max(72, max * 8 + 24));
+}
+
 export function exportExcel(filename: string, rows: Row[], title = "Reporte") {
   const headers = rows.length ? Object.keys(rows[0]) : [];
-  const thead = `<tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr>`;
-  const tbody = rows.map((r) => `<tr>${headers.map((h) => `<td>${r[h] ?? ""}</td>`).join("")}</tr>`).join("");
+  const colgroup = `<colgroup>${headers.map((h) => `<col style="width:${anchoPx(h, rows)}px">`).join("")}</colgroup>`;
+  const thead = `<tr>${headers.map((h) => `<th>${escaparHTML(h)}</th>`).join("")}</tr>`;
+  const tbody = rows
+    .map((r) => `<tr>${headers.map((h) => `<td>${escaparHTML(r[h])}</td>`).join("")}</tr>`)
+    .join("");
   const html =
-    `<html><head><meta charset="utf-8"></head><body><h3>${title}</h3>` +
-    `<table border="1">${thead}${tbody}</table></body></html>`;
-  descargar(new Blob([html], { type: "application/vnd.ms-excel" }), `${filename}.xls`);
+    `<html><head><meta charset="utf-8"></head><body><h3>${escaparHTML(title)}</h3>` +
+    `<table border="1">${colgroup}${thead}${tbody}</table></body></html>`;
+  // BOM: sin él, Excel puede leer el HTML como latin-1 y romper las tildes.
+  descargar(new Blob(["﻿" + html], { type: "application/vnd.ms-excel" }), `${filename}.xls`);
 }
 
 export function exportPDF(filename: string, title: string, rows: Row[]) {

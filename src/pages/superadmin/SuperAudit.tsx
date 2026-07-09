@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Search, Download, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { fetchAuditLogs, type AuditRow } from "@/lib/admin";
-import { exportCSV } from "@/lib/exportReport";
+import { exportExcel } from "@/lib/exportReport";
 
 const PAGE_SIZE = 10;
 
@@ -64,9 +64,10 @@ const SuperAudit = () => {
   const to = Math.min(currentPage * PAGE_SIZE, filtered.length);
 
   // Exporta lo que el usuario está viendo (búsqueda + rango de fechas aplicados).
-  // Delega en exportCSV, que escribe UTF-8 con BOM para que Excel respete las tildes.
+  // Va como .xls y no como .csv: el CSV no puede declarar el ancho de columna, y
+  // Excel pinta "#######" sobre cualquier fecha que no entre en el ancho por defecto.
   const exportCsv = () => {
-    exportCSV(
+    exportExcel(
       "auditoria",
       filtered.map((l) => ({
         Registro: l.id,
@@ -76,6 +77,7 @@ const SuperAudit = () => {
         "Dirección IP": l.ip,
         "Fecha y hora": fechaParaExcel(l.time),
       })),
+      "Historial de acciones importantes",
     );
   };
 

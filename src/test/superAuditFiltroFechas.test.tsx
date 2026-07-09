@@ -7,13 +7,13 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 // descarga debe ser exactamente lo que el admin está viendo.
 
 const fetchAuditLogs = vi.fn();
-const exportCSV = vi.fn();
+const exportExcel = vi.fn();
 
 vi.mock("@/lib/admin", () => ({
   fetchAuditLogs: (...a: unknown[]) => fetchAuditLogs(...a),
 }));
 vi.mock("@/lib/exportReport", () => ({
-  exportCSV: (...a: unknown[]) => exportCSV(...a),
+  exportExcel: (...a: unknown[]) => exportExcel(...a),
 }));
 
 import SuperAudit from "@/pages/superadmin/SuperAudit";
@@ -91,9 +91,10 @@ describe("SuperAudit — descarga del historial", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Descargar historial/i }));
 
-    expect(exportCSV).toHaveBeenCalledTimes(1);
-    const [nombre, filas] = exportCSV.mock.calls[0];
+    expect(exportExcel).toHaveBeenCalledTimes(1);
+    const [nombre, filas, titulo] = exportExcel.mock.calls[0];
     expect(nombre).toBe("auditoria");
+    expect(titulo).toBe("Historial de acciones importantes");
     expect(filas).toEqual([{
       Registro: "L-1",
       "Realizado por": "rosa@correo.com",
@@ -105,7 +106,7 @@ describe("SuperAudit — descarga del historial", () => {
     }]);
   });
 
-  it("la tabla en pantalla conserva el formato ISO; solo el CSV se traduce", async () => {
+  it("la tabla en pantalla conserva el formato ISO; solo el archivo se traduce", async () => {
     render(<SuperAudit />);
     expect((await screen.findAllByText("2026-07-09 12:00")).length).toBeGreaterThan(0);
     expect(screen.queryByText("09/07/2026 12:00")).toBeNull();
@@ -118,7 +119,7 @@ describe("SuperAudit — descarga del historial", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Descargar historial/i }));
 
-    const [, filas] = exportCSV.mock.calls[0];
+    const [, filas] = exportExcel.mock.calls[0];
     expect(filas[0]["Fecha y hora"]).toBe("");
   });
 
@@ -133,7 +134,7 @@ describe("SuperAudit — descarga del historial", () => {
     fireEvent.change(screen.getByPlaceholderText(/Buscar por persona/i), { target: { value: "ana" } });
     fireEvent.click(screen.getByRole("button", { name: /Descargar historial/i }));
 
-    const [, filas] = exportCSV.mock.calls[0];
+    const [, filas] = exportExcel.mock.calls[0];
     expect(filas).toHaveLength(1);
     expect(filas[0]["Realizado por"]).toBe("ana@correo.com");
   });
