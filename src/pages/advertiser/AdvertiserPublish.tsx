@@ -20,7 +20,7 @@ import { useNavigate } from "react-router-dom";
 import { useSession } from "@/hooks/useSession";
 import { toast } from "@/hooks/use-toast";
 import {
-  loadSettings, priceForDuration, formatSoles, addInvoice, avisosBreakdown, solesToCredits,
+  loadSettings, priceForDuration, formatSoles, formatCredits, addInvoice, avisosBreakdown, solesToCredits,
   type DurationDays, type PricingSettings, type ExtraPrices,
 } from "@/lib/pricing";
 import { createAndPublishListing, saveListingDraft } from "@/lib/publish";
@@ -842,15 +842,15 @@ const AdvertiserPublish = () => {
                 <div className="border bg-muted/30 p-4 space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Aviso ({duration} días)</span>
-                    <span className="font-bold">{solesToCredits(packageBase)} cr</span>
+                    <span className="font-bold">{formatCredits(solesToCredits(packageBase))}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Adicionales</span>
-                    <span className="font-bold">{solesToCredits(extrasSum)} cr</span>
+                    <span className="font-bold">{formatCredits(solesToCredits(extrasSum))}</span>
                   </div>
                   <div className="border-t pt-2 flex items-baseline justify-between">
                     <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Total en créditos</span>
-                    <span className="text-2xl font-extrabold text-primary">{totalCredits} cr</span>
+                    <span className="text-2xl font-extrabold text-primary">{formatCredits(totalCredits)}</span>
                   </div>
                   <p className="text-[11px] text-muted-foreground pt-1">
                     Se descontará de tu saldo de créditos al publicar. (Boleta: {formatSoles(total)})
@@ -873,18 +873,18 @@ const AdvertiserPublish = () => {
               <CardContent className="p-5 space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Aviso · {duration} días</span>
-                  <span className="font-bold">{solesToCredits(packageBase)} cr</span>
+                  <span className="font-bold">{formatCredits(solesToCredits(packageBase))}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Adicionales</span>
-                  <span className="font-bold">{solesToCredits(extrasSum)} cr</span>
+                  <span className="font-bold">{formatCredits(solesToCredits(extrasSum))}</span>
                 </div>
                 {promoPct > 0 && (
                   <div className="flex justify-between text-sm text-success">
                     <span className="flex items-center gap-1">
                       <Percent size={12} /> Promo {activePromo?.name} (−{promoPct}%)
                     </span>
-                    <span className="font-bold">−{baseCredits - totalCredits} cr</span>
+                    <span className="font-bold">−{formatCredits(baseCredits - totalCredits)}</span>
                   </div>
                 )}
                 <div className="border-t pt-3 flex items-baseline justify-between">
@@ -893,7 +893,7 @@ const AdvertiserPublish = () => {
                     {promoPct > 0 && (
                       <span className="text-sm font-normal text-muted-foreground line-through mr-2">{baseCredits}</span>
                     )}
-                    {totalCredits} cr
+                    {formatCredits(totalCredits)}
                   </span>
                 </div>
                 <div className="border-t pt-3 flex items-baseline justify-between">
@@ -902,7 +902,7 @@ const AdvertiserPublish = () => {
                     <Loader2 size={14} className="animate-spin text-muted-foreground" />
                   ) : (
                     <span className={`text-sm font-bold ${balanceCredits >= totalCredits ? "text-success" : "text-destructive"}`}>
-                      {balanceCredits} cr
+                      {formatCredits(balanceCredits)}
                     </span>
                   )}
                 </div>
@@ -1016,7 +1016,7 @@ const AdvertiserPublish = () => {
           } else {
             toast({
               title: "Créditos añadidos",
-              description: `Tu saldo es ${Math.round(newBalance)} cr, pero este aviso cuesta ${totalCredits} cr. Compra un poco más para publicar.`,
+              description: `Tu saldo es ${formatCredits(newBalance)}, pero este aviso cuesta ${formatCredits(totalCredits)}. Recarga un poco más para publicar.`,
             });
           }
         }}

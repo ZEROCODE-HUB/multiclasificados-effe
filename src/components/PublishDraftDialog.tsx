@@ -18,7 +18,7 @@ import { BuyCreditsModal } from "@/components/BuyCreditsModal";
 import { finalizeListingPublication } from "@/lib/publish";
 import { getCreditBalance, spendCredits } from "@/lib/credits";
 import {
-  priceForDuration, extrasTotal, formatSoles, solesToCredits, loadSettings,
+  priceForDuration, extrasTotal, formatSoles, formatCredits, solesToCredits, loadSettings,
   type DurationDays, type PricingSettings,
 } from "@/lib/pricing";
 import { fetchPricingSettings } from "@/lib/pricingRemote";
@@ -72,7 +72,7 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
   const promo = draft ? bestPromoForCategory(promos, draft.category) : null;
   const totalSoles = promo ? applyDiscount(baseSoles, promo.discount_pct) : baseSoles;
   const totalCredits = solesToCredits(totalSoles);
-  const enoughCredits = balance !== null && Math.round(balance) >= totalCredits;
+  const enoughCredits = balance !== null && balance >= totalCredits;
 
   // Cobra y activa el borrador. `finalizeListingPublication` NO crea el aviso:
   // solo genera la orden, el comprobante y llama al RPC publish_listing.
@@ -180,19 +180,19 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
               )}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Se descontarán</span>
-                <span className="font-semibold">{totalCredits} cr</span>
+                <span className="font-semibold">{formatCredits(totalCredits)}</span>
               </div>
               <div className="flex justify-between border-t pt-1.5">
                 <span className="text-muted-foreground flex items-center gap-1.5"><Wallet size={13} /> Tu saldo</span>
                 <span className={enoughCredits ? "font-semibold" : "font-semibold text-destructive"}>
-                  {balance === null ? "…" : `${Math.round(balance)} cr`}
+                  {balance === null ? "…" : formatCredits(balance)}
                 </span>
               </div>
             </div>
 
             {balance !== null && !enoughCredits && (
               <p className="text-xs text-muted-foreground">
-                Te faltan {totalCredits - Math.round(balance)} créditos. Al pulsar el botón abrirás la compra.
+                Te faltan {formatCredits(totalCredits - balance)}. Al pulsar el botón abrirás la recarga.
               </p>
             )}
           </div>
@@ -203,8 +203,8 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
               {publishing
                 ? <><Loader2 size={14} className="animate-spin" /> Publicando…</>
                 : enoughCredits
-                  ? <><ShieldCheck size={14} /> Publicar por {totalCredits} cr</>
-                  : <>Comprar créditos</>}
+                  ? <><ShieldCheck size={14} /> Publicar por {formatCredits(totalCredits)}</>
+                  : <>Recargar créditos</>}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -73,7 +73,7 @@ import AdvertiserPublish from "@/pages/advertiser/AdvertiserPublish";
 // Costo de 1 aviso × 7 días con la matriz por defecto (base 16.14).
 // El DINERO va en soles; el usuario se cobra en CRÉDITOS = soles × 10 (redondeado).
 const COST_SOLES = 16.14;
-const COST_CREDITS = 161; // solesToCredits(16.14) = round(161.4)
+const COST_CREDITS = 16.14; // 1 crédito = 1 sol
 
 // Precarga el formulario vía el borrador que el componente restaura al montar.
 const seedDraft = () => {
@@ -121,9 +121,9 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     seedDraft();
     render(<AdvertiserPublish />);
 
-    // El formulario se cargó (borrador restaurado) y el saldo se leyó (1000 cr).
+    // El formulario se cargó (borrador restaurado) y el saldo se leyó (S/ 1000).
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("1000 cr");
+    await screen.findByText("S/ 1000.00");
 
     uploadMainPhoto();
     await publishAndConfirmIdentity();
@@ -134,7 +134,7 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
 
     // Muestra el éxito y NO abre el configurador de compra.
     await screen.findByText(/pago confirmado/i);
-    expect(screen.queryByText(/créditos a comprar/i)).toBeNull();
+    expect(screen.queryByText(/total a recargar/i)).toBeNull();
   });
 
   it("SIN CRÉDITOS: al pulsar Publicar abre el configurador y NO publica", async () => {
@@ -147,9 +147,9 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     await publishAndConfirmIdentity();
 
     // Se abre el modal configurador (anuncios/días/extras → créditos).
-    await screen.findByText(/créditos a comprar/i);
-    expect(screen.getByText(/arma tu compra/i)).toBeTruthy();
-    expect(screen.getByRole("button", { name: /comprar/i })).toBeTruthy();
+    await screen.findByText(/total a recargar/i);
+    expect(screen.getByText(/arma tu recarga/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /recargar/i })).toBeTruthy();
 
     // No se publicó ni se descontó nada.
     expect(createAndPublishListing).not.toHaveBeenCalled();
@@ -172,7 +172,7 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
 
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
     // Dinero: 16.14 × (1 − 0.50) = 8.07 soles. Créditos: round(8.07 × 10) = 81.
-    expect(spendCredits).toHaveBeenCalledWith(81, "L1");
+    expect(spendCredits).toHaveBeenCalledWith(8.07, "L1");
     expect(createAndPublishListing).toHaveBeenCalledWith(expect.objectContaining({ total: 8.07 }));
   });
 
@@ -185,14 +185,14 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
 
     uploadMainPhoto();
     await publishAndConfirmIdentity();
-    await screen.findByText(/créditos a comprar/i);
+    await screen.findByText(/total a recargar/i);
 
     // Completa datos del comprobante y compra.
     fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "12345678" } });
     fireEvent.change(screen.getByPlaceholderText("tu@correo.com"), { target: { value: "comprador@correo.com" } });
     // El DNI se autoverifica con Factiliza; esperamos a que confirme antes de comprar.
     await screen.findByText("JUAN PEREZ");
-    fireEvent.click(screen.getByRole("button", { name: /comprar/i }));
+    fireEvent.click(screen.getByRole("button", { name: /recargar/i }));
 
     // Al acreditarse y cubrir el costo, publica automáticamente y descuenta.
     await waitFor(() => expect(purchaseCredits).toHaveBeenCalledTimes(1));

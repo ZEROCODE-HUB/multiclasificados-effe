@@ -3,7 +3,7 @@ import { Coins, Plus } from "lucide-react";
 import { getCreditBalance, getCreditsSpent } from "@/lib/credits";
 import { BuyCreditsModal } from "@/components/BuyCreditsModal";
 import { useSession } from "@/hooks/useSession";
-import { avisosForBalance } from "@/lib/pricing";
+import { avisosForBalance, formatCredits } from "@/lib/pricing";
 
 // Chip de saldo de créditos para la barra superior. Visible para cualquier
 // usuario con sesión (anunciante y buscador), no solo el anunciante. El staff
@@ -25,8 +25,8 @@ export function CreditsBalance({ variant = "chip" }: { variant?: "chip" | "row" 
 
   if (!session) return null;
 
-  const label = balance === null ? "…" : `${Math.round(balance)} cr`;
-  const avisos = balance === null ? null : avisosForBalance(Math.round(balance));
+  const label = balance === null ? "…" : formatCredits(balance);
+  const avisos = balance === null ? null : avisosForBalance(balance);
   const avisosLabel = avisos === null ? "" : `≈ ${avisos} aviso${avisos === 1 ? "" : "s"}`;
 
   return (

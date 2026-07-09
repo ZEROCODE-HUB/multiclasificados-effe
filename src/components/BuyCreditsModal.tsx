@@ -9,7 +9,7 @@ import { Wallet, ShieldCheck, User, Building2, Check, CheckCircle2, AlertCircle,
 import { toast } from "@/hooks/use-toast";
 import { purchaseCredits, type CreditPackage, type PurchaseInvoiceData } from "@/lib/credits";
 import {
-  loadSettings, priceForDuration, extrasTotal, formatSoles, solesToCredits,
+  loadSettings, priceForDuration, extrasTotal, formatSoles, formatCredits, solesToCredits,
   type DurationDays, type ExtrasSelection, type PricingSettings, type ExtraPrices,
 } from "@/lib/pricing";
 import { fetchPricingSettings } from "@/lib/pricingRemote";
@@ -167,8 +167,8 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
       };
       const { newBalance, invoiceNumber } = await purchaseCredits(pkg, invoiceData);
       toast({
-        title: "¡Créditos acreditados!",
-        description: `${creditsToBuy} créditos añadidos. Comprobante: ${invoiceNumber}`,
+        title: "¡Saldo recargado!",
+        description: `Se añadieron ${formatCredits(creditsToBuy)} a tu saldo. Comprobante: ${invoiceNumber}`,
       });
       onPurchaseComplete(newBalance);
       onClose();
@@ -191,10 +191,10 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Wallet size={18} className="text-secondary" /> Comprar créditos
+            <Wallet size={18} className="text-secondary" /> Recargar créditos
           </DialogTitle>
           <DialogDescription>
-            Arma tu compra: elige cantidad de avisos, duración y adicionales. Todo suma créditos que podrás usar al publicar.
+            Arma tu recarga: elige cantidad de avisos, duración y adicionales. 1 crédito vale 1 sol, así que pagas justo lo que ves.
           </DialogDescription>
         </DialogHeader>
 
@@ -202,10 +202,10 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
         {creditCost > 0 && (
           <div className="text-xs border p-3 bg-muted/30 flex items-center justify-between gap-2">
             <span className="text-muted-foreground">
-              Para publicar tu aviso necesitas <b className="text-foreground">{creditCost} cr</b>
-              {deficit > 0 && <> · tu saldo: {currentBalance} cr</>}
+              Para publicar tu aviso necesitas <b className="text-foreground">{formatCredits(creditCost)}</b>
+              {deficit > 0 && <> · tu saldo: {formatCredits(currentBalance)}</>}
             </span>
-            {deficit > 0 && <span className="font-bold text-destructive whitespace-nowrap">Faltan {deficit}</span>}
+            {deficit > 0 && <span className="font-bold text-destructive whitespace-nowrap">Faltan {formatCredits(deficit)}</span>}
           </div>
         )}
 
@@ -237,7 +237,7 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
                 <button key={d} type="button" onClick={() => setDuration(d)}
                   className={`p-2 border text-center transition-all ${isSel ? "border-secondary bg-secondary/10 ring-2 ring-secondary/30" : "border-border hover:bg-muted/50"}`}>
                   <p className="font-bold text-sm">{d} días</p>
-                  <p className="text-[11px] text-muted-foreground">{solesToCredits(p)} cr</p>
+                  <p className="text-[11px] text-muted-foreground">{formatCredits(solesToCredits(p))}</p>
                 </button>
               );
             })}
@@ -257,7 +257,7 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
                   className={`relative p-3 border text-left transition-all ${isSel ? "border-secondary bg-secondary/10 ring-2 ring-secondary/30" : "border-border hover:bg-muted/50"}`}>
                   <p className="font-bold text-xs">{d.label}</p>
                   <p className="text-[10px] text-muted-foreground">{d.sub}</p>
-                  <p className="text-xs font-semibold text-secondary mt-1">+{solesToCredits(unit)} cr</p>
+                  <p className="text-xs font-semibold text-secondary mt-1">+{formatCredits(solesToCredits(unit))}</p>
                   {isSel && <Check size={14} className="absolute top-2 right-2 text-secondary" />}
                 </button>
               );
@@ -269,27 +269,24 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
         <div className="border p-3 bg-secondary/5 space-y-1">
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground">{quantity} aviso{quantity > 1 ? "s" : ""} × {duration} días</span>
-            <span className="font-semibold">{solesToCredits(packageBase)} cr</span>
+            <span className="font-semibold">{formatCredits(solesToCredits(packageBase))}</span>
           </div>
           {extrasSum > 0 && (
             <div className="flex justify-between text-xs">
               <span className="text-muted-foreground">Adicionales</span>
-              <span className="font-semibold">{solesToCredits(extrasSum)} cr</span>
+              <span className="font-semibold">{formatCredits(solesToCredits(extrasSum))}</span>
             </div>
           )}
           <div className="border-t pt-2 flex justify-between items-baseline">
-            <span className="font-bold uppercase tracking-wider text-xs">Créditos a comprar</span>
-            <span className="text-2xl font-extrabold text-secondary">{creditsToBuy} cr</span>
+            <span className="font-bold uppercase tracking-wider text-xs">Total a recargar</span>
+            <span className="text-2xl font-extrabold text-secondary">{formatCredits(creditsToBuy)}</span>
           </div>
-          <div className="flex justify-between text-[11px] text-muted-foreground">
-            <span>Pagas (boleta)</span>
-            <span className="font-semibold">{formatSoles(solesTotal)}</span>
-          </div>
+          <p className="text-[11px] text-muted-foreground">Es también lo que pagas: tu boleta dirá {formatSoles(solesTotal)}.</p>
           {creditCost > 0 && (
             <p className={`text-[11px] ${coversAd ? "text-success" : "text-destructive"}`}>
               {coversAd
                 ? "✓ Con esta compra podrás publicar tu aviso."
-                : `Aún faltarían ${creditCost - balanceAfter} cr para publicar tu aviso.`}
+                : `Aún faltarían ${formatCredits(creditCost - balanceAfter)} para publicar tu aviso.`}
             </p>
           )}
         </div>
@@ -370,7 +367,7 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
           <Button onClick={handleBuy} disabled={buying || creditsToBuy <= 0 || verifyingDoc || !verifiedName || !emailValid} className="gap-2">
             {buying
               ? <><Loader2 size={14} className="animate-spin" /> Procesando…</>
-              : <><ShieldCheck size={14} /> Comprar {creditsToBuy} cr — {formatSoles(solesTotal)}</>}
+              : <><ShieldCheck size={14} /> Recargar {formatCredits(creditsToBuy)}</>}
           </Button>
         </DialogFooter>
       </DialogContent>

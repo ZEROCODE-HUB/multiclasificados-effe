@@ -136,7 +136,7 @@ describe("AdvertiserPublish — Guardar en mis borradores", () => {
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("1000 cr");
+    await screen.findByText("S/ 1000.00");
     uploadMainPhoto();
 
     fireEvent.click(draftButton());

@@ -69,7 +69,7 @@ vi.mock("@/hooks/use-toast", () => ({ toast: (...a: unknown[]) => toast(...a) })
 
 import AdvertiserPublish from "@/pages/advertiser/AdvertiserPublish";
 
-const COST_CREDITS = 161; // 1 aviso × 7 días = 16.14 soles → 161 créditos
+const COST_CREDITS = 16.14; // 1 aviso × 7 días = 16.14 soles = 16.14 créditos
 
 const seedDraft = () => {
   localStorage.setItem("effe:publish-draft", JSON.stringify({
@@ -121,7 +121,7 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("1000 cr");
+    await screen.findByText("S/ 1000.00");
 
     uploadMainPhoto();
     await publishWithIdentity();
@@ -154,7 +154,7 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("1000 cr");
+    await screen.findByText("S/ 1000.00");
     uploadMainPhoto();
     await openIdentityDialog();
 
@@ -176,7 +176,7 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("1000 cr");
+    await screen.findByText("S/ 1000.00");
     uploadMainPhoto();
 
     const btn = publishButton();
@@ -194,7 +194,7 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("1000 cr");
+    await screen.findByText("S/ 1000.00");
     uploadMainPhoto();
 
     // Se captura el nodo antes: al publicar, el botón pasa a decir "Publicando…"
@@ -217,21 +217,21 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("1000 cr");
+    await screen.findByText("S/ 1000.00");
     uploadMainPhoto();
 
     await publishWithIdentity();
 
     // Publicó una vez, no cobró, y abrió el configurador de compra.
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
-    await screen.findByText(/créditos a comprar/i);
+    await screen.findByText(/total a recargar/i);
     // No se anuncia un pago que no ocurrió.
     expect(screen.queryByText(/pago confirmado/i)).toBeNull();
 
     fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "12345678" } });
     fireEvent.change(screen.getByPlaceholderText("tu@correo.com"), { target: { value: "comprador@correo.com" } });
     await screen.findByText("JUAN PEREZ");
-    fireEvent.click(screen.getByRole("button", { name: /comprar/i }));
+    fireEvent.click(screen.getByRole("button", { name: /recargar/i }));
 
     await waitFor(() => expect(purchaseCredits).toHaveBeenCalledTimes(1));
     await screen.findByText(/pago confirmado/i);

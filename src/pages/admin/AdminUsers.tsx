@@ -14,6 +14,7 @@ import { Search, UserCheck, Ban, BadgeCheck, KeyRound, Trash2, ChevronLeft, Chev
 import { fetchAdminUsers, setUserStatus, verifyUser, deleteUser, setUserRole, grantCredits, type AdminUser } from "@/lib/admin";
 import { usePermissions } from "@/hooks/usePermissions";
 import { supabase } from "@/lib/supabase";
+import { formatCredits } from "@/lib/pricing";
 import { toast } from "@/hooks/use-toast";
 
 // Mapa estado real (BD) -> etiqueta y color del diseño existente.
@@ -448,7 +449,7 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={doGrant} disabled={!(Number(grantAmount) > 0)}>
-              Otorgar {Number(grantAmount) > 0 ? `${Number(grantAmount)} cr` : ""}
+              Otorgar {Number(grantAmount) > 0 ? formatCredits(Number(grantAmount)) : ""}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
