@@ -5,6 +5,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SupabaseAuthBridge } from "@/components/SupabaseAuthBridge";
+import { MaintenanceGate } from "@/components/MaintenanceGate";
 import { FavoritesProvider } from "@/hooks/useFavorites";
 import { RequireRole } from "@/components/RequireRole";
 import { AdminShell } from "@/components/AdminLayout";
@@ -52,6 +53,8 @@ const App = () => (
       <SupabaseAuthBridge />
       <FavoritesProvider>
       <BrowserRouter>
+        {/* Dentro del router: necesita la ruta para dejar pasar /auth/staff. */}
+        <MaintenanceGate>
         <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><div className="w-9 h-9 rounded-full border-[3px] border-muted border-t-secondary animate-spin" /></div>}>
         <Routes>
           <Route path="/" element={<Index />} />
@@ -120,6 +123,7 @@ const App = () => (
           <Route path="*" element={<NotFound />} />
         </Routes>
         </Suspense>
+        </MaintenanceGate>
       </BrowserRouter>
       </FavoritesProvider>
     </TooltipProvider>

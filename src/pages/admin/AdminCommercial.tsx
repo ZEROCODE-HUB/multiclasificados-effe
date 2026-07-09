@@ -198,20 +198,18 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
   };
 
   // ===== Variables del sistema (REQ-ADM-04) =====
+  // El precio del aviso destacado NO va aquí: se configura en Tarifas y
+  // descuentos > Precios de adicionales, y tenerlo en dos sitios invitaba a
+  // dejarlos descuadrados. Las pasarelas (Stripe/Culqi) no son variables del
+  // sistema y se quitaron de esta vista.
   const SETTING_KEYS = {
     commission_pct: "Comisión por transacción (%)",
-    featured_price: "Precio de aviso destacado (S/)",
     free_listings_limit: "Límite de publicaciones gratis",
-    gateway_stripe: "Pasarela Stripe activa",
-    gateway_culqi: "Pasarela Culqi activa",
     maintenance_mode: "Modo mantenimiento",
   } as const;
   type SettingKey = keyof typeof SETTING_KEYS;
-  // Valores por defecto ACORDE AL EXCEL: Destacado = S/5 (mismo adicional del
-  // motor); el Excel no contempla comisión ni publicaciones gratis → 0.
   const [settings, setSettings] = useState<Record<SettingKey, any>>({
-    commission_pct: 0, featured_price: 5, free_listings_limit: 0,
-    gateway_stripe: true, gateway_culqi: false, maintenance_mode: false,
+    commission_pct: 0, free_listings_limit: 0, maintenance_mode: false,
   });
   const [savingSettings, setSavingSettings] = useState(false);
 
@@ -368,16 +366,11 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>{SETTING_KEYS.commission_pct}</Label>
                   <Input type="number" value={settings.commission_pct}
                     onChange={(e) => setSettings((s) => ({ ...s, commission_pct: Number(e.target.value) }))} />
-                </div>
-                <div className="space-y-2">
-                  <Label>{SETTING_KEYS.featured_price}</Label>
-                  <Input type="number" value={settings.featured_price}
-                    onChange={(e) => setSettings((s) => ({ ...s, featured_price: Number(e.target.value) }))} />
                 </div>
                 <div className="space-y-2">
                   <Label>{SETTING_KEYS.free_listings_limit}</Label>
@@ -387,20 +380,16 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
               </div>
 
               <div className="space-y-3">
-                {([
-                  ["gateway_stripe", SETTING_KEYS.gateway_stripe, "Acepta pagos con tarjeta vía Stripe."],
-                  ["gateway_culqi", SETTING_KEYS.gateway_culqi, "Acepta pagos locales vía Culqi."],
-                  ["maintenance_mode", SETTING_KEYS.maintenance_mode, "Bloquea el acceso público mientras se realizan tareas."],
-                ] as const).map(([key, label, desc]) => (
-                  <div key={key} className="flex items-center justify-between border rounded-lg p-4">
-                    <div className="pr-4">
-                      <p className="font-medium text-sm">{label}</p>
-                      <p className="text-xs text-muted-foreground">{desc}</p>
-                    </div>
-                    <Switch checked={!!settings[key]}
-                      onCheckedChange={(v) => setSettings((s) => ({ ...s, [key]: v }))} />
+                <div className="flex items-center justify-between border rounded-lg p-4">
+                  <div className="pr-4">
+                    <p className="font-medium text-sm">{SETTING_KEYS.maintenance_mode}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Bloquea el acceso a la plataforma. El personal del panel sigue entrando, para poder desactivarlo.
+                    </p>
                   </div>
-                ))}
+                  <Switch checked={!!settings.maintenance_mode}
+                    onCheckedChange={(v) => setSettings((s) => ({ ...s, maintenance_mode: v }))} />
+                </div>
               </div>
 
               <div className="flex justify-end">
