@@ -210,10 +210,14 @@ export function formatSoles(v: number) {
   return `S/ ${v.toFixed(2)}`;
 }
 
-// Un crédito vale un sol, así que el saldo se escribe en soles y no con la
-// sigla "cr", que nadie entendía. Fuente única para todo lo que muestre saldo.
+// En la app se paga con CRÉDITOS, no con dinero: el saldo y el costo de un
+// aviso se escriben "16.14 créditos", nunca con la sigla "cr" ni con "S/".
+// El símbolo del sol queda para donde hay dinero real (la boleta).
+// Los enteros no arrastran ".00": "8472 créditos", no "8472.00 créditos".
 export function formatCredits(v: number) {
-  return formatSoles(v);
+  const n = Math.round(v * 100) / 100;
+  const cifra = Number.isInteger(n) ? String(n) : n.toFixed(2);
+  return `${cifra} ${n === 1 ? "crédito" : "créditos"}`;
 }
 
 // === Helpers para reportes/cierre de venta/boletas (persistidos en localStorage) ===

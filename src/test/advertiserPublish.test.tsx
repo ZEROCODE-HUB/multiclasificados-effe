@@ -121,9 +121,9 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     seedDraft();
     render(<AdvertiserPublish />);
 
-    // El formulario se cargó (borrador restaurado) y el saldo se leyó (S/ 1000).
+    // El formulario se cargó (borrador restaurado) y el saldo se leyó (1000 créditos).
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("S/ 1000.00");
+    await screen.findByText("1000 créditos");
 
     uploadMainPhoto();
     await publishAndConfirmIdentity();

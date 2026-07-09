@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
-// El crédito valía 1/10 de sol y el saldo se mostraba con la sigla "cr", que
-// nadie entendía. Ahora 1 crédito = 1 sol y todo se lee en "S/".
+// En la app se paga con CRÉDITOS, no con dinero. Lo único que cambió es la
+// conversión: antes 1 sol = 10 créditos (y se mostraban como "161 cr"), ahora
+// 1 sol = 1 crédito. El símbolo "S/" solo aparece donde hay dinero real: la
+// boleta de la compra.
 
 beforeEach(() => {
   (globalThis as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
@@ -39,14 +41,22 @@ const abrir = (props: Partial<{ creditCost: number; currentBalance: number }> = 
 
 beforeEach(() => { purchaseCredits.mockClear(); });
 
-describe("Recarga de créditos — 1 sol = 1 crédito, mostrado como S/", () => {
+describe("Conversión — 1 sol = 1 crédito", () => {
   it("un sol es un crédito", () => {
     expect(solesToCredits(1)).toBe(1);
     expect(solesToCredits(ESTANDAR)).toBe(ESTANDAR);
-    expect(formatCredits(ESTANDAR)).toBe("S/ 16.14");
   });
 
-  it("la recarga no muestra la sigla 'cr' por ninguna parte", async () => {
+  it("el saldo se escribe en créditos, nunca en 'cr' ni en 'S/'", () => {
+    expect(formatCredits(ESTANDAR)).toBe("16.14 créditos");
+    expect(formatCredits(1)).toBe("1 crédito");
+    // Un entero no arrastra decimales: "8472 créditos", no "8472.00".
+    expect(formatCredits(8472)).toBe("8472 créditos");
+  });
+});
+
+describe("Comprar créditos — la app cobra en créditos y la boleta en soles", () => {
+  it("no queda la sigla 'cr' suelta por ninguna parte", async () => {
     abrir({ creditCost: ESTANDAR, currentBalance: 5 });
     await screen.findByText(/créditos a comprar/i);
 
@@ -55,35 +65,33 @@ describe("Recarga de créditos — 1 sol = 1 crédito, mostrado como S/", () => 
     expect(document.body.textContent).not.toMatch(/(?<!\p{L})cr(?!\p{L})/iu);
   });
 
-  it("el costo del aviso y el saldo salen en soles", async () => {
+  it("el costo del aviso, el saldo y lo que falta van en créditos", async () => {
     abrir({ creditCost: ESTANDAR, currentBalance: 5 });
     await screen.findByText(/créditos a comprar/i);
 
-    // El aviso a publicar y el saldo actual, ambos en soles.
     const aviso = screen.getByText(/Para publicar tu aviso necesitas/i);
-    expect(aviso).toHaveTextContent("S/ 16.14");
-    expect(aviso).toHaveTextContent("tu saldo: S/ 5.00");
-    // Lo que falta para publicar, también en soles.
-    expect(screen.getByText(/^Faltan/)).toHaveTextContent("Faltan S/ 11.14");
+    expect(aviso).toHaveTextContent("16.14 créditos");
+    expect(aviso).toHaveTextContent("tu saldo: 5 créditos");
+    expect(screen.getByText(/^Faltan/)).toHaveTextContent("Faltan 11.14 créditos");
   });
 
-  it("el botón compra exactamente los soles que se van a pagar", async () => {
+  it("el botón compra créditos; el sol solo aparece en la boleta", async () => {
     abrir();
     await screen.findByText(/créditos a comprar/i);
 
-    // Por defecto: 1 aviso × 7 días, sin adicionales.
-    expect(screen.getByRole("button", { name: /comprar S\/ 16\.14/i })).toBeInTheDocument();
-    // Los créditos a comprar y lo que se paga son la misma cifra.
-    expect(screen.getAllByText("S/ 16.14").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByRole("button", { name: /comprar 16\.14 créditos/i })).toBeInTheDocument();
+    // La única cifra en soles del cuadro de totales es la que se paga.
+    expect(screen.getByText("Pagas (boleta)")).toBeInTheDocument();
+    expect(screen.getByText("S/ 16.14")).toBeInTheDocument();
   });
 
-  it("compra el mismo número de créditos que soles paga", async () => {
+  it("compra tantos créditos como soles paga (conversión 1:1)", async () => {
     abrir();
     fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "44443333" } });
     await screen.findByText("ANA TORRES");
     fireEvent.change(screen.getByPlaceholderText("tu@correo.com"), { target: { value: "ana@correo.com" } });
 
-    fireEvent.click(screen.getByRole("button", { name: /comprar S\//i }));
+    fireEvent.click(screen.getByRole("button", { name: /comprar .* créditos/i }));
 
     await waitFor(() => expect(purchaseCredits).toHaveBeenCalled());
     const [pkg] = purchaseCredits.mock.calls[0];

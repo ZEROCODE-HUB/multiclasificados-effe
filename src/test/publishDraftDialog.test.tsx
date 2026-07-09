@@ -94,13 +94,13 @@ describe("PublishDraftDialog — publicar un borrador guardado", () => {
   it("muestra el plan guardado (7 días) y el costo en créditos", async () => {
     renderDialog();
     await screen.findByText("Casa bonita");
-    await screen.findAllByText(`S/ ${COST_CREDITS.toFixed(2)}`);
-    expect(screen.getByRole("button", { name: new RegExp(`Publicar por S/ ${COST_CREDITS.toFixed(2)}`) })).toBeTruthy();
+    await screen.findAllByText(`${COST_CREDITS} créditos`);
+    expect(screen.getByRole("button", { name: new RegExp(`Publicar por ${COST_CREDITS} créditos`) })).toBeTruthy();
   });
 
   it("exige identidad antes de cobrar: pulsar Publicar abre el cuadro y no cobra", async () => {
     renderDialog();
-    await screen.findAllByText(`S/ ${COST_CREDITS.toFixed(2)}`);
+    await screen.findAllByText(`${COST_CREDITS} créditos`);
 
     fireEvent.click(screen.getByRole("button", { name: /publicar por/i }));
 
@@ -111,7 +111,7 @@ describe("PublishDraftDialog — publicar un borrador guardado", () => {
 
   it("tras confirmar identidad: cobra y ACTIVA el aviso existente, sin recrearlo", async () => {
     renderDialog();
-    await screen.findAllByText(`S/ ${COST_CREDITS.toFixed(2)}`);
+    await screen.findAllByText(`${COST_CREDITS} créditos`);
     fireEvent.click(screen.getByRole("button", { name: /publicar por/i }));
     await confirmIdentity();
 
@@ -129,7 +129,7 @@ describe("PublishDraftDialog — publicar un borrador guardado", () => {
   it("DNI falso: no cobra ni publica", async () => {
     verifyDocument.mockResolvedValue({ ok: false, error: "No se encontró el documento." });
     renderDialog();
-    await screen.findAllByText(`S/ ${COST_CREDITS.toFixed(2)}`);
+    await screen.findAllByText(`${COST_CREDITS} créditos`);
     fireEvent.click(screen.getByRole("button", { name: /publicar por/i }));
 
     fireEvent.click(await screen.findByRole("button", { name: /persona natural/i }));
@@ -144,7 +144,7 @@ describe("PublishDraftDialog — publicar un borrador guardado", () => {
   it("sin saldo: el botón ofrece comprar créditos y no cobra", async () => {
     getCreditBalance.mockResolvedValue(0);
     renderDialog();
-    await screen.findAllByText(`S/ ${COST_CREDITS.toFixed(2)}`);
+    await screen.findAllByText(`${COST_CREDITS} créditos`);
 
     const btn = await screen.findByRole("button", { name: /comprar créditos/i });
     fireEvent.click(btn);
@@ -157,7 +157,7 @@ describe("PublishDraftDialog — publicar un borrador guardado", () => {
   it("si el cobro falla, NO activa el aviso y abre la compra", async () => {
     spendCredits.mockResolvedValue(false);
     renderDialog();
-    await screen.findAllByText(`S/ ${COST_CREDITS.toFixed(2)}`);
+    await screen.findAllByText(`${COST_CREDITS} créditos`);
     fireEvent.click(screen.getByRole("button", { name: /publicar por/i }));
     await confirmIdentity();
 
@@ -169,7 +169,7 @@ describe("PublishDraftDialog — publicar un borrador guardado", () => {
   it("si se cobró pero el RPC no activó el aviso, lo dice en vez de fingir éxito", async () => {
     finalizeListingPublication.mockResolvedValue({ invoiceNumber: "", published: false, invoiceSaved: false });
     renderDialog();
-    await screen.findAllByText(`S/ ${COST_CREDITS.toFixed(2)}`);
+    await screen.findAllByText(`${COST_CREDITS} créditos`);
     fireEvent.click(screen.getByRole("button", { name: /publicar por/i }));
     await confirmIdentity();
 
