@@ -15,19 +15,11 @@ import {
   fetchAdminListings, fetchRecentActivity,
   type AdminStats, type AdminListingRow, type ActivityItem,
 } from "@/lib/admin";
+import { auditEntityLabel, lowercaseFirst } from "@/lib/auditLabels";
 
 const COLORS = ["hsl(220 56% 20%)", "hsl(24 95% 53%)", "hsl(166 60% 45%)", "hsl(220 56% 45%)", "hsl(40 95% 55%)", "hsl(220 14% 60%)"];
 
 interface Props { role: AdminRole }
-
-// Etiqueta legible del tipo de entidad al que se refiere la actividad.
-const ENTITY_LABEL: Record<string, string> = {
-  listing: "Aviso",
-  user: "Usuario",
-  report: "Reporte",
-  setting: "Configuración",
-  role: "Rol",
-};
 
 // Fecha completa (la lista solo muestra el tiempo relativo, ej. "hace 2 h").
 function fullDate(at: string): string {
@@ -236,7 +228,7 @@ const AdminDashboard = ({ role }: Props) => {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-foreground">
-                  <span className="font-semibold">{a.who}</span> {a.action} <span className="text-secondary font-medium">{a.target}</span>
+                  <span className="font-semibold">{a.who}</span> {lowercaseFirst(a.action)} <span className="text-secondary font-medium">{a.target}</span>
                 </p>
                 <p className="text-xs text-muted-foreground">{a.time}</p>
               </div>
@@ -291,7 +283,7 @@ const AdminDashboard = ({ role }: Props) => {
               {detail.entityType && (
                 <div>
                   <dt className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Tipo</dt>
-                  <dd><Badge variant="outline">{ENTITY_LABEL[detail.entityType] ?? detail.entityType}</Badge></dd>
+                  <dd><Badge variant="outline">{auditEntityLabel(detail.entityType)}</Badge></dd>
                 </div>
               )}
               {detail.entityId && (
