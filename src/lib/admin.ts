@@ -530,13 +530,27 @@ export function auditActionLabel(action: string): string {
   return AUDIT_ACTION_LABELS[action] ?? action;
 }
 
-export async function fetchAuditLogs(): Promise<{ data: AuditRow[]; real: boolean }> {
+// "2026-07-09" → instante ISO del inicio/fin de ese día en la zona horaria del
+// navegador. created_at es timestamptz, así que "hasta el 9" debe incluir todo
+// el día 9 y no cortarse en su medianoche. Devuelve null si la fecha no es válida.
+function limiteDiaISO(fecha: string, fin: boolean): string | null {
+  const d = new Date(`${fecha}T${fin ? "23:59:59.999" : "00:00:00.000"}`);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+export async function fetchAuditLogs(range?: ReportDateRange): Promise<{ data: AuditRow[]; real: boolean }> {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from("audit_logs")
-      .select("id, action, entity_type, entity_id, ip, created_at, actor:profiles!audit_logs_actor_id_fkey(full_name, email)")
-      .order("created_at", { ascending: false })
-      .limit(200);
+      .select("id, action, entity_type, entity_id, ip, created_at, actor:profiles!audit_logs_actor_id_fkey(full_name, email)");
+
+    const desde = range?.from ? limiteDiaISO(range.from, false) : null;
+    const hasta = range?.to ? limiteDiaISO(range.to, true) : null;
+    if (desde) query = query.gte("created_at", desde);
+    if (hasta) query = query.lte("created_at", hasta);
+
+    // El tope de 200 se aplica dentro del rango pedido, no sobre todo el historial.
+    const { data, error } = await query.order("created_at", { ascending: false }).limit(200);
     if (error) throw error;
     if (data?.length || (await isAuthed())) {
       const logs = data ?? [];
