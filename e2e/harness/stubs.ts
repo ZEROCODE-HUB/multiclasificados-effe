@@ -18,12 +18,17 @@ export const USERS = NAMES.map((full_name, i) => ({
   email: `usuario.numero.${i}.con.correo.largo@correoempresarial.com.pe`,
   status: "active",
   verified: true,
-  roles: "buscador",
+  // El usuario 1 conserva el rol heredado 'anunciante' (fila aún sin migrar por
+  // 0043): el panel debe mostrarlo como Buscador, no en blanco.
+  roles: i === 1 ? "anunciante" : "buscador",
   listings_count: 0,
   suspended_until: null,
   rating: 0,
   created_at: "2026-01-01T00:00:00Z",
 }));
+
+/** Nombre del usuario que aún arrastra el rol viejo en la BD. */
+export const LEGACY_ANUNCIANTE = NAMES[1];
 
 // --- @/lib/admin
 export const fetchAdminUsers = async () => ({ data: USERS, real: true });

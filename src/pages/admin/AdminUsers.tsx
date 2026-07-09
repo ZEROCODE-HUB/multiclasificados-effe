@@ -29,6 +29,18 @@ const metaFor = (s: string) => statusMeta[s] ?? statusMeta.active;
 const isUuid = (v: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 
+/**
+ * Roles de un usuario, con "anunciante" consolidado en "buscador".
+ *
+ * No había separación real de permisos entre ambos (RequireRole les da el mismo
+ * rango), así que el rol dejó de asignarse y de filtrarse. La migración 0043
+ * lo consolida en la BD; esta normalización hace que el panel se vea igual
+ * aunque queden filas viejas sin migrar.
+ */
+const rolesOf = (roles: string): string[] => [
+  ...new Set(roles.split(",").filter(Boolean).map((r) => (r === "anunciante" ? "buscador" : r))),
+];
+
 const PAGE_SIZE = 5;
 
 const AdminUsers = ({ role }: { role: AdminRole }) => {
@@ -56,7 +68,7 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
   const filtered = useMemo(
     () =>
       users.filter((u) =>
-        (r === "all" || u.roles.split(",").includes(r)) &&
+        (r === "all" || rolesOf(u.roles).includes(r)) &&
         (q === "" || (u.full_name ?? "").toLowerCase().includes(q.toLowerCase()) || (u.email ?? "").toLowerCase().includes(q.toLowerCase())),
       ),
     [users, q, r],
@@ -125,14 +137,13 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
 
   const initials = (name: string) => (name || "?").split(" ").map((n) => n[0]).slice(0, 2).join("");
   const primaryRole = (roles: string) => {
-    const r0 = roles.split(",")[0] || "buscador";
+    const r0 = rolesOf(roles)[0] || "buscador";
     return r0.charAt(0).toUpperCase() + r0.slice(1);
   };
 
   // Roles asignables desde el panel (enum app_role).
   const ASSIGNABLE_ROLES = [
     { value: "buscador", label: "Buscador" },
-    { value: "anunciante", label: "Anunciante" },
     { value: "moderador", label: "Moderador" },
     { value: "soporte", label: "Soporte" },
     { value: "admin", label: "Admin" },
@@ -145,8 +156,8 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
       return <Badge variant="outline">{primaryRole(u.roles)}</Badge>;
     }
     // Rol "efectivo": el de mayor jerarquía que tenga el usuario.
-    const RANK = ["superadmin", "admin", "moderador", "soporte", "anunciante", "buscador"];
-    const owned = u.roles.split(",").filter(Boolean);
+    const RANK = ["superadmin", "admin", "moderador", "soporte", "buscador"];
+    const owned = rolesOf(u.roles);
     const current = RANK.find((r) => owned.includes(r)) ?? "buscador";
     return (
       <Select

@@ -1,10 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import * as esbuild from "esbuild";
-import { execFileSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
+import { harnessHtml } from "./harness/build";
 
 /**
  * Test de layout real: monta el componente REAL `AdminUsers` en Chromium con el CSS
@@ -17,15 +12,6 @@ import path from "node:path";
  * 19px de ancho) → el círculo salía ovalado.
  */
 
-const DIR = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(DIR, "..");
-const SRC = path.join(ROOT, "src");
-const STUBS = path.join(DIR, "harness", "stubs.ts");
-
-// Módulos que hablan con Supabase: se reemplazan por stubs. El resto (incluido
-// AdminUsers y todos los componentes de UI) se bundlea desde el código real.
-const STUBBED = new Set(["@/lib/admin", "@/hooks/usePermissions", "@/lib/supabase", "@/hooks/use-toast"]);
-
 const AVATAR = "div.rounded-full.bg-primary";
 const DESKTOP_AVATAR = `table td ${AVATAR}`;
 const MOBILE_AVATAR = `div.md\\:hidden ${AVATAR}`;
@@ -33,40 +19,7 @@ const MOBILE_AVATAR = `div.md\\:hidden ${AVATAR}`;
 let html: string;
 
 test.beforeAll(async () => {
-  const bundle = await esbuild.build({
-    entryPoints: [path.join(DIR, "harness", "main.tsx")],
-    bundle: true,
-    format: "iife",
-    jsx: "automatic",
-    absWorkingDir: ROOT,
-    write: false,
-    define: { "process.env.NODE_ENV": '"production"' },
-    plugins: [
-      {
-        name: "alias-src",
-        setup(build) {
-          build.onResolve({ filter: /^@\// }, async (args) => {
-            if (STUBBED.has(args.path)) return { path: STUBS };
-            const r = await build.resolve("./" + args.path.slice(2), {
-              resolveDir: SRC,
-              kind: "import-statement",
-            });
-            return r.errors.length ? { errors: r.errors } : { path: r.path, external: r.external };
-          });
-        },
-      },
-    ],
-  });
-
-  const cssFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "effe-css-")), "app.css");
-  execFileSync(process.execPath, [
-    path.join(ROOT, "node_modules", "tailwindcss", "lib", "cli.js"),
-    "-i", path.join(SRC, "index.css"), "-o", cssFile, "--minify",
-  ], { cwd: ROOT, stdio: "pipe" });
-
-  html = `<style>${fs.readFileSync(cssFile, "utf8")}</style>`
-    + `<div id="root"></div>`
-    + `<script>${bundle.outputFiles[0].text}</script>`;
+  html = await harnessHtml();
 });
 
 /** Ancho/alto renderizados de cada avatar visible, junto al nombre de su fila. */
