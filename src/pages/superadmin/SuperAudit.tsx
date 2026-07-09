@@ -10,6 +10,15 @@ import { exportCSV } from "@/lib/exportReport";
 
 const PAGE_SIZE = 10;
 
+// "2026-07-07 19:45" → "07/07/2026 19:45", para el CSV.
+// Excel en español lee el ISO como número de serie y lo pinta como "#######"
+// si la columna es angosta; dd/mm/aaaa lo muestra tal cual. Si el registro no
+// trae fecha, devuelve lo que haya en vez de inventar una.
+const fechaParaExcel = (t: string): string => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}:\d{2})/.exec(t ?? "");
+  return m ? `${m[3]}/${m[2]}/${m[1]} ${m[4]}` : (t ?? "");
+};
+
 const SuperAudit = () => {
   const [logs, setLogs] = useState<AuditRow[]>([]);
   const [q, setQ] = useState("");
@@ -65,7 +74,7 @@ const SuperAudit = () => {
         Acción: l.action,
         "Elemento afectado": l.entity,
         "Dirección IP": l.ip,
-        "Fecha y hora": l.time,
+        "Fecha y hora": fechaParaExcel(l.time),
       })),
     );
   };

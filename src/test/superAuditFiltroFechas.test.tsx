@@ -100,8 +100,26 @@ describe("SuperAudit — descarga del historial", () => {
       Acción: "Cambió configuración",
       "Elemento afectado": "Configuración: diseño",
       "Dirección IP": "190.12.0.1",
-      "Fecha y hora": "2026-07-09 12:00",
+      // dd/mm/aaaa: en ISO, Excel en español lo convierte a número de serie.
+      "Fecha y hora": "09/07/2026 12:00",
     }]);
+  });
+
+  it("la tabla en pantalla conserva el formato ISO; solo el CSV se traduce", async () => {
+    render(<SuperAudit />);
+    expect((await screen.findAllByText("2026-07-09 12:00")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("09/07/2026 12:00")).toBeNull();
+  });
+
+  it("un registro sin fecha no inventa una", async () => {
+    fetchAuditLogs.mockResolvedValue({ data: [{ ...LOG, time: "" }], real: true });
+    render(<SuperAudit />);
+    await screen.findAllByText("rosa@correo.com");
+
+    fireEvent.click(screen.getByRole("button", { name: /Descargar historial/i }));
+
+    const [, filas] = exportCSV.mock.calls[0];
+    expect(filas[0]["Fecha y hora"]).toBe("");
   });
 
   it("la descarga respeta la búsqueda: solo baja lo que se ve", async () => {
