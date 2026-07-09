@@ -1,11 +1,13 @@
 import { Navbar } from "@/components/Navbar";
-import { featuredListings, categories } from "@/data/mockData";
+import { featuredListings } from "@/data/mockData";
+import { useCategories } from "@/hooks/useCategories";
 import { MapPin, ShieldCheck, Heart, Star, SlidersHorizontal, List, Map as MapIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 
 export default function MapPage() {
+  const categories = useCategories();
   const [active, setActive] = useState<string | null>(featuredListings[0]?.id ?? null);
   const formatPrice = (price: number, currency: string) =>
     currency === "USD" ? `US$ ${(price / 1000).toFixed(0)}K` : `S/ ${price.toLocaleString()}`;

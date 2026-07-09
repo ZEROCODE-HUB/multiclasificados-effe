@@ -14,7 +14,7 @@ import {
   ShieldCheck, CreditCard, Receipt, Sparkles, Flame, EyeOff, Lock, Package, Minus, Plus,
   Wallet, Loader2, Percent, Save,
 } from "lucide-react";
-import { categories } from "@/data/mockData";
+import { useCategories } from "@/hooks/useCategories";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSession } from "@/hooks/useSession";
@@ -54,6 +54,7 @@ const AdvertiserPublish = () => {
   const session = useSession();
   const hasSession = !!session;
   const navigate = useNavigate();
+  const categories = useCategories();
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Guardia: para publicar hay que haber iniciado sesión (cuenta real).

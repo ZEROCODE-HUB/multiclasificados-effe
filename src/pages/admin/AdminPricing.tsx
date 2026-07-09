@@ -30,7 +30,7 @@ import {
   fetchPromotions, upsertPromotion, deletePromotion, type Promotion,
 } from "@/lib/promotions";
 import { supabase } from "@/lib/supabase";
-import { categories } from "@/data/mockData";
+import { useCategories } from "@/hooks/useCategories";
 import { toast } from "@/hooks/use-toast";
 
 // ===== Promociones (persistidas en la base de datos) =====
@@ -51,6 +51,7 @@ const QUANTITY_ROWS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const DURATION_ROWS: Array<7 | 15 | 30 | 60 | 90> = [7, 15, 30, 60, 90];
 
 const AdminPricing = ({ role }: { role: AdminRole }) => {
+  const categories = useCategories();
   const [s, setS] = useState<PricingSettings>(() => loadSettings());
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [settingsId, setSettingsId] = useState<string | null>(null);

@@ -322,13 +322,13 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
                     <TableRow key={u.id}>
                       <TableCell>
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">
+                          <div className="w-8 h-8 shrink-0 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">
                             {initials(u.full_name)}
                           </div>
-                          <div>
+                          <div className="min-w-0">
                             <p className="font-medium text-sm flex items-center gap-1">
                               {u.full_name}
-                              {u.verified && <BadgeCheck size={13} className="text-secondary" />}
+                              {u.verified && <BadgeCheck size={13} className="text-secondary shrink-0" />}
                             </p>
                             <p className="text-[10px] font-mono text-muted-foreground">{u.id.slice(0, 8)}</p>
                           </div>

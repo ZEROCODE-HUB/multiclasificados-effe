@@ -2,12 +2,13 @@ import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { categories } from "@/data/mockData";
+import { useCategories } from "@/hooks/useCategories";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 export function HeroSearch() {
   const navigate = useNavigate();
+  const categories = useCategories();
   const [cat, setCat] = useState("");
   const [query, setQuery] = useState("");
 

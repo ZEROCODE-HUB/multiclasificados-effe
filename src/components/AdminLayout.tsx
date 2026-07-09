@@ -109,7 +109,7 @@ export function AdminLayout({ children, role, title, breadcrumb, can }: Props) {
       <div className="hidden lg:block lg:w-64 xl:w-72 bg-sidebar text-sidebar-foreground h-full">
       <aside className="flex flex-col h-full">
         <div className="px-6 py-5 border-b border-sidebar-border/40">
-          <Link to="/" className="flex items-center gap-2">
+          <Link to={`/dashboard/${role}`} className="flex items-center gap-2">
             <div className={cn(
               "w-9 h-9 rounded-lg flex items-center justify-center text-sm font-extrabold",
               isSuper ? "bg-gradient-to-br from-secondary to-primary text-white" : "gradient-secondary text-secondary-foreground"
@@ -178,7 +178,7 @@ export function AdminLayout({ children, role, title, breadcrumb, can }: Props) {
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         <header className="sticky top-0 z-30 h-14 lg:h-16 flex items-center bg-card/95 backdrop-blur-md border-b px-4 lg:px-8 gap-3">
-          <Link to="/" className="lg:hidden flex items-center gap-2">
+          <Link to={`/dashboard/${role}`} className="lg:hidden flex items-center gap-2">
             <div className={cn(
               "w-8 h-8 rounded-md flex items-center justify-center text-sm font-extrabold shadow-sm",
               isSuper ? "bg-gradient-to-br from-secondary to-primary text-white" : "gradient-secondary text-secondary-foreground"

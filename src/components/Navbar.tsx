@@ -6,7 +6,7 @@ import {
   BarChart3, Users, Star, CreditCard, Shield,
 } from "lucide-react";
 import { useState } from "react";
-import { categories } from "@/data/mockData";
+import { useCategories } from "@/hooks/useCategories";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +26,7 @@ import { CreditsBalance } from "@/components/CreditsBalance";
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const categories = useCategories();
   const navigate = useNavigate();
   const session = useSession();
   const unread = useUnreadMessages();

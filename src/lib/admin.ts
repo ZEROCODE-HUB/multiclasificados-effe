@@ -198,6 +198,18 @@ export async function deleteCategory(id: string) {
   if (error) throw error;
 }
 
+// Persiste el orden de las tarjetas: `ids` viene en el orden visible y su
+// posición pasa a ser el `sort_order` (1-based, como el seed).
+export async function reorderCategories(ids: string[]) {
+  const results = await Promise.all(
+    ids.map((id, i) =>
+      supabase.from("categories").update({ sort_order: i + 1 }).eq("id", id),
+    ),
+  );
+  const failed = results.find((r) => r.error);
+  if (failed?.error) throw failed.error;
+}
+
 // Tiempo relativo en español a partir de un timestamp ISO.
 function relativeTime(iso: string): string {
   const t = new Date(iso).getTime();
