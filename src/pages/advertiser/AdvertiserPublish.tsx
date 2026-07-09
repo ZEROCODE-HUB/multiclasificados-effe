@@ -1016,7 +1016,7 @@ const AdvertiserPublish = () => {
           } else {
             toast({
               title: "Créditos añadidos",
-              description: `Tu saldo es ${formatCredits(newBalance)}, pero este aviso cuesta ${formatCredits(totalCredits)}. Recarga un poco más para publicar.`,
+              description: `Tu saldo es ${formatCredits(newBalance)}, pero este aviso cuesta ${formatCredits(totalCredits)}. Compra un poco más para publicar.`,
             });
           }
         }}

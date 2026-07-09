@@ -48,7 +48,7 @@ describe("Recarga de créditos — 1 sol = 1 crédito, mostrado como S/", () => 
 
   it("la recarga no muestra la sigla 'cr' por ninguna parte", async () => {
     abrir({ creditCost: ESTANDAR, currentBalance: 5 });
-    await screen.findByText(/total a recargar/i);
+    await screen.findByText(/créditos a comprar/i);
 
     // "cr" suelto, no el prefijo de "créditos": \b no vale porque la tilde de
     // "créditos" no es carácter de palabra y abre un límite tras "cr".
@@ -57,7 +57,7 @@ describe("Recarga de créditos — 1 sol = 1 crédito, mostrado como S/", () => 
 
   it("el costo del aviso y el saldo salen en soles", async () => {
     abrir({ creditCost: ESTANDAR, currentBalance: 5 });
-    await screen.findByText(/total a recargar/i);
+    await screen.findByText(/créditos a comprar/i);
 
     // El aviso a publicar y el saldo actual, ambos en soles.
     const aviso = screen.getByText(/Para publicar tu aviso necesitas/i);
@@ -67,13 +67,14 @@ describe("Recarga de créditos — 1 sol = 1 crédito, mostrado como S/", () => 
     expect(screen.getByText(/^Faltan/)).toHaveTextContent("Faltan S/ 11.14");
   });
 
-  it("el botón recarga exactamente los soles que se van a pagar", async () => {
+  it("el botón compra exactamente los soles que se van a pagar", async () => {
     abrir();
-    await screen.findByText(/total a recargar/i);
+    await screen.findByText(/créditos a comprar/i);
 
     // Por defecto: 1 aviso × 7 días, sin adicionales.
-    expect(screen.getByRole("button", { name: /recargar S\/ 16\.14/i })).toBeInTheDocument();
-    expect(screen.getByText(/tu boleta dirá S\/ 16\.14/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /comprar S\/ 16\.14/i })).toBeInTheDocument();
+    // Los créditos a comprar y lo que se paga son la misma cifra.
+    expect(screen.getAllByText("S/ 16.14").length).toBeGreaterThanOrEqual(2);
   });
 
   it("compra el mismo número de créditos que soles paga", async () => {
@@ -82,7 +83,7 @@ describe("Recarga de créditos — 1 sol = 1 crédito, mostrado como S/", () => 
     await screen.findByText("ANA TORRES");
     fireEvent.change(screen.getByPlaceholderText("tu@correo.com"), { target: { value: "ana@correo.com" } });
 
-    fireEvent.click(screen.getByRole("button", { name: /recargar S\//i }));
+    fireEvent.click(screen.getByRole("button", { name: /comprar S\//i }));
 
     await waitFor(() => expect(purchaseCredits).toHaveBeenCalled());
     const [pkg] = purchaseCredits.mock.calls[0];

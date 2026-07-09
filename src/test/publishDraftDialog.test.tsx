@@ -141,15 +141,15 @@ describe("PublishDraftDialog — publicar un borrador guardado", () => {
     expect(finalizeListingPublication).not.toHaveBeenCalled();
   });
 
-  it("sin saldo: el botón ofrece recargar créditos y no cobra", async () => {
+  it("sin saldo: el botón ofrece comprar créditos y no cobra", async () => {
     getCreditBalance.mockResolvedValue(0);
     renderDialog();
     await screen.findAllByText(`S/ ${COST_CREDITS.toFixed(2)}`);
 
-    const btn = await screen.findByRole("button", { name: /recargar créditos/i });
+    const btn = await screen.findByRole("button", { name: /comprar créditos/i });
     fireEvent.click(btn);
 
-    await screen.findByText(/total a recargar/i);
+    await screen.findByText(/créditos a comprar/i);
     expect(spendCredits).not.toHaveBeenCalled();
     expect(finalizeListingPublication).not.toHaveBeenCalled();
   });

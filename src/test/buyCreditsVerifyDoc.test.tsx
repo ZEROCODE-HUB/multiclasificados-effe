@@ -138,7 +138,7 @@ describe("BuyCreditsModal — verificación de documento con Factiliza + campos 
     fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "00000000" } });
     await screen.findByText(/Documento inválido/i);
 
-    const comprar = screen.getByRole("button", { name: /recargar/i });
+    const comprar = screen.getByRole("button", { name: /comprar/i });
     expect(comprar).toBeDisabled();
     fireEvent.click(comprar);
     expect(purchaseCredits).not.toHaveBeenCalled();
@@ -152,7 +152,7 @@ describe("BuyCreditsModal — verificación de documento con Factiliza + campos 
     fireEvent.change(screen.getByPlaceholderText("tu@correo.com"), { target: { value: "juan@correo.com" } });
     await screen.findByText("JUAN PEREZ");
 
-    const comprar = screen.getByRole("button", { name: /recargar/i });
+    const comprar = screen.getByRole("button", { name: /comprar/i });
     await waitFor(() => expect(comprar).not.toBeDisabled());
     fireEvent.click(comprar);
 

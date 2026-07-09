@@ -643,7 +643,7 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
                   <Wallet size={16} className="text-secondary" /> Paquetes de créditos
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  1 crédito = 1 sol. Los usuarios recargan créditos y los gastan al publicar.
+                  1 crédito = 1 sol. Los usuarios compran créditos y los gastan al publicar.
                 </CardDescription>
               </div>
               <Button size="sm" className="gap-2" onClick={openNewPkg}><Plus size={14} /> Nuevo paquete</Button>

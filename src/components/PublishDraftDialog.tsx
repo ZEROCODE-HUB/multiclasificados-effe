@@ -192,7 +192,7 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
 
             {balance !== null && !enoughCredits && (
               <p className="text-xs text-muted-foreground">
-                Te faltan {formatCredits(totalCredits - balance)}. Al pulsar el botón abrirás la recarga.
+                Te faltan {formatCredits(totalCredits - balance)} en créditos. Al pulsar el botón abrirás la compra.
               </p>
             )}
           </div>
@@ -204,7 +204,7 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
                 ? <><Loader2 size={14} className="animate-spin" /> Publicando…</>
                 : enoughCredits
                   ? <><ShieldCheck size={14} /> Publicar por {formatCredits(totalCredits)}</>
-                  : <>Recargar créditos</>}
+                  : <>Comprar créditos</>}
             </Button>
           </DialogFooter>
         </DialogContent>

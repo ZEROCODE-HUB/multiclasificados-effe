@@ -224,14 +224,14 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
 
     // Publicó una vez, no cobró, y abrió el configurador de compra.
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
-    await screen.findByText(/total a recargar/i);
+    await screen.findByText(/créditos a comprar/i);
     // No se anuncia un pago que no ocurrió.
     expect(screen.queryByText(/pago confirmado/i)).toBeNull();
 
     fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "12345678" } });
     fireEvent.change(screen.getByPlaceholderText("tu@correo.com"), { target: { value: "comprador@correo.com" } });
     await screen.findByText("JUAN PEREZ");
-    fireEvent.click(screen.getByRole("button", { name: /recargar/i }));
+    fireEvent.click(screen.getByRole("button", { name: /comprar/i }));
 
     await waitFor(() => expect(purchaseCredits).toHaveBeenCalledTimes(1));
     await screen.findByText(/pago confirmado/i);

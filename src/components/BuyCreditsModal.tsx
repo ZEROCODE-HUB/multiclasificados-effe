@@ -167,8 +167,8 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
       };
       const { newBalance, invoiceNumber } = await purchaseCredits(pkg, invoiceData);
       toast({
-        title: "¡Saldo recargado!",
-        description: `Se añadieron ${formatCredits(creditsToBuy)} a tu saldo. Comprobante: ${invoiceNumber}`,
+        title: "¡Créditos acreditados!",
+        description: `Se añadieron ${formatCredits(creditsToBuy)} en créditos. Comprobante: ${invoiceNumber}`,
       });
       onPurchaseComplete(newBalance);
       onClose();
@@ -191,10 +191,10 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Wallet size={18} className="text-secondary" /> Recargar créditos
+            <Wallet size={18} className="text-secondary" /> Comprar créditos
           </DialogTitle>
           <DialogDescription>
-            Arma tu recarga: elige cantidad de avisos, duración y adicionales. 1 crédito vale 1 sol, así que pagas justo lo que ves.
+            Arma tu compra: elige cantidad de avisos, duración y adicionales. 1 crédito vale 1 sol, así que pagas justo lo que ves.
           </DialogDescription>
         </DialogHeader>
 
@@ -278,10 +278,13 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
             </div>
           )}
           <div className="border-t pt-2 flex justify-between items-baseline">
-            <span className="font-bold uppercase tracking-wider text-xs">Total a recargar</span>
+            <span className="font-bold uppercase tracking-wider text-xs">Créditos a comprar</span>
             <span className="text-2xl font-extrabold text-secondary">{formatCredits(creditsToBuy)}</span>
           </div>
-          <p className="text-[11px] text-muted-foreground">Es también lo que pagas: tu boleta dirá {formatSoles(solesTotal)}.</p>
+          <div className="flex justify-between text-[11px] text-muted-foreground">
+            <span>Pagas (boleta)</span>
+            <span className="font-semibold">{formatSoles(solesTotal)}</span>
+          </div>
           {creditCost > 0 && (
             <p className={`text-[11px] ${coversAd ? "text-success" : "text-destructive"}`}>
               {coversAd
@@ -367,7 +370,7 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
           <Button onClick={handleBuy} disabled={buying || creditsToBuy <= 0 || verifyingDoc || !verifiedName || !emailValid} className="gap-2">
             {buying
               ? <><Loader2 size={14} className="animate-spin" /> Procesando…</>
-              : <><ShieldCheck size={14} /> Recargar {formatCredits(creditsToBuy)}</>}
+              : <><ShieldCheck size={14} /> Comprar {formatCredits(creditsToBuy)}</>}
           </Button>
         </DialogFooter>
       </DialogContent>

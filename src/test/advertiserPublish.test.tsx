@@ -134,7 +134,7 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
 
     // Muestra el éxito y NO abre el configurador de compra.
     await screen.findByText(/pago confirmado/i);
-    expect(screen.queryByText(/total a recargar/i)).toBeNull();
+    expect(screen.queryByText(/créditos a comprar/i)).toBeNull();
   });
 
   it("SIN CRÉDITOS: al pulsar Publicar abre el configurador y NO publica", async () => {
@@ -147,9 +147,9 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     await publishAndConfirmIdentity();
 
     // Se abre el modal configurador (anuncios/días/extras → créditos).
-    await screen.findByText(/total a recargar/i);
-    expect(screen.getByText(/arma tu recarga/i)).toBeTruthy();
-    expect(screen.getByRole("button", { name: /recargar/i })).toBeTruthy();
+    await screen.findByText(/créditos a comprar/i);
+    expect(screen.getByText(/arma tu compra/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /comprar/i })).toBeTruthy();
 
     // No se publicó ni se descontó nada.
     expect(createAndPublishListing).not.toHaveBeenCalled();
@@ -185,14 +185,14 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
 
     uploadMainPhoto();
     await publishAndConfirmIdentity();
-    await screen.findByText(/total a recargar/i);
+    await screen.findByText(/créditos a comprar/i);
 
     // Completa datos del comprobante y compra.
     fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "12345678" } });
     fireEvent.change(screen.getByPlaceholderText("tu@correo.com"), { target: { value: "comprador@correo.com" } });
     // El DNI se autoverifica con Factiliza; esperamos a que confirme antes de comprar.
     await screen.findByText("JUAN PEREZ");
-    fireEvent.click(screen.getByRole("button", { name: /recargar/i }));
+    fireEvent.click(screen.getByRole("button", { name: /comprar/i }));
 
     // Al acreditarse y cubrir el costo, publica automáticamente y descuenta.
     await waitFor(() => expect(purchaseCredits).toHaveBeenCalledTimes(1));
