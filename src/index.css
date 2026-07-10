@@ -6,6 +6,14 @@
 
 @layer base {
   :root {
+    /* La plataforma es SOLO tema claro. Sin esto, un navegador con el sistema en
+       modo oscuro pinta de oscuro los controles nativos —inputs, selects,
+       selectores de fecha, barras de scroll, el fondo del autocompletado— sobre
+       nuestro fondo claro. Se notaba sobre todo en el panel de admin, que es
+       casi todo formularios y tablas. No es nuestro tema oscuro: es el del
+       navegador. */
+    color-scheme: light;
+
     --background: 0 0% 98%;
     --foreground: 220 20% 20%;
 
@@ -51,35 +59,8 @@
     --warning-foreground: 220 20% 20%;
   }
 
-  .dark {
-    --background: 220 30% 8%;
-    --foreground: 220 14% 94%;
-    --card: 220 30% 12%;
-    --card-foreground: 220 14% 94%;
-    --popover: 220 30% 12%;
-    --popover-foreground: 220 14% 94%;
-    --primary: 24 95% 53%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 220 56% 30%;
-    --secondary-foreground: 0 0% 100%;
-    --muted: 220 20% 18%;
-    --muted-foreground: 220 10% 60%;
-    --accent: 166 50% 25%;
-    --accent-foreground: 166 70% 87%;
-    --destructive: 0 62% 30%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 220 20% 22%;
-    --input: 220 20% 22%;
-    --ring: 24 95% 53%;
-    --sidebar-background: 220 30% 6%;
-    --sidebar-foreground: 220 14% 94%;
-    --sidebar-primary: 24 95% 53%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 30% 14%;
-    --sidebar-accent-foreground: 220 14% 94%;
-    --sidebar-border: 220 20% 16%;
-    --sidebar-ring: 24 95% 53%;
-  }
+  /* Aquí vivía una paleta `.dark`. Nadie añadía nunca esa clase, así que era
+     código muerto que solo servía para hacer creer que había tema oscuro. */
 }
 
 @layer base {
