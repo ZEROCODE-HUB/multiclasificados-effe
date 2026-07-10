@@ -137,6 +137,27 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     expect(screen.queryByText(/créditos a comprar/i)).toBeNull();
   });
 
+  it("RESPETA LA DURACIÓN elegida: publica por los días que el usuario seleccionó y pagó", async () => {
+    getCreditBalance.mockResolvedValue(1000);
+    seedDraft(); // el borrador trae 7 días; el usuario cambia a 90 antes de publicar
+    render(<AdvertiserPublish />);
+    await screen.findByDisplayValue("Casa bonita");
+
+    // Selecciona "90 días" en el bloque "Duración del aviso".
+    const btn90 = screen.getByText("90").closest("button");
+    if (!btn90) throw new Error("No se encontró el botón de 90 días");
+    fireEvent.click(btn90);
+
+    uploadMainPhoto();
+    await publishAndConfirmIdentity();
+
+    // La duración que llega a la publicación es la elegida (90), no la del borrador (7).
+    await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
+    expect(createAndPublishListing).toHaveBeenCalledWith(expect.objectContaining({ duration: 90 }));
+    // Y el costo cobrado corresponde a 90 días (S/ 113.49), no a 7 (S/ 16.14).
+    expect(spendCredits).toHaveBeenCalledWith(113.49, "L1");
+  });
+
   it("SIN CRÉDITOS: al pulsar Publicar abre el configurador y NO publica", async () => {
     getCreditBalance.mockResolvedValue(0); // sin saldo
     seedDraft();

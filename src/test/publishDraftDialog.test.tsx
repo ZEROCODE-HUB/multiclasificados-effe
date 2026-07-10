@@ -126,6 +126,21 @@ describe("PublishDraftDialog — publicar un borrador guardado", () => {
     await waitFor(() => expect(onPublished).toHaveBeenCalled());
   });
 
+  it("RESPETA la duración guardada en el borrador (90 días), no un valor por defecto", async () => {
+    const draft90 = { ...DRAFT, planDurationDays: 90 } as unknown as MyListing;
+    // Saldo holgado para que 90 días (S/ 113.49) no abra el configurador de compra.
+    getCreditBalance.mockResolvedValue(1000);
+    renderDialog(draft90);
+    await screen.findAllByText("113.49 créditos");
+    fireEvent.click(screen.getByRole("button", { name: /publicar por/i }));
+    await confirmIdentity();
+
+    await waitFor(() => expect(finalizeListingPublication).toHaveBeenCalledTimes(1));
+    // Publica por 90 días y cobra el costo de 90 (S/ 113.49), no el de 7.
+    expect(finalizeListingPublication).toHaveBeenCalledWith("L-DRAFT", expect.objectContaining({ duration: 90 }));
+    expect(spendCredits).toHaveBeenCalledWith(113.49, "L-DRAFT");
+  });
+
   it("DNI falso: no cobra ni publica", async () => {
     verifyDocument.mockResolvedValue({ ok: false, error: "No se encontró el documento." });
     renderDialog();
