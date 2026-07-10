@@ -1,6 +1,7 @@
-import { MapPin, Heart, ShieldCheck, Star, Flame, EyeOff } from "lucide-react";
+import { MapPin, Heart, ShieldCheck, Star, Flame, EyeOff, Award } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import type { Listing } from "@/data/mockData";
@@ -51,25 +52,34 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
     currency === "USD" ? `US$ ${price.toLocaleString()}` : `S/ ${price.toLocaleString()}`;
 
   // Insignias visuales del aviso (adicionales que pagó el anunciante). Solo
-  // decorativas, como el corazón de favoritos. Estilo de píldora para el grid.
-  const pillBadges = (
-    <>
-      {listing.featured && (
-        <span className="inline-flex items-center px-2.5 py-1 bg-secondary text-secondary-foreground text-[10px] font-bold uppercase tracking-wider shadow-md">
-          Destacado
-        </span>
-      )}
-      {listing.urgent && (
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-destructive text-destructive-foreground text-[10px] font-bold uppercase tracking-wider shadow-md">
-          <Flame size={10} /> Urgente
-        </span>
-      )}
-      {listing.confidential && (
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-wider shadow-md">
-          <EyeOff size={10} /> Confidencial
-        </span>
-      )}
-    </>
+  // decorativas, como el corazón de favoritos. Van como ICONO compacto para no
+  // pisarse entre sí ni con "Verificado"; el nombre sale al pasar el mouse.
+  const badgeDefs = [
+    { on: listing.featured, label: "Destacado", icon: Award, cls: "bg-secondary text-secondary-foreground" },
+    { on: listing.urgent, label: "Urgente", icon: Flame, cls: "bg-destructive text-destructive-foreground" },
+    { on: listing.confidential, label: "Confidencial", icon: EyeOff, cls: "bg-primary text-primary-foreground" },
+  ].filter((b) => b.on);
+
+  // Los chips (icono + tooltip). El contenedor decide la dirección: en el grid
+  // van en columna por la izquierda (no crecen hacia "Verificado"); en la lista,
+  // en fila junto al título.
+  const badgeChips = badgeDefs.length > 0 && (
+    <TooltipProvider delayDuration={100}>
+      {badgeDefs.map(({ label, icon: Icon, cls }) => (
+        <Tooltip key={label}>
+          <TooltipTrigger asChild>
+            <span
+              aria-label={label}
+              onClick={(e) => e.stopPropagation()}
+              className={`w-7 h-7 flex items-center justify-center shadow-md ${cls}`}
+            >
+              <Icon size={14} />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{label}</TooltipContent>
+        </Tooltip>
+      ))}
+    </TooltipProvider>
   );
 
   // Sin reseñas reales todavía → valores neutros
@@ -85,7 +95,7 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <h3 className="font-semibold text-foreground group-hover:text-secondary transition-colors truncate">{listing.title}</h3>
-            <div className="flex flex-wrap items-center gap-1 flex-shrink-0">{pillBadges}</div>
+            <div className="flex items-center gap-1.5 flex-shrink-0">{badgeChips}</div>
           </div>
           {/* Contenido detallado solo para usuarios con sesión */}
           {isAuthed && <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{listing.description}</p>}
@@ -114,9 +124,10 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
           loading="lazy"
           className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.05]"
         />
-        {/* Top badges */}
-        <div className="absolute top-3 left-3 flex flex-wrap gap-1.5 max-w-[calc(100%-5rem)]">
-          {pillBadges}
+        {/* Insignias — iconos apilados por la izquierda (nombre en el tooltip).
+            En columna para no crecer hacia el badge "Verificado" de la derecha. */}
+        <div className="absolute top-3 left-3 flex flex-col gap-1.5">
+          {badgeChips}
         </div>
         <span className="absolute top-3 right-12 inline-flex items-center gap-1 px-2.5 py-1 bg-white/95 backdrop-blur-sm text-primary text-[10px] font-bold uppercase tracking-wider shadow-sm">
           <ShieldCheck size={10} /> Verificado
