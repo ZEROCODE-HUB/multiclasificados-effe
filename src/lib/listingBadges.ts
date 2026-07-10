@@ -30,3 +30,10 @@ export function listingBadges(
 // se ofrece.
 export const URGENTE_MAX_DAYS = 7;
 export const urgenteAllowedFor = (durationDays: number) => durationDays <= URGENTE_MAX_DAYS;
+
+// Aviso CONFIDENCIAL (documento eFFe): la identidad del anunciante permanece
+// oculta. En vez del nombre real se muestra una etiqueta genérica.
+export const CONFIDENTIAL_ADVERTISER_LABEL = "Anunciante confidencial";
+export function advertiserDisplayName(advertiser: string, confidential?: boolean): string {
+  return confidential ? CONFIDENTIAL_ADVERTISER_LABEL : advertiser;
+}

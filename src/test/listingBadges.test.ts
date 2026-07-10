@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { listingBadges, urgenteAllowedFor, URGENTE_MAX_DAYS } from "@/lib/listingBadges";
+import { listingBadges, urgenteAllowedFor, URGENTE_MAX_DAYS, advertiserDisplayName } from "@/lib/listingBadges";
 
 describe("listingBadges", () => {
   it("no devuelve insignias si el aviso no trae adicionales", () => {
@@ -34,5 +34,16 @@ describe("urgenteAllowedFor", () => {
     expect(urgenteAllowedFor(30)).toBe(false);
     expect(urgenteAllowedFor(60)).toBe(false);
     expect(urgenteAllowedFor(90)).toBe(false);
+  });
+});
+
+describe("advertiserDisplayName (Confidencial)", () => {
+  it("muestra el nombre real si el aviso no es confidencial", () => {
+    expect(advertiserDisplayName("Juan Pérez", false)).toBe("Juan Pérez");
+    expect(advertiserDisplayName("Juan Pérez")).toBe("Juan Pérez");
+  });
+
+  it("oculta el nombre si el aviso es confidencial", () => {
+    expect(advertiserDisplayName("Juan Pérez", true)).toBe("Anunciante confidencial");
   });
 });

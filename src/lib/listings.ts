@@ -68,7 +68,11 @@ export interface SearchFilters {
 // Lista de avisos para home / destacados.
 export async function fetchListings(opts?: { limit?: number; sort?: SortKey }): Promise<Listing[]> {
   try {
-    let query = supabase.from("listing_cards").select("*").limit(opts?.limit ?? 8);
+    // Prioridad por modalidad (documento): Urgente primero, luego Destacado, y
+    // dentro de cada grupo el orden pedido.
+    let query = supabase.from("listing_cards").select("*").limit(opts?.limit ?? 8)
+      .order("urgent", { ascending: false, nullsFirst: false })
+      .order("featured", { ascending: false, nullsFirst: false });
     if (opts?.sort === "price_asc") query = query.order("price", { ascending: true });
     else if (opts?.sort === "price_desc") query = query.order("price", { ascending: false });
     else if (opts?.sort === "views") query = query.order("views", { ascending: false });

@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { type Listing } from "@/data/mockData";
 import { useCategories } from "@/hooks/useCategories";
 import { fetchListingById, fetchListingImages, fetchListings, fetchListingDocumentUrl, trackEvent } from "@/lib/listings";
-import { listingBadges } from "@/lib/listingBadges";
+import { listingBadges, advertiserDisplayName } from "@/lib/listingBadges";
 import {
   ChevronRight,
   MapPin,
@@ -22,6 +22,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   Tag,
+  EyeOff,
   Clock,
   Building2,
   Users,
@@ -204,6 +205,13 @@ export default function ListingDetail() {
   // Sin teléfono público (se coordina por mensaje).
   const phoneNumber = "No disponible";
 
+  // Aviso CONFIDENCIAL (documento eFFe): la identidad del anunciante permanece
+  // oculta (nombre, teléfono). El interesado solo puede contactar por el chat
+  // interno; nunca se muestran los datos reales.
+  const confidential = !!listing.confidential;
+  const advertiserName = advertiserDisplayName(listing.advertiser, confidential);
+  const advertiserFirstName = confidential ? "" : (listing.advertiser.split(" ")[0] || "");
+
   const [messageOpen, setMessageOpen] = useState(false);
   const [phoneOpen, setPhoneOpen] = useState(false);
   const [phoneRevealed, setPhoneRevealed] = useState(false);
@@ -219,7 +227,7 @@ export default function ListingDetail() {
   const [soldState, setSoldState] = useState(() => loadSold()[listing.id]);
 
   const [messageText, setMessageText] = useState(
-    `Hola ${listing.advertiser.split(" ")[0]}, estoy interesado en "${listing.title}". ¿Sigue disponible?`,
+    `Hola${advertiserFirstName ? " " + advertiserFirstName : ""}, estoy interesado en "${listing.title}". ¿Sigue disponible?`,
   );
 
   const handleReport = async () => {
@@ -286,7 +294,7 @@ export default function ListingDetail() {
       setMessageOpen(false);
       toast({
         title: "Mensaje enviado",
-        description: `${listing.advertiser} recibirá tu consulta. Abriendo tu conversación…`,
+        description: `${advertiserName} recibirá tu consulta. Abriendo tu conversación…`,
       });
       const base = session?.role === "anunciante" ? "anunciante" : "buscador";
       setTimeout(() => navigate(`/dashboard/${base}/mensajes?c=${convId}`), 500);
@@ -615,15 +623,24 @@ export default function ListingDetail() {
                   >
                     <MessageSquare size={16} /> Enviar mensaje
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    className="w-full gap-2 font-bold uppercase tracking-wider text-xs rounded-none h-12"
-                    onClick={() => requireAuthOrRun(handleRevealPhone)}
-                  >
-                    <Phone size={16} />
-                    {phoneRevealed ? phoneNumber : "Mostrar teléfono"}
-                  </Button>
+                  {/* En avisos confidenciales no se muestra el teléfono: el
+                      contacto es solo por el chat interno. */}
+                  {confidential ? (
+                    <p className="flex items-center gap-2 text-xs text-muted-foreground border border-sky-500/30 bg-sky-500/5 px-3 py-2.5">
+                      <EyeOff size={14} className="text-sky-600 shrink-0" />
+                      Aviso confidencial: contacta solo por el chat interno; los datos del anunciante están protegidos.
+                    </p>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      className="w-full gap-2 font-bold uppercase tracking-wider text-xs rounded-none h-12"
+                      onClick={() => requireAuthOrRun(handleRevealPhone)}
+                    >
+                      <Phone size={16} />
+                      {phoneRevealed ? phoneNumber : "Mostrar teléfono"}
+                    </Button>
+                  )}
                 </>
               )}
 
@@ -656,11 +673,13 @@ export default function ListingDetail() {
             <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-secondary">Publicado por</span>
             <div className="flex items-center gap-3">
               <div className="w-14 h-14 rounded-full gradient-secondary text-secondary-foreground flex items-center justify-center font-extrabold text-lg">
-                {listing.advertiser.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+                {confidential
+                  ? <EyeOff size={20} />
+                  : listing.advertiser.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
               </div>
               <div className="min-w-0">
                 <p className="font-bold text-foreground truncate flex items-center gap-1.5">
-                  {listing.advertiser}
+                  {advertiserName}
                   <ShieldCheck size={14} className="text-secondary shrink-0" />
                 </p>
                 <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
@@ -776,7 +795,7 @@ export default function ListingDetail() {
           style={kbPad ? { paddingBottom: kbPad + 24 } : undefined}
         >
           <DialogHeader>
-            <DialogTitle>Enviar mensaje a {listing.advertiser}</DialogTitle>
+            <DialogTitle>Enviar mensaje a {advertiserName}</DialogTitle>
             <DialogDescription>
               Sobre: <span className="font-medium text-foreground">{listing.title}</span>
             </DialogDescription>
@@ -814,7 +833,7 @@ export default function ListingDetail() {
           </DialogHeader>
           <div className="rounded-md border border-border bg-muted/30 p-5 text-center space-y-2">
             <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-secondary">
-              {listing.advertiser}
+              {advertiserName}
             </p>
             <p className="text-2xl font-extrabold text-primary tracking-tight">{phoneNumber}</p>
             <p className="text-xs text-muted-foreground">Código de aviso: EFFE-{listing.id.padStart(6, "0")}</p>
@@ -842,7 +861,7 @@ export default function ListingDetail() {
           <DialogHeader>
             <DialogTitle>Postular a este aviso</DialogTitle>
             <DialogDescription>
-              Tu postulación se enviará a {listing.advertiser || "el anunciante"}.
+              Tu postulación se enviará a {advertiserName || "el anunciante"}.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -943,7 +962,7 @@ export default function ListingDetail() {
         >
           <DialogHeader>
             <DialogTitle>Reportar usuario</DialogTitle>
-            <DialogDescription>Cuéntanos qué problema observas con {listing.advertiser || "este anunciante"}.</DialogDescription>
+            <DialogDescription>Cuéntanos qué problema observas con {advertiserName || "este anunciante"}.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <Label>Motivo del reporte</Label>
