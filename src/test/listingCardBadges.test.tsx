@@ -49,4 +49,15 @@ describe("ListingCard — insignias de adicionales", () => {
     expect(screen.getByLabelText("Urgente")).toBeInTheDocument();
     expect(screen.getByLabelText("Confidencial")).toBeInTheDocument();
   });
+
+  // El documento pide para Destacado un "marco dorado" (además de la insignia).
+  it("el aviso Destacado lleva marco dorado", () => {
+    renderCard({ featured: true });
+    expect(screen.getByRole("link").className).toContain("amber");
+  });
+
+  it("un aviso sin Destacado no lleva marco dorado", () => {
+    renderCard({ urgent: true });
+    expect(screen.getByRole("link").className).not.toContain("amber");
+  });
 });

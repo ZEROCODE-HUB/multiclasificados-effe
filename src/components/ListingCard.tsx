@@ -84,9 +84,13 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
   const rating = "0.0";
   const reviews = 0;
 
+  // Destacado = "marco dorado" + fondo ligeramente distinto (documento eFFe).
+  // Solo estético; la insignia sigue indicando la modalidad.
+  const featured = !!listing.featured;
+
   if (layout === "list") {
     return (
-      <div role="link" tabIndex={0} onClick={goToDetail} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && goToDetail()} className="flex gap-4 bg-card border border-border p-3 hover:border-secondary/40 hover:shadow-lg transition-all cursor-pointer group">
+      <div role="link" tabIndex={0} onClick={goToDetail} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && goToDetail()} className={`flex gap-4 p-3 hover:shadow-lg transition-all cursor-pointer group ${featured ? "bg-amber-50/50 border-2 border-amber-400 hover:border-amber-500" : "bg-card border border-border hover:border-secondary/40"}`}>
         <div className="relative w-40 flex-shrink-0 overflow-hidden bg-muted" style={{ aspectRatio: "4 / 3" }}>
           <img src={listing.imageUrl} alt={listing.title} className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.05]" loading="lazy" />
         </div>
@@ -112,7 +116,7 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
 
 
   return (
-    <div role="link" tabIndex={0} onClick={goToDetail} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && goToDetail()} className="group cursor-pointer flex flex-col bg-card border border-border/70 overflow-hidden transition-all duration-300 hover:border-secondary/40 hover:shadow-xl hover:-translate-y-0.5">
+    <div role="link" tabIndex={0} onClick={goToDetail} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && goToDetail()} className={`group cursor-pointer flex flex-col overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5 ${featured ? "bg-amber-50/50 border-2 border-amber-400 ring-1 ring-amber-300/60 hover:border-amber-500" : "bg-card border border-border/70 hover:border-secondary/40"}`}>
 
       {/* Image — taller, near-square for a premium presence */}
       <div className="relative overflow-hidden bg-muted" style={{ aspectRatio: "1 / 1" }}>

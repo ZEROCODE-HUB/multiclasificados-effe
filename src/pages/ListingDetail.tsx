@@ -403,7 +403,7 @@ export default function ListingDetail() {
           {/* Gallery */}
           <section>
             <div className="grid grid-cols-1 md:grid-cols-[1fr_120px] gap-3">
-              <div className="relative bg-muted overflow-hidden" style={{ aspectRatio: "4 / 3" }}>
+              <div className={`relative bg-muted overflow-hidden ${listing.featured ? "ring-2 ring-amber-400" : ""}`} style={{ aspectRatio: "4 / 3" }}>
                 <img src={gallery[activeImg]} alt={listing.title} className="absolute inset-0 w-full h-full object-cover" />
                 <div className="absolute top-4 left-4 flex flex-wrap gap-1.5 max-w-[70%]">
                   {listingBadges(listing).map(({ label, icon: Icon, cls }) => (
