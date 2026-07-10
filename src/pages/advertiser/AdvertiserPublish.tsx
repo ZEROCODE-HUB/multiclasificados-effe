@@ -24,6 +24,7 @@ import {
   type DurationDays, type PricingSettings, type ExtraPrices,
 } from "@/lib/pricing";
 import { createAndPublishListing, saveListingDraft } from "@/lib/publish";
+import { urgenteAllowedFor, URGENTE_MAX_DAYS } from "@/lib/listingBadges";
 import { VerifyIdentityDialog, type ConfirmedIdentity, type PersonType } from "@/components/VerifyIdentityDialog";
 import { getCreditBalance, spendCredits } from "@/lib/credits";
 import { fetchActivePromotions, bestPromoForCategory, applyDiscount, type Promotion } from "@/lib/promotions";
@@ -236,6 +237,19 @@ const AdvertiserPublish = () => {
 
   const hasSecondImageInPackage = (extras.img500 ?? 0) > 0;
   const hasPdfInPackage = (extras.pdf500 ?? 0) > 0;
+
+  // "Urgente" solo se ofrece en avisos cortos (≤ 7 días): su fin es respuesta
+  // inmediata. Con 15/30/60/90 días la opción no aparece.
+  const urgenteAllowed = urgenteAllowedFor(duration);
+  const visibleExtras = EXTRA_DEFS.filter((d) => d.key !== "urgente" || urgenteAllowed);
+
+  // Si el usuario ya había marcado "Urgente" y luego elige una duración larga,
+  // se quita solo: no se puede cobrar un adicional que ya no aplica.
+  useEffect(() => {
+    if (!urgenteAllowed && (extras.urgente ?? 0) > 0) {
+      setExtras((e) => ({ ...e, urgente: 0 }));
+    }
+  }, [urgenteAllowed, extras.urgente]);
 
   // Al desactivar el adicional del PDF, se descarta el archivo elegido: el
   // apartado se oculta y no debe quedar un PDF "colgado" para publicar.
@@ -878,8 +892,14 @@ const AdvertiserPublish = () => {
                   <p className="text-[11px] text-muted-foreground mt-1 mb-2">
                     Actívalos con “+”. Se aplican a tu aviso.
                   </p>
+                  {!urgenteAllowed && (
+                    <p className="text-[11px] text-muted-foreground mb-2 flex items-center gap-1.5">
+                      <Flame size={12} className="text-muted-foreground shrink-0" />
+                      “Urgente” solo está disponible en avisos de hasta {URGENTE_MAX_DAYS} días.
+                    </p>
+                  )}
                   <div className="space-y-2">
-                    {EXTRA_DEFS.map(({ key, label, sub, icon: Icon }) => {
+                    {visibleExtras.map(({ key, label, sub, icon: Icon }) => {
                       const count = extras[key] ?? 0;
                       const unit = settings.extras[key as keyof ExtraPrices] ?? 0;
                       return (

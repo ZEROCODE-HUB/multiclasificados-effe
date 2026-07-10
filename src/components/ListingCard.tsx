@@ -1,4 +1,4 @@
-import { MapPin, Heart, ShieldCheck, Star, Flame, EyeOff, Award } from "lucide-react";
+import { MapPin, Heart, ShieldCheck, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import type { Listing } from "@/data/mockData";
 import { useSession } from "@/hooks/useSession";
 import { useFavorites } from "@/hooks/useFavorites";
+import { listingBadges } from "@/lib/listingBadges";
 
 interface ListingCardProps {
   listing: Listing;
@@ -54,11 +55,8 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
   // Insignias visuales del aviso (adicionales que pagó el anunciante). Solo
   // decorativas, como el corazón de favoritos. Van como ICONO compacto para no
   // pisarse entre sí ni con "Verificado"; el nombre sale al pasar el mouse.
-  const badgeDefs = [
-    { on: listing.featured, label: "Destacado", icon: Award, cls: "bg-secondary text-secondary-foreground" },
-    { on: listing.urgent, label: "Urgente", icon: Flame, cls: "bg-destructive text-destructive-foreground" },
-    { on: listing.confidential, label: "Confidencial", icon: EyeOff, cls: "bg-primary text-primary-foreground" },
-  ].filter((b) => b.on);
+  // Colores oficiales (dorado / rojo / celeste) en @/lib/listingBadges.
+  const badgeDefs = listingBadges(listing);
 
   // Los chips (icono + tooltip). El contenedor decide la dirección: en el grid
   // van en columna por la izquierda (no crecen hacia "Verificado"); en la lista,
