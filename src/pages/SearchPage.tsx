@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Capacitor } from "@capacitor/core";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,7 +34,9 @@ type ViewMode = "list" | "map";
 type Layout = "grid" | "list";
 
 // La lista de resultados se pagina de 10 en 10 (5 arriba + 5 abajo en escritorio).
+// Solo en la WEB: en la app (APK) se mantiene la lista continua de siempre.
 const PAGE_SIZE = 10;
+const PAGINATE = !Capacitor.isNativePlatform();
 
 // Números de página a mostrar, con "…" cuando hay muchas. Siempre incluye la
 // primera, la última y una ventana alrededor de la actual.
@@ -163,10 +166,13 @@ export default function SearchPage() {
   useEffect(() => { setPage(1); }, [q, category, priceMin, priceMax, sort, owner]);
 
   // Porción visible de resultados según la página actual (clamp por si la lista
-  // encogió tras filtrar y la página quedó fuera de rango).
+  // encogió tras filtrar y la página quedó fuera de rango). En la app no se
+  // pagina: se muestran todos los avisos.
   const totalPages = Math.max(1, Math.ceil(listings.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
-  const pageListings = listings.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const pageListings = PAGINATE
+    ? listings.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+    : listings;
   const goToPage = (p: number) => setPage(Math.min(totalPages, Math.max(1, p)));
 
   const applyFilters = () => setShowFilters(false);
@@ -407,7 +413,7 @@ export default function SearchPage() {
                     ))}
                   </div>
 
-                  {totalPages > 1 && (
+                  {PAGINATE && totalPages > 1 && (
                     <nav
                       className="flex flex-wrap items-center justify-center gap-1.5 mt-8"
                       aria-label="Paginación de resultados"
