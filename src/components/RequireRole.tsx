@@ -13,19 +13,26 @@ import { useSession, isStaffRole, type SessionRole } from "@/hooks/useSession";
 import { getMfaState } from "@/lib/mfa";
 import { MfaGate } from "@/components/MfaGate";
 
-// Jerarquía: superadmin > admin > (anunciante/buscador).
+// Jerarquía: superadmin > admin > (moderador/soporte) > (anunciante/buscador).
+// Moderador y soporte comparten rango: entrar al panel es lo mismo para ambos,
+// y lo que puede hacer cada uno dentro lo decide la Matriz de permisos.
 const RANK: Record<SessionRole, number> = {
   buscador: 0,
   anunciante: 0,
+  soporte: 1,
+  moderador: 1,
   admin: 2,
   superadmin: 3,
 };
+
+// Roles que definen "área de staff" cuando se piden como mínimo.
+const STAFF_MIN: SessionRole[] = ["soporte", "moderador", "admin", "superadmin"];
 
 function AccessDenied({ role, staffInUserArea = false }: { role: SessionRole; staffInUserArea?: boolean }) {
   // Panel destino según el rol actual del usuario.
   const home =
     role === "superadmin" ? "/dashboard/superadmin"
-    : role === "admin" ? "/dashboard/admin"
+    : role === "admin" || role === "moderador" || role === "soporte" ? "/dashboard/admin"
     : role === "anunciante" ? "/dashboard/anunciante"
     : "/dashboard/buscador";
   return (
@@ -61,8 +68,8 @@ export function RequireRole({ min, requireReal = true, children }: Props) {
   const session = useSession();
   const location = useLocation();
 
-  // El staff (admin/superadmin) DEBE tener 2FA completado (AAL2) para entrar al panel.
-  const isStaffArea = min === "admin" || min === "superadmin";
+  // El staff DEBE tener 2FA completado (AAL2) para entrar al panel.
+  const isStaffArea = STAFF_MIN.includes(min);
 
   // El staff va al login CON hCaptcha (/auth/staff); el usuario normal al login
   // sin captcha (/auth). Así el captcha aparece solo en el acceso de admin.

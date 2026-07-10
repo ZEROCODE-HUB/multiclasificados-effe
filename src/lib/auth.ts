@@ -5,11 +5,11 @@ import { savePushToken } from "@/lib/push";
 import { clearSession, isStaffRole, setSessionData, type Session, type SessionRole } from "@/hooks/useSession";
 
 // Prioridad de rol cuando un usuario tiene varios (para elegir el panel destino).
-const ROLE_PRIORITY: SessionRole[] = ["superadmin", "admin", "anunciante", "buscador"];
+const ROLE_PRIORITY: SessionRole[] = ["superadmin", "admin", "moderador", "soporte", "anunciante", "buscador"];
 
 // Roles de staff (personal): NO pueden iniciar sesión por el login de usuario
 // (/auth); deben usar el login de staff (/auth/staff).
-const STAFF_ROLES: SessionRole[] = ["admin", "superadmin"];
+const STAFF_ROLES: SessionRole[] = ["admin", "superadmin", "moderador", "soporte"];
 
 // Mensaje genérico e indistinguible de una contraseña equivocada: no revela que
 // la cuenta existe ni que es de staff.
@@ -157,7 +157,9 @@ export async function uploadMyAvatar(file: File): Promise<string> {
 // /auth/staff?redirect=/dashboard/buscador) aterrizaría en el panel de usuario.
 export function landingPath(session: Session | null, redirect?: string | null): string {
   if (session && isStaffRole(session.role)) {
-    const staffHome = `/dashboard/${session.role}`;
+    // Moderador y soporte no tienen panel propio: operan el de administración,
+    // recortado por la Matriz de permisos. `/dashboard/moderador` no existe.
+    const staffHome = session.role === "superadmin" ? "/dashboard/superadmin" : "/dashboard/admin";
     return redirect && isStaffPath(redirect) ? redirect : staffHome;
   }
   if (redirect) return redirect;

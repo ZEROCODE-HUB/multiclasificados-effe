@@ -94,8 +94,11 @@ const App = () => (
             <Route path="/dashboard/buscador/configuracion" element={<SettingsPage role="buscador" />} />
           </Route>
 
-          {/* Admin — shell persistente (sidebar/header no se remontan al navegar) */}
-          <Route element={<RequireRole min="admin"><AdminShell /></RequireRole>}>
+          {/* Panel de administración — shell persistente (sidebar/header no se
+              remontan al navegar). Entra todo el staff: admin, moderador y
+              soporte. Lo que cada uno ve dentro lo recorta la Matriz de permisos
+              (get_my_permissions), y lo que puede hacer lo exigen los RPCs. */}
+          <Route element={<RequireRole min="soporte"><AdminShell /></RequireRole>}>
             <Route path="/dashboard/admin" element={<AdminDashboard role="admin" />} />
             <Route path="/dashboard/admin/avisos" element={<AdminListings role="admin" />} />
             <Route path="/dashboard/admin/usuarios" element={<AdminUsers role="admin" />} />
