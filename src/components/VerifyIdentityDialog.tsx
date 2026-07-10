@@ -17,6 +17,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { verifyDocument, normalizeDocNumber } from "@/lib/verifyDoc";
+import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 
 export type PersonType = "natural" | "juridica" | "";
 
@@ -46,6 +47,9 @@ export function VerifyIdentityDialog({
   const [verifiedName, setVerifiedName] = useState("");
   const [docData, setDocData] = useState<Record<string, unknown> | null>(null);
   const [docError, setDocError] = useState("");
+  // En el móvil, reserva el alto del teclado y desplaza el campo enfocado por
+  // encima de él (si no, el teclado tapa el DNI/RUC y el botón Confirmar).
+  const { kbPad, scrollFocusedIntoView } = useKeyboardInset();
 
   // Consulta automática en cuanto el documento tiene la longitud exacta
   // (DNI 8 / RUC 11). Antes era un botón "Verificar" que, al acertar, publicaba
@@ -125,7 +129,10 @@ export function VerifyIdentityDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onOpenChange(false); }}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent
+        className="sm:max-w-md max-h-[90vh] overflow-y-auto"
+        style={kbPad ? { paddingBottom: kbPad + 24 } : undefined}
+      >
         <DialogHeader>
           <DialogTitle>Verifica tu identidad</DialogTitle>
           <DialogDescription>
@@ -160,6 +167,7 @@ export function VerifyIdentityDialog({
               <Input
                 value={docNumber}
                 onChange={(e) => { setDocNumber(normalizeDocNumber(e.target.value, personType === "natural" ? 8 : 11)); resetIdentity(); }}
+                onFocus={scrollFocusedIntoView}
                 placeholder={personType === "natural" ? "12345678" : "20123456789"}
                 inputMode="numeric"
                 className="mt-1"

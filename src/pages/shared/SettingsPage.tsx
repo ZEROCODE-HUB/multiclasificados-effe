@@ -433,7 +433,10 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
 
       {/* Confirmación de borrado: exige escribir la palabra clave. */}
       <Dialog open={deleteOpen} onOpenChange={(o) => !deleting && setDeleteOpen(o)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent
+          className="sm:max-w-md max-h-[90vh] overflow-y-auto"
+          style={kbPad ? { paddingBottom: kbPad + 24 } : undefined}
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangle size={20} /> Eliminar cuenta
@@ -450,6 +453,7 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
               id="delete-confirm"
               value={deleteConfirm}
               onChange={(e) => setDeleteConfirm(e.target.value)}
+              onFocus={scrollFocusedIntoView}
               placeholder={DELETE_CONFIRM_WORD}
               autoComplete="off"
               autoFocus
