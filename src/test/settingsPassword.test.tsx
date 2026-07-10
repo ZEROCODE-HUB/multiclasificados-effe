@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 
 beforeEach(() => {
   (globalThis as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
@@ -39,7 +40,7 @@ vi.mock("@/hooks/use-toast", () => ({ toast: (...a: unknown[]) => toast(...a) })
 import SettingsPage from "@/pages/shared/SettingsPage";
 
 async function gotoSeguridad() {
-  render(<SettingsPage role="anunciante" />);
+  render(<MemoryRouter><SettingsPage role="anunciante" /></MemoryRouter>);
   const tab = await screen.findByRole("tab", { name: "Seguridad" });
   fireEvent.mouseDown(tab); fireEvent.focus(tab); fireEvent.click(tab);
   return await screen.findByLabelText("Contraseña actual");

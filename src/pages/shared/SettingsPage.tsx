@@ -7,15 +7,28 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BadgeCheck, ShieldAlert, Loader2, Eye, EyeOff } from "lucide-react";
+import { BadgeCheck, ShieldAlert, Loader2, Eye, EyeOff, ScrollText, Trash2, AlertTriangle } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { fetchMyProfile, updateMyProfile, uploadMyAvatar, type MyProfile } from "@/lib/auth";
 import { normalizeDocNumber } from "@/lib/verifyDoc";
+import { deleteMyAccount } from "@/lib/account";
+import { TermsDialog } from "@/components/LegalTerms";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 import { Capacitor } from "@capacitor/core";
 import { Keyboard } from "@capacitor/keyboard";
 
+// Palabra que el usuario debe escribir para confirmar el borrado irreversible.
+const DELETE_CONFIRM_WORD = "ELIMINAR";
+
 const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
+  const navigate = useNavigate();
+  // Política de privacidad (reutiliza el documento legal) y borrado de cuenta.
+  const [termsOpen, setTermsOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const [profile, setProfile] = useState<MyProfile | null>(null);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -152,6 +165,23 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
       toast({ title: "No se pudo guardar", description: e?.message ?? "Error", variant: "destructive" });
     }
     setSaving(false);
+  };
+
+  // Borra la cuenta de forma definitiva (RPC delete_my_account). Solo procede si
+  // el usuario escribió exactamente la palabra de confirmación.
+  const confirmDeleteAccount = async () => {
+    if (deleteConfirm.trim().toUpperCase() !== DELETE_CONFIRM_WORD) return;
+    setDeleting(true);
+    try {
+      await deleteMyAccount();
+      toast({ title: "Cuenta eliminada", description: "Tu cuenta y tus datos se eliminaron." });
+      setDeleteOpen(false);
+      navigate("/", { replace: true });
+    } catch (e: any) {
+      toast({ title: "No se pudo eliminar la cuenta", description: e?.message ?? "Inténtalo de nuevo.", variant: "destructive" });
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -360,7 +390,81 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Legal — política de privacidad (documento completo en un modal). */}
+        <Card>
+          <CardHeader><CardTitle className="text-base">Legal y privacidad</CardTitle></CardHeader>
+          <CardContent>
+            <button
+              type="button"
+              onClick={() => setTermsOpen(true)}
+              className="flex items-center gap-3 w-full text-left hover:bg-muted/40 -m-2 p-2 rounded-lg transition-colors"
+            >
+              <ScrollText size={18} className="text-secondary shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-foreground">Política de privacidad y Términos</p>
+                <p className="text-xs text-muted-foreground">Tratamiento de datos personales (Ley N° 29733) y condiciones del servicio.</p>
+              </div>
+            </button>
+          </CardContent>
+        </Card>
+
+        {/* Zona de peligro — eliminar la cuenta de forma definitiva. */}
+        <Card className="border-destructive/40">
+          <CardHeader>
+            <CardTitle className="text-base text-destructive flex items-center gap-2">
+              <AlertTriangle size={18} /> Zona de peligro
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Eliminar tu cuenta borra <b>de forma permanente</b> tu perfil, tus avisos, favoritos,
+              mensajes y créditos. Esta acción no se puede deshacer.
+            </p>
+            <Button variant="destructive" className="gap-2" onClick={() => { setDeleteConfirm(""); setDeleteOpen(true); }}>
+              <Trash2 size={16} /> Eliminar mi cuenta
+            </Button>
+          </CardContent>
+        </Card>
       </div>
+
+      {/* Modal legal reutilizable (Términos + Política de privacidad). */}
+      <TermsDialog open={termsOpen} onOpenChange={setTermsOpen} />
+
+      {/* Confirmación de borrado: exige escribir la palabra clave. */}
+      <Dialog open={deleteOpen} onOpenChange={(o) => !deleting && setDeleteOpen(o)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle size={20} /> Eliminar cuenta
+            </DialogTitle>
+            <DialogDescription>
+              Esta acción es <b>irreversible</b>. Se eliminarán tu cuenta y todos tus datos.
+              Para confirmar, escribe <b>{DELETE_CONFIRM_WORD}</b>.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            value={deleteConfirm}
+            onChange={(e) => setDeleteConfirm(e.target.value)}
+            placeholder={DELETE_CONFIRM_WORD}
+            autoComplete="off"
+            aria-label="Escribe la palabra de confirmación"
+          />
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleting}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              className="gap-2"
+              onClick={confirmDeleteAccount}
+              disabled={deleting || deleteConfirm.trim().toUpperCase() !== DELETE_CONFIRM_WORD}
+            >
+              {deleting ? <><Loader2 size={16} className="animate-spin" /> Eliminando…</> : <><Trash2 size={16} /> Eliminar definitivamente</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 };

@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SupabaseAuthBridge } from "@/components/SupabaseAuthBridge";
 import { MaintenanceGate } from "@/components/MaintenanceGate";
+import { UpdateGate } from "@/components/UpdateGate";
 import { FavoritesProvider } from "@/hooks/useFavorites";
 import { RequireRole } from "@/components/RequireRole";
 import { AdminShell } from "@/components/AdminLayout";
@@ -51,6 +52,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <SupabaseAuthBridge />
+      <UpdateGate />
       <FavoritesProvider>
       <BrowserRouter>
         {/* Dentro del router: necesita la ruta para dejar pasar /auth/staff. */}

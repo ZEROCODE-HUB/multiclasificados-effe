@@ -21,6 +21,14 @@ const config: CapacitorConfig = {
       backgroundColor: '#ffffff',
       showSpinner: false,
     },
+    CapacitorUpdater: {
+      // OTA manual controlada por la BD (lib/ota.ts): NO auto-contactamos la
+      // nube de Capgo. Con autoUpdate en false, sin bundle configurado la app
+      // usa el APK instalado y no hace nada extra.
+      autoUpdate: false,
+      // notifyAppReady lo llamamos nosotros en initOta() para evitar rollbacks.
+      resetWhenUpdate: true,
+    },
   },
 };
 
