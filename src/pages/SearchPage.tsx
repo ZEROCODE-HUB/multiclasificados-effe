@@ -25,10 +25,29 @@ import {
   Star,
   Bookmark,
   X,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 type ViewMode = "list" | "map";
 type Layout = "grid" | "list";
+
+// La lista de resultados se pagina de 10 en 10 (5 arriba + 5 abajo en escritorio).
+const PAGE_SIZE = 10;
+
+// Números de página a mostrar, con "…" cuando hay muchas. Siempre incluye la
+// primera, la última y una ventana alrededor de la actual.
+export function pageNumbers(current: number, total: number): (number | "…")[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const out: (number | "…")[] = [1];
+  const from = Math.max(2, current - 1);
+  const to = Math.min(total - 1, current + 1);
+  if (from > 2) out.push("…");
+  for (let p = from; p <= to; p++) out.push(p);
+  if (to < total - 1) out.push("…");
+  out.push(total);
+  return out;
+}
 
 const formatPrice = (price: number, currency: string) =>
   currency === "USD" ? `US$ ${(price / 1000).toFixed(0)}K` : `S/ ${price.toLocaleString()}`;
@@ -52,6 +71,7 @@ export default function SearchPage() {
   const [priceMin, setPriceMin] = useState<string>("");
   const [priceMax, setPriceMax] = useState<string>("");
   const [sort, setSort] = useState<SortKey>((params.get("sort") as SortKey) || "recent");
+  const [page, setPage] = useState(1);
 
   // Sincroniza texto/categoría/orden/precio desde la URL (navbar, hero, búsquedas guardadas).
   useEffect(() => {
@@ -138,6 +158,16 @@ export default function SearchPage() {
     }, owner ? 0 : 250);
     return () => clearTimeout(t);
   }, [q, category, priceMin, priceMax, sort, owner]);
+
+  // Al cambiar la búsqueda o los filtros, vuelve a la primera página.
+  useEffect(() => { setPage(1); }, [q, category, priceMin, priceMax, sort, owner]);
+
+  // Porción visible de resultados según la página actual (clamp por si la lista
+  // encogió tras filtrar y la página quedó fuera de rango).
+  const totalPages = Math.max(1, Math.ceil(listings.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageListings = listings.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const goToPage = (p: number) => setPage(Math.min(totalPages, Math.max(1, p)));
 
   const applyFilters = () => setShowFilters(false);
 
@@ -364,17 +394,64 @@ export default function SearchPage() {
                   <p className="text-muted-foreground">No se encontraron avisos con estos filtros.</p>
                 </div>
               ) : (
-                <div
-                  className={
-                    layout === "grid"
-                      ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 3xl:grid-cols-5 4xl:grid-cols-6 5xl:grid-cols-8 6xl:grid-cols-10 gap-5"
-                      : "space-y-4"
-                  }
-                >
-                  {listings.map((listing) => (
-                    <ListingCard key={listing.id} listing={listing} layout={layout} />
-                  ))}
-                </div>
+                <>
+                  <div
+                    className={
+                      layout === "grid"
+                        ? "grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-5"
+                        : "space-y-4"
+                    }
+                  >
+                    {pageListings.map((listing) => (
+                      <ListingCard key={listing.id} listing={listing} layout={layout} />
+                    ))}
+                  </div>
+
+                  {totalPages > 1 && (
+                    <nav
+                      className="flex flex-wrap items-center justify-center gap-1.5 mt-8"
+                      aria-label="Paginación de resultados"
+                    >
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1 rounded-none"
+                        onClick={() => goToPage(currentPage - 1)}
+                        disabled={currentPage <= 1}
+                      >
+                        <ChevronLeft size={14} /> Anterior
+                      </Button>
+
+                      {pageNumbers(currentPage, totalPages).map((p, i) =>
+                        p === "…" ? (
+                          <span key={`gap-${i}`} className="px-2 text-muted-foreground select-none">…</span>
+                        ) : (
+                          <Button
+                            key={p}
+                            variant={p === currentPage ? "default" : "outline"}
+                            size="icon"
+                            className="rounded-none h-9 w-9 text-sm"
+                            onClick={() => goToPage(p)}
+                            aria-label={`Página ${p}`}
+                            aria-current={p === currentPage ? "page" : undefined}
+                          >
+                            {p}
+                          </Button>
+                        )
+                      )}
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1 rounded-none"
+                        onClick={() => goToPage(currentPage + 1)}
+                        disabled={currentPage >= totalPages}
+                      >
+                        Siguiente <ChevronRight size={14} />
+                      </Button>
+                    </nav>
+                  )}
+                </>
               )}
             </div>
           </div>
