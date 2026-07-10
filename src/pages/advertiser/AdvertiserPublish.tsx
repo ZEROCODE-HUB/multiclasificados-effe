@@ -91,6 +91,11 @@ const AdvertiserPublish = () => {
   const [secondPhoto, setSecondPhoto] = useState<PhotoItem | null>(null);
   const secondFileRef = useRef<HTMLInputElement>(null);
 
+  // PDF adjunto (adicional "PDF adjunto por aviso"). Solo se muestra su apartado
+  // si el adicional está activo; si se desactiva, el archivo elegido se descarta.
+  const [pdfFile, setPdfFile] = useState<{ file: File; name: string } | null>(null);
+  const pdfFileRef = useRef<HTMLInputElement>(null);
+
   const [form, setForm] = useState({
     category: "",
     title: "",
@@ -230,6 +235,28 @@ const AdvertiserPublish = () => {
   }, [quantity]);
 
   const hasSecondImageInPackage = (extras.img500 ?? 0) > 0;
+  const hasPdfInPackage = (extras.pdf500 ?? 0) > 0;
+
+  // Al desactivar el adicional del PDF, se descarta el archivo elegido: el
+  // apartado se oculta y no debe quedar un PDF "colgado" para publicar.
+  useEffect(() => {
+    if (!hasPdfInPackage && pdfFile) setPdfFile(null);
+  }, [hasPdfInPackage, pdfFile]);
+
+  // Elige el PDF adjunto (valida tipo y tamaño ≤ 500 KB).
+  const pickPdf = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const f = files[0];
+    if (f.type !== "application/pdf") {
+      toast({ title: "Debe ser un PDF", variant: "destructive" });
+      return;
+    }
+    if (f.size > 500 * 1024) {
+      toast({ title: "El PDF supera los 500 KB", description: "Sube un archivo más liviano.", variant: "destructive" });
+      return;
+    }
+    setPdfFile({ file: f, name: f.name });
+  };
 
   const persistDraftForLogin = (resumeAtSummary: boolean) => {
     try {
@@ -349,6 +376,7 @@ const AdvertiserPublish = () => {
         quantity, duration, extras,
         mainPhoto: mainPhoto ? { file: mainPhoto.file, name: mainPhoto.name } : null,
         secondPhoto: secondPhoto ? { file: secondPhoto.file, name: secondPhoto.name } : null,
+        pdf: hasPdfInPackage && pdfFile ? { file: pdfFile.file, name: pdfFile.name } : null,
         draftId: draftListingId.current,
       });
       draftListingId.current = id;
@@ -433,6 +461,7 @@ const AdvertiserPublish = () => {
         draftId: draftListingId.current,
         mainPhoto: mainPhoto ? { file: mainPhoto.file, name: mainPhoto.name } : null,
         secondPhoto: hasSecondImageInPackage && secondPhoto ? { file: secondPhoto.file, name: secondPhoto.name } : null,
+        pdf: hasPdfInPackage && pdfFile ? { file: pdfFile.file, name: pdfFile.name } : null,
         receiptType: "boleta",
         email,
         advertiserName: verifiedName || session?.name || "Anunciante",
@@ -690,6 +719,45 @@ const AdvertiserPublish = () => {
                     <p className="mt-1 text-[11px] text-warning">No tienes este adicional en tu paquete actual.</p>
                   )}
                 </div>
+
+                {/* PDF adjunto — el apartado aparece solo si el adicional está activo. */}
+                {hasPdfInPackage && (
+                  <div className="sm:col-span-2">
+                    <input
+                      ref={pdfFileRef}
+                      type="file"
+                      accept="application/pdf"
+                      className="hidden"
+                      onChange={(e) => { pickPdf(e.target.files); if (pdfFileRef.current) pdfFileRef.current.value = ""; }}
+                    />
+                    {pdfFile ? (
+                      <div className="flex items-center gap-3 p-3 border border-secondary/40 bg-secondary/5">
+                        <FileText size={18} className="text-secondary shrink-0" />
+                        <span className="text-sm font-medium text-foreground truncate flex-1">{pdfFile.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => setPdfFile(null)}
+                          className="w-7 h-7 flex items-center justify-center text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                          aria-label="Quitar PDF"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => pdfFileRef.current?.click()}
+                        className="w-full flex items-center justify-center gap-2 p-4 border-2 border-dashed border-border hover:border-secondary/60 hover:bg-muted/30 transition-colors"
+                      >
+                        <FileText size={22} className="text-muted-foreground" />
+                        <div className="text-left">
+                          <p className="text-sm font-semibold text-foreground">Adjuntar PDF</p>
+                          <p className="text-[11px] text-muted-foreground">hasta 500 KB · se mostrará en tu aviso</p>
+                        </div>
+                      </button>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -823,11 +891,11 @@ const AdvertiserPublish = () => {
                           </div>
                           <span className="text-xs font-bold text-muted-foreground hidden sm:inline">{formatSoles(unit)} c/u</span>
                           <div className="flex items-center border">
-                            <button type="button" onClick={() => setExtraCount(key, count - 1)} className="w-8 h-8 flex items-center justify-center hover:bg-muted disabled:opacity-30" disabled={count <= 0}>
+                            <button type="button" aria-label={`Quitar ${label}`} onClick={() => setExtraCount(key, count - 1)} className="w-8 h-8 flex items-center justify-center hover:bg-muted disabled:opacity-30" disabled={count <= 0}>
                               <Minus size={12} />
                             </button>
                             <span className="w-8 text-center text-sm font-bold">{count}</span>
-                            <button type="button" onClick={() => setExtraCount(key, count + 1)} className="w-8 h-8 flex items-center justify-center hover:bg-muted disabled:opacity-30" disabled={count >= quantity}>
+                            <button type="button" aria-label={`Agregar ${label}`} onClick={() => setExtraCount(key, count + 1)} className="w-8 h-8 flex items-center justify-center hover:bg-muted disabled:opacity-30" disabled={count >= quantity}>
                               <Plus size={12} />
                             </button>
                           </div>

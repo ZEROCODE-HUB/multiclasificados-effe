@@ -29,6 +29,9 @@ export interface DraftInput {
   extras: Record<string, number | undefined>;
   mainPhoto: PublishPhoto | null;
   secondPhoto: PublishPhoto | null;
+  // PDF adjunto (adicional "PDF adjunto"). Se sube al bucket privado listing-docs
+  // y su ruta queda en listings.document_url. Null = no se adjuntó / se quitó.
+  pdf?: PublishPhoto | null;
   // Si viene, se actualiza ese borrador en vez de crear otro. Así "Guardar"
   // dos veces no deja dos avisos en "Mis borradores".
   draftId?: string | null;
@@ -97,6 +100,19 @@ async function uploadListingPhotos(userId: string, listingId: string, input: Dra
   }
 }
 
+// Sube el PDF adjunto al bucket privado listing-docs y guarda su ruta en
+// listings.document_url. La ruta empieza por el id del usuario (lo exige la RLS
+// del bucket). Si algo falla, no rompe la publicación: el aviso queda sin PDF.
+async function uploadListingDoc(userId: string, listingId: string, pdf: PublishPhoto): Promise<void> {
+  const path = `${userId}/${listingId}.pdf`;
+  const { error: upErr } = await supabase.storage
+    .from("listing-docs")
+    .upload(path, pdf.file, { contentType: "application/pdf", upsert: true });
+  if (upErr) { console.error("[publish] No se pudo subir el PDF:", upErr.message); return; }
+  const { error: dbErr } = await supabase.from("listings").update({ document_url: path }).eq("id", listingId);
+  if (dbErr) console.error("[publish] No se pudo guardar la ruta del PDF:", dbErr.message);
+}
+
 // Crea el aviso en estado `draft` (o actualiza el borrador indicado) y sube las
 // imágenes. No cobra ni publica: es lo que usa "Guardar en mis borradores" y
 // también el primer tramo de la publicación completa.
@@ -121,6 +137,7 @@ export async function saveListingDraft(input: DraftInput): Promise<string> {
       .eq("status", "draft"); // nunca reescribir un aviso ya publicado
     if (error) throw new Error(error.message);
     await uploadListingPhotos(user.id, input.draftId, input, true);
+    if (input.pdf) await uploadListingDoc(user.id, input.draftId, input.pdf);
     return input.draftId;
   }
 
@@ -133,6 +150,7 @@ export async function saveListingDraft(input: DraftInput): Promise<string> {
 
   const listingId = data.id as string;
   await uploadListingPhotos(user.id, listingId, input, false);
+  if (input.pdf) await uploadListingDoc(user.id, listingId, input.pdf);
   return listingId;
 }
 

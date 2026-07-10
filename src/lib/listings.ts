@@ -139,6 +139,22 @@ export async function fetchListingById(id: string): Promise<Listing | null> {
   return null;
 }
 
+// Enlace (firmado, temporal) al PDF adjunto del aviso, si tiene uno. Cualquiera
+// puede pedirlo desde el detalle (política listing_docs_public_read). Devuelve
+// null si el aviso no tiene documento.
+export async function fetchListingDocumentUrl(id: string): Promise<string | null> {
+  if (!isUuid(id)) return null;
+  try {
+    const { data } = await supabase.from("listings").select("document_url").eq("id", id).maybeSingle();
+    const path = (data as { document_url?: string | null } | null)?.document_url;
+    if (!path) return null;
+    const { data: signed } = await supabase.storage.from("listing-docs").createSignedUrl(path, 60 * 60);
+    return signed?.signedUrl ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // Buscador con filtros combinados (usa el RPC search_listings).
 export async function searchListings(f: SearchFilters): Promise<Listing[]> {
   try {

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { type Listing } from "@/data/mockData";
 import { useCategories } from "@/hooks/useCategories";
-import { fetchListingById, fetchListingImages, fetchListings, trackEvent } from "@/lib/listings";
+import { fetchListingById, fetchListingImages, fetchListings, fetchListingDocumentUrl, trackEvent } from "@/lib/listings";
 import {
   ChevronRight,
   MapPin,
@@ -82,6 +82,7 @@ export default function ListingDetail() {
     featured: false, advertiser: "", views: 0,
   };
   const [listing, setListing] = useState<Listing>(EMPTY);
+  const [docUrl, setDocUrl] = useState<string | null>(null);
   const [related, setRelated] = useState<Listing[]>([]);
   const session = useSession();
   const { isFavorite, toggle } = useFavorites();
@@ -158,6 +159,7 @@ export default function ListingDetail() {
     fetchListingById(id).then((l) => {
       if (mounted && l) setListing(l);
     });
+    fetchListingDocumentUrl(id).then((url) => mounted && setDocUrl(url));
     fetchListings({ limit: 8 }).then((rows) => {
       if (mounted) setRelated(rows.filter((l) => l.id !== id).slice(0, 4));
     });
@@ -522,6 +524,18 @@ export default function ListingDetail() {
             <p className="text-foreground/85 leading-[1.75] text-base mt-4">
               Si necesitas más fotografías, ficha técnica, ubicación exacta o coordinar una visita / videollamada, utiliza el panel lateral para enviar un mensaje directo.
             </p>
+
+            {/* PDF adjunto por el anunciante (adicional). Enlace firmado temporal. */}
+            {docUrl && (
+              <a
+                href={docUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-5 inline-flex items-center gap-2 px-4 py-2.5 border border-secondary/40 bg-secondary/5 text-secondary font-semibold text-sm hover:bg-secondary hover:text-secondary-foreground transition-colors"
+              >
+                <FileText size={16} /> Ver documento (PDF)
+              </a>
+            )}
           </section>
 
           {/* Spec table */}
