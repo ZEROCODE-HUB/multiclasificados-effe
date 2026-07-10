@@ -1,10 +1,19 @@
 // Capa de autenticación real (Supabase) que alimenta el contrato existente
 // de useSession ({ role, name, initials }) para NO romper el diseño actual.
 import { supabase } from "@/lib/supabase";
-import { clearSession, setSessionData, type Session, type SessionRole } from "@/hooks/useSession";
+import { savePushToken } from "@/lib/push";
+import { clearSession, isStaffRole, setSessionData, type Session, type SessionRole } from "@/hooks/useSession";
 
 // Prioridad de rol cuando un usuario tiene varios (para elegir el panel destino).
-const ROLE_PRIORITY: SessionRole[] = ["superadmin", "admin", "anunciante", "buscador"];
+const ROLE_PRIORITY: SessionRole[] = ["superadmin", "admin", "moderador", "soporte", "anunciante", "buscador"];
+
+// Roles de staff (personal): NO pueden iniciar sesión por el login de usuario
+// (/auth); deben usar el login de staff (/auth/staff).
+const STAFF_ROLES: SessionRole[] = ["admin", "superadmin", "moderador", "soporte"];
+
+// Mensaje genérico e indistinguible de una contraseña equivocada: no revela que
+// la cuenta existe ni que es de staff.
+export const INVALID_CREDENTIALS_MSG = "Correo o contraseña incorrectos.";
 
 // Error cuando la cuenta está suspendida o baneada: se cierra la sesión y se
 // muestra el motivo en el login.
@@ -139,21 +148,105 @@ export async function uploadMyAvatar(file: File): Promise<string> {
   return url;
 }
 
-// Destino tras iniciar sesión: el staff aterriza directo en su panel; el resto
-// donde haya pedido ir (redirect) o al inicio. Centralizado para usarlo igual
-// en login con contraseña y en el callback de Google.
+// Destino tras iniciar sesión: el staff aterriza en su panel; el resto donde
+// haya pedido ir (redirect) o al inicio. Centralizado para usarlo igual en el
+// login con contraseña y en el callback de Google.
+//
+// El `redirect` del staff solo se respeta si apunta a su propia área: si no, un
+// admin que llega desde una ruta de usuario (p. ej.
+// /auth/staff?redirect=/dashboard/buscador) aterrizaría en el panel de usuario.
 export function landingPath(session: Session | null, redirect?: string | null): string {
-  if (redirect) return redirect;
-  if (session && (session.role === "admin" || session.role === "superadmin")) {
-    return `/dashboard/${session.role}`;
+  if (session && isStaffRole(session.role)) {
+    // Moderador y soporte no tienen panel propio: operan el de administración,
+    // recortado por la Matriz de permisos. `/dashboard/moderador` no existe.
+    const staffHome = session.role === "superadmin" ? "/dashboard/superadmin" : "/dashboard/admin";
+    return redirect && isStaffPath(redirect) ? redirect : staffHome;
   }
+  if (redirect) return redirect;
   return "/";
 }
 
-export async function signInWithPassword(email: string, password: string): Promise<Session | null> {
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) throw error;
-  return syncSession();
+// ¿La ruta pertenece al área de staff? Se compara contra el prefijo del panel
+// para no confundir `/dashboard/admin...` con `/dashboard/administrador-x`.
+function isStaffPath(path: string): boolean {
+  return ["/dashboard/admin", "/dashboard/superadmin"].some(
+    (p) => path === p || path.startsWith(`${p}/`),
+  );
+}
+
+// Mientras se comprueba el rol de una cuenta recién autenticada (y que por tanto
+// todavía puede ser rechazada), el puente de auth (SupabaseAuthBridge) NO debe
+// sincronizar la sesión: si lo hiciera, la persistiría por un instante y
+// dispararía la redirección ANTES de que alcancemos a cerrarla. Esta bandera se
+// lo indica.
+let blockingStaffLogin = false;
+export function isBlockingStaffLogin(): boolean {
+  return blockingStaffLogin;
+}
+
+// ¿La cuenta tiene rol de staff? `null` = no se pudo averiguar (red caída, RLS,
+// timeout). Quien llama trata el `null` como motivo de rechazo, en las dos
+// direcciones: asumir cualquier cosa abriría justo el agujero que esto cierra.
+async function fetchIsStaff(userId: string): Promise<boolean | null> {
+  const { data, error } = await supabase.from("user_roles").select("role").eq("user_id", userId);
+  if (error || !data) return null;
+  return data.some((r: { role: SessionRole }) => STAFF_ROLES.includes(r.role));
+}
+
+/**
+ * Las dos puertas de entrada son excluyentes y cada una vigila su lado:
+ *  - `rejectStaff`  → /auth: el personal NO entra por el login de usuario.
+ *  - `requireStaff` → /auth/staff: un usuario normal NO entra por el de admin.
+ * En ambos casos la cuenta rechazada recibe el MISMO mensaje que una contraseña
+ * equivocada, y su sesión se cierra antes de persistirla.
+ */
+export async function signInWithPassword(
+  email: string,
+  password: string,
+  opts?: { rejectStaff?: boolean; requireStaff?: boolean },
+): Promise<Session | null> {
+  const checksRole = !!(opts?.rejectStaff || opts?.requireStaff);
+  // Se activa ANTES de autenticar: el evento SIGNED_IN se dispara durante la
+  // propia llamada, así que el puente ya debe estar silenciado.
+  if (checksRole) blockingStaffLogin = true;
+  try {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+
+    if (checksRole) {
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      const isStaff = userId ? await fetchIsStaff(userId) : null;
+
+      // Falla CERRADA: con `isStaff === null` (rol desconocido) se rechaza siempre.
+      const rejected = opts?.requireStaff ? isStaff !== true : isStaff !== false;
+      if (rejected) {
+        await supabase.auth.signOut();
+        clearSession();
+        throw new Error(INVALID_CREDENTIALS_MSG);
+      }
+    }
+
+    // syncSession() también valida la cuenta: lanza AccountBlockedError si está
+    // baneada o suspendida.
+    const session = await syncSession();
+
+    // Como el puente quedó silenciado durante todo el SIGNED_IN (ver
+    // `blockingStaffLogin`), aquí recuperamos lo que él habría hecho: asociar el
+    // token de push de este dispositivo. Sin esto, en el APK nadie que entre con
+    // correo y contraseña vuelve a recibir notificaciones.
+    //
+    // El orden importa; va al final, ya con la sesión validada:
+    //  - después de la comprobación de rol, o dejaríamos el teléfono asociado a
+    //    la cuenta que acabamos de rechazar y le llegarían aquí SUS push;
+    //  - después de syncSession(), o un usuario baneado registraría su
+    //    dispositivo justo antes de que lo echemos, y seguiría recibiendo push.
+    if (checksRole) savePushToken();
+
+    return session;
+  } finally {
+    blockingStaffLogin = false;
+  }
 }
 
 export interface SignUpInput {

@@ -26,7 +26,14 @@ vi.mock("@/lib/publish", () => ({
   createAndPublishListing: (...a: unknown[]) => createAndPublishListing(...a),
 }));
 
-vi.mock("@/lib/verifyDoc", () => ({ verifyDocument: vi.fn() }));
+// Verificación de documento contra Factiliza (RENIEC/SUNAT). Por defecto el
+// documento existe; los tests que prueban el rechazo la sobreescriben.
+const verifyDocument = vi.fn();
+vi.mock("@/lib/verifyDoc", async (orig) => ({
+  // normalizeDocNumber va REAL: es lo que limpia lo que el usuario pega.
+  ...(await (orig() as Promise<Record<string, unknown>>)),
+  verifyDocument: (...a: unknown[]) => verifyDocument(...a),
+}));
 
 // Promociones: mockeamos solo la carga; los helpers (bestPromoForCategory/applyDiscount) son reales.
 const fetchActivePromotions = vi.fn().mockResolvedValue([]);
@@ -66,7 +73,7 @@ import AdvertiserPublish from "@/pages/advertiser/AdvertiserPublish";
 // Costo de 1 aviso × 7 días con la matriz por defecto (base 16.14).
 // El DINERO va en soles; el usuario se cobra en CRÉDITOS = soles × 10 (redondeado).
 const COST_SOLES = 16.14;
-const COST_CREDITS = 161; // solesToCredits(16.14) = round(161.4)
+const COST_CREDITS = 16.14; // 1 crédito = 1 sol
 
 // Precarga el formulario vía el borrador que el componente restaura al montar.
 const seedDraft = () => {
@@ -83,6 +90,17 @@ const uploadMainPhoto = () => {
   fireEvent.change(fileInput);
 };
 
+// Publicar exige verificar el documento contra RENIEC/SUNAT y confirmar la ficha
+// devuelta. Pulsa "Publicar aviso", completa el DNI y confirma; al confirmar se
+// encadena el flujo de publicación (publica o abre el configurador de compra).
+const publishAndConfirmIdentity = async () => {
+  fireEvent.click(screen.getByRole("button", { name: /publicar aviso/i }));
+  fireEvent.click(await screen.findByRole("button", { name: /persona natural/i }));
+  fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "12345678" } });
+  await screen.findByText("JUAN PEREZ");
+  fireEvent.click(screen.getByRole("button", { name: /confirmar y continuar/i }));
+};
+
 beforeEach(() => {
   localStorage.clear();
   getCreditBalance.mockReset();
@@ -94,6 +112,7 @@ beforeEach(() => {
   navigate.mockClear();
   toast.mockClear();
   fetchActivePromotions.mockReset().mockResolvedValue([]);
+  verifyDocument.mockReset().mockResolvedValue({ ok: true, nombre: "JUAN PEREZ", data: {} });
 });
 
 describe("AdvertiserPublish — secuencia del flujo de publicación con créditos", () => {
@@ -102,12 +121,12 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     seedDraft();
     render(<AdvertiserPublish />);
 
-    // El formulario se cargó (borrador restaurado) y el saldo se leyó (1000 cr).
+    // El formulario se cargó (borrador restaurado) y el saldo se leyó (1000 créditos).
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("1000 cr");
+    await screen.findByText("1000 créditos");
 
     uploadMainPhoto();
-    fireEvent.click(screen.getByRole("button", { name: /publicar aviso/i }));
+    await publishAndConfirmIdentity();
 
     // Publica directo: crea el aviso y descuenta el costo en créditos.
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
@@ -118,6 +137,27 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     expect(screen.queryByText(/créditos a comprar/i)).toBeNull();
   });
 
+  it("RESPETA LA DURACIÓN elegida: publica por los días que el usuario seleccionó y pagó", async () => {
+    getCreditBalance.mockResolvedValue(1000);
+    seedDraft(); // el borrador trae 7 días; el usuario cambia a 90 antes de publicar
+    render(<AdvertiserPublish />);
+    await screen.findByDisplayValue("Casa bonita");
+
+    // Selecciona "90 días" en el bloque "Duración del aviso".
+    const btn90 = screen.getByText("90").closest("button");
+    if (!btn90) throw new Error("No se encontró el botón de 90 días");
+    fireEvent.click(btn90);
+
+    uploadMainPhoto();
+    await publishAndConfirmIdentity();
+
+    // La duración que llega a la publicación es la elegida (90), no la del borrador (7).
+    await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
+    expect(createAndPublishListing).toHaveBeenCalledWith(expect.objectContaining({ duration: 90 }));
+    // Y el costo cobrado corresponde a 90 días (S/ 113.49), no a 7 (S/ 16.14).
+    expect(spendCredits).toHaveBeenCalledWith(113.49, "L1");
+  });
+
   it("SIN CRÉDITOS: al pulsar Publicar abre el configurador y NO publica", async () => {
     getCreditBalance.mockResolvedValue(0); // sin saldo
     seedDraft();
@@ -125,7 +165,7 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     await screen.findByDisplayValue("Casa bonita");
 
     uploadMainPhoto();
-    fireEvent.click(screen.getByRole("button", { name: /publicar aviso/i }));
+    await publishAndConfirmIdentity();
 
     // Se abre el modal configurador (anuncios/días/extras → créditos).
     await screen.findByText(/créditos a comprar/i);
@@ -149,11 +189,11 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     await screen.findByText(/Día de la Madre/i);
 
     uploadMainPhoto();
-    fireEvent.click(screen.getByRole("button", { name: /publicar aviso/i }));
+    await publishAndConfirmIdentity();
 
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
     // Dinero: 16.14 × (1 − 0.50) = 8.07 soles. Créditos: round(8.07 × 10) = 81.
-    expect(spendCredits).toHaveBeenCalledWith(81, "L1");
+    expect(spendCredits).toHaveBeenCalledWith(8.07, "L1");
     expect(createAndPublishListing).toHaveBeenCalledWith(expect.objectContaining({ total: 8.07 }));
   });
 
@@ -165,12 +205,14 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     await screen.findByDisplayValue("Casa bonita");
 
     uploadMainPhoto();
-    fireEvent.click(screen.getByRole("button", { name: /publicar aviso/i }));
+    await publishAndConfirmIdentity();
     await screen.findByText(/créditos a comprar/i);
 
     // Completa datos del comprobante y compra.
     fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "12345678" } });
     fireEvent.change(screen.getByPlaceholderText("tu@correo.com"), { target: { value: "comprador@correo.com" } });
+    // El DNI se autoverifica con Factiliza; esperamos a que confirme antes de comprar.
+    await screen.findByText("JUAN PEREZ");
     fireEvent.click(screen.getByRole("button", { name: /comprar/i }));
 
     // Al acreditarse y cubrir el costo, publica automáticamente y descuenta.
@@ -178,5 +220,77 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
     expect(spendCredits).toHaveBeenCalledWith(COST_CREDITS, "L1");
     await screen.findByText(/pago confirmado/i);
+  });
+});
+
+describe("AdvertiserPublish — la identidad se valida contra RENIEC/SUNAT", () => {
+  it("NO publica sin verificar: pulsar Publicar abre el cuadro de identidad", async () => {
+    getCreditBalance.mockResolvedValue(1000); // saldo de sobra: nada más lo frena
+    seedDraft();
+    render(<AdvertiserPublish />);
+    await screen.findByDisplayValue("Casa bonita");
+    uploadMainPhoto();
+
+    fireEvent.click(screen.getByRole("button", { name: /publicar aviso/i }));
+
+    await screen.findByText(/verifica tu identidad/i);
+    expect(createAndPublishListing).not.toHaveBeenCalled();
+    expect(spendCredits).not.toHaveBeenCalled();
+  });
+
+  it("DNI FALSO (12345678): Factiliza no lo encuentra, se muestra el error y NO se publica", async () => {
+    verifyDocument.mockResolvedValue({ ok: false, error: "No se encontró el documento." });
+    getCreditBalance.mockResolvedValue(1000);
+    seedDraft();
+    render(<AdvertiserPublish />);
+    await screen.findByDisplayValue("Casa bonita");
+    uploadMainPhoto();
+
+    fireEvent.click(screen.getByRole("button", { name: /publicar aviso/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /persona natural/i }));
+    fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "12345678" } });
+
+    // Se consultó de verdad y el error de RENIEC llega al usuario.
+    await waitFor(() => expect(verifyDocument).toHaveBeenCalledWith("dni", "12345678"));
+    await screen.findByText(/no se encontró el documento/i);
+
+    // "Confirmar y continuar" sigue bloqueado: sin ficha no hay nada que confirmar.
+    expect(screen.getByRole("button", { name: /confirmar y continuar/i })).toBeDisabled();
+    expect(createAndPublishListing).not.toHaveBeenCalled();
+    expect(spendCredits).not.toHaveBeenCalled();
+  });
+
+  it("consulta Factiliza UNA sola vez por documento (no en cada render)", async () => {
+    getCreditBalance.mockResolvedValue(1000);
+    seedDraft();
+    render(<AdvertiserPublish />);
+    await screen.findByDisplayValue("Casa bonita");
+    uploadMainPhoto();
+
+    fireEvent.click(screen.getByRole("button", { name: /publicar aviso/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /persona natural/i }));
+    fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "12345678" } });
+    await screen.findByText("JUAN PEREZ");
+
+    // Cada consulta cuesta saldo de Factiliza y expone datos personales.
+    expect(verifyDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it("un borrador con {verified:true} en localStorage NO salta la verificación", async () => {
+    getCreditBalance.mockResolvedValue(1000);
+    // El borrador vive en localStorage: el usuario puede editarlo a mano.
+    localStorage.setItem("effe:publish-draft", JSON.stringify({
+      form: { category: "inmuebles", title: "Casa bonita", description: "Descripción larga del aviso", price: "100", currency: "PEN", location: "Lima", condition: "nuevo" },
+      duration: 7, quantity: 1, extras: {},
+      verified: true, verifiedName: "QUIEN SEA", personType: "natural", docNumber: "12345678",
+    }));
+    render(<AdvertiserPublish />);
+    await screen.findByDisplayValue("Casa bonita");
+    uploadMainPhoto();
+
+    fireEvent.click(screen.getByRole("button", { name: /publicar aviso/i }));
+
+    await screen.findByText(/verifica tu identidad/i);
+    expect(createAndPublishListing).not.toHaveBeenCalled();
   });
 });

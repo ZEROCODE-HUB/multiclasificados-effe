@@ -54,30 +54,36 @@ describe("Req 2 — helpers de promoción", () => {
   });
 });
 
-describe("Créditos — enteros y desvinculados del sol (×10)", () => {
-  it("el multiplicador separa el crédito del sol", () => {
-    expect(CREDIT_MULTIPLIER).toBe(10);
-    // 16.14 soles NO es 16.14 créditos: es 161.
-    expect(solesToCredits(16.14)).toBe(161);
+describe("Créditos — 1 crédito = 1 sol", () => {
+  it("el crédito vale exactamente un sol", () => {
+    expect(CREDIT_MULTIPLIER).toBe(1);
+    expect(solesToCredits(16.14)).toBe(16.14);
   });
 
-  it("siempre devuelve un ENTERO, aun con decimales feos y promociones", () => {
-    // Recorre toda la matriz del Excel + promociones de 10% a 90%.
+  it("el costo en créditos es el precio en soles, al céntimo", () => {
+    // Si el saldo no cuadrara con la boleta, el usuario pagaría una cosa y
+    // recibiría otra: recorre toda la matriz del Excel + promociones.
     for (let n = 1; n <= 10; n++) {
       for (const dias of [7, 15, 30, 60, 90] as const) {
         const soles = priceForDuration(n, dias, DEFAULT_SETTINGS);
-        expect(Number.isInteger(creditsForDuration(n, dias, DEFAULT_SETTINGS))).toBe(true);
+        expect(creditsForDuration(n, dias, DEFAULT_SETTINGS)).toBe(soles);
         for (let pct = 10; pct <= 90; pct += 10) {
-          const conPromo = solesToCredits(applyDiscount(soles, pct));
-          expect(Number.isInteger(conPromo)).toBe(true);
+          const conPromo = applyDiscount(soles, pct);
+          expect(solesToCredits(conPromo)).toBe(conPromo);
         }
       }
     }
   });
 
-  it("no aparecen decimales tipo '16.14': el estándar 1×7 son 161 créditos", () => {
-    expect(creditsForDuration(1, 7, DEFAULT_SETTINGS)).toBe(161);
-    // Promo −50% sobre el estándar: 161 → 81 (round(8.07 × 10)).
-    expect(solesToCredits(applyDiscount(priceFor(1, 7, DEFAULT_SETTINGS), 50))).toBe(81);
+  it("nunca aparece un tercer decimal (las columnas de la BD son numeric(12,2))", () => {
+    const dosDecimales = (v: number) => expect(Math.round(v * 100) / 100).toBe(v);
+    dosDecimales(creditsForDuration(1, 7, DEFAULT_SETTINGS));
+    for (let pct = 10; pct <= 90; pct += 10) {
+      dosDecimales(solesToCredits(applyDiscount(priceFor(1, 7, DEFAULT_SETTINGS), pct)));
+    }
+  });
+
+  it("el estándar 1×7 cuesta lo mismo en soles que en créditos", () => {
+    expect(creditsForDuration(1, 7, DEFAULT_SETTINGS)).toBe(16.14);
   });
 });

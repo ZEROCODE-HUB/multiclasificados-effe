@@ -1,7 +1,7 @@
-import { categories } from "@/data/mockData";
 import { ArrowUpRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { fetchCategoryCounts } from "@/lib/stats";
+import { useCategories } from "@/hooks/useCategories";
 
 const images: Record<string, string> = {
   inmuebles: "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800&h=600&fit=crop",
@@ -15,6 +15,7 @@ const images: Record<string, string> = {
 };
 
 export function CategoryGrid() {
+  const categories = useCategories();
   // Conteo real de avisos activos por categoría (desde la BD).
   const [counts, setCounts] = useState<Record<string, number>>({});
   useEffect(() => {
@@ -30,16 +31,21 @@ export function CategoryGrid() {
           className="group relative bg-card hover:bg-card transition-colors cursor-pointer overflow-hidden"
         >
           <div className="relative aspect-[4/3] overflow-hidden">
-            <img
-              src={images[cat.id]}
-              alt={cat.name}
-              loading="lazy"
-              className="absolute inset-0 w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700 group-hover:scale-[1.08]"
-            />
+            {/* Las categorías que cree el staff no tienen foto: cae a un fondo sólido. */}
+            {images[cat.id] ? (
+              <img
+                src={images[cat.id]}
+                alt={cat.name}
+                loading="lazy"
+                className="absolute inset-0 w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700 group-hover:scale-[1.08]"
+              />
+            ) : (
+              <div className="absolute inset-0 bg-gradient-to-br from-primary to-primary/60" />
+            )}
             <div className="absolute inset-0 bg-gradient-to-t from-primary/95 via-primary/30 to-transparent" />
             {/* Index marker */}
             <span className="absolute top-3 left-4 text-[10px] font-bold text-primary-foreground/60 tracking-widest">
-              0{i + 1}
+              {String(i + 1).padStart(2, "0")}
             </span>
             {/* Hover arrow */}
             <div className="absolute top-3 right-3 w-8 h-8 rounded-full bg-secondary text-secondary-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all duration-300">

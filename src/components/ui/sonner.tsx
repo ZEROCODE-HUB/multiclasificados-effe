@@ -1,14 +1,14 @@
-import { useTheme } from "next-themes";
 import { Toaster as Sonner, toast } from "sonner";
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
+// Antes leía el tema de next-themes, que sin proveedor devuelve "system": con el
+// sistema operativo en oscuro, los toasts salían oscuros sobre una app clara.
+// La plataforma es solo tema claro.
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme();
-
   return (
     <Sonner
-      theme={theme as ToasterProps["theme"]}
+      theme="light"
       className="toaster group"
       toastOptions={{
         classNames: {

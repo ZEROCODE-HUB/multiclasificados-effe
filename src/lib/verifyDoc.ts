@@ -5,6 +5,19 @@ import { supabase } from "@/lib/supabase";
 
 export type DocType = "dni" | "ruc";
 
+/**
+ * Normaliza lo que el usuario escribe o pega en un campo de DNI/RUC.
+ *
+ * Filtra PRIMERO y recorta después. El orden importa: con `maxLength` en el
+ * <input>, el navegador trunca el texto crudo antes de que podamos limpiarlo, así
+ * que pegar "4444 5555" (formato habitual al copiar un DNI) dejaba "44 44 55" →
+ * "444455" y el campo nunca llegaba a los 8 dígitos. Por eso los campos no llevan
+ * `maxLength`: el tope lo pone este helper, ya sobre los dígitos.
+ */
+export function normalizeDocNumber(value: string, maxLen: number): string {
+  return value.replace(/\D/g, "").slice(0, maxLen);
+}
+
 export interface VerifyDocResult {
   ok: boolean;
   nombre?: string; // Nombre completo (DNI) o razón social (RUC)

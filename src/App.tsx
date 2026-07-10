@@ -5,6 +5,8 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SupabaseAuthBridge } from "@/components/SupabaseAuthBridge";
+import { MaintenanceGate } from "@/components/MaintenanceGate";
+import { UpdateGate } from "@/components/UpdateGate";
 import { FavoritesProvider } from "@/hooks/useFavorites";
 import { RequireRole } from "@/components/RequireRole";
 import { AdminShell } from "@/components/AdminLayout";
@@ -50,8 +52,11 @@ const App = () => (
       <Toaster />
       <Sonner />
       <SupabaseAuthBridge />
+      <UpdateGate />
       <FavoritesProvider>
       <BrowserRouter>
+        {/* Dentro del router: necesita la ruta para dejar pasar /auth/staff. */}
+        <MaintenanceGate>
         <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><div className="w-9 h-9 rounded-full border-[3px] border-muted border-t-secondary animate-spin" /></div>}>
         <Routes>
           <Route path="/" element={<Index />} />
@@ -91,8 +96,11 @@ const App = () => (
             <Route path="/dashboard/buscador/configuracion" element={<SettingsPage role="buscador" />} />
           </Route>
 
-          {/* Admin — shell persistente (sidebar/header no se remontan al navegar) */}
-          <Route element={<RequireRole min="admin"><AdminShell /></RequireRole>}>
+          {/* Panel de administración — shell persistente (sidebar/header no se
+              remontan al navegar). Entra todo el staff: admin, moderador y
+              soporte. Lo que cada uno ve dentro lo recorta la Matriz de permisos
+              (get_my_permissions), y lo que puede hacer lo exigen los RPCs. */}
+          <Route element={<RequireRole min="soporte"><AdminShell /></RequireRole>}>
             <Route path="/dashboard/admin" element={<AdminDashboard role="admin" />} />
             <Route path="/dashboard/admin/avisos" element={<AdminListings role="admin" />} />
             <Route path="/dashboard/admin/usuarios" element={<AdminUsers role="admin" />} />
@@ -120,6 +128,7 @@ const App = () => (
           <Route path="*" element={<NotFound />} />
         </Routes>
         </Suspense>
+        </MaintenanceGate>
       </BrowserRouter>
       </FavoritesProvider>
     </TooltipProvider>

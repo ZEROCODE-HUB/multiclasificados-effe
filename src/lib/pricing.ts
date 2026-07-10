@@ -135,11 +135,12 @@ export function totalPrice(n: number, dias: DurationDays, sel: ExtrasSelection, 
   return Math.round((priceForDuration(n, dias, s) + extrasTotal(sel, s)) * 100) / 100;
 }
 
-// ─── Créditos (enteros, desvinculados del sol) ─────────────────────────────
-// Los precios se calculan en soles (Excel) para el DINERO (boletas), pero al
-// usuario se le cobra en CRÉDITOS: créditos = redondeo(soles × multiplicador).
-// El multiplicador separa el crédito del sol y absorbe los decimales.
-export const CREDIT_MULTIPLIER = 10;
+// ─── Créditos (1 crédito = 1 sol) ──────────────────────────────────────────
+// El crédito vale exactamente un sol, así que el saldo se muestra como "S/" y
+// no como una moneda aparte. Se conservan los dos decimales del precio (base
+// 16.14) para que el saldo cuadre al céntimo con la boleta; las columnas de la
+// BD son numeric(12,2).
+export const CREDIT_MULTIPLIER = 1;
 
 // IGV de Perú (18%). En el Excel los precios ya vienen "con IGV"; esta constante
 // centraliza la tasa para separar subtotal/IGV en boletas y órdenes.
@@ -151,11 +152,12 @@ export function splitIgv(total: number): { subtotal: number; igv: number } {
   return { subtotal, igv: Math.round((total - subtotal) * 100) / 100 };
 }
 
+// Redondea al céntimo, no al entero: el crédito ya es el sol.
 export function solesToCredits(soles: number): number {
-  return Math.round(soles * CREDIT_MULTIPLIER);
+  return Math.round(soles * CREDIT_MULTIPLIER * 100) / 100;
 }
 
-// Costo de un aviso EN CRÉDITOS (entero) según cantidad y duración.
+// Costo de un aviso EN CRÉDITOS según cantidad y duración.
 export function creditsForDuration(n: number, dias: DurationDays, s: PricingSettings = loadSettings()): number {
   return solesToCredits(priceForDuration(n, dias, s));
 }
@@ -206,6 +208,16 @@ export function buildMatrix(s: PricingSettings = loadSettings()) {
 
 export function formatSoles(v: number) {
   return `S/ ${v.toFixed(2)}`;
+}
+
+// En la app se paga con CRÉDITOS, no con dinero: el saldo y el costo de un
+// aviso se escriben "16.14 créditos", nunca con la sigla "cr" ni con "S/".
+// El símbolo del sol queda para donde hay dinero real (la boleta).
+// Los enteros no arrastran ".00": "8472 créditos", no "8472.00 créditos".
+export function formatCredits(v: number) {
+  const n = Math.round(v * 100) / 100;
+  const cifra = Number.isInteger(n) ? String(n) : n.toFixed(2);
+  return `${cifra} ${n === 1 ? "crédito" : "créditos"}`;
 }
 
 // === Helpers para reportes/cierre de venta/boletas (persistidos en localStorage) ===

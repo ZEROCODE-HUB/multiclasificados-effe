@@ -6,20 +6,51 @@
 //
 // Request (POST JSON):
 //   { "tipo": "dni" | "ruc", "numero": "12345678" }
+//   Header obligatorio: Authorization: Bearer <access_token del USUARIO>
 //
 // Response (200 JSON):
 //   { "success": true,  "tipo": "dni", "numero": "...", "nombre": "JUAN PEREZ", "data": {...} }
 //   { "success": false, "error": "No se encontró el documento." }
+// Response 401: { "success": false, "error": "Inicia sesión para verificar tu documento." }
+//
+// IMPORTANTE (seguridad): esta función consulta datos personales (RENIEC:
+// nombre y domicilio) y cada llamada consume saldo de Factiliza. Por eso EXIGE
+// una sesión de usuario real. No basta la anon key: es pública (va en el bundle
+// del navegador y del APK), así que la rechazamos explícitamente — de lo
+// contrario cualquiera podría iterar DNIs y usar esto como buscador de
+// domicilios a costa de nuestra cuenta.
 //
 // Secret requerido (Supabase → Edge Functions → Secrets):
 //   - FACTILIZA_TOKEN  (el token JWT de tu cuenta Factiliza → sección "Token")
 //
-// Deploy:  supabase functions deploy verify-doc --no-verify-jwt
-//   (--no-verify-jwt: la verificación de identidad ocurre antes del login,
-//    igual que el flujo actual de "Verificar" que no exige sesión todavía)
+// Deploy:  supabase functions deploy verify-doc
+//   (SIN --no-verify-jwt: el gateway filtra las peticiones sin JWT y el código
+//    de abajo, además, descarta la anon key y exige un usuario autenticado)
 
 const FACTILIZA_TOKEN = Deno.env.get("FACTILIZA_TOKEN") ?? "";
 const FACTILIZA_BASE = "https://api.factiliza.com/v1";
+
+// Inyectadas automáticamente por Supabase en el entorno de la Edge Function.
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+
+// Devuelve el id del usuario dueño del token, o null si no hay usuario real.
+async function authenticatedUserId(req: Request): Promise<string | null> {
+  const header = req.headers.get("Authorization") ?? "";
+  const token = header.replace(/^Bearer\s+/i, "").trim();
+  if (!token) return null;
+
+  // La anon key es un JWT válido para el gateway, pero NO identifica a nadie.
+  if (token === SUPABASE_ANON_KEY) return null;
+
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: { Authorization: `Bearer ${token}`, apikey: SUPABASE_ANON_KEY },
+  });
+  if (!res.ok) return null;
+
+  const user = await res.json().catch(() => null);
+  return typeof user?.id === "string" ? user.id : null;
+}
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -39,6 +70,11 @@ Deno.serve(async (req) => {
   try {
     if (!FACTILIZA_TOKEN) {
       return json({ success: false, error: "Verificación no configurada (falta FACTILIZA_TOKEN)." });
+    }
+
+    // Solo usuarios autenticados: se comprueba ANTES de gastar una consulta.
+    if (!(await authenticatedUserId(req))) {
+      return json({ success: false, error: "Inicia sesión para verificar tu documento." }, 401);
     }
 
     const { tipo, numero } = await req.json().catch(() => ({}));

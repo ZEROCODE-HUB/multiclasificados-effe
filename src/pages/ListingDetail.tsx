@@ -3,8 +3,10 @@ import { Navbar } from "@/components/Navbar";
 import { ListingCard } from "@/components/ListingCard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { categories, type Listing } from "@/data/mockData";
-import { fetchListingById, fetchListingImages, fetchListings, trackEvent } from "@/lib/listings";
+import { type Listing } from "@/data/mockData";
+import { useCategories } from "@/hooks/useCategories";
+import { fetchListingById, fetchListingImages, fetchListings, fetchListingDocumentUrl, trackEvent } from "@/lib/listings";
+import { listingBadges, advertiserDisplayName } from "@/lib/listingBadges";
 import {
   ChevronRight,
   MapPin,
@@ -20,7 +22,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   Tag,
-  Award,
+  EyeOff,
   Clock,
   Building2,
   Users,
@@ -71,6 +73,7 @@ import { getOrCreateConversation, sendMessage } from "@/lib/messaging";
 export default function ListingDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const categories = useCategories();
   // Placeholder neutro hasta cargar el aviso real (sin datos ficticios).
   const EMPTY: Listing = {
     id: id ?? "", title: "", description: "", price: 0, currency: "PEN",
@@ -78,6 +81,7 @@ export default function ListingDetail() {
     featured: false, advertiser: "", views: 0,
   };
   const [listing, setListing] = useState<Listing>(EMPTY);
+  const [docUrl, setDocUrl] = useState<string | null>(null);
   const [related, setRelated] = useState<Listing[]>([]);
   const session = useSession();
   const { isFavorite, toggle } = useFavorites();
@@ -154,6 +158,7 @@ export default function ListingDetail() {
     fetchListingById(id).then((l) => {
       if (mounted && l) setListing(l);
     });
+    fetchListingDocumentUrl(id).then((url) => mounted && setDocUrl(url));
     fetchListings({ limit: 8 }).then((rows) => {
       if (mounted) setRelated(rows.filter((l) => l.id !== id).slice(0, 4));
     });
@@ -200,6 +205,13 @@ export default function ListingDetail() {
   // Sin teléfono público (se coordina por mensaje).
   const phoneNumber = "No disponible";
 
+  // Aviso CONFIDENCIAL (documento eFFe): la identidad del anunciante permanece
+  // oculta (nombre, teléfono). El interesado solo puede contactar por el chat
+  // interno; nunca se muestran los datos reales.
+  const confidential = !!listing.confidential;
+  const advertiserName = advertiserDisplayName(listing.advertiser, confidential);
+  const advertiserFirstName = confidential ? "" : (listing.advertiser.split(" ")[0] || "");
+
   const [messageOpen, setMessageOpen] = useState(false);
   const [phoneOpen, setPhoneOpen] = useState(false);
   const [phoneRevealed, setPhoneRevealed] = useState(false);
@@ -215,7 +227,7 @@ export default function ListingDetail() {
   const [soldState, setSoldState] = useState(() => loadSold()[listing.id]);
 
   const [messageText, setMessageText] = useState(
-    `Hola ${listing.advertiser.split(" ")[0]}, estoy interesado en "${listing.title}". ¿Sigue disponible?`,
+    `Hola${advertiserFirstName ? " " + advertiserFirstName : ""}, estoy interesado en "${listing.title}". ¿Sigue disponible?`,
   );
 
   const handleReport = async () => {
@@ -282,7 +294,7 @@ export default function ListingDetail() {
       setMessageOpen(false);
       toast({
         title: "Mensaje enviado",
-        description: `${listing.advertiser} recibirá tu consulta. Abriendo tu conversación…`,
+        description: `${advertiserName} recibirá tu consulta. Abriendo tu conversación…`,
       });
       const base = session?.role === "anunciante" ? "anunciante" : "buscador";
       setTimeout(() => navigate(`/dashboard/${base}/mensajes?c=${convId}`), 500);
@@ -399,13 +411,15 @@ export default function ListingDetail() {
           {/* Gallery */}
           <section>
             <div className="grid grid-cols-1 md:grid-cols-[1fr_120px] gap-3">
-              <div className="relative bg-muted overflow-hidden" style={{ aspectRatio: "4 / 3" }}>
+              <div className={`relative bg-muted overflow-hidden ${listing.featured ? "ring-2 ring-amber-400" : ""}`} style={{ aspectRatio: "4 / 3" }}>
                 <img src={gallery[activeImg]} alt={listing.title} className="absolute inset-0 w-full h-full object-cover" />
-                {listing.featured && (
-                  <span className="absolute top-4 left-4 inline-flex items-center gap-1 px-3 py-1.5 bg-secondary text-secondary-foreground text-[10px] font-bold uppercase tracking-wider shadow-md">
-                    <Award size={11} /> Destacado
-                  </span>
-                )}
+                <div className="absolute top-4 left-4 flex flex-wrap gap-1.5 max-w-[70%]">
+                  {listingBadges(listing).map(({ label, icon: Icon, cls }) => (
+                    <span key={label} className={`inline-flex items-center gap-1 px-3 py-1.5 ${cls} text-[10px] font-bold uppercase tracking-wider shadow-md`}>
+                      <Icon size={11} /> {label}
+                    </span>
+                  ))}
+                </div>
                 <span className="absolute top-4 right-4 inline-flex items-center gap-1 px-3 py-1.5 bg-white/95 backdrop-blur-sm text-primary text-[10px] font-bold uppercase tracking-wider shadow-sm">
                   <ShieldCheck size={11} /> Verificado eFFe
                 </span>
@@ -506,6 +520,18 @@ export default function ListingDetail() {
             <p className="text-foreground/85 leading-[1.75] text-base mt-4">
               Si necesitas más fotografías, ficha técnica, ubicación exacta o coordinar una visita / videollamada, utiliza el panel lateral para enviar un mensaje directo.
             </p>
+
+            {/* PDF adjunto por el anunciante (adicional). Enlace firmado temporal. */}
+            {docUrl && (
+              <a
+                href={docUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-5 inline-flex items-center gap-2 px-4 py-2.5 border border-secondary/40 bg-secondary/5 text-secondary font-semibold text-sm hover:bg-secondary hover:text-secondary-foreground transition-colors"
+              >
+                <FileText size={16} /> Ver documento (PDF)
+              </a>
+            )}
           </section>
 
           {/* Spec table */}
@@ -597,15 +623,24 @@ export default function ListingDetail() {
                   >
                     <MessageSquare size={16} /> Enviar mensaje
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    className="w-full gap-2 font-bold uppercase tracking-wider text-xs rounded-none h-12"
-                    onClick={() => requireAuthOrRun(handleRevealPhone)}
-                  >
-                    <Phone size={16} />
-                    {phoneRevealed ? phoneNumber : "Mostrar teléfono"}
-                  </Button>
+                  {/* En avisos confidenciales no se muestra el teléfono: el
+                      contacto es solo por el chat interno. */}
+                  {confidential ? (
+                    <p className="flex items-center gap-2 text-xs text-muted-foreground border border-sky-500/30 bg-sky-500/5 px-3 py-2.5">
+                      <EyeOff size={14} className="text-sky-600 shrink-0" />
+                      Aviso confidencial: contacta solo por el chat interno; los datos del anunciante están protegidos.
+                    </p>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      className="w-full gap-2 font-bold uppercase tracking-wider text-xs rounded-none h-12"
+                      onClick={() => requireAuthOrRun(handleRevealPhone)}
+                    >
+                      <Phone size={16} />
+                      {phoneRevealed ? phoneNumber : "Mostrar teléfono"}
+                    </Button>
+                  )}
                 </>
               )}
 
@@ -638,11 +673,13 @@ export default function ListingDetail() {
             <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-secondary">Publicado por</span>
             <div className="flex items-center gap-3">
               <div className="w-14 h-14 rounded-full gradient-secondary text-secondary-foreground flex items-center justify-center font-extrabold text-lg">
-                {listing.advertiser.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+                {confidential
+                  ? <EyeOff size={20} />
+                  : listing.advertiser.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
               </div>
               <div className="min-w-0">
                 <p className="font-bold text-foreground truncate flex items-center gap-1.5">
-                  {listing.advertiser}
+                  {advertiserName}
                   <ShieldCheck size={14} className="text-secondary shrink-0" />
                 </p>
                 <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
@@ -664,14 +701,18 @@ export default function ListingDetail() {
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Antigüedad</p>
               </div>
             </div>
-            <Button
-              variant="outline"
-              className="w-full rounded-none gap-2 text-xs uppercase tracking-wider font-bold"
-              disabled={!ownerId}
-              onClick={() => ownerId && navigate(`/buscar?owner=${ownerId}`)}
-            >
-              <Users size={14} /> Ver todos sus avisos
-            </Button>
+            {/* En avisos confidenciales no se enlaza a los demás avisos del
+                anunciante: delataría su identidad. */}
+            {!confidential && (
+              <Button
+                variant="outline"
+                className="w-full rounded-none gap-2 text-xs uppercase tracking-wider font-bold"
+                disabled={!ownerId}
+                onClick={() => ownerId && navigate(`/buscar?owner=${ownerId}`)}
+              >
+                <Users size={14} /> Ver todos sus avisos
+              </Button>
+            )}
             {!isOwner && (
               <button
                 onClick={() => requireAuthOrRun(() => setUserReportOpen(true))}
@@ -758,7 +799,7 @@ export default function ListingDetail() {
           style={kbPad ? { paddingBottom: kbPad + 24 } : undefined}
         >
           <DialogHeader>
-            <DialogTitle>Enviar mensaje a {listing.advertiser}</DialogTitle>
+            <DialogTitle>Enviar mensaje a {advertiserName}</DialogTitle>
             <DialogDescription>
               Sobre: <span className="font-medium text-foreground">{listing.title}</span>
             </DialogDescription>
@@ -796,7 +837,7 @@ export default function ListingDetail() {
           </DialogHeader>
           <div className="rounded-md border border-border bg-muted/30 p-5 text-center space-y-2">
             <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-secondary">
-              {listing.advertiser}
+              {advertiserName}
             </p>
             <p className="text-2xl font-extrabold text-primary tracking-tight">{phoneNumber}</p>
             <p className="text-xs text-muted-foreground">Código de aviso: EFFE-{listing.id.padStart(6, "0")}</p>
@@ -824,7 +865,7 @@ export default function ListingDetail() {
           <DialogHeader>
             <DialogTitle>Postular a este aviso</DialogTitle>
             <DialogDescription>
-              Tu postulación se enviará a {listing.advertiser || "el anunciante"}.
+              Tu postulación se enviará a {advertiserName || "el anunciante"}.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -925,7 +966,7 @@ export default function ListingDetail() {
         >
           <DialogHeader>
             <DialogTitle>Reportar usuario</DialogTitle>
-            <DialogDescription>Cuéntanos qué problema observas con {listing.advertiser || "este anunciante"}.</DialogDescription>
+            <DialogDescription>Cuéntanos qué problema observas con {advertiserName || "este anunciante"}.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <Label>Motivo del reporte</Label>

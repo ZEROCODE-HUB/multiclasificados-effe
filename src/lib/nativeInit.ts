@@ -3,12 +3,16 @@
 import { Capacitor } from "@capacitor/core";
 import { StatusBar, Style } from "@capacitor/status-bar";
 import { initPush } from "@/lib/push";
+import { initOta } from "@/lib/ota";
 import { supabase } from "@/lib/supabase";
 
 export async function initNative() {
   if (!Capacitor.isNativePlatform()) return;
   // Registra notificaciones push (FCM) en el dispositivo.
   initPush();
+  // OTA (Capgo): aplica un bundle web más nuevo si la BD lo indica. No-op si no
+  // está configurado. Es independiente del modal de actualización (UpdateGate).
+  initOta();
 
   // OAuth (Google/Facebook): al volver del navegador por deep link, completa
   // la sesión con el código (PKCE) y regresa a la app.

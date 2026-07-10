@@ -14,6 +14,7 @@ import { Search, UserCheck, Ban, BadgeCheck, KeyRound, Trash2, ChevronLeft, Chev
 import { fetchAdminUsers, setUserStatus, verifyUser, deleteUser, setUserRole, grantCredits, type AdminUser } from "@/lib/admin";
 import { usePermissions } from "@/hooks/usePermissions";
 import { supabase } from "@/lib/supabase";
+import { formatCredits } from "@/lib/pricing";
 import { toast } from "@/hooks/use-toast";
 
 // Mapa estado real (BD) -> etiqueta y color del diseño existente.
@@ -28,6 +29,18 @@ const metaFor = (s: string) => statusMeta[s] ?? statusMeta.active;
 
 const isUuid = (v: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+
+/**
+ * Roles de un usuario, con "anunciante" consolidado en "buscador".
+ *
+ * No había separación real de permisos entre ambos (RequireRole les da el mismo
+ * rango), así que el rol dejó de asignarse y de filtrarse. La migración 0043
+ * lo consolida en la BD; esta normalización hace que el panel se vea igual
+ * aunque queden filas viejas sin migrar.
+ */
+const rolesOf = (roles: string): string[] => [
+  ...new Set(roles.split(",").filter(Boolean).map((r) => (r === "anunciante" ? "buscador" : r))),
+];
 
 const PAGE_SIZE = 5;
 
@@ -56,7 +69,7 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
   const filtered = useMemo(
     () =>
       users.filter((u) =>
-        (r === "all" || u.roles.split(",").includes(r)) &&
+        (r === "all" || rolesOf(u.roles).includes(r)) &&
         (q === "" || (u.full_name ?? "").toLowerCase().includes(q.toLowerCase()) || (u.email ?? "").toLowerCase().includes(q.toLowerCase())),
       ),
     [users, q, r],
@@ -125,14 +138,13 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
 
   const initials = (name: string) => (name || "?").split(" ").map((n) => n[0]).slice(0, 2).join("");
   const primaryRole = (roles: string) => {
-    const r0 = roles.split(",")[0] || "buscador";
+    const r0 = rolesOf(roles)[0] || "buscador";
     return r0.charAt(0).toUpperCase() + r0.slice(1);
   };
 
   // Roles asignables desde el panel (enum app_role).
   const ASSIGNABLE_ROLES = [
     { value: "buscador", label: "Buscador" },
-    { value: "anunciante", label: "Anunciante" },
     { value: "moderador", label: "Moderador" },
     { value: "soporte", label: "Soporte" },
     { value: "admin", label: "Admin" },
@@ -145,8 +157,8 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
       return <Badge variant="outline">{primaryRole(u.roles)}</Badge>;
     }
     // Rol "efectivo": el de mayor jerarquía que tenga el usuario.
-    const RANK = ["superadmin", "admin", "moderador", "soporte", "anunciante", "buscador"];
-    const owned = u.roles.split(",").filter(Boolean);
+    const RANK = ["superadmin", "admin", "moderador", "soporte", "buscador"];
+    const owned = rolesOf(u.roles);
     const current = RANK.find((r) => owned.includes(r)) ?? "buscador";
     return (
       <Select
@@ -322,13 +334,13 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
                     <TableRow key={u.id}>
                       <TableCell>
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">
+                          <div className="w-8 h-8 shrink-0 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">
                             {initials(u.full_name)}
                           </div>
-                          <div>
+                          <div className="min-w-0">
                             <p className="font-medium text-sm flex items-center gap-1">
                               {u.full_name}
-                              {u.verified && <BadgeCheck size={13} className="text-secondary" />}
+                              {u.verified && <BadgeCheck size={13} className="text-secondary shrink-0" />}
                             </p>
                             <p className="text-[10px] font-mono text-muted-foreground">{u.id.slice(0, 8)}</p>
                           </div>
@@ -437,7 +449,7 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={doGrant} disabled={!(Number(grantAmount) > 0)}>
-              Otorgar {Number(grantAmount) > 0 ? `${Number(grantAmount)} cr` : ""}
+              Otorgar {Number(grantAmount) > 0 ? formatCredits(Number(grantAmount)) : ""}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

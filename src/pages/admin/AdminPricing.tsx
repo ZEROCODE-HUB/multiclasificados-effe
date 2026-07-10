@@ -30,7 +30,7 @@ import {
   fetchPromotions, upsertPromotion, deletePromotion, type Promotion,
 } from "@/lib/promotions";
 import { supabase } from "@/lib/supabase";
-import { categories } from "@/data/mockData";
+import { useCategories } from "@/hooks/useCategories";
 import { toast } from "@/hooks/use-toast";
 
 // ===== Promociones (persistidas en la base de datos) =====
@@ -51,6 +51,7 @@ const QUANTITY_ROWS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const DURATION_ROWS: Array<7 | 15 | 30 | 60 | 90> = [7, 15, 30, 60, 90];
 
 const AdminPricing = ({ role }: { role: AdminRole }) => {
+  const categories = useCategories();
   const [s, setS] = useState<PricingSettings>(() => loadSettings());
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [settingsId, setSettingsId] = useState<string | null>(null);
@@ -642,7 +643,7 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
                   <Wallet size={16} className="text-secondary" /> Paquetes de créditos
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  1 sol = 10 créditos. Los usuarios compran créditos en paquetes y los gastan al publicar.
+                  1 crédito = 1 sol. Los usuarios compran créditos y los gastan al publicar.
                 </CardDescription>
               </div>
               <Button size="sm" className="gap-2" onClick={openNewPkg}><Plus size={14} /> Nuevo paquete</Button>
@@ -707,13 +708,13 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
                   <Input
                     value={pkgForm.name ?? ""}
                     onChange={(e) => setPkgForm({ ...pkgForm, name: e.target.value })}
-                    placeholder="Ej. Pro — 100 créditos"
+                    placeholder="Ej. Pro — 229 créditos"
                     className="mt-1"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Label>Créditos (1 sol = 10 cr)</Label>
+                    <Label>Créditos (1 crédito = S/ 1)</Label>
                     <Input
                       type="number"
                       step="1"
@@ -760,7 +761,7 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
                 {(pkgForm.credits_amount ?? 0) > 0 && (pkgForm.price_soles ?? 0) > 0 && (() => {
                   const cr = pkgForm.credits_amount ?? 0;
                   const soles = pkgForm.price_soles ?? 0;
-                  // Valor nominal en soles del paquete: créditos ÷ multiplicador (1 sol = 10 cr).
+                  // Valor nominal en soles del paquete: 1 crédito = 1 sol.
                   const face = cr / CREDIT_MULTIPLIER;
                   const disc = face > soles ? Math.round(((face - soles) / face) * 100) : 0;
                   return (

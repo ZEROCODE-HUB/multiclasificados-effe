@@ -2,16 +2,9 @@ import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Heart, Search, MessageSquare, Bell, Clock, MapPin, Star, SlidersHorizontal, ArrowRight } from "lucide-react";
+import { Heart, Search, MessageSquare, Bell, Clock, MapPin, Star, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { toast } from "@/hooks/use-toast";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useSession } from "@/hooks/useSession";
 import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 import { useFavorites } from "@/hooks/useFavorites";
@@ -21,12 +14,8 @@ import { fetchSavedSearches, criteriaLabel, criteriaToSearchUrl, type SavedSearc
 
 const SeekerDashboard = () => {
   const session = useSession();
-  const navigate = useNavigate();
   const unread = useUnreadMessages();
   const { ids } = useFavorites();
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [price, setPrice] = useState([0, 3000]);
-  const [query, setQuery] = useState("");
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
   const [favItems, setFavItems] = useState<Listing[]>([]);
 
@@ -40,8 +29,6 @@ const SeekerDashboard = () => {
 
   const firstName = (session?.name || "").split(" ")[0] || "buscador";
   const alerts = savedSearches.filter((s) => s.alert_enabled);
-
-  const goSearch = () => navigate(`/buscar${query ? `?q=${encodeURIComponent(query)}` : ""}`);
 
   // Contadores reales.
   const stats = [
@@ -65,90 +52,6 @@ const SeekerDashboard = () => {
             </p>
           </div>
         </div>
-
-        {/* Quick search */}
-        <Card className="rounded-lg">
-          <CardContent className="p-3 sm:p-4">
-            <div className="flex flex-col sm:flex-row gap-2">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-                <Input
-                  placeholder="Buscar avisos..."
-                  className="pl-10 h-11"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") goSearch(); }}
-                />
-              </div>
-              <div className="flex gap-2">
-                <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
-                  <SheetTrigger asChild>
-                    <Button variant="outline" size="lg" className="gap-2 flex-1 sm:flex-none">
-                      <SlidersHorizontal size={16} /> Filtros
-                    </Button>
-                  </SheetTrigger>
-                  <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
-                    <SheetHeader>
-                      <SheetTitle>Filtros</SheetTitle>
-                    </SheetHeader>
-                    <div className="space-y-6 mt-4">
-                      <div>
-                        <Label className="text-sm font-semibold">Categoría</Label>
-                        <Select>
-                          <SelectTrigger className="mt-2"><SelectValue placeholder="Todas las categorías" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="inmuebles">Inmuebles</SelectItem>
-                            <SelectItem value="vehiculos">Vehículos</SelectItem>
-                            <SelectItem value="empleos">Empleos</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label className="text-sm font-semibold">Ubicación</Label>
-                        <Select>
-                          <SelectTrigger className="mt-2"><SelectValue placeholder="Todas" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="lima">Lima</SelectItem>
-                            <SelectItem value="arequipa">Arequipa</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <div className="flex justify-between mb-2">
-                          <Label className="text-sm font-semibold">Rango de precio</Label>
-                          <span className="text-xs text-muted-foreground">${price[0]} – ${price[1]}</span>
-                        </div>
-                        <Slider value={price} onValueChange={setPrice} min={0} max={5000} step={50} />
-                      </div>
-                      <div>
-                        <Label className="text-sm font-semibold mb-2 block">Condición</Label>
-                        <div className="space-y-2">
-                          {["Nuevo", "Usado"].map((c) => (
-                            <label key={c} className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
-                              <Checkbox /> {c}
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                      <Button
-                        variant="hero"
-                        className="w-full"
-                        onClick={() => {
-                          setFiltersOpen(false);
-                          goSearch();
-                          toast({ title: "Filtros aplicados" });
-                        }}
-                      >
-                        Aplicar filtros
-                      </Button>
-                    </div>
-                  </SheetContent>
-                </Sheet>
-                <Button variant="hero" size="lg" className="flex-1 sm:flex-none px-6" onClick={goSearch}>Buscar</Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
 
         {/* Stats - colorful */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">

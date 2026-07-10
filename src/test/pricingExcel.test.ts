@@ -46,9 +46,9 @@ describe("Excel — parámetros base (Supuestos)", () => {
     expect(DEFAULT_SETTINGS.extras).toMatchObject({
       img100: 0, pdf100: 0, img500: 5, pdf500: 5, urgente: 5, destacado: 5, confidencial: 0,
     });
-    // Un adicional de pago suma 5 soles = 50 créditos.
+    // Un adicional de pago suma 5 soles = 5 créditos.
     expect(extrasTotal({ urgente: true }, DEFAULT_SETTINGS)).toBe(5);
-    expect(solesToCredits(5)).toBe(50);
+    expect(solesToCredits(5)).toBe(5);
   });
 });
 
@@ -61,12 +61,11 @@ describe("Excel — matriz de precios completa (10 avisos × 5 duraciones)", () 
     }
   });
 
-  it("los créditos (enteros) son consistentes con el precio en soles × 10", () => {
+  it("el costo en créditos es idéntico al precio en soles (1 crédito = 1 sol)", () => {
     for (let n = 1; n <= 10; n++) {
       DIAS.forEach((dias) => {
-        const cr = creditsForDuration(n, dias, DEFAULT_SETTINGS);
-        expect(Number.isInteger(cr)).toBe(true);
-        expect(cr).toBe(Math.round(priceForDuration(n, dias, DEFAULT_SETTINGS) * 10));
+        expect(creditsForDuration(n, dias, DEFAULT_SETTINGS))
+          .toBe(priceForDuration(n, dias, DEFAULT_SETTINGS));
       });
     }
   });

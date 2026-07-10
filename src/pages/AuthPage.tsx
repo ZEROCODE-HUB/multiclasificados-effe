@@ -34,11 +34,14 @@ import { toast } from "sonner";
 
 import { BrandMark } from "@/components/BrandMark";
 import { TermsDialog } from "@/components/LegalTerms";
-import { signInWithPassword, signUpWithPassword, signInWithGoogle, landingPath } from "@/lib/auth";
+import { signInWithPassword, signUpWithPassword, signInWithGoogle, landingPath, INVALID_CREDENTIALS_MSG } from "@/lib/auth";
 
 // `requireCaptcha`: el login de staff (admin/superadmin) muestra y exige
 // hCaptcha; el login de usuario (/auth) no lo usa.
 const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
+  // Login de staff (admin/superadmin): solo formulario de acceso. Sin registro,
+  // sin Google y sin "Explorar avisos" — el acceso es con cuenta autorizada.
+  const isStaff = requireCaptcha;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get("redirect");
@@ -114,13 +117,24 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
           return;
         }
       }
-      // 2) Login real.
-      const logged = await signInWithPassword(email, password);
+      // 2) Login real. En el login de USUARIO (/auth, sin captcha) rechazamos las
+      // cuentas de staff: un admin debe entrar por /auth/staff.
+      // Cada puerta vigila su lado: /auth rechaza al personal, /auth/staff rechaza
+      // a quien no lo es.
+      const logged = await signInWithPassword(email, password,
+        isStaff ? { requireStaff: true } : { rejectStaff: true });
       toast.success("¡Bienvenido de vuelta!");
       // El staff aterriza directo en su panel; el resto, donde pidió ir o al inicio.
       navigate(landingPath(logged, redirectTo));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo iniciar sesión.");
+      const raw = err instanceof Error ? err.message : "";
+      // Un password equivocado real (Supabase: "Invalid login credentials") y el
+      // bloqueo de staff en el login de usuario muestran EXACTAMENTE el mismo
+      // mensaje, para no delatar que la cuenta existe o es de administrador.
+      const msg = /invalid login credentials/i.test(raw)
+        ? INVALID_CREDENTIALS_MSG
+        : raw || "No se pudo iniciar sesión.";
+      toast.error(msg);
       resetCaptcha(); // el token es de un solo uso
     } finally {
       setLoading(false);
@@ -256,27 +270,29 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
             <BrandMark size="lg" asLink={false} />
           </Link>
 
-          {/* Tab toggle */}
-          <div className="flex bg-muted rounded-lg p-1 mb-6">
-            <button
-              onClick={() => setActiveTab("login")}
-              className={`flex-1 py-2.5 text-sm font-semibold rounded-md transition-all ${
-                activeTab === "login" ? "bg-card text-primary shadow-sm" : "text-muted-foreground"
-              }`}
-            >
-              Iniciar sesión
-            </button>
-            <button
-              onClick={() => setActiveTab("register")}
-              className={`flex-1 py-2.5 text-sm font-semibold rounded-md transition-all ${
-                activeTab === "register" ? "bg-card text-primary shadow-sm" : "text-muted-foreground"
-              }`}
-            >
-              Registrarse
-            </button>
-          </div>
+          {/* Tab toggle — oculto en el login de staff (solo iniciar sesión). */}
+          {!isStaff && (
+            <div className="flex bg-muted rounded-lg p-1 mb-6">
+              <button
+                onClick={() => setActiveTab("login")}
+                className={`flex-1 py-2.5 text-sm font-semibold rounded-md transition-all ${
+                  activeTab === "login" ? "bg-card text-primary shadow-sm" : "text-muted-foreground"
+                }`}
+              >
+                Iniciar sesión
+              </button>
+              <button
+                onClick={() => setActiveTab("register")}
+                className={`flex-1 py-2.5 text-sm font-semibold rounded-md transition-all ${
+                  activeTab === "register" ? "bg-card text-primary shadow-sm" : "text-muted-foreground"
+                }`}
+              >
+                Registrarse
+              </button>
+            </div>
+          )}
 
-          {activeTab === "login" ? (
+          {activeTab === "login" || isStaff ? (
             <div className="space-y-4 animate-fade-in">
               <div>
                 <Label htmlFor="email">Correo electrónico</Label>
@@ -319,17 +335,22 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
                 {loading ? <Loader2 className="animate-spin" size={18} /> : "Iniciar sesión"}
               </Button>
 
-              <div className="relative my-4">
-                <div className="absolute inset-0 flex items-center"><div className="w-full border-t" /></div>
-                <div className="relative flex justify-center text-xs"><span className="bg-card lg:bg-background px-2 text-muted-foreground">o continuar con</span></div>
-              </div>
+              {/* Acceso con Google — oculto en el login de staff. */}
+              {!isStaff && (
+                <>
+                  <div className="relative my-4">
+                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t" /></div>
+                    <div className="relative flex justify-center text-xs"><span className="bg-card lg:bg-background px-2 text-muted-foreground">o continuar con</span></div>
+                  </div>
 
-              <div className="grid grid-cols-1 gap-3">
-                <Button variant="outline" className="w-full" onClick={handleGoogle} disabled={loading}>
-                  <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-                  Google
-                </Button>
-              </div>
+                  <div className="grid grid-cols-1 gap-3">
+                    <Button variant="outline" className="w-full" onClick={handleGoogle} disabled={loading}>
+                      <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                      Google
+                    </Button>
+                  </div>
+                </>
+              )}
             </div>
           ) : (
             <div className="space-y-4 animate-fade-in">
@@ -428,14 +449,19 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
 
           {/* Accesos rápidos — Explorar va al inicio como visitante (sin perfil falso); Administrador usa login real. */}
           <div className="mt-6 pt-4 border-t border-dashed">
-            <p className="text-xs text-muted-foreground text-center mb-3">Acceso rápido</p>
-            <div className="grid grid-cols-1 gap-2">
-              <Button variant="outline" size="sm" className="min-w-0 gap-1.5 border-primary/40 text-primary hover:bg-primary/10 hover:text-primary"
-                onClick={exploreAsGuest}>
-                <Search size={14} className="flex-shrink-0" />
-                <span className="truncate">Explorar avisos</span>
-              </Button>
-            </div>
+            {/* "Explorar avisos" oculto en el login de staff. */}
+            {!isStaff && (
+              <>
+                <p className="text-xs text-muted-foreground text-center mb-3">Acceso rápido</p>
+                <div className="grid grid-cols-1 gap-2">
+                  <Button variant="outline" size="sm" className="min-w-0 gap-1.5 border-primary/40 text-primary hover:bg-primary/10 hover:text-primary"
+                    onClick={exploreAsGuest}>
+                    <Search size={14} className="flex-shrink-0" />
+                    <span className="truncate">Explorar avisos</span>
+                  </Button>
+                </div>
+              </>
+            )}
             <p className="text-[11px] text-muted-foreground text-center mt-3 flex items-center justify-center gap-1.5">
               <ShieldCheck size={12} className="text-secondary" /> El acceso de administrador usa el formulario de arriba con una cuenta autorizada y verificación en dos pasos.
             </p>

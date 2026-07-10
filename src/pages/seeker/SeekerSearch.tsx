@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, MapPin, SlidersHorizontal, X } from "lucide-react";
-import { featuredListings, categories } from "@/data/mockData";
+import { featuredListings } from "@/data/mockData";
+import { useCategories } from "@/hooks/useCategories";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetFooter } from "@/components/ui/sheet";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
@@ -15,6 +16,7 @@ import { toast } from "@/hooks/use-toast";
 import { ListingCard } from "@/components/ListingCard";
 
 const FiltersContent = ({ onApply }: { onApply: () => void }) => {
+  const categories = useCategories();
   const [price, setPrice] = useState([0, 5000]);
   return (
     <div className="space-y-6 mt-4">

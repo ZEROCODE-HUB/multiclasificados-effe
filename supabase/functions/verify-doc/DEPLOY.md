@@ -18,17 +18,20 @@ supabase secrets set FACTILIZA_TOKEN="eyJhbGci...tu-token-completo..."
 ## 2) Desplegar la función
 
 ```bash
-supabase functions deploy verify-doc --no-verify-jwt
+supabase functions deploy verify-doc
 ```
 
-`--no-verify-jwt` porque la identidad se verifica **antes** del login (igual que
-el flujo actual: primero verificas DNI/RUC, luego inicias sesión para pagar).
+**Sin `--no-verify-jwt`.** La función consulta datos personales (RENIEC: nombre
+y domicilio) y cada llamada consume saldo de Factiliza, así que exige una sesión
+de usuario. Tampoco basta la anon key: es pública (viaja en el bundle de la web
+y del APK) y el código la rechaza explícitamente. Por eso el flujo de publicar
+pide login **antes** de verificar el documento.
 
 ## 3) Probar en local (opcional)
 
 ```bash
 # crea supabase/functions/.env con:  FACTILIZA_TOKEN=eyJhbGci...
-supabase functions serve verify-doc --no-verify-jwt --env-file supabase/functions/.env
+supabase functions serve verify-doc --env-file supabase/functions/.env
 ```
 
 ## Contrato

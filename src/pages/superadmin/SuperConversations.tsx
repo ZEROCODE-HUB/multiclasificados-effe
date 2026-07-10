@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, AlertOctagon, ArrowLeft } from "lucide-react";
+import { ListingPreviewDialog } from "@/components/ListingPreviewDialog";
+import { Search, AlertOctagon, ArrowLeft, Eye } from "lucide-react";
 import { fetchReports, assignReport, resolveReport, fetchConversationBetween, type AdminReport, type ModMessage } from "@/lib/admin";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
@@ -27,6 +28,10 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
   const [me, setMe] = useState<string | null>(null);
   const [convo, setConvo] = useState<ModMessage[]>([]);
   const [convoLoading, setConvoLoading] = useState(false);
+  // Hay una acción de moderación en vuelo: bloquea los botones hasta que vuelva.
+  const [busy, setBusy] = useState(false);
+  // Aviso denunciado, que se muestra en un diálogo sin salir de la denuncia.
+  const [avisoId, setAvisoId] = useState<string | null>(null);
   const convoRef = useRef<HTMLDivElement>(null);
 
   const load = () => fetchReports().then(({ data }) => setReports(data));
@@ -64,16 +69,28 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
 
   const act = async (label: string, fn: () => Promise<void>) => {
     if (!item || !isUuid(item.id)) { toast({ title: label }); return; }
+    if (busy) return; // el botón ya está deshabilitado; esto cubre el doble toque.
+    setBusy(true);
     try {
       await fn();
       toast({ title: label });
       await load();
     } catch (e: any) {
       toast({ title: "No se pudo completar", description: e?.message ?? "Error", variant: "destructive" });
+    } finally {
+      setBusy(false);
     }
   };
 
-  const markReviewing = () => act("Marcada en revisión", () => assignReport(item!.id, me ?? item!.reported_id ?? ""));
+  const markReviewing = () => {
+    // Sin sesión no hay a quién asignarla. Antes caía en `item.reported_id`, que
+    // asignaba la denuncia... al propio usuario denunciado.
+    if (!me) {
+      toast({ title: "No se pudo identificar al moderador", variant: "destructive" });
+      return;
+    }
+    return act("Marcada en revisión", () => assignReport(item!.id, me));
+  };
   const warnUser = () => act("Usuario advertido", () => resolveReport(item!.id, "warn", "Advertencia emitida por moderación"));
   const suspendUser = () => act("Cuenta suspendida", () => resolveReport(item!.id, "ban", item!.reason));
 
@@ -140,6 +157,13 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
                   {item.category && <p className="text-sm"><span className="text-muted-foreground">Categoría:</span> {item.category}</p>}
                   {item.assignee && <p className="text-sm"><span className="text-muted-foreground">Asignada a:</span> {item.assignee}</p>}
                   {item.action_taken && <p className="text-sm"><span className="text-muted-foreground">Acción tomada:</span> {item.action_taken}</p>}
+                  {/* Denuncia sobre un aviso: sin esto el moderador no puede ver
+                      qué se publicó. Se abre aquí mismo, sin salir de la denuncia. */}
+                  {item.target_type === "listing" && item.listing_id && (
+                    <Button variant="outline" size="sm" className="mt-1 gap-1.5" onClick={() => setAvisoId(item.listing_id)}>
+                      <Eye size={14} /> Ver aviso
+                    </Button>
+                  )}
                 </div>
                 <div className="rounded-xl border bg-card p-3">
                   <p className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground mb-2">
@@ -193,9 +217,13 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
                 </div>
               </CardContent>
               <div className="border-t p-4 flex flex-col sm:flex-row gap-2">
-                <Button variant="outline" className="flex-1" onClick={markReviewing}>Marcar en revisión</Button>
-                <Button variant="outline" className="flex-1 text-warning" onClick={warnUser}>Advertir usuario</Button>
-                <Button className="flex-1 bg-destructive hover:bg-destructive/90" onClick={suspendUser}>Suspender cuenta</Button>
+                {/* Solo se marca en revisión una denuncia abierta: una vez asignada
+                    (o resuelta) volver a pulsar no hace nada útil. */}
+                <Button variant="outline" className="flex-1" disabled={busy || item.status !== "open"} onClick={markReviewing}>
+                  {item.status === "reviewing" ? "En revisión" : "Marcar en revisión"}
+                </Button>
+                <Button variant="outline" className="flex-1 text-warning" disabled={busy} onClick={warnUser}>Advertir usuario</Button>
+                <Button className="flex-1 bg-destructive hover:bg-destructive/90" disabled={busy} onClick={suspendUser}>Suspender cuenta</Button>
               </div>
             </>
           ) : (
@@ -209,6 +237,13 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
           )}
         </Card>
       </div>
+
+      <ListingPreviewDialog
+        listingId={avisoId}
+        reason={item?.reason}
+        fallbackTitle={item?.listing_title}
+        onClose={() => setAvisoId(null)}
+      />
     </>
   );
 };

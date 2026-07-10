@@ -11,20 +11,21 @@ import {
 } from "@/components/ui/dialog";
 import {
   ImagePlus, X, ArrowLeft, ArrowRight, Star, Check, MapPin, Tag, FileText, Camera,
-  ShieldCheck, Building2, User, CreditCard, Receipt, Sparkles, Flame, EyeOff, Lock, Package, Minus, Plus,
-  Wallet, Loader2, Percent,
+  ShieldCheck, CreditCard, Receipt, Sparkles, Flame, EyeOff, Lock, Package, Minus, Plus,
+  Wallet, Loader2, Percent, Save,
 } from "lucide-react";
-import { categories } from "@/data/mockData";
+import { useCategories } from "@/hooks/useCategories";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSession } from "@/hooks/useSession";
 import { toast } from "@/hooks/use-toast";
 import {
-  loadSettings, priceForDuration, formatSoles, addInvoice, avisosBreakdown, solesToCredits,
+  loadSettings, priceForDuration, formatSoles, formatCredits, addInvoice, avisosBreakdown, solesToCredits,
   type DurationDays, type PricingSettings, type ExtraPrices,
 } from "@/lib/pricing";
-import { createAndPublishListing } from "@/lib/publish";
-import { verifyDocument } from "@/lib/verifyDoc";
+import { createAndPublishListing, saveListingDraft } from "@/lib/publish";
+import { urgenteAllowedFor, URGENTE_MAX_DAYS } from "@/lib/listingBadges";
+import { VerifyIdentityDialog, type ConfirmedIdentity, type PersonType } from "@/components/VerifyIdentityDialog";
 import { getCreditBalance, spendCredits } from "@/lib/credits";
 import { fetchActivePromotions, bestPromoForCategory, applyDiscount, type Promotion } from "@/lib/promotions";
 import { fetchPricingSettings } from "@/lib/pricingRemote";
@@ -52,7 +53,9 @@ const DRAFT_KEY = "effe:publish-draft";
 
 const AdvertiserPublish = () => {
   const session = useSession();
+  const hasSession = !!session;
   const navigate = useNavigate();
+  const categories = useCategories();
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Guardia: para publicar hay que haber iniciado sesión (cuenta real).
@@ -73,18 +76,26 @@ const AdvertiserPublish = () => {
     return () => { active = false; };
   }, [navigate]);
 
-  // Verificación de identidad (se solicita al presionar "Publicar aviso")
+  // Verificación de identidad (se solicita al presionar "Publicar aviso").
+  // El cuadro vive en <VerifyIdentityDialog>; aquí solo guardamos el RESULTADO
+  // confirmado, que alimenta el comprobante. `verified` = el usuario confirmó que
+  // la ficha de RENIEC/SUNAT es suya: consultar el documento no equivale a
+  // aceptarlo, y sin confirmación explícita no se publica nada.
   const [verifyOpen, setVerifyOpen] = useState(false);
-  const [personType, setPersonType] = useState<"natural" | "juridica" | "">("");
+  const [personType, setPersonType] = useState<PersonType>("");
   const [docNumber, setDocNumber] = useState("");
   const [verified, setVerified] = useState(false);
-  const [verifying, setVerifying] = useState(false);
   const [verifiedName, setVerifiedName] = useState("");
 
   // Imágenes — solo 2 slots por aviso
   const [mainPhoto, setMainPhoto] = useState<PhotoItem | null>(null);
   const [secondPhoto, setSecondPhoto] = useState<PhotoItem | null>(null);
   const secondFileRef = useRef<HTMLInputElement>(null);
+
+  // PDF adjunto (adicional "PDF adjunto por aviso"). Solo se muestra su apartado
+  // si el adicional está activo; si se desactiva, el archivo elegido se descarta.
+  const [pdfFile, setPdfFile] = useState<{ file: File; name: string } | null>(null);
+  const pdfFileRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState({
     category: "",
@@ -115,6 +126,21 @@ const AdvertiserPublish = () => {
   // Flujo de publicación con créditos
   const [buyCreditsOpen, setBuyCreditsOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  // Guard SÍNCRONO contra el doble envío. `publishing` es state: no se actualiza
+  // hasta el siguiente render, así que dos toques seguidos (o el ghost-click de
+  // touch→click en el WebView de Android) leen ambos `publishing === false` del
+  // mismo closure y pasan el guard. Un ref se actualiza al instante.
+  const publishingRef = useRef(false);
+  // Guardado en "Mis borradores". `draftListingId` recuerda el aviso ya creado:
+  // guardar dos veces lo ACTUALIZA, y publicar después reutiliza ese mismo aviso
+  // en vez de crear otro.
+  const [savingDraft, setSavingDraft] = useState(false);
+  const savingDraftRef = useRef(false);
+  const draftListingId = useRef<string | null>(null);
+  // Aviso YA publicado al que solo le faltó el cobro (spend_credits devolvió
+  // false porque el saldo cambió). Al comprar créditos hay que cobrar ESTE
+  // aviso, no publicar uno nuevo: eso creaba un duplicado.
+  const pendingChargeListingId = useRef<string | null>(null);
   const [successOpen, setSuccessOpen] = useState<{ open: boolean; number: string; email: string }>({ open: false, number: "", email: "" });
 
   // Pricing en vivo: arranca del caché local y se refresca desde la BD.
@@ -144,12 +170,16 @@ const AdvertiserPublish = () => {
       if (d.coords) setCoords(d.coords);
       if (d.duration) setDuration(d.duration);
       if (d.extras) setExtras(d.extras);
-      if (d.verified) setVerified(d.verified);
+      // `verified`/`verifiedName` NO se restauran: verificar exige sesión, así que
+      // un borrador guardado antes del login jamás pudo verificarse de verdad.
+      // Restaurarlos solo servía para que cualquiera se saltara la verificación
+      // escribiendo `{"verified":true}` en el borrador de localStorage.
       if (d.personType) setPersonType(d.personType);
       if (d.docNumber) setDocNumber(d.docNumber);
-      if (d.verifiedName) setVerifiedName(d.verifiedName);
+      // Al volver del login se retoma la publicación por el cuadro de identidad,
+      // no publicando directamente: el documento aún está sin verificar.
       if (d.resumeAtSummary && session) {
-        setTimeout(() => openPublishFlowAfterVerify(), 200);
+        setTimeout(() => setVerifyOpen(true), 200);
       }
       localStorage.removeItem(DRAFT_KEY);
     } catch { /* noop */ }
@@ -206,66 +236,78 @@ const AdvertiserPublish = () => {
   }, [quantity]);
 
   const hasSecondImageInPackage = (extras.img500 ?? 0) > 0;
+  const hasPdfInPackage = (extras.pdf500 ?? 0) > 0;
+
+  // "Urgente" solo se ofrece en avisos cortos (≤ 7 días): su fin es respuesta
+  // inmediata. Con 15/30/60/90 días la opción no aparece.
+  const urgenteAllowed = urgenteAllowedFor(duration);
+  const visibleExtras = EXTRA_DEFS.filter((d) => d.key !== "urgente" || urgenteAllowed);
+
+  // Si el usuario ya había marcado "Urgente" y luego elige una duración larga,
+  // se quita solo: no se puede cobrar un adicional que ya no aplica.
+  useEffect(() => {
+    if (!urgenteAllowed && (extras.urgente ?? 0) > 0) {
+      setExtras((e) => ({ ...e, urgente: 0 }));
+    }
+  }, [urgenteAllowed, extras.urgente]);
+
+  // Al desactivar el adicional del PDF, se descarta el archivo elegido: el
+  // apartado se oculta y no debe quedar un PDF "colgado" para publicar.
+  useEffect(() => {
+    if (!hasPdfInPackage && pdfFile) setPdfFile(null);
+  }, [hasPdfInPackage, pdfFile]);
+
+  // Elige el PDF adjunto (valida tipo y tamaño ≤ 500 KB).
+  const pickPdf = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const f = files[0];
+    if (f.type !== "application/pdf") {
+      toast({ title: "Debe ser un PDF", variant: "destructive" });
+      return;
+    }
+    if (f.size > 500 * 1024) {
+      toast({ title: "El PDF supera los 500 KB", description: "Sube un archivo más liviano.", variant: "destructive" });
+      return;
+    }
+    setPdfFile({ file: f, name: f.name });
+  };
 
   const persistDraftForLogin = (resumeAtSummary: boolean) => {
     try {
+      // Ni `verified` ni `verifiedName` se guardan: el borrador vive en
+      // localStorage, donde el usuario puede editarlo, y al restaurarlo se
+      // ignoran de todos modos. La verificación se rehace tras el login.
       localStorage.setItem(DRAFT_KEY, JSON.stringify({
-        form, coords, duration, quantity, extras, verified: true, personType, docNumber, verifiedName,
+        form, coords, duration, quantity, extras, personType, docNumber,
         resumeAtSummary,
       }));
     } catch { /* noop */ }
   };
 
-  const handleVerify = async () => {
-    if (verifying) return;
-    if (personType === "natural" && docNumber.length !== 8) {
-      toast({ title: "DNI inválido", description: "El DNI debe tener 8 dígitos.", variant: "destructive" });
-      return;
-    }
-    if (personType === "juridica" && docNumber.length !== 11) {
-      toast({ title: "RUC inválido", description: "El RUC debe tener 11 dígitos.", variant: "destructive" });
-      return;
-    }
-
-    // Verificación real contra Factiliza (a través de la Edge Function).
-    const tipo = personType === "natural" ? "dni" : "ruc";
-    setVerifying(true);
-    let result;
-    try {
-      result = await verifyDocument(tipo, docNumber);
-    } finally {
-      setVerifying(false);
-    }
-
-    if (!result.ok) {
-      toast({
-        title: tipo === "dni" ? "DNI no verificado" : "RUC no verificado",
-        description: result.error ?? "No se pudo verificar el documento. Revisa el número.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const nombre = result.nombre ?? "";
-    setVerifiedName(nombre);
+  // El usuario confirmó que la ficha de RENIEC/SUNAT es suya. Recién aquí
+  // `verified` pasa a true y se puede publicar.
+  //
+  // Confirmar es el punto de envío real (encadena la publicación), así que lleva
+  // el mismo guard SÍNCRONO que `doPublish`: dos toques seguidos —o el
+  // ghost-click de touch→click en el WebView de Android— leerían el mismo
+  // `verified === false` del closure y encadenarían dos publicaciones.
+  const confirmingRef = useRef(false);
+  const confirmIdentity = (identity: ConfirmedIdentity) => {
+    if (confirmingRef.current) return;
+    confirmingRef.current = true;
+    setPersonType(identity.personType);
+    setDocNumber(identity.docNumber);
+    setVerifiedName(identity.name);
     setVerified(true);
     setVerifyOpen(false);
     toast({
-      title: "Identidad verificada",
-      description: nombre
-        ? `${personType === "natural" ? "DNI" : "RUC"} ${docNumber} · ${nombre}`
-        : `${personType === "natural" ? "DNI" : "RUC"} ${docNumber} confirmado.`,
+      title: "Identidad confirmada",
+      description: `${identity.docType.toUpperCase()} ${identity.docNumber} · ${identity.name}`,
     });
-
-    // Tras verificar exige login antes del pago
-    if (!session) {
-      persistDraftForLogin(true);
-      toast({ title: "Inicia sesión para pagar", description: "Te llevamos al login y retomamos tu publicación." });
-      setTimeout(() => navigate("/auth?redirect=/dashboard/anunciante/publicar"), 400);
-      return;
-    }
-    // Si ya hay sesión, abre el flujo de publicación
-    setTimeout(() => openPublishFlowAfterVerify(), 250);
+    setTimeout(() => {
+      confirmingRef.current = false;
+      openPublishFlowAfterVerify();
+    }, 250);
   };
 
   const canPublish = form.category && form.title && form.description && form.price && form.location && !!mainPhoto;
@@ -292,11 +334,123 @@ const AdvertiserPublish = () => {
       navigate("/auth?redirect=/dashboard/anunciante/publicar");
       return;
     }
+    // Identidad verificada contra RENIEC/SUNAT y confirmada por el usuario.
+    // Sin esto se publicaba sin pedir documento alguno cuando ya había saldo:
+    // el cuadro de verificación existía pero NADIE lo abría.
+    if (!verified) {
+      setVerifyOpen(true);
+      return;
+    }
     openPublishFlowAfterVerify();
   };
 
+  // Tras publicar con éxito dejamos el formulario vacío. Así, cerrar el modal de
+  // confirmación con Esc / clic afuera / la X ya no deja al usuario frente a un
+  // formulario completo que puede volver a enviar: `canPublish` pasa a false y
+  // republicar el mismo aviso se vuelve imposible por construcción.
+  const resetPublishForm = () => {
+    setForm({ category: "", title: "", description: "", price: "", currency: "PEN", location: "", condition: "nuevo" });
+    setMainPhoto(null);
+    setSecondPhoto(null);
+    setCoords(null);
+    setExtras({});
+    setDuration(7);
+    draftListingId.current = null; // el borrador ya se convirtió en aviso publicado
+    localStorage.removeItem(DRAFT_KEY);
+  };
+
+  // "Guardar en mis borradores": deja el aviso en la BD con status=draft, sin
+  // cobrar ni pedir identidad. Guardar dos veces actualiza el mismo aviso.
+  const saveDraft = async () => {
+    if (savingDraftRef.current || publishingRef.current) return;
+
+    // Sin sesión no hay dónde guardarlo (owner_id): guardamos el borrador local
+    // y lo retomamos tras el login, igual que hace "Publicar".
+    if (!session) {
+      persistDraftForLogin(false);
+      toast({ title: "Inicia sesión para guardar", description: "Te llevamos al login y retomamos tu aviso." });
+      navigate("/auth?redirect=/dashboard/anunciante/publicar");
+      return;
+    }
+    // `title` y `category_id` son NOT NULL en la BD: sin ellos no hay borrador.
+    if (!form.title.trim() || !form.category) {
+      toast({
+        title: "Falta lo mínimo para guardar",
+        description: "Ponle al menos un título y una categoría al aviso.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    savingDraftRef.current = true;
+    setSavingDraft(true);
+    try {
+      const id = await saveListingDraft({
+        form, lat: coords?.lat ?? null, lng: coords?.lng ?? null,
+        quantity, duration, extras,
+        mainPhoto: mainPhoto ? { file: mainPhoto.file, name: mainPhoto.name } : null,
+        secondPhoto: secondPhoto ? { file: secondPhoto.file, name: secondPhoto.name } : null,
+        pdf: hasPdfInPackage && pdfFile ? { file: pdfFile.file, name: pdfFile.name } : null,
+        draftId: draftListingId.current,
+      });
+      draftListingId.current = id;
+      // El borrador local ya no hace falta: la fuente de verdad pasa a ser la BD.
+      localStorage.removeItem(DRAFT_KEY);
+      toast({
+        title: "Guardado en tus borradores",
+        description: "Lo encuentras en Mis avisos › Borradores. Puedes publicarlo cuando quieras.",
+      });
+    } catch (err: unknown) {
+      toast({
+        title: "No se pudo guardar el borrador",
+        description: err instanceof Error ? err.message : "Inténtalo de nuevo.",
+        variant: "destructive",
+      });
+    } finally {
+      savingDraftRef.current = false;
+      setSavingDraft(false);
+    }
+  };
+
+  // Cobra un aviso que ya quedó publicado pero cuyo descuento de créditos falló.
+  // Publicar de nuevo crearía un aviso duplicado; aquí solo se descuenta.
+  const chargePendingListing = async (listingId: string) => {
+    if (publishingRef.current) return;
+    publishingRef.current = true;
+    setPublishing(true);
+    const email = userEmail || "anunciante@effe.pe";
+    try {
+      const spent = await spendCredits(totalCredits, listingId);
+      const newBalance = await getCreditBalance();
+      setCreditBalance(newBalance);
+      if (!spent) {
+        toast({
+          title: "No se pudieron descontar los créditos",
+          description: "Tu saldo sigue sin alcanzar para este aviso.",
+          variant: "destructive",
+        });
+        return;
+      }
+      pendingChargeListingId.current = null;
+      const localInv = addInvoice({
+        email,
+        advertiser: verifiedName || session?.name || "Anunciante",
+        listingTitle: form.title,
+        amount: total,
+        detail: `Boleta · Aviso ${duration} días · ${totalCredits} créditos (${formatSoles(total)})`,
+        docNumber: docNumber || undefined,
+      });
+      setSuccessOpen({ open: true, number: localInv.number, email });
+      resetPublishForm();
+    } finally {
+      publishingRef.current = false;
+      setPublishing(false);
+    }
+  };
+
   const doPublish = async () => {
-    if (publishing) return;
+    // Ref, no state: cierra la ventana entre dos clics dentro del mismo render.
+    if (publishingRef.current) return;
     if (!session) {
       persistDraftForLogin(true);
       navigate("/auth?redirect=/dashboard/anunciante/publicar");
@@ -304,6 +458,7 @@ const AdvertiserPublish = () => {
     }
     const email = userEmail || "anunciante@effe.pe";
     const tipoDoc = personType === "juridica" ? "ruc" : "dni";
+    publishingRef.current = true;
     setPublishing(true);
     try {
       // 1) Crear el aviso y publicarlo
@@ -315,8 +470,12 @@ const AdvertiserPublish = () => {
         duration,
         extras,
         total,
+        // Si ya se guardó como borrador, se publica ESE aviso: sin esto quedarían
+        // dos, uno en borradores y otro activo.
+        draftId: draftListingId.current,
         mainPhoto: mainPhoto ? { file: mainPhoto.file, name: mainPhoto.name } : null,
         secondPhoto: hasSecondImageInPackage && secondPhoto ? { file: secondPhoto.file, name: secondPhoto.name } : null,
+        pdf: hasPdfInPackage && pdfFile ? { file: pdfFile.file, name: pdfFile.name } : null,
         receiptType: "boleta",
         email,
         advertiserName: verifiedName || session?.name || "Anunciante",
@@ -329,14 +488,19 @@ const AdvertiserPublish = () => {
       const newBalance = await getCreditBalance();
       setCreditBalance(newBalance);
       if (!spent) {
-        // El saldo cambió y ya no alcanza: abrir el configurador para comprar.
+        // El saldo cambió y ya no alcanza. El aviso YA está publicado: lo dejamos
+        // anotado para cobrarlo tras la compra (sin republicarlo) y no mostramos
+        // "¡Pago confirmado!" por algo que todavía no se cobró.
+        pendingChargeListingId.current = listingId;
         toast({
           title: "No se pudieron descontar los créditos",
           description: "Tu saldo cambió y ya no alcanza. Compra créditos para completar.",
           variant: "destructive",
         });
         setBuyCreditsOpen(true);
+        return;
       }
+      pendingChargeListingId.current = null;
 
       // 3) Guardar comprobante local como respaldo
       const localInv = addInvoice({
@@ -350,6 +514,8 @@ const AdvertiserPublish = () => {
       });
 
       setSuccessOpen({ open: true, number: invoiceNumber || localInv.number, email });
+      // Publicado y cobrado: vaciamos el formulario para que no se pueda reenviar.
+      resetPublishForm();
       if (!invoiceSaved) {
         toast({
           title: "Comprobante no registrado en la base de datos",
@@ -370,6 +536,7 @@ const AdvertiserPublish = () => {
         variant: "destructive",
       });
     } finally {
+      publishingRef.current = false;
       setPublishing(false);
     }
   };
@@ -566,6 +733,45 @@ const AdvertiserPublish = () => {
                     <p className="mt-1 text-[11px] text-warning">No tienes este adicional en tu paquete actual.</p>
                   )}
                 </div>
+
+                {/* PDF adjunto — el apartado aparece solo si el adicional está activo. */}
+                {hasPdfInPackage && (
+                  <div className="sm:col-span-2">
+                    <input
+                      ref={pdfFileRef}
+                      type="file"
+                      accept="application/pdf"
+                      className="hidden"
+                      onChange={(e) => { pickPdf(e.target.files); if (pdfFileRef.current) pdfFileRef.current.value = ""; }}
+                    />
+                    {pdfFile ? (
+                      <div className="flex items-center gap-3 p-3 border border-secondary/40 bg-secondary/5">
+                        <FileText size={18} className="text-secondary shrink-0" />
+                        <span className="text-sm font-medium text-foreground truncate flex-1">{pdfFile.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => setPdfFile(null)}
+                          className="w-7 h-7 flex items-center justify-center text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                          aria-label="Quitar PDF"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => pdfFileRef.current?.click()}
+                        className="w-full flex items-center justify-center gap-2 p-4 border-2 border-dashed border-border hover:border-secondary/60 hover:bg-muted/30 transition-colors"
+                      >
+                        <FileText size={22} className="text-muted-foreground" />
+                        <div className="text-left">
+                          <p className="text-sm font-semibold text-foreground">Adjuntar PDF</p>
+                          <p className="text-[11px] text-muted-foreground">hasta 500 KB · se mostrará en tu aviso</p>
+                        </div>
+                      </button>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -686,8 +892,14 @@ const AdvertiserPublish = () => {
                   <p className="text-[11px] text-muted-foreground mt-1 mb-2">
                     Actívalos con “+”. Se aplican a tu aviso.
                   </p>
+                  {!urgenteAllowed && (
+                    <p className="text-[11px] text-muted-foreground mb-2 flex items-center gap-1.5">
+                      <Flame size={12} className="text-muted-foreground shrink-0" />
+                      “Urgente” solo está disponible en avisos de hasta {URGENTE_MAX_DAYS} días.
+                    </p>
+                  )}
                   <div className="space-y-2">
-                    {EXTRA_DEFS.map(({ key, label, sub, icon: Icon }) => {
+                    {visibleExtras.map(({ key, label, sub, icon: Icon }) => {
                       const count = extras[key] ?? 0;
                       const unit = settings.extras[key as keyof ExtraPrices] ?? 0;
                       return (
@@ -699,11 +911,11 @@ const AdvertiserPublish = () => {
                           </div>
                           <span className="text-xs font-bold text-muted-foreground hidden sm:inline">{formatSoles(unit)} c/u</span>
                           <div className="flex items-center border">
-                            <button type="button" onClick={() => setExtraCount(key, count - 1)} className="w-8 h-8 flex items-center justify-center hover:bg-muted disabled:opacity-30" disabled={count <= 0}>
+                            <button type="button" aria-label={`Quitar ${label}`} onClick={() => setExtraCount(key, count - 1)} className="w-8 h-8 flex items-center justify-center hover:bg-muted disabled:opacity-30" disabled={count <= 0}>
                               <Minus size={12} />
                             </button>
                             <span className="w-8 text-center text-sm font-bold">{count}</span>
-                            <button type="button" onClick={() => setExtraCount(key, count + 1)} className="w-8 h-8 flex items-center justify-center hover:bg-muted disabled:opacity-30" disabled={count >= quantity}>
+                            <button type="button" aria-label={`Agregar ${label}`} onClick={() => setExtraCount(key, count + 1)} className="w-8 h-8 flex items-center justify-center hover:bg-muted disabled:opacity-30" disabled={count >= quantity}>
                               <Plus size={12} />
                             </button>
                           </div>
@@ -718,15 +930,15 @@ const AdvertiserPublish = () => {
                 <div className="border bg-muted/30 p-4 space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Aviso ({duration} días)</span>
-                    <span className="font-bold">{solesToCredits(packageBase)} cr</span>
+                    <span className="font-bold">{formatCredits(solesToCredits(packageBase))}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Adicionales</span>
-                    <span className="font-bold">{solesToCredits(extrasSum)} cr</span>
+                    <span className="font-bold">{formatCredits(solesToCredits(extrasSum))}</span>
                   </div>
                   <div className="border-t pt-2 flex items-baseline justify-between">
                     <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Total en créditos</span>
-                    <span className="text-2xl font-extrabold text-primary">{totalCredits} cr</span>
+                    <span className="text-2xl font-extrabold text-primary">{formatCredits(totalCredits)}</span>
                   </div>
                   <p className="text-[11px] text-muted-foreground pt-1">
                     Se descontará de tu saldo de créditos al publicar. (Boleta: {formatSoles(total)})
@@ -749,18 +961,18 @@ const AdvertiserPublish = () => {
               <CardContent className="p-5 space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Aviso · {duration} días</span>
-                  <span className="font-bold">{solesToCredits(packageBase)} cr</span>
+                  <span className="font-bold">{formatCredits(solesToCredits(packageBase))}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Adicionales</span>
-                  <span className="font-bold">{solesToCredits(extrasSum)} cr</span>
+                  <span className="font-bold">{formatCredits(solesToCredits(extrasSum))}</span>
                 </div>
                 {promoPct > 0 && (
                   <div className="flex justify-between text-sm text-success">
                     <span className="flex items-center gap-1">
                       <Percent size={12} /> Promo {activePromo?.name} (−{promoPct}%)
                     </span>
-                    <span className="font-bold">−{baseCredits - totalCredits} cr</span>
+                    <span className="font-bold">−{formatCredits(baseCredits - totalCredits)}</span>
                   </div>
                 )}
                 <div className="border-t pt-3 flex items-baseline justify-between">
@@ -769,7 +981,7 @@ const AdvertiserPublish = () => {
                     {promoPct > 0 && (
                       <span className="text-sm font-normal text-muted-foreground line-through mr-2">{baseCredits}</span>
                     )}
-                    {totalCredits} cr
+                    {formatCredits(totalCredits)}
                   </span>
                 </div>
                 <div className="border-t pt-3 flex items-baseline justify-between">
@@ -778,7 +990,7 @@ const AdvertiserPublish = () => {
                     <Loader2 size={14} className="animate-spin text-muted-foreground" />
                   ) : (
                     <span className={`text-sm font-bold ${balanceCredits >= totalCredits ? "text-success" : "text-destructive"}`}>
-                      {balanceCredits} cr
+                      {formatCredits(balanceCredits)}
                     </span>
                   )}
                 </div>
@@ -829,11 +1041,31 @@ const AdvertiserPublish = () => {
             </Card>
 
             <div className="flex flex-col gap-2">
-              <Button variant="hero" size="lg" className="w-full rounded-none" onClick={openPublishFlow}>
-                Publicar aviso <ArrowRight size={16} className="ml-1" />
+              {/* `disabled` solo mientras se publica: si faltan campos dejamos el
+                  botón activo para que openPublishFlow explique QUÉ falta. */}
+              <Button variant="hero" size="lg" className="w-full rounded-none" onClick={openPublishFlow} disabled={publishing || savingDraft}>
+                {publishing
+                  ? <><Loader2 size={16} className="mr-1 animate-spin" /> Publicando…</>
+                  : <>Publicar aviso <ArrowRight size={16} className="ml-1" /></>}
               </Button>
+
+              {/* Guardar sin pagar: el aviso queda en "Mis avisos › Borradores".
+                  No exige identidad ni créditos — no se cobra nada. */}
+              <Button
+                variant="outline"
+                size="lg"
+                className="w-full rounded-none"
+                onClick={saveDraft}
+                disabled={publishing || savingDraft}
+              >
+                {savingDraft
+                  ? <><Loader2 size={16} className="mr-1 animate-spin" /> Guardando…</>
+                  : <><Save size={16} className="mr-1.5" /> Guardar en mis borradores</>}
+              </Button>
+
               <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 justify-center text-center">
                 <Wallet size={12} className="text-secondary" /> Se descontarán créditos de tu saldo al publicar.
+                Guardar como borrador es gratis.
               </p>
             </div>
           </div>
@@ -842,65 +1074,16 @@ const AdvertiserPublish = () => {
 
 
 
-      {/* Popup verificación */}
-      <Dialog open={verifyOpen} onOpenChange={setVerifyOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Verifica tu identidad</DialogTitle>
-            <DialogDescription>
-              Antes de publicar, indícanos si publicas como persona natural o jurídica.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => { setPersonType("natural"); setDocNumber(""); setVerifiedName(""); }}
-                className={`p-4 border text-left transition-all ${personType === "natural" ? "border-secondary bg-secondary/10" : "border-border hover:bg-muted/50"}`}
-              >
-                <User size={20} className="text-secondary mb-2" />
-                <p className="font-bold text-sm">Persona natural</p>
-                <p className="text-[11px] text-muted-foreground">DNI · 8 dígitos</p>
-              </button>
-              <button
-                type="button"
-                onClick={() => { setPersonType("juridica"); setDocNumber(""); setVerifiedName(""); }}
-                className={`p-4 border text-left transition-all ${personType === "juridica" ? "border-secondary bg-secondary/10" : "border-border hover:bg-muted/50"}`}
-              >
-                <Building2 size={20} className="text-secondary mb-2" />
-                <p className="font-bold text-sm">Persona jurídica</p>
-                <p className="text-[11px] text-muted-foreground">RUC · 11 dígitos</p>
-              </button>
-            </div>
-            {personType && (
-              <div className="flex gap-2 items-end">
-                <div className="flex-1">
-                  <Label>{personType === "natural" ? "DNI" : "RUC"}</Label>
-                  <Input
-                    value={docNumber}
-                    onChange={(e) => { setDocNumber(e.target.value.replace(/\D/g, "")); setVerifiedName(""); }}
-                    maxLength={personType === "natural" ? 8 : 11}
-                    placeholder={personType === "natural" ? "12345678" : "20123456789"}
-                    className="mt-1"
-                    disabled={verifying}
-                  />
-                </div>
-                <Button onClick={handleVerify} disabled={verifying} className="gap-2">
-                  <ShieldCheck size={14} /> {verifying ? "Verificando…" : "Verificar"}
-                </Button>
-              </div>
-            )}
-            {verifiedName && (
-              <p className="text-xs text-success flex items-center gap-1.5">
-                <ShieldCheck size={13} /> {verifiedName}
-              </p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setVerifyOpen(false)}>Más tarde</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Verificación de identidad — consulta RENIEC/SUNAT y exige confirmación.
+          Componente compartido con la publicación de borradores. */}
+      <VerifyIdentityDialog
+        open={verifyOpen}
+        onOpenChange={setVerifyOpen}
+        enabled={hasSession}
+        defaultPersonType={personType}
+        defaultDocNumber={docNumber}
+        onConfirmed={confirmIdentity}
+      />
 
       {/* Modal compra de créditos — configurador (cuando no hay saldo suficiente) */}
       <BuyCreditsModal
@@ -913,11 +1096,15 @@ const AdvertiserPublish = () => {
           setBuyCreditsOpen(false);
           // Tras comprar, si ya alcanza, se publica de inmediato y se descuenta.
           if (Math.round(newBalance) >= totalCredits) {
-            doPublish();
+            // Si el aviso ya se publicó y solo faltaba el cobro, se cobra ese
+            // aviso. Llamar a doPublish() aquí publicaría un duplicado.
+            const pending = pendingChargeListingId.current;
+            if (pending) chargePendingListing(pending);
+            else doPublish();
           } else {
             toast({
               title: "Créditos añadidos",
-              description: `Tu saldo es ${Math.round(newBalance)} cr, pero este aviso cuesta ${totalCredits} cr. Compra un poco más para publicar.`,
+              description: `Tu saldo es ${formatCredits(newBalance)}, pero este aviso cuesta ${formatCredits(totalCredits)}. Compra un poco más para publicar.`,
             });
           }
         }}

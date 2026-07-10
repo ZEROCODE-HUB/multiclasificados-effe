@@ -6,7 +6,7 @@ import {
   BarChart3, Users, Star, CreditCard, Shield,
 } from "lucide-react";
 import { useState } from "react";
-import { categories } from "@/data/mockData";
+import { useCategories } from "@/hooks/useCategories";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,7 +15,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useSession } from "@/hooks/useSession";
+import { useSession, isStaffRole } from "@/hooks/useSession";
 import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { signOut } from "@/lib/auth";
@@ -26,6 +26,7 @@ import { CreditsBalance } from "@/components/CreditsBalance";
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const categories = useCategories();
   const navigate = useNavigate();
   const session = useSession();
   const unread = useUnreadMessages();
@@ -42,7 +43,10 @@ export function Navbar() {
   };
 
   const isUser = session && (session.role === "anunciante" || session.role === "buscador");
-  const isAdmin = session && (session.role === "admin" || session.role === "superadmin");
+  // El staff no opera como usuario: se le ocultan "Publicar", el saldo de
+  // créditos y todo enlace a los paneles de usuario (RequireRole ya los bloquea,
+  // pero mostrarlos solo lleva a "Acceso denegado").
+  const isAdmin = !!session && isStaffRole(session.role);
 
   // Items unificados del menú Mi Cuenta
   const accountItems = isUser
@@ -94,12 +98,14 @@ export function Navbar() {
           <Link to="/buscar" className="px-3 py-2 text-sm font-semibold text-foreground hover:text-secondary transition-colors">
             Explorar
           </Link>
-          <Link
-            to="/dashboard/anunciante/publicar"
-            className="px-3 py-2 text-sm font-semibold text-foreground hover:text-secondary transition-colors"
-          >
-            Publicar
-          </Link>
+          {!isAdmin && (
+            <Link
+              to="/dashboard/anunciante/publicar"
+              className="px-3 py-2 text-sm font-semibold text-foreground hover:text-secondary transition-colors"
+            >
+              Publicar
+            </Link>
+          )}
         </nav>
 
         <form
@@ -142,7 +148,7 @@ export function Navbar() {
             </>
           )}
 
-          <CreditsBalance />
+          {!isAdmin && <CreditsBalance />}
 
           <DropdownMenu>
             <DropdownMenuTrigger className="flex items-center gap-2 ml-2 pl-1.5 pr-3 py-1.5 border border-border hover:border-secondary/50 hover:bg-muted/50 transition-all outline-none rounded-none">
@@ -222,23 +228,28 @@ export function Navbar() {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Link to="/dashboard/anunciante/publicar" className="ml-2">
-            <Button size="sm" className="gap-1.5 font-semibold rounded-none px-4">
-              <PlusCircle size={14} /> Publicar
-            </Button>
-          </Link>
+          {!isAdmin && (
+            <Link to="/dashboard/anunciante/publicar" className="ml-2">
+              <Button size="sm" className="gap-1.5 font-semibold rounded-none px-4">
+                <PlusCircle size={14} /> Publicar
+              </Button>
+            </Link>
+          )}
         </div>
 
-        <Link
-          to="/dashboard/anunciante/publicar"
-          className="md:hidden ml-auto p-2 text-foreground"
-          aria-label="Publicar"
-        >
-          <PlusCircle size={22} />
-        </Link>
+        {!isAdmin && (
+          <Link
+            to="/dashboard/anunciante/publicar"
+            className="md:hidden ml-auto p-2 text-foreground"
+            aria-label="Publicar"
+          >
+            <PlusCircle size={22} />
+          </Link>
+        )}
         <button
           onClick={() => setMobileOpen(!mobileOpen)}
-          className="md:hidden p-2 text-foreground"
+          /* Sin el botón "Publicar" (staff), la hamburguesa asume su `ml-auto`. */
+          className={`md:hidden p-2 text-foreground ${isAdmin ? "ml-auto" : ""}`}
           aria-label="Menú"
         >
           {mobileOpen ? <X size={24} /> : <Menu size={24} />}
@@ -278,6 +289,34 @@ export function Navbar() {
                     <it.icon size={16} className="text-muted-foreground" /> {it.label}
                   </Link>
                 ))}
+                <div className="border-t my-2" />
+                <button
+                  onClick={() => { logout(); setMobileOpen(false); }}
+                  className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/10"
+                >
+                  <LogOut size={16} /> Cerrar sesión
+                </button>
+              </>
+            ) : isAdmin ? (
+              /* Staff con sesión: navegación pública + su panel. Nada de
+                 "Publicar", "Ingresar" ni enlaces a paneles de usuario. */
+              <>
+                <p className="px-3 py-2 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground">
+                  {session!.role === "superadmin" ? "Super Admin" : "Administrador"}
+                </p>
+                <Link to="/" onClick={() => setMobileOpen(false)} className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium hover:bg-muted/50">
+                  Inicio
+                </Link>
+                <Link to="/buscar" onClick={() => setMobileOpen(false)} className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium hover:bg-muted/50">
+                  Explorar
+                </Link>
+                <Link
+                  to={`/dashboard/${session!.role}`}
+                  onClick={() => setMobileOpen(false)}
+                  className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium hover:bg-muted/50"
+                >
+                  <Shield size={16} className="text-muted-foreground" /> Ir al panel admin
+                </Link>
                 <div className="border-t my-2" />
                 <button
                   onClick={() => { logout(); setMobileOpen(false); }}

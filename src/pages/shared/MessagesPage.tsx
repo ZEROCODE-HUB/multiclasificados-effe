@@ -5,8 +5,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeft, Send, Search, CheckCircle2, Check, CheckCheck } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { ArrowLeft, Send, Search, CheckCircle2, Check, CheckCheck, Flag } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { useKeyboardInset } from "@/hooks/useKeyboardInset";
+import { reportUser, USER_REPORT_REASONS } from "@/lib/reports";
 import { loadSold, markSold } from "@/lib/pricing";
 import {
   fetchConversations, fetchMessages, sendMessage, markDelivered, markRead,
@@ -47,6 +55,13 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
   const [sold, setSold] = useState(() => loadSold());
   const [loadingConvs, setLoadingConvs] = useState(true);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
+
+  // Reporte del otro participante del chat (misma tabla `reports` que el aviso).
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportCategory, setReportCategory] = useState("");
+  const [reportDetail, setReportDetail] = useState("");
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const { kbPad, scrollFocusedIntoView } = useKeyboardInset();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const msgChannel = useRef<RealtimeChannel | null>(null);
@@ -159,6 +174,22 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
     }
   };
 
+  const submitReport = async () => {
+    if (!selected || !reportCategory) return;
+    setReportSubmitting(true);
+    try {
+      await reportUser(selected.counterpart_id, reportCategory, reportDetail);
+      setReportOpen(false);
+      setReportCategory("");
+      setReportDetail("");
+      toast({ title: "Usuario reportado", description: "Nuestro equipo de moderación revisará esta conversación." });
+    } catch (e) {
+      toast({ title: "No se pudo reportar", description: e instanceof Error ? e.message : "Intenta de nuevo.", variant: "destructive" });
+    } finally {
+      setReportSubmitting(false);
+    }
+  };
+
   const toggleSold = () => {
     if (!selected) return;
     markSold(selected.listing_id, role_side, role_side === "buyer" ? "Comprador" : selected.counterpart_name);
@@ -167,15 +198,16 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
   };
 
   return (
-    <DashboardLayout role={role}>
+    <DashboardLayout role={role} fullHeight>
       {/* En móvil el chat va edge-to-edge (como WhatsApp); en desktop se mantiene en el contenedor.
           OJO: sin animate-fade-in aquí — su transform rompería el position:fixed del grid. */}
-      <div className="-mx-3 sm:-mx-6 lg:mx-0">
-        <h1 className="text-2xl font-bold text-foreground mb-4 lg:block hidden px-3 sm:px-0">Mensajes</h1>
+      <div className="-mx-3 sm:-mx-6 lg:mx-0 lg:flex lg:flex-col lg:flex-1 lg:min-h-0">
+        {/* El título "Mensajes" ya lo pinta la cabecera de DashboardLayout. */}
 
         {/* Móvil: contenedor fijo entre el navbar superior (64px) y el inferior (64px),
-            a pantalla completa de lado a lado. Desktop (lg): layout normal. */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 lg:gap-4 fixed inset-x-0 top-16 md:top-[76px] bottom-16 z-30 lg:static lg:inset-auto lg:top-auto lg:bottom-auto lg:z-auto lg:h-[calc(100vh-12rem)]">
+            a pantalla completa de lado a lado. Desktop (lg): ocupa el alto libre que le
+            cede el layout (`fullHeight`) y scrollea por dentro, nunca la página. */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 lg:gap-4 fixed inset-x-0 top-16 md:top-[76px] bottom-16 z-30 lg:static lg:inset-auto lg:top-auto lg:bottom-auto lg:z-auto lg:flex-1 lg:min-h-0">
           {/* Lista de conversaciones */}
           <Card className={`lg:col-span-1 overflow-hidden rounded-none border-x-0 lg:rounded-xl lg:border-x h-full lg:h-auto ${selected ? "hidden lg:flex lg:flex-col" : "flex flex-col"}`}>
             <CardHeader className="pb-3">
@@ -252,6 +284,14 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
                       <CardTitle className="text-sm truncate">{selected.counterpart_name}</CardTitle>
                       <p className="text-xs text-muted-foreground truncate">{selected.listing_title}</p>
                     </div>
+                    <button
+                      onClick={() => setReportOpen(true)}
+                      className="p-2 -mr-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-muted transition-colors shrink-0"
+                      aria-label={`Reportar a ${selected.counterpart_name}`}
+                      title="Reportar a este usuario"
+                    >
+                      <Flag size={18} />
+                    </button>
                   </div>
                   {selected.listing_category !== "empleos" && (
                     <div className="mt-2 pt-2 border-t flex items-center justify-between gap-2 flex-wrap">
@@ -324,6 +364,45 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
           </Card>
         </div>
       </div>
+
+      {/* Reportar al otro participante del chat (REQ-10). */}
+      <Dialog open={reportOpen} onOpenChange={setReportOpen}>
+        <DialogContent
+          className="sm:max-w-md max-h-[90vh] overflow-y-auto"
+          onFocusCapture={scrollFocusedIntoView}
+          style={kbPad ? { paddingBottom: kbPad + 24 } : undefined}
+        >
+          <DialogHeader>
+            <DialogTitle>Reportar usuario</DialogTitle>
+            <DialogDescription>
+              Cuéntanos qué problema observas con {selected?.counterpart_name || "este usuario"}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Label>Motivo del reporte</Label>
+            <Select value={reportCategory} onValueChange={setReportCategory}>
+              <SelectTrigger><SelectValue placeholder="Selecciona un motivo" /></SelectTrigger>
+              <SelectContent>
+                {USER_REPORT_REASONS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Label htmlFor="chat-report-detail">Detalle (opcional)</Label>
+            <Textarea
+              id="chat-report-detail"
+              rows={3}
+              value={reportDetail}
+              onChange={(e) => setReportDetail(e.target.value)}
+              placeholder="Cuéntanos más sobre el problema…"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setReportOpen(false)}>Cancelar</Button>
+            <Button onClick={submitReport} disabled={!reportCategory || reportSubmitting} className="gap-2">
+              <Flag size={14} /> {reportSubmitting ? "Enviando…" : "Enviar reporte"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 };

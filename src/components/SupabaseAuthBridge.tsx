@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
-import { syncSession, AccountBlockedError } from "@/lib/auth";
+import { syncSession, AccountBlockedError, isBlockingStaffLogin } from "@/lib/auth";
 import { clearSession, getSession } from "@/hooks/useSession";
 import { savePushToken } from "@/lib/push";
 
@@ -32,6 +32,15 @@ export function SupabaseAuthBridge() {
       supabase.realtime.setAuth(session?.access_token ?? null);
 
       if (session?.user) {
+        // Si estamos en medio de un login de usuario que puede ser rechazado por
+        // ser cuenta de staff, NO sincronizamos: evita persistir la sesión de
+        // admin y la redirección en falso al panel. signInWithPassword la cerrará.
+        //
+        // Ojo: supabase-js emite SIGNED_IN *dentro* de signInWithPassword, así que
+        // esta salida temprana cubre TODO login con contraseña por /auth, no solo
+        // el de un admin. Por eso signInWithPassword hace por su cuenta el
+        // syncSession y el savePushToken cuando la cuenta resulta ser de usuario.
+        if (isBlockingStaffLogin()) return;
         safeSync();
         // Asocia el token de push del dispositivo a este usuario (en el APK).
         savePushToken();

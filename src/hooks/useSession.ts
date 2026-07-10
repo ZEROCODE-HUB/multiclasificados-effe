@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-export type SessionRole = "anunciante" | "buscador" | "admin" | "superadmin";
+export type SessionRole = "anunciante" | "buscador" | "soporte" | "moderador" | "admin" | "superadmin";
 
 export interface Session {
   role: SessionRole;
@@ -10,6 +10,16 @@ export interface Session {
   email?: string;
   /** true cuando la sesión proviene de Supabase (no de los botones demo). */
   supabase?: boolean;
+}
+
+// Roles de staff (personal de la plataforma). Se usan para dos cosas opuestas:
+// darles el panel admin y NEGARLES los paneles de usuario.
+// Moderador y soporte también son personal: entran al panel, y lo que ven dentro
+// lo decide la Matriz de permisos (role_permissions), no este listado.
+const STAFF: SessionRole[] = ["admin", "superadmin", "moderador", "soporte"];
+
+export function isStaffRole(role: SessionRole | undefined | null): boolean {
+  return !!role && STAFF.includes(role);
 }
 
 const KEY = "effe_session";

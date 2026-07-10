@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Bell, BellOff, Clock, Search, Trash2, Play } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { categories } from "@/data/mockData";
+import { useCategories } from "@/hooks/useCategories";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -20,10 +20,10 @@ import {
 const fmtDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString("es-PE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
-const catName = (id?: string) => (id ? categories.find((c) => c.id === id)?.name ?? id : "Todas");
-
 const SeekerSearches = () => {
   const navigate = useNavigate();
+  const categories = useCategories();
+  const catName = (id?: string) => (id ? categories.find((c) => c.id === id)?.name ?? id : "Todas");
   const [items, setItems] = useState<SavedSearch[]>([]);
   const [loading, setLoading] = useState(true);
   const [counts, setCounts] = useState<Record<string, number>>({});

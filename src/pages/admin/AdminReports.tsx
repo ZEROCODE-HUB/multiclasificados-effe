@@ -12,7 +12,7 @@ import {
   PieChart, Pie, Cell,
 } from "recharts";
 import { toast } from "@/hooks/use-toast";
-import { categories } from "@/data/mockData";
+import { useCategories } from "@/hooks/useCategories";
 import {
   fetchCategoryDistribution, fetchCategoryRevenue, fetchRegionDistribution,
   fetchClaimsSummary, fetchGrowthSeries, type ClaimsSummary,
@@ -34,6 +34,7 @@ function ReportFilters({ filters, setFilters, regions, onExport, show = { dates:
   onExport: (f: string) => void;
   show?: { dates?: boolean; catRegion?: boolean };
 }) {
+  const categories = useCategories();
   const upd = (k: keyof Filters, v: string) => setFilters((f) => ({ ...f, [k]: v }));
   const anyFilter = show.dates || show.catRegion;
   return (
@@ -90,6 +91,7 @@ function ReportFilters({ filters, setFilters, regions, onExport, show = { dates:
 }
 
 const AdminReports = ({ role }: { role: AdminRole }) => {
+  const categories = useCategories();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [filters, setFilters] = useState<Filters>({ from: "", to: "", cat: "all", region: "all" });
 
@@ -151,7 +153,12 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
       title = `Reporte de ${activeTab}`;
       rows = revenueSeries.map((r) => ({ Mes: r.mes, "Ingresos S/": r.ingresos, "Usuarios nuevos": r.usuarios }));
     }
-    exportRows(format, `reporte-${activeTab}`, `${title}${stamp}`, rows);
+    try {
+      exportRows(format, `reporte-${activeTab}`, `${title}${stamp}`, rows);
+    } catch {
+      toast({ title: "No se pudo exportar el reporte", variant: "destructive" });
+      return;
+    }
     toast({ title: "Reporte exportado", description: `${activeTab}.${format}` });
   };
 
@@ -183,7 +190,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Gratuitos por categoría */}
                 <Card>
-                  <CardHeader><CardTitle className="text-sm">Avisos gratuitos por categoría</CardTitle></CardHeader>
+                  <CardHeader><CardTitle className="text-sm">Avisos por categoría</CardTitle></CardHeader>
                   <CardContent className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={freeByCategory}>
@@ -222,7 +229,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
 
                 {/* Gratuitos por región */}
                 <Card>
-                  <CardHeader><CardTitle className="text-sm">Avisos gratuitos por región</CardTitle></CardHeader>
+                  <CardHeader><CardTitle className="text-sm">Avisos por región</CardTitle></CardHeader>
                   <CardContent className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>

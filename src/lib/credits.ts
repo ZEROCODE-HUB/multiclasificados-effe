@@ -1,5 +1,5 @@
 // Sistema de créditos pre-pagados.
-// Los créditos están desvinculados del sol: 1 sol = 10 créditos (CREDIT_MULTIPLIER).
+// 1 crédito = 1 sol (CREDIT_MULTIPLIER = 1); el saldo se muestra como "S/".
 // El saldo se descuenta al publicar un aviso.
 import { supabase } from "@/lib/supabase";
 import { splitIgv } from "@/lib/pricing";

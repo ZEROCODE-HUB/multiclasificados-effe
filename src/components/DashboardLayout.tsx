@@ -4,6 +4,10 @@ import { Navbar } from "@/components/Navbar";
 interface DashboardLayoutProps {
   children: React.ReactNode;
   role: "anunciante" | "buscador";
+  /** El hijo ocupa la altura libre exacta y hace su propio scroll interno, en
+   *  vez de estirar la página (chat). Solo en escritorio: en móvil el chat ya
+   *  se posiciona fijo entre las dos barras. */
+  fullHeight?: boolean;
 }
 
 const titlesByPath: Record<string, string> = {
@@ -23,12 +27,12 @@ const titlesByPath: Record<string, string> = {
   "/dashboard/buscador/configuracion": "Configuración",
 };
 
-export function DashboardLayout({ children }: DashboardLayoutProps) {
+export function DashboardLayout({ children, fullHeight = false }: DashboardLayoutProps) {
   const { pathname } = useLocation();
   const title = titlesByPath[pathname] ?? "Mi cuenta";
 
   return (
-    <div className="min-h-screen flex flex-col w-full bg-background">
+    <div className={`min-h-screen flex flex-col w-full bg-background ${fullHeight ? "lg:h-screen lg:overflow-hidden" : ""}`}>
       <Navbar />
 
       <div className="border-b bg-muted/30">
@@ -38,8 +42,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         </div>
       </div>
 
-      <main className="flex-1 px-3 sm:px-6 lg:px-8 py-4 md:py-6 lg:py-8 pb-24 lg:pb-12">
-        <div className="mx-auto max-w-7xl w-full">{children}</div>
+      <main
+        className={`flex-1 px-3 sm:px-6 lg:px-8 py-4 md:py-6 lg:py-8 pb-24 lg:pb-12 ${
+          fullHeight ? "lg:flex lg:flex-col lg:min-h-0" : ""
+        }`}
+      >
+        <div className={`mx-auto max-w-7xl w-full ${fullHeight ? "lg:flex lg:flex-col lg:flex-1 lg:min-h-0" : ""}`}>
+          {children}
+        </div>
       </main>
     </div>
   );

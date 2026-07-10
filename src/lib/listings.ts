@@ -23,6 +23,8 @@ interface CardRow {
   lat: number | string | null;
   lng: number | string | null;
   featured: boolean;
+  urgent: boolean | null;
+  confidential: boolean | null;
   views: number | null;
   published_at: string | null;
   created_at: string | null;
@@ -44,6 +46,8 @@ export function mapCard(r: CardRow): Listing {
     imageUrl: r.image_url ?? FALLBACK_IMG,
     date: (r.published_at ?? r.created_at ?? new Date().toISOString()).slice(0, 10),
     featured: !!r.featured,
+    urgent: !!r.urgent,
+    confidential: !!r.confidential,
     advertiser: r.advertiser ?? "Anunciante",
     views: Number(r.views) || 0,
   };
@@ -64,7 +68,11 @@ export interface SearchFilters {
 // Lista de avisos para home / destacados.
 export async function fetchListings(opts?: { limit?: number; sort?: SortKey }): Promise<Listing[]> {
   try {
-    let query = supabase.from("listing_cards").select("*").limit(opts?.limit ?? 8);
+    // Prioridad por modalidad (documento): Urgente primero, luego Destacado, y
+    // dentro de cada grupo el orden pedido.
+    let query = supabase.from("listing_cards").select("*").limit(opts?.limit ?? 8)
+      .order("urgent", { ascending: false, nullsFirst: false })
+      .order("featured", { ascending: false, nullsFirst: false });
     if (opts?.sort === "price_asc") query = query.order("price", { ascending: true });
     else if (opts?.sort === "price_desc") query = query.order("price", { ascending: false });
     else if (opts?.sort === "views") query = query.order("views", { ascending: false });
@@ -135,6 +143,22 @@ export async function fetchListingById(id: string): Promise<Listing | null> {
   return null;
 }
 
+// Enlace (firmado, temporal) al PDF adjunto del aviso, si tiene uno. Cualquiera
+// puede pedirlo desde el detalle (política listing_docs_public_read). Devuelve
+// null si el aviso no tiene documento.
+export async function fetchListingDocumentUrl(id: string): Promise<string | null> {
+  if (!isUuid(id)) return null;
+  try {
+    const { data } = await supabase.from("listings").select("document_url").eq("id", id).maybeSingle();
+    const path = (data as { document_url?: string | null } | null)?.document_url;
+    if (!path) return null;
+    const { data: signed } = await supabase.storage.from("listing-docs").createSignedUrl(path, 60 * 60);
+    return signed?.signedUrl ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // Buscador con filtros combinados (usa el RPC search_listings).
 export async function searchListings(f: SearchFilters): Promise<Listing[]> {
   try {
@@ -162,10 +186,38 @@ export type ListingStatus =
 
 export type ListingCondition = "nuevo" | "usado" | "na";
 
+// Tiempo que le queda a un aviso activo antes de caducar, listo para mostrar.
+// `tone` gradúa el color: normal (>7 días), atención (≤7 días) y urgente (<1 día
+// o ya vencido). Devuelve null si no hay fecha de vencimiento.
+export interface ExpiryInfo { text: string; tone: "normal" | "warning" | "urgent" }
+export function expiryInfo(expiresAt: string | null, now: number = Date.now()): ExpiryInfo | null {
+  if (!expiresAt) return null;
+  const ms = new Date(expiresAt).getTime() - now;
+  if (Number.isNaN(ms)) return null;
+  if (ms <= 0) return { text: "Vencido", tone: "urgent" };
+
+  const mins = Math.floor(ms / 60000);
+  const hours = Math.floor(mins / 60);
+  const days = Math.floor(hours / 24);
+
+  let text: string;
+  if (days >= 1) text = `Vence en ${days} ${days === 1 ? "día" : "días"}`;
+  else if (hours >= 1) text = `Vence en ${hours} ${hours === 1 ? "hora" : "horas"}`;
+  else text = `Vence en ${mins} ${mins === 1 ? "minuto" : "minutos"}`;
+
+  const tone: ExpiryInfo["tone"] = days >= 7 ? "normal" : days >= 1 ? "warning" : "urgent";
+  return { text, tone };
+}
+
 export interface MyListing extends Listing {
   status: ListingStatus;
   expiresAt: string | null;
   condition: ListingCondition;
+  // Plan elegido antes de pagar (ver 0041_listing_draft_plan.sql). Solo tiene
+  // valor en los borradores: en un aviso publicado el plan real está en su orden.
+  planDurationDays: number | null;
+  planQuantity: number | null;
+  planExtras: Record<string, number | undefined> | null;
 }
 
 // Avisos del anunciante actual (todos sus estados). Usa la tabla `listings`
@@ -179,7 +231,7 @@ export async function fetchMyListings(): Promise<MyListing[]> {
     const { data, error } = await supabase
       .from("listings")
       .select(
-        "id, title, description, price, currency, category_id, condition, location, lat, lng, featured, views, status, published_at, expires_at, created_at, listing_images(url, sort_order)"
+        "id, title, description, price, currency, category_id, condition, location, lat, lng, featured, urgent, confidential, views, status, published_at, expires_at, created_at, plan_duration_days, plan_quantity, plan_extras, listing_images(url, sort_order)"
       )
       .eq("owner_id", user.id)
       .order("created_at", { ascending: false });
@@ -201,11 +253,16 @@ export async function fetchMyListings(): Promise<MyListing[]> {
         imageUrl: imgs[0]?.url || FALLBACK_IMG,
         date: (r.published_at ?? r.created_at ?? new Date().toISOString()).slice(0, 10),
         featured: !!r.featured,
+        urgent: !!r.urgent,
+        confidential: !!r.confidential,
         advertiser: "",
         views: Number(r.views) || 0,
         status: r.status as ListingStatus,
         expiresAt: r.expires_at ?? null,
         condition: (r.condition ?? "na") as ListingCondition,
+        planDurationDays: r.plan_duration_days != null ? Number(r.plan_duration_days) : null,
+        planQuantity: r.plan_quantity != null ? Number(r.plan_quantity) : null,
+        planExtras: (r.plan_extras ?? null) as Record<string, number | undefined> | null,
       };
     });
   } catch {

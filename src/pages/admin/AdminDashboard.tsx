@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { AdminRole } from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Users, ClipboardList, CheckCircle2, XCircle, DollarSign, ArrowUpRight, Flag } from "lucide-react";
@@ -13,19 +15,28 @@ import {
   fetchAdminListings, fetchRecentActivity,
   type AdminStats, type AdminListingRow, type ActivityItem,
 } from "@/lib/admin";
+import { auditEntityLabel, lowercaseFirst } from "@/lib/auditLabels";
 
 const COLORS = ["hsl(220 56% 20%)", "hsl(24 95% 53%)", "hsl(166 60% 45%)", "hsl(220 56% 45%)", "hsl(40 95% 55%)", "hsl(220 14% 60%)"];
 
 interface Props { role: AdminRole }
 
+// Fecha completa (la lista solo muestra el tiempo relativo, ej. "hace 2 h").
+function fullDate(at: string): string {
+  if (!at) return "";
+  const d = new Date(at);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleString("es-PE");
+}
+
 const AdminDashboard = ({ role }: Props) => {
-  const navigate = useNavigate();
   const [catFilter, setCatFilter] = useState<string>("all");
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [series, setSeries] = useState<{ mes: string; ingresos: number; usuarios: number }[]>([]);
   const [catDist, setCatDist] = useState<{ name: string; value: number }[]>([]);
   const [listings, setListings] = useState<AdminListingRow[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
+  // Actividad abierta en el cuadro de detalle (solo lectura).
+  const [detail, setDetail] = useState<ActivityItem | null>(null);
 
   // Datos reales de Supabase (con fallback a mock dentro de la capa admin).
   useEffect(() => {
@@ -57,19 +68,6 @@ const AdminDashboard = ({ role }: Props) => {
     { label: "Usuarios", value: (stats ? stats.users : 0).toLocaleString(), icon: Users, trend: "+8.4%", accent: "bg-primary/10 text-primary" },
     { label: "Ingresos (S/)", value: (stats ? stats.revenue : 0).toLocaleString(), icon: DollarSign, trend: "+14.1%", accent: "bg-success/15 text-success" },
   ];
-
-  // Ruta destino del botón "Ver" según el tipo de entidad de la actividad.
-  const activityHref = (a: ActivityItem): string | null => {
-    switch (a.entityType) {
-      case "listing": return a.entityId ? `/aviso/${a.entityId}` : null;
-      case "user":    return `/dashboard/${role}/usuarios`;
-      case "report":  return `/dashboard/${role}/conversaciones`;
-      case "setting": return `/dashboard/${role}/comercial`;
-      case "role":    return `/dashboard/superadmin/roles`;
-      default:        return null;
-    }
-  };
-
 
   return (
     <>
@@ -223,36 +221,85 @@ const AdminDashboard = ({ role }: Props) => {
           <CardTitle className="text-base md:text-lg">Actividad reciente</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          {activity.map((a, i) => {
-            const href = activityHref(a);
-            return (
-              <div key={i} className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition">
-                <div className="w-9 h-9 rounded-full bg-secondary/15 text-secondary flex items-center justify-center text-sm font-bold flex-shrink-0">
-                  {(a.who || "?").charAt(0).toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-foreground">
-                    <span className="font-semibold">{a.who}</span> {a.action} <span className="text-secondary font-medium">{a.target}</span>
-                  </p>
-                  <p className="text-xs text-muted-foreground">{a.time}</p>
-                </div>
-                {href && (
-                  <button
-                    onClick={() => navigate(href)}
-                    className="hidden sm:inline-flex"
-                    aria-label={`Ver ${a.target}`}
-                  >
-                    <Badge variant="outline" className="cursor-pointer hover:bg-secondary/10 hover:text-secondary hover:border-secondary/40 transition-colors">Ver</Badge>
-                  </button>
-                )}
+          {activity.map((a, i) => (
+            <div key={i} className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition">
+              <div className="w-9 h-9 rounded-full bg-secondary/15 text-secondary flex items-center justify-center text-sm font-bold flex-shrink-0">
+                {(a.who || "?").charAt(0).toUpperCase()}
               </div>
-            );
-          })}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-foreground">
+                  <span className="font-semibold">{a.who}</span> {lowercaseFirst(a.action)} <span className="text-secondary font-medium">{a.target}</span>
+                </p>
+                <p className="text-xs text-muted-foreground">{a.time}</p>
+              </div>
+              {/* Solo abre el detalle de la actividad; el admin no entra al panel
+                  del usuario ni a la vista pública del aviso. */}
+              <button
+                onClick={() => setDetail(a)}
+                className="hidden sm:inline-flex"
+                aria-label={`Ver detalle de la actividad de ${a.who}`}
+              >
+                <Badge variant="outline" className="cursor-pointer hover:bg-secondary/10 hover:text-secondary hover:border-secondary/40 transition-colors">Ver</Badge>
+              </button>
+            </div>
+          ))}
           {activity.length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-8">Sin actividad reciente.</p>
           )}
         </CardContent>
       </Card>
+
+      {/* Detalle de la actividad — solo lectura, sin navegación a otros paneles. */}
+      <Dialog open={detail !== null} onOpenChange={(o) => { if (!o) setDetail(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Detalle de la actividad</DialogTitle>
+            <DialogDescription>Información de solo lectura del registro seleccionado.</DialogDescription>
+          </DialogHeader>
+
+          {detail && (
+            <dl className="space-y-3 text-sm">
+              <div>
+                <dt className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Responsable</dt>
+                <dd className="text-foreground font-medium">{detail.who || "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Acción</dt>
+                <dd className="text-foreground">{detail.action || "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Objetivo</dt>
+                <dd className="text-foreground break-words">{detail.target || "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Fecha</dt>
+                <dd className="text-foreground">
+                  {fullDate(detail.at) || detail.time || "—"}
+                  {fullDate(detail.at) && detail.time && (
+                    <span className="text-muted-foreground"> · {detail.time}</span>
+                  )}
+                </dd>
+              </div>
+              {detail.entityType && (
+                <div>
+                  <dt className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Tipo</dt>
+                  <dd><Badge variant="outline">{auditEntityLabel(detail.entityType)}</Badge></dd>
+                </div>
+              )}
+              {detail.entityId && (
+                <div>
+                  <dt className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Identificador</dt>
+                  <dd className="font-mono text-xs text-foreground break-all">{detail.entityId}</dd>
+                </div>
+              )}
+            </dl>
+          )}
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDetail(null)}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };

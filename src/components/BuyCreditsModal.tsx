@@ -5,15 +5,19 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Wallet, ShieldCheck, User, Building2, Check, Loader2, Minus, Plus } from "lucide-react";
+import { Wallet, ShieldCheck, User, Building2, Check, CheckCircle2, AlertCircle, Loader2, Minus, Plus } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { purchaseCredits, type CreditPackage, type PurchaseInvoiceData } from "@/lib/credits";
 import {
-  loadSettings, priceForDuration, extrasTotal, formatSoles, solesToCredits,
+  loadSettings, priceForDuration, extrasTotal, formatSoles, formatCredits, solesToCredits,
   type DurationDays, type ExtrasSelection, type PricingSettings, type ExtraPrices,
 } from "@/lib/pricing";
 import { fetchPricingSettings } from "@/lib/pricingRemote";
 import { useKeyboardInset } from "@/hooks/useKeyboardInset";
+import { verifyDocument, normalizeDocNumber } from "@/lib/verifyDoc";
+
+// Correo válido para el comprobante.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 interface Props {
   open: boolean;
@@ -48,10 +52,74 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
   const [email, setEmail] = useState("");
   const [receiptType, setReceiptType] = useState<"boleta" | "factura">("boleta");
 
+  // Verificación del documento con Factiliza (nombre/razón social + datos).
+  const [verifiedName, setVerifiedName] = useState("");
+  const [docData, setDocData] = useState<Record<string, unknown> | null>(null);
+  const [verifyingDoc, setVerifyingDoc] = useState(false);
+  const [docError, setDocError] = useState("");
+
   const deficit = Math.max(0, creditCost - currentBalance);
 
   // En el APK, reserva el alto del teclado y centra el campo enfocado.
   const { kbPad, scrollFocusedIntoView } = useKeyboardInset();
+
+  // Al completar el documento (DNI 8 / RUC 11) lo consultamos automáticamente en
+  // Factiliza y mostramos el nombre/razón social y los datos disponibles.
+  useEffect(() => {
+    const docType = personType === "natural" ? "dni" : "ruc";
+    const requiredLen = personType === "natural" ? 8 : 11;
+    setDocError("");
+    if (docNumber.length !== requiredLen) {
+      setVerifiedName("");
+      setDocData(null);
+      setVerifyingDoc(false);
+      return;
+    }
+    let cancelled = false;
+    setVerifyingDoc(true);
+    setVerifiedName("");
+    setDocData(null);
+    verifyDocument(docType, docNumber)
+      .then((r) => {
+        if (cancelled) return;
+        if (r.ok) {
+          setVerifiedName(r.nombre ?? "");
+          setDocData(r.data ?? null);
+        } else {
+          setDocError(r.error ?? "No se pudo verificar el documento.");
+        }
+      })
+      .catch(() => { if (!cancelled) setDocError("No se pudo verificar el documento."); })
+      .finally(() => { if (!cancelled) setVerifyingDoc(false); });
+    return () => { cancelled = true; };
+  }, [docNumber, personType]);
+
+  const emailValid = EMAIL_RE.test(email.trim());
+  // Campo de Factiliza; "" si no viene o viene vacío (varios llegan en blanco).
+  const docField = (k: string): string => {
+    const v = docData?.[k];
+    return typeof v === "string" && v.trim() ? v.trim() : "";
+  };
+
+  // Ficha a mostrar tras verificar. Factiliza devuelve `direccion_completa` con
+  // el ubigeo ya concatenado; si falta, la armamos con dirección + ubigeo.
+  const ubigeo = [docField("distrito"), docField("provincia"), docField("departamento")]
+    .filter(Boolean).join(" - ");
+  const direccion = docField("direccion_completa")
+    || [docField("direccion"), ubigeo].filter(Boolean).join(", ");
+
+  const docRows: Array<[string, string]> = personType === "natural"
+    ? [
+        ["DNI", docNumber],
+        ["Domicilio", direccion],
+      ]
+    : [
+        ["RUC", docNumber],
+        ["Estado", docField("estado")],
+        ["Condición", docField("condicion")],
+        ["Tipo", docField("tipo_contribuyente")],
+        ["Domicilio fiscal", direccion],
+      ];
 
   // Al abrir: recarga la matriz de precios vigente desde la base de datos.
   useEffect(() => {
@@ -70,8 +138,15 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
 
   const handleBuy = async () => {
     if (creditsToBuy <= 0) { toast({ title: "Selecciona qué comprar", variant: "destructive" }); return; }
-    if (!docNumber.trim()) { toast({ title: "Ingresa tu documento", variant: "destructive" }); return; }
-    if (!email.trim()) { toast({ title: "Ingresa tu correo", variant: "destructive" }); return; }
+    if (!verifiedName) {
+      toast({
+        title: personType === "natural" ? "Verifica tu DNI" : "Verifica tu RUC",
+        description: "Ingresa un documento válido para continuar (se valida automáticamente).",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!emailValid) { toast({ title: "Ingresa un correo válido", variant: "destructive" }); return; }
     setBuying(true);
     try {
       const detailExtras = EXTRA_DEFS.filter((d) => extras[d.key]).map((d) => d.label);
@@ -86,14 +161,14 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
       const invoiceData: PurchaseInvoiceData = {
         receiptType,
         email: email.trim(),
-        advertiserName: "",
+        advertiserName: verifiedName,
         docType: personType === "natural" ? "dni" : "ruc",
         docNumber: docNumber.trim(),
       };
       const { newBalance, invoiceNumber } = await purchaseCredits(pkg, invoiceData);
       toast({
         title: "¡Créditos acreditados!",
-        description: `${creditsToBuy} créditos añadidos. Comprobante: ${invoiceNumber}`,
+        description: `Se añadieron ${formatCredits(creditsToBuy)} en créditos. Comprobante: ${invoiceNumber}`,
       });
       onPurchaseComplete(newBalance);
       onClose();
@@ -119,7 +194,7 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
             <Wallet size={18} className="text-secondary" /> Comprar créditos
           </DialogTitle>
           <DialogDescription>
-            Arma tu compra: elige cantidad de avisos, duración y adicionales. Todo suma créditos que podrás usar al publicar.
+            Arma tu compra: elige cantidad de avisos, duración y adicionales. 1 crédito vale 1 sol, así que pagas justo lo que ves.
           </DialogDescription>
         </DialogHeader>
 
@@ -127,10 +202,10 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
         {creditCost > 0 && (
           <div className="text-xs border p-3 bg-muted/30 flex items-center justify-between gap-2">
             <span className="text-muted-foreground">
-              Para publicar tu aviso necesitas <b className="text-foreground">{creditCost} cr</b>
-              {deficit > 0 && <> · tu saldo: {currentBalance} cr</>}
+              Para publicar tu aviso necesitas <b className="text-foreground">{formatCredits(creditCost)}</b>
+              {deficit > 0 && <> · tu saldo: {formatCredits(currentBalance)}</>}
             </span>
-            {deficit > 0 && <span className="font-bold text-destructive whitespace-nowrap">Faltan {deficit}</span>}
+            {deficit > 0 && <span className="font-bold text-destructive whitespace-nowrap">Faltan {formatCredits(deficit)}</span>}
           </div>
         )}
 
@@ -162,7 +237,7 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
                 <button key={d} type="button" onClick={() => setDuration(d)}
                   className={`p-2 border text-center transition-all ${isSel ? "border-secondary bg-secondary/10 ring-2 ring-secondary/30" : "border-border hover:bg-muted/50"}`}>
                   <p className="font-bold text-sm">{d} días</p>
-                  <p className="text-[11px] text-muted-foreground">{solesToCredits(p)} cr</p>
+                  <p className="text-[11px] text-muted-foreground">{formatCredits(solesToCredits(p))}</p>
                 </button>
               );
             })}
@@ -182,7 +257,7 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
                   className={`relative p-3 border text-left transition-all ${isSel ? "border-secondary bg-secondary/10 ring-2 ring-secondary/30" : "border-border hover:bg-muted/50"}`}>
                   <p className="font-bold text-xs">{d.label}</p>
                   <p className="text-[10px] text-muted-foreground">{d.sub}</p>
-                  <p className="text-xs font-semibold text-secondary mt-1">+{solesToCredits(unit)} cr</p>
+                  <p className="text-xs font-semibold text-secondary mt-1">+{formatCredits(solesToCredits(unit))}</p>
                   {isSel && <Check size={14} className="absolute top-2 right-2 text-secondary" />}
                 </button>
               );
@@ -194,17 +269,17 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
         <div className="border p-3 bg-secondary/5 space-y-1">
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground">{quantity} aviso{quantity > 1 ? "s" : ""} × {duration} días</span>
-            <span className="font-semibold">{solesToCredits(packageBase)} cr</span>
+            <span className="font-semibold">{formatCredits(solesToCredits(packageBase))}</span>
           </div>
           {extrasSum > 0 && (
             <div className="flex justify-between text-xs">
               <span className="text-muted-foreground">Adicionales</span>
-              <span className="font-semibold">{solesToCredits(extrasSum)} cr</span>
+              <span className="font-semibold">{formatCredits(solesToCredits(extrasSum))}</span>
             </div>
           )}
           <div className="border-t pt-2 flex justify-between items-baseline">
             <span className="font-bold uppercase tracking-wider text-xs">Créditos a comprar</span>
-            <span className="text-2xl font-extrabold text-secondary">{creditsToBuy} cr</span>
+            <span className="text-2xl font-extrabold text-secondary">{formatCredits(creditsToBuy)}</span>
           </div>
           <div className="flex justify-between text-[11px] text-muted-foreground">
             <span>Pagas (boleta)</span>
@@ -214,7 +289,7 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
             <p className={`text-[11px] ${coversAd ? "text-success" : "text-destructive"}`}>
               {coversAd
                 ? "✓ Con esta compra podrás publicar tu aviso."
-                : `Aún faltarían ${creditCost - balanceAfter} cr para publicar tu aviso.`}
+                : `Aún faltarían ${formatCredits(creditCost - balanceAfter)} para publicar tu aviso.`}
             </p>
           )}
         </div>
@@ -239,26 +314,63 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
             </button>
           </div>
           <div>
-            <Label className="text-xs">{personType === "natural" ? "DNI (8 dígitos)" : "RUC (11 dígitos)"}</Label>
+            <Label className="text-xs">
+              {personType === "natural" ? "DNI (8 dígitos)" : "RUC (11 dígitos)"} <span className="text-destructive">*</span>
+            </Label>
+            {/* Sin `maxLength`: recortaría el texto pegado antes de quitarle los
+                espacios. El tope lo aplica normalizeDocNumber, ya sobre dígitos. */}
             <Input value={docNumber} onFocus={scrollFocusedIntoView}
-              onChange={(e) => setDocNumber(e.target.value.replace(/\D/g, ""))}
-              maxLength={personType === "natural" ? 8 : 11}
+              onChange={(e) => setDocNumber(normalizeDocNumber(e.target.value, personType === "natural" ? 8 : 11))}
+              inputMode="numeric"
               placeholder={personType === "natural" ? "12345678" : "20123456789"} className="mt-1" />
+
+            {/* Resultado de la verificación con Factiliza */}
+            {verifyingDoc && (
+              <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Loader2 size={13} className="animate-spin" /> Verificando en Factiliza…
+              </p>
+            )}
+            {!verifyingDoc && verifiedName && (
+              <div className="mt-2 rounded-md border border-success/40 bg-success/5 p-2.5 text-xs space-y-1.5">
+                <p className="flex items-center gap-1.5 font-semibold text-success">
+                  <CheckCircle2 size={14} /> {personType === "natural" ? "Identidad verificada" : "Empresa verificada"}
+                </p>
+                <p className="font-medium text-foreground leading-snug">{verifiedName}</p>
+                {/* Ficha de Factiliza. Omitimos las filas que llegan vacías. */}
+                <dl className="space-y-0.5">
+                  {docRows.filter(([, v]) => v).map(([label, value]) => (
+                    <div key={label} className="flex gap-2">
+                      <dt className="shrink-0 text-muted-foreground">{label}:</dt>
+                      <dd className="text-foreground break-words">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            )}
+            {!verifyingDoc && docError && (
+              <p className="mt-2 flex items-start gap-1.5 text-xs text-destructive">
+                <AlertCircle size={13} className="mt-0.5 shrink-0" /> {docError}
+              </p>
+            )}
           </div>
           <div>
-            <Label className="text-xs">Correo para el comprobante</Label>
+            <Label className="text-xs">Correo para el comprobante <span className="text-destructive">*</span></Label>
             <Input type="email" value={email} onFocus={scrollFocusedIntoView}
               onChange={(e) => setEmail(e.target.value)}
+              inputMode="email"
               placeholder="tu@correo.com" className="mt-1" />
+            {email.length > 0 && !emailValid && (
+              <p className="mt-1 text-xs text-destructive">Ingresa un correo válido.</p>
+            )}
           </div>
         </div>
 
         <DialogFooter className="gap-2 pt-2">
           <Button variant="ghost" onClick={onClose} disabled={buying}>Cancelar</Button>
-          <Button onClick={handleBuy} disabled={buying || creditsToBuy <= 0} className="gap-2">
+          <Button onClick={handleBuy} disabled={buying || creditsToBuy <= 0 || verifyingDoc || !verifiedName || !emailValid} className="gap-2">
             {buying
               ? <><Loader2 size={14} className="animate-spin" /> Procesando…</>
-              : <><ShieldCheck size={14} /> Comprar {creditsToBuy} cr — {formatSoles(solesTotal)}</>}
+              : <><ShieldCheck size={14} /> Comprar {formatCredits(creditsToBuy)}</>}
           </Button>
         </DialogFooter>
       </DialogContent>

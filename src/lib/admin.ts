@@ -10,6 +10,10 @@ import {
   recentActivity as mockActivity,
 } from "@/data/adminMockData";
 import { loadInvoices } from "@/lib/pricing";
+import {
+  auditActionLabel, auditEntityDescription, auditEntityLabel, auditEntityName,
+  type EntityNames,
+} from "@/lib/auditLabels";
 
 const isUuid = (v: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
@@ -198,6 +202,18 @@ export async function deleteCategory(id: string) {
   if (error) throw error;
 }
 
+// Persiste el orden de las tarjetas: `ids` viene en el orden visible y su
+// posición pasa a ser el `sort_order` (1-based, como el seed).
+export async function reorderCategories(ids: string[]) {
+  const results = await Promise.all(
+    ids.map((id, i) =>
+      supabase.from("categories").update({ sort_order: i + 1 }).eq("id", id),
+    ),
+  );
+  const failed = results.find((r) => r.error);
+  if (failed?.error) throw failed.error;
+}
+
 // Tiempo relativo en español a partir de un timestamp ISO.
 function relativeTime(iso: string): string {
   const t = new Date(iso).getTime();
@@ -210,6 +226,31 @@ function relativeTime(iso: string): string {
   if (h < 24) return `Hace ${h} h`;
   const d = Math.floor(h / 24);
   return d === 1 ? "Ayer" : `Hace ${d} días`;
+}
+
+// Los `audit_logs` guardan solo el ID de la entidad afectada. Resuelve de una
+// vez los IDs de todas las filas a nombres legibles (usuario → correo,
+// aviso → título) para no consultar la BD fila por fila.
+async function resolveEntityNames(
+  logs: { entity_type?: string | null; entity_id?: string | null }[],
+): Promise<EntityNames> {
+  const idsOfType = (type: string) =>
+    [...new Set(logs.filter((l) => l.entity_type === type && l.entity_id).map((l) => l.entity_id as string))];
+
+  const userIds = idsOfType("user");
+  const listingIds = idsOfType("listing");
+  const users = new Map<string, string>();
+  const listings = new Map<string, string>();
+
+  if (userIds.length) {
+    const { data } = await supabase.from("profiles").select("id, full_name, email").in("id", userIds);
+    (data ?? []).forEach((u: any) => users.set(u.id, u.email || u.full_name || u.id));
+  }
+  if (listingIds.length) {
+    const { data } = await supabase.from("listings").select("id, title").in("id", listingIds);
+    (data ?? []).forEach((l: any) => listings.set(l.id, l.title || l.id));
+  }
+  return { users, listings };
 }
 
 export interface ActivityItem {
@@ -234,13 +275,21 @@ export async function fetchRecentActivity(): Promise<{ data: ActivityItem[]; rea
       .select("action, entity_type, entity_id, created_at, actor:profiles!audit_logs_actor_id_fkey(full_name, email)")
       .order("created_at", { ascending: false })
       .limit(8);
-    (logs ?? []).forEach((a: any) => items.push({
-      who: a.actor?.email || a.actor?.full_name || "Staff",
-      action: a.action,
-      target: [a.entity_type, a.entity_id].filter(Boolean).join(" "),
-      at: a.created_at, time: relativeTime(a.created_at),
-      entityType: a.entity_type ?? null, entityId: a.entity_id ?? null,
-    }));
+    // Mismas etiquetas que "Auditoría y registros": nada de `set_role_permission`
+    // ni de IDs crudos en la actividad reciente.
+    const names = await resolveEntityNames(logs ?? []);
+    (logs ?? []).forEach((a: any) => {
+      const type = a.entity_type ?? null;
+      const id = a.entity_id ?? null;
+      items.push({
+        who: a.actor?.email || a.actor?.full_name || "Staff",
+        action: auditActionLabel(a.action),
+        // Sin ID que resolver, el tipo traducido es lo más informativo que hay.
+        target: auditEntityName(type, id, names) || (type ? auditEntityLabel(type) : ""),
+        at: a.created_at, time: relativeTime(a.created_at),
+        entityType: type, entityId: id,
+      });
+    });
     if (items.length) {
       items.sort((x, y) => new Date(y.at).getTime() - new Date(x.at).getTime());
       return { data: items.slice(0, 6), real: true };
@@ -474,92 +523,64 @@ export async function resolveReport(reportId: string, action: "dismiss" | "warn"
   if (error) throw error;
 }
 
+// El aviso denunciado, tal como lo ve el moderador.
+export interface AdminListingDetail {
+  id: string; title: string; description: string | null; price: number; currency: string;
+  condition: string | null; category_id: string | null; subcategory_id: string | null;
+  location: string | null; status: string; featured: boolean; urgent: boolean; views: number;
+  rejection_reason: string | null; published_at: string | null; created_at: string;
+  advertiser: string | null; advertiser_id: string | null; images: string[];
+}
+
+/**
+ * Trae el aviso completo para moderación (admin_get_listing, 0044). No sirve la
+ * vista `listing_cards`: filtra `status = 'active'`, y un aviso denunciado suele
+ * estar deshabilitado justo por eso. Devuelve null si no existe o no hay permiso.
+ */
+export async function fetchAdminListing(listingId: string): Promise<AdminListingDetail | null> {
+  const { data, error } = await supabase.rpc("admin_get_listing", { p_id: listingId });
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return null;
+  return { ...row, images: row.images ?? [] } as AdminListingDetail;
+}
+
 // ------------------------------------------------------------------ Auditoría
 export interface AuditRow { id: string; actor: string; action: string; entity: string; ip: string; time: string }
 
-// Traducción de las acciones técnicas (audit_logs.action) a lenguaje claro.
-const AUDIT_ACTION_LABELS: Record<string, string> = {
-  delete_user: "Eliminó usuario",
-  set_user_status: "Cambió estado del usuario",
-  verify_user: "Verificó usuario",
-  reset_password: "Restableció contraseña",
-  set_user_role: "Cambió rol del usuario",
-  assign_role: "Asignó rol",
-  remove_role: "Quitó rol",
-  set_role_permission: "Cambió permisos del rol",
-  set_listing_status: "Cambió estado del aviso",
-  toggle_featured: "Cambió aviso destacado",
-  assign_report: "Asignó reporte",
-  resolve_report: "Resolvió reporte",
-  set_setting: "Cambió configuración",
-  send_message: "Envió mensaje",
-  broadcast: "Envió comunicado masivo",
-  grant_credits: "Otorgó créditos",
-};
+export { auditActionLabel } from "@/lib/auditLabels";
 
-// Traducción del tipo de entidad afectada.
-const AUDIT_ENTITY_LABELS: Record<string, string> = {
-  user: "Usuario",
-  listing: "Aviso",
-  report: "Reporte",
-  role: "Rol",
-  setting: "Configuración",
-  audience: "Audiencia",
-};
-
-// Traducción del segmento de audiencia (comunicados masivos) a español.
-const AUDIENCE_LABELS: Record<string, string> = {
-  all: "Todos",
-  anunciante: "Anunciantes",
-  buscador: "Buscadores",
-};
-
-export function auditActionLabel(action: string): string {
-  return AUDIT_ACTION_LABELS[action] ?? action;
+// "2026-07-09" → instante ISO del inicio/fin de ese día en la zona horaria del
+// navegador. created_at es timestamptz, así que "hasta el 9" debe incluir todo
+// el día 9 y no cortarse en su medianoche. Devuelve null si la fecha no es válida.
+function limiteDiaISO(fecha: string, fin: boolean): string | null {
+  const d = new Date(`${fecha}T${fin ? "23:59:59.999" : "00:00:00.000"}`);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-export async function fetchAuditLogs(): Promise<{ data: AuditRow[]; real: boolean }> {
+export async function fetchAuditLogs(range?: ReportDateRange): Promise<{ data: AuditRow[]; real: boolean }> {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from("audit_logs")
-      .select("id, action, entity_type, entity_id, ip, created_at, actor:profiles!audit_logs_actor_id_fkey(full_name, email)")
-      .order("created_at", { ascending: false })
-      .limit(200);
+      .select("id, action, entity_type, entity_id, ip, created_at, actor:profiles!audit_logs_actor_id_fkey(full_name, email)");
+
+    const desde = range?.from ? limiteDiaISO(range.from, false) : null;
+    const hasta = range?.to ? limiteDiaISO(range.to, true) : null;
+    if (desde) query = query.gte("created_at", desde);
+    if (hasta) query = query.lte("created_at", hasta);
+
+    // El tope de 200 se aplica dentro del rango pedido, no sobre todo el historial.
+    const { data, error } = await query.order("created_at", { ascending: false }).limit(200);
     if (error) throw error;
     if (data?.length || (await isAuthed())) {
       const logs = data ?? [];
-
-      // Resuelve los IDs a nombres legibles: usuarios → correo, avisos → título.
-      const userIds = [...new Set(logs.filter((l: any) => l.entity_type === "user" && l.entity_id).map((l: any) => l.entity_id))];
-      const listingIds = [...new Set(logs.filter((l: any) => l.entity_type === "listing" && l.entity_id).map((l: any) => l.entity_id))];
-
-      const userMap = new Map<string, string>();
-      const listingMap = new Map<string, string>();
-      if (userIds.length) {
-        const { data: us } = await supabase.from("profiles").select("id, full_name, email").in("id", userIds);
-        (us ?? []).forEach((u: any) => userMap.set(u.id, u.email || u.full_name || u.id));
-      }
-      if (listingIds.length) {
-        const { data: ls } = await supabase.from("listings").select("id, title").in("id", listingIds);
-        (ls ?? []).forEach((l: any) => listingMap.set(l.id, l.title || l.id));
-      }
-
-      const friendlyEntity = (type: string, id: string | null): string => {
-        const label = AUDIT_ENTITY_LABELS[type] ?? type ?? "—";
-        if (!id) return label;
-        let name = id;
-        if (type === "user") name = userMap.get(id) ?? id.slice(0, 8);
-        else if (type === "listing") name = listingMap.get(id) ?? id.slice(0, 8);
-        else if (type === "report") name = id.slice(0, 8);
-        else if (type === "audience") name = AUDIENCE_LABELS[id] ?? id;
-        return `${label}: ${name}`;
-      };
+      const names = await resolveEntityNames(logs);
 
       const rows: AuditRow[] = logs.map((l: any) => ({
         id: `L-${l.id}`,
         actor: l.actor?.email || l.actor?.full_name || "sistema",
         action: auditActionLabel(l.action),
-        entity: friendlyEntity(l.entity_type, l.entity_id),
+        entity: auditEntityDescription(l.entity_type ?? null, l.entity_id ?? null, names),
         ip: l.ip || "—",
         time: (l.created_at || "").replace("T", " ").slice(0, 16),
       }));

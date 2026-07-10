@@ -13,7 +13,7 @@ import { fetchMyListings, type MyListing } from "@/lib/listings";
 import { fetchAdvertiserStats, type AdvertiserStatsData } from "@/lib/stats";
 import { fetchConversations, type Conversation } from "@/lib/messaging";
 import { fetchApplicationsForOwner, STATUS_LABEL, type OwnerApplication } from "@/lib/applications";
-import { loadInvoices, formatSoles, avisosBreakdown } from "@/lib/pricing";
+import { loadInvoices, formatSoles, formatCredits, avisosBreakdown } from "@/lib/pricing";
 import { getCreditBalance, getCreditsSpent } from "@/lib/credits";
 import { BuyCreditsModal } from "@/components/BuyCreditsModal";
 
@@ -136,19 +136,19 @@ const AdvertiserDashboard = () => {
               <div className="border p-3 bg-muted/30">
                 <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Créditos disponibles</p>
                 <p className="text-xl font-extrabold mt-1 text-secondary">
-                  {creditBalance === null ? "…" : `${Math.round(creditBalance)} cr`}
+                  {creditBalance === null ? "…" : formatCredits(creditBalance)}
                 </p>
               </div>
               <div className="border p-3 bg-muted/30">
                 <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Créditos usados</p>
                 <p className="text-xl font-extrabold mt-1 text-muted-foreground">
-                  {Math.round(creditsSpent)} cr
+                  {formatCredits(creditsSpent)}
                 </p>
               </div>
               <div className="border p-3 bg-muted/30">
                 <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Total comprado</p>
                 <p className="text-xl font-extrabold mt-1 text-foreground">
-                  {creditBalance === null ? "…" : `${Math.round(creditBalance + creditsSpent)} cr`}
+                  {creditBalance === null ? "…" : formatCredits(creditBalance + creditsSpent)}
                 </p>
               </div>
             </div>
@@ -157,17 +157,17 @@ const AdvertiserDashboard = () => {
             <div className="border-2 border-secondary/30 bg-secondary/5 p-3">
               <p className="text-sm flex items-center gap-2 mb-3">
                 <ClipboardList size={16} className="text-secondary" />
-                Con tu saldo{creditBalance === null ? "" : ` (${Math.round(creditBalance)} cr)`} puedes publicar:
+                Con tu saldo{creditBalance === null ? "" : ` (${formatCredits(creditBalance)})`} puedes publicar:
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {avisosBreakdown(Math.round(creditBalance ?? 0)).map(({ dias, cost, count }) => (
+                {avisosBreakdown(creditBalance ?? 0).map(({ dias, cost, count }) => (
                   <div key={dias} className="border bg-background p-2.5 text-center">
                     <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{dias} días</p>
                     <p className="text-2xl font-extrabold text-secondary leading-tight mt-0.5">
                       {creditBalance === null ? "…" : count}
                     </p>
                     <p className="text-[10px] text-muted-foreground">
-                      aviso{count === 1 ? "" : "s"} · {cost} cr c/u
+                      aviso{count === 1 ? "" : "s"} · {formatCredits(cost)} c/u
                     </p>
                   </div>
                 ))}
