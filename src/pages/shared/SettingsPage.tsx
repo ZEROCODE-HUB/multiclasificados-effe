@@ -440,16 +440,22 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
             </DialogTitle>
             <DialogDescription>
               Esta acción es <b>irreversible</b>. Se eliminarán tu cuenta y todos tus datos.
-              Para confirmar, escribe <b>{DELETE_CONFIRM_WORD}</b>.
             </DialogDescription>
           </DialogHeader>
-          <Input
-            value={deleteConfirm}
-            onChange={(e) => setDeleteConfirm(e.target.value)}
-            placeholder={DELETE_CONFIRM_WORD}
-            autoComplete="off"
-            aria-label="Escribe la palabra de confirmación"
-          />
+          <div className="space-y-1.5">
+            <Label htmlFor="delete-confirm" className="text-sm">
+              Escribe <b className="text-destructive">{DELETE_CONFIRM_WORD}</b> para eliminar la cuenta
+            </Label>
+            <Input
+              id="delete-confirm"
+              value={deleteConfirm}
+              onChange={(e) => setDeleteConfirm(e.target.value)}
+              placeholder={DELETE_CONFIRM_WORD}
+              autoComplete="off"
+              autoFocus
+              aria-label="Escribe la palabra de confirmación"
+            />
+          </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleting}>
               Cancelar
