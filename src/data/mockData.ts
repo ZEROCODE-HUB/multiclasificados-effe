@@ -12,6 +12,9 @@ export interface Listing {
   imageUrl: string;
   date: string;
   featured: boolean;
+  // Insignias visuales según los adicionales que pagó el anunciante.
+  urgent?: boolean;
+  confidential?: boolean;
   advertiser: string;
   views: number;
   lat?: number | null;

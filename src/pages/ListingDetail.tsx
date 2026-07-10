@@ -22,6 +22,8 @@ import {
   ChevronLeft,
   Tag,
   Award,
+  Flame,
+  EyeOff,
   Clock,
   Building2,
   Users,
@@ -403,11 +405,23 @@ export default function ListingDetail() {
             <div className="grid grid-cols-1 md:grid-cols-[1fr_120px] gap-3">
               <div className="relative bg-muted overflow-hidden" style={{ aspectRatio: "4 / 3" }}>
                 <img src={gallery[activeImg]} alt={listing.title} className="absolute inset-0 w-full h-full object-cover" />
-                {listing.featured && (
-                  <span className="absolute top-4 left-4 inline-flex items-center gap-1 px-3 py-1.5 bg-secondary text-secondary-foreground text-[10px] font-bold uppercase tracking-wider shadow-md">
-                    <Award size={11} /> Destacado
-                  </span>
-                )}
+                <div className="absolute top-4 left-4 flex flex-wrap gap-1.5 max-w-[70%]">
+                  {listing.featured && (
+                    <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-secondary text-secondary-foreground text-[10px] font-bold uppercase tracking-wider shadow-md">
+                      <Award size={11} /> Destacado
+                    </span>
+                  )}
+                  {listing.urgent && (
+                    <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-destructive text-destructive-foreground text-[10px] font-bold uppercase tracking-wider shadow-md">
+                      <Flame size={11} /> Urgente
+                    </span>
+                  )}
+                  {listing.confidential && (
+                    <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-wider shadow-md">
+                      <EyeOff size={11} /> Confidencial
+                    </span>
+                  )}
+                </div>
                 <span className="absolute top-4 right-4 inline-flex items-center gap-1 px-3 py-1.5 bg-white/95 backdrop-blur-sm text-primary text-[10px] font-bold uppercase tracking-wider shadow-sm">
                   <ShieldCheck size={11} /> Verificado eFFe
                 </span>

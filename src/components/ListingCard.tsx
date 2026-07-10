@@ -1,4 +1,4 @@
-import { MapPin, Heart, ShieldCheck, Star } from "lucide-react";
+import { MapPin, Heart, ShieldCheck, Star, Flame, EyeOff } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
@@ -50,6 +50,28 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
   const formatPrice = (price: number, currency: string) =>
     currency === "USD" ? `US$ ${price.toLocaleString()}` : `S/ ${price.toLocaleString()}`;
 
+  // Insignias visuales del aviso (adicionales que pagó el anunciante). Solo
+  // decorativas, como el corazón de favoritos. Estilo de píldora para el grid.
+  const pillBadges = (
+    <>
+      {listing.featured && (
+        <span className="inline-flex items-center px-2.5 py-1 bg-secondary text-secondary-foreground text-[10px] font-bold uppercase tracking-wider shadow-md">
+          Destacado
+        </span>
+      )}
+      {listing.urgent && (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-destructive text-destructive-foreground text-[10px] font-bold uppercase tracking-wider shadow-md">
+          <Flame size={10} /> Urgente
+        </span>
+      )}
+      {listing.confidential && (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-wider shadow-md">
+          <EyeOff size={10} /> Confidencial
+        </span>
+      )}
+    </>
+  );
+
   // Sin reseñas reales todavía → valores neutros
   const rating = "0.0";
   const reviews = 0;
@@ -63,7 +85,7 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <h3 className="font-semibold text-foreground group-hover:text-secondary transition-colors truncate">{listing.title}</h3>
-            {listing.featured && <Badge className="bg-secondary text-secondary-foreground flex-shrink-0">Destacado</Badge>}
+            <div className="flex flex-wrap items-center gap-1 flex-shrink-0">{pillBadges}</div>
           </div>
           {/* Contenido detallado solo para usuarios con sesión */}
           {isAuthed && <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{listing.description}</p>}
@@ -93,12 +115,8 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
           className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.05]"
         />
         {/* Top badges */}
-        <div className="absolute top-3 left-3 flex gap-1.5">
-          {listing.featured && (
-            <span className="inline-flex items-center px-2.5 py-1 bg-secondary text-secondary-foreground text-[10px] font-bold uppercase tracking-wider shadow-md">
-              Destacado
-            </span>
-          )}
+        <div className="absolute top-3 left-3 flex flex-wrap gap-1.5 max-w-[calc(100%-5rem)]">
+          {pillBadges}
         </div>
         <span className="absolute top-3 right-12 inline-flex items-center gap-1 px-2.5 py-1 bg-white/95 backdrop-blur-sm text-primary text-[10px] font-bold uppercase tracking-wider shadow-sm">
           <ShieldCheck size={10} /> Verificado

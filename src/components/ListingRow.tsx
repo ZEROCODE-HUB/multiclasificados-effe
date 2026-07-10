@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Eye, MapPin, Calendar, MoreVertical, Edit, Pause, Play, Trash2, Rocket, Clock } from "lucide-react";
+import { Eye, MapPin, Calendar, MoreVertical, Edit, Pause, Play, Trash2, Rocket, Clock, Flame, EyeOff } from "lucide-react";
 import type { Listing } from "@/data/mockData";
 import { expiryInfo } from "@/lib/listings";
 import {
@@ -54,11 +54,17 @@ export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEd
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
         />
         <Badge className={`absolute top-2 left-2 ${statusStyles[status]} shadow-md`}>{status}</Badge>
-        {listing.featured && (
-          <Badge className="absolute top-2 right-2 bg-secondary text-secondary-foreground shadow-md">
-            Destacado
-          </Badge>
-        )}
+        <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+          {listing.featured && (
+            <Badge className="bg-secondary text-secondary-foreground shadow-md">Destacado</Badge>
+          )}
+          {listing.urgent && (
+            <Badge className="bg-destructive text-destructive-foreground shadow-md gap-1"><Flame size={10} /> Urgente</Badge>
+          )}
+          {listing.confidential && (
+            <Badge className="bg-primary text-primary-foreground shadow-md gap-1"><EyeOff size={10} /> Confidencial</Badge>
+          )}
+        </div>
         <div className="absolute bottom-2 left-2 flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-black/55 text-white text-[11px] font-semibold backdrop-blur-sm">
           <Eye size={11} /> {listing.views}
         </div>
