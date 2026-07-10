@@ -404,7 +404,7 @@ export default function SearchPage() {
                   <div
                     className={
                       layout === "grid"
-                        ? "grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-5"
+                        ? "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-5"
                         : "space-y-4"
                     }
                   >

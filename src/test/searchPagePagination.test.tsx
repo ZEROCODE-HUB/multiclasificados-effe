@@ -86,4 +86,15 @@ describe("SearchPage — paginación de resultados", () => {
     await waitFor(() => expect(cards().length).toBe(10));
     expect(screen.getByRole("button", { name: /anterior/i })).toBeDisabled();
   });
+
+  // Bug de la app: en teléfono salían 2 avisos por fila. La cuadrícula debe
+  // arrancar en UNA columna (el 2-col recién desde 'sm').
+  it("en móvil los avisos van de a uno por fila", async () => {
+    renderPage();
+    await waitFor(() => expect(cards().length).toBe(10));
+    const grid = cards()[0].parentElement!;
+    expect(grid.className).toContain("grid-cols-1");
+    // Sin 2 columnas como base (eso solo aplica desde 'sm:').
+    expect(grid.className).not.toMatch(/(^|\s)grid-cols-2(\s|$)/);
+  });
 });
