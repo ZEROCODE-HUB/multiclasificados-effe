@@ -1,7 +1,8 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Eye, MapPin, Calendar, MoreVertical, Edit, Pause, Play, Trash2, Rocket } from "lucide-react";
+import { Eye, MapPin, Calendar, MoreVertical, Edit, Pause, Play, Trash2, Rocket, Clock } from "lucide-react";
 import type { Listing } from "@/data/mockData";
+import { expiryInfo } from "@/lib/listings";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,6 +14,8 @@ import {
 interface ListingRowProps {
   listing: Listing;
   status?: "Activo" | "Pausado" | "Vencido" | "Borrador";
+  /** Fecha de vencimiento (ISO); alimenta el contador de días restantes. */
+  expiresAt?: string | null;
   onView?: (listing: Listing) => void;
   onEdit?: (listing: Listing) => void;
   onDelete?: (listing: Listing) => void;
@@ -29,8 +32,17 @@ const statusStyles: Record<string, string> = {
   Borrador: "bg-muted text-muted-foreground border border-border",
 };
 
-export function ListingRow({ listing, status = "Activo", onView, onEdit, onDelete, onTogglePause, onPublish }: ListingRowProps) {
+// Color del contador de vencimiento según lo cerca que esté.
+const expiryStyles: Record<string, string> = {
+  normal: "text-muted-foreground",
+  warning: "text-warning font-semibold",
+  urgent: "text-destructive font-semibold",
+};
+
+export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEdit, onDelete, onTogglePause, onPublish }: ListingRowProps) {
   const hasActions = !!(onView || onEdit || onDelete || onTogglePause || onPublish);
+  // El contador solo tiene sentido en un aviso activo (los vencidos ya caducaron).
+  const expiry = status === "Activo" ? expiryInfo(expiresAt ?? null) : null;
   return (
     <div className="group flex flex-col sm:flex-row gap-0 sm:gap-4 bg-card border border-border overflow-hidden hover:shadow-md hover:border-secondary/40 transition-all">
       {/* Image - prominent on mobile (full width), compact on desktop */}
@@ -98,6 +110,11 @@ export function ListingRow({ listing, status = "Activo", onView, onEdit, onDelet
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground mb-3">
           <span className="flex items-center gap-1"><MapPin size={11} /> {listing.location}</span>
           <span className="flex items-center gap-1"><Calendar size={11} /> {listing.date}</span>
+          {expiry && (
+            <span className={`flex items-center gap-1 ${expiryStyles[expiry.tone]}`}>
+              <Clock size={11} /> {expiry.text}
+            </span>
+          )}
         </div>
 
         {/* Envuelve en móvil: con 3 acciones (4 en un borrador, por "Publicar") no

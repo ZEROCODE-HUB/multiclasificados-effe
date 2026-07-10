@@ -117,6 +117,10 @@ export function notificationText(n: AppNotification): string {
     }
     case "listing_enabled":
       return `"${(p.listing_title as string) || "Tu aviso"}" volvió a estar visible`;
+    case "listing_expiring": {
+      const title = (p.listing_title as string) || "Tu aviso";
+      return `"${title}" está por vencer. Renuévalo para que siga visible.`;
+    }
     case "moderation_warning": {
       const reason = (p.reason as string) || "";
       const note = (p.note as string) || "";
@@ -148,6 +152,7 @@ export function notificationLink(n: AppNotification, role: string): string {
       return p.listing_id ? `/aviso/${p.listing_id}` : "#";
     case "listing_disabled":
     case "listing_enabled":
+    case "listing_expiring":
       // El dueño revisa el estado/motivo en "Mis avisos".
       return "/dashboard/anunciante/avisos";
     default:

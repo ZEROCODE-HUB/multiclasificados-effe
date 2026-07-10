@@ -162,6 +162,29 @@ export type ListingStatus =
 
 export type ListingCondition = "nuevo" | "usado" | "na";
 
+// Tiempo que le queda a un aviso activo antes de caducar, listo para mostrar.
+// `tone` gradúa el color: normal (>7 días), atención (≤7 días) y urgente (<1 día
+// o ya vencido). Devuelve null si no hay fecha de vencimiento.
+export interface ExpiryInfo { text: string; tone: "normal" | "warning" | "urgent" }
+export function expiryInfo(expiresAt: string | null, now: number = Date.now()): ExpiryInfo | null {
+  if (!expiresAt) return null;
+  const ms = new Date(expiresAt).getTime() - now;
+  if (Number.isNaN(ms)) return null;
+  if (ms <= 0) return { text: "Vencido", tone: "urgent" };
+
+  const mins = Math.floor(ms / 60000);
+  const hours = Math.floor(mins / 60);
+  const days = Math.floor(hours / 24);
+
+  let text: string;
+  if (days >= 1) text = `Vence en ${days} ${days === 1 ? "día" : "días"}`;
+  else if (hours >= 1) text = `Vence en ${hours} ${hours === 1 ? "hora" : "horas"}`;
+  else text = `Vence en ${mins} ${mins === 1 ? "minuto" : "minutos"}`;
+
+  const tone: ExpiryInfo["tone"] = days >= 7 ? "normal" : days >= 1 ? "warning" : "urgent";
+  return { text, tone };
+}
+
 export interface MyListing extends Listing {
   status: ListingStatus;
   expiresAt: string | null;

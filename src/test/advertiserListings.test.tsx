@@ -20,7 +20,10 @@ const listing = {
   advertiser: "", views: 5, status: "active" as const, expiresAt: null, condition: "nuevo" as const,
 };
 
-vi.mock("@/lib/listings", () => ({
+// Conserva los exports reales (expiryInfo, tipos) y solo sustituye la capa de red:
+// ListingRow usa expiryInfo, así que no puede quedar sin definir.
+vi.mock("@/lib/listings", async (orig) => ({
+  ...(await (orig() as Promise<Record<string, unknown>>)),
   fetchMyListings: () => Promise.resolve([listing]),
   updateListing: (...a: unknown[]) => updateListing(...a),
   deleteListing: (...a: unknown[]) => deleteListing(...a),
