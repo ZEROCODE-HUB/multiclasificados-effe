@@ -125,22 +125,22 @@ const AdvertiserDashboard = () => {
         <Card className="border-2 border-secondary/30">
           <CardHeader className="pb-3 flex flex-row items-center justify-between">
             <CardTitle className="text-base md:text-lg flex items-center gap-2">
-              <Wallet size={18} className="text-secondary" /> Mis créditos
+              <Wallet size={18} className="text-secondary" /> Mi saldo
             </CardTitle>
             <Button size="sm" variant="outline" className="gap-2 text-secondary border-secondary/40" onClick={() => setBuyCreditsOpen(true)}>
-              <TrendingUp size={14} /> Comprar créditos
+              <TrendingUp size={14} /> Comprar saldo
             </Button>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="border p-3 bg-muted/30">
-                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Créditos disponibles</p>
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Saldo disponible</p>
                 <p className="text-xl font-extrabold mt-1 text-secondary">
                   {creditBalance === null ? "…" : formatCredits(creditBalance)}
                 </p>
               </div>
               <div className="border p-3 bg-muted/30">
-                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Créditos usados</p>
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Saldo usado</p>
                 <p className="text-xl font-extrabold mt-1 text-muted-foreground">
                   {formatCredits(creditsSpent)}
                 </p>

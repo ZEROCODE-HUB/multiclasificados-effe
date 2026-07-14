@@ -49,6 +49,9 @@ describe("Excel — parámetros base (Supuestos)", () => {
     // Un adicional de pago suma 5 soles = 5 créditos.
     expect(extrasTotal({ urgente: true }, DEFAULT_SETTINGS)).toBe(5);
     expect(solesToCredits(5)).toBe(5);
+    // "Imagen adicional" cobra por cantidad: 3 imágenes × S/5 = S/15.
+    expect(extrasTotal({ img500: 1 }, DEFAULT_SETTINGS)).toBe(5);
+    expect(extrasTotal({ img500: 3 }, DEFAULT_SETTINGS)).toBe(15);
   });
 });
 

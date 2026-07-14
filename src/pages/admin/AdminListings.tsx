@@ -12,11 +12,11 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, Eye, ChevronLeft, ChevronRight, MapPin, Calendar, Tag, User, Ban, RotateCcw, Flag } from "lucide-react";
+import { Search, Eye, ChevronLeft, ChevronRight, MapPin, Calendar, Tag, User, Ban, RotateCcw, Flag, CalendarClock } from "lucide-react";
 import { AdminListingStatus } from "@/data/adminMockData";
 import { toast } from "@/hooks/use-toast";
 import { disableListing, loadDisabled } from "@/lib/pricing";
-import { fetchAdminListings, setListingStatus, fetchReports, type AdminListingRow, type AdminReport } from "@/lib/admin";
+import { fetchAdminListings, setListingStatus, setListingPublishedAt, fetchReports, type AdminListingRow, type AdminReport } from "@/lib/admin";
 import { usePermissions } from "@/hooks/usePermissions";
 import { fetchListingImages } from "@/lib/listings";
 import { ListingPreviewDialog } from "@/components/ListingPreviewDialog";
@@ -26,6 +26,8 @@ const statusColor: Record<AdminListingStatus, string> = {
   Activo: "bg-success/15 text-success border-success/30",
   Rechazado: "bg-destructive/15 text-destructive border-destructive/30",
   Destacado: "bg-secondary/15 text-secondary border-secondary/30",
+  // "Vencido" = caducado por tiempo (distinto de "Deshabilitado" por moderación).
+  Vencido: "bg-muted text-muted-foreground border-border",
 };
 
 // Estado de una denuncia (tabla `reports`): etiqueta y color para la pestaña "Reportados".
@@ -39,16 +41,20 @@ const REPORT_STATUS: Record<string, { label: string; cls: string }> = {
 interface Listing {
   id: string; title: string; advertiser: string; category: string;
   status: AdminListingStatus; date: string; price: string;
+  publishedAt: string | null; expiresAt: string | null;
 }
 
 const isUuid = (v: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 
 // Estado real (BD) + featured -> etiqueta del diseño.
+// "expired" (caducado por tiempo) tiene su propia etiqueta "Vencido", y gana
+// sobre "Destacado": un aviso vencido ya no está activo aunque siga marcado.
 const toDisplayStatus = (r: AdminListingRow): AdminListingStatus =>
-  r.featured ? "Destacado"
+  r.status === "expired" ? "Vencido"
+  : r.status === "rejected" || r.status === "paused" ? "Rechazado"
+  : r.featured ? "Destacado"
   : r.status === "pending" ? "Pendiente"
-  : r.status === "rejected" || r.status === "paused" || r.status === "expired" ? "Rechazado"
   : "Activo";
 
 const mapRow = (r: AdminListingRow): Listing => ({
@@ -56,14 +62,33 @@ const mapRow = (r: AdminListingRow): Listing => ({
   category: r.category_id, status: toDisplayStatus(r),
   date: (r.created_at ?? "").slice(0, 10),
   price: `${r.currency || "PEN"} ${Number(r.price || 0).toLocaleString()}`,
+  publishedAt: r.published_at ?? null,
+  expiresAt: r.expires_at ?? null,
 });
 
 const PAGE_SIZE = 5;
+
+const DAY_MS = 86_400_000;
+
+// ISO (UTC) -> valor para <input type="datetime-local"> (hora LOCAL, sin zona).
+const toLocalInput = (iso: string | null): string => {
+  const d = iso ? new Date(iso) : new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+// Duración configurada del aviso (ms) a partir de sus fechas; 30 días si faltan.
+const listingDurationMs = (l: Listing): number =>
+  l.publishedAt && l.expiresAt
+    ? Math.max(0, new Date(l.expiresAt).getTime() - new Date(l.publishedAt).getTime())
+    : 30 * DAY_MS;
 
 const AdminListings = ({ role }: { role: AdminRole }) => {
   // Matriz de permisos: habilitar/deshabilitar avisos requiere can_edit (solo aplica al rol admin).
   const { can } = usePermissions(role === "admin");
   const canModerate = can("Gestión de avisos", "edit");
+  // Herramienta de PRUEBA: cambiar fecha de publicación. Solo para superadmin.
+  const isSuperadmin = role === "superadmin";
   const [rows, setRows] = useState<Listing[]>([]);
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<string>("all");
@@ -77,10 +102,14 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
   const [disabled, setDisabled] = useState<Record<string, string>>(() => loadDisabled());
   const [detailImg, setDetailImg] = useState<string | null>(null);
   const [imgLoading, setImgLoading] = useState(false);
+  // Diálogo "cambiar fecha de publicación" (prueba de caducidad).
+  const [dateTarget, setDateTarget] = useState<Listing | null>(null);
+  const [dateValue, setDateValue] = useState("");
+  const [savingDate, setSavingDate] = useState(false);
 
   const load = () => fetchAdminListings().then(({ data }) => setRows(data.map(mapRow)));
   // Avisos reportados REALES desde la BD (tabla `reports`), solo target_type "listing".
-  // Los reportes de usuarios se gestionan en "Denuncias / Moderación".
+  // Los reportes de usuarios se gestionan en "Reclamos / Moderación".
   const loadReportedListings = () =>
     fetchReports().then(({ data }) => setReports(data.filter((r) => r.target_type === "listing")));
   useEffect(() => {
@@ -153,6 +182,54 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
     }
   };
 
+  // Abre el diálogo de fecha, prefijando la fecha de publicación actual.
+  const openDateDialog = (l: Listing) => {
+    setDateTarget(l);
+    setDateValue(toLocalInput(l.publishedAt ?? (l.date ? `${l.date}T00:00:00` : null)));
+  };
+
+  // Vigencia resultante con la fecha elegida (conservando la duración del aviso).
+  const previewExpiry = useMemo(() => {
+    if (!dateTarget || !dateValue) return null;
+    const published = new Date(dateValue);
+    if (isNaN(published.getTime())) return null;
+    const expiry = new Date(published.getTime() + listingDurationMs(dateTarget));
+    return { expiry, expired: expiry.getTime() < Date.now() };
+  }, [dateTarget, dateValue]);
+
+  // Preset: dejar el aviso ya vencido (publicación = ahora - duración - 1 min).
+  const setExpireNow = () => {
+    if (!dateTarget) return;
+    const published = new Date(Date.now() - listingDurationMs(dateTarget) - 60_000);
+    setDateValue(toLocalInput(published.toISOString()));
+  };
+
+  const confirmDate = async () => {
+    if (!dateTarget || !dateValue) return;
+    const published = new Date(dateValue);
+    if (isNaN(published.getTime())) {
+      toast({ title: "Fecha inválida", variant: "destructive" });
+      return;
+    }
+    setSavingDate(true);
+    try {
+      await setListingPublishedAt(dateTarget.id, published.toISOString());
+      await load();
+      toast({
+        title: "Fecha de publicación actualizada",
+        description: previewExpiry?.expired
+          ? `"${dateTarget.title}" quedó Vencido y dejará de mostrarse.`
+          : `"${dateTarget.title}" vence el ${previewExpiry?.expiry.toLocaleString("es-PE")}.`,
+      });
+      setDateTarget(null);
+      setDateValue("");
+    } catch (e: any) {
+      toast({ title: "No se pudo actualizar", description: e?.message ?? "Error", variant: "destructive" });
+    } finally {
+      setSavingDate(false);
+    }
+  };
+
   return (
     <>
       <Tabs defaultValue="todos">
@@ -222,6 +299,17 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
                               <Button size="icon" variant="ghost" title="Ver detalle" onClick={() => setDetail(l)}>
                                 <Eye size={16} />
                               </Button>
+                              {isSuperadmin && isUuid(l.id) && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="text-secondary"
+                                  title="Cambiar fecha de publicación (prueba de caducidad)"
+                                  onClick={() => openDateDialog(l)}
+                                >
+                                  <CalendarClock size={16} />
+                                </Button>
+                              )}
                               {canModerate && (isDisabled ? (
                                 <Button
                                   size="icon"
@@ -286,6 +374,12 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
                           </Button>
                         ))}
                       </div>
+                      {isSuperadmin && isUuid(l.id) && (
+                        <Button size="sm" variant="outline" className="text-secondary w-full mt-1.5"
+                          onClick={() => openDateDialog(l)}>
+                          <CalendarClock size={14} /> Cambiar fecha (prueba)
+                        </Button>
+                      )}
                     </div>
                   );
                 })}
@@ -439,6 +533,58 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
             <Button variant="ghost" onClick={() => { setDisableTarget(null); setDisableReason(""); }}>Cancelar</Button>
             <Button onClick={confirmDisable} disabled={!disableReason.trim()} className="gap-2">
               <Ban size={14} /> Deshabilitar y notificar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cambiar fecha de publicación — herramienta de PRUEBA de caducidad (superadmin). */}
+      <Dialog open={!!dateTarget} onOpenChange={(o) => { if (!o) { setDateTarget(null); setDateValue(""); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarClock size={18} className="text-secondary" /> Cambiar fecha de publicación
+            </DialogTitle>
+            <DialogDescription>
+              Prueba de caducidad para <b>"{dateTarget?.title}"</b>. Se conserva la duración
+              del aviso y se recalcula el vencimiento; si la nueva vigencia ya pasó, quedará
+              <b> Vencido</b> al instante.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="pub-date">Nueva fecha y hora de publicación</Label>
+              <Input
+                id="pub-date"
+                type="datetime-local"
+                value={dateValue}
+                onChange={(e) => setDateValue(e.target.value)}
+              />
+            </div>
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={setExpireNow}>
+              <CalendarClock size={14} /> Simular vencimiento (dejar ya vencido)
+            </Button>
+            {previewExpiry && (
+              <div className="rounded-md border bg-muted/40 p-3 text-sm space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Vence:</span>
+                  <span className="font-medium">{previewExpiry.expiry.toLocaleString("es-PE")}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Estado resultante:</span>
+                  {previewExpiry.expired ? (
+                    <Badge variant="outline" className={statusColor.Vencido}>Vencido</Badge>
+                  ) : (
+                    <Badge variant="outline" className={statusColor.Activo}>Activo</Badge>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => { setDateTarget(null); setDateValue(""); }}>Cancelar</Button>
+            <Button onClick={confirmDate} disabled={!dateValue || savingDate} className="gap-2">
+              <CalendarClock size={14} /> {savingDate ? "Guardando…" : "Aplicar fecha"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -237,10 +237,17 @@ export function Navbar() {
           )}
         </div>
 
+        {/* Campana de notificaciones en móvil (en escritorio va en la barra de
+            acciones de arriba). El primer icono de la derecha lleva `ml-auto`. */}
+        {isUser && (
+          <div className="md:hidden ml-auto flex items-center">
+            <NotificationsBell />
+          </div>
+        )}
         {!isAdmin && (
           <Link
             to="/dashboard/anunciante/publicar"
-            className="md:hidden ml-auto p-2 text-foreground"
+            className={`md:hidden p-2 text-foreground ${isUser ? "" : "ml-auto"}`}
             aria-label="Publicar"
           >
             <PlusCircle size={22} />

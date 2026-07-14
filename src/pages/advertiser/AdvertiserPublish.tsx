@@ -25,7 +25,11 @@ import {
 } from "@/lib/pricing";
 import { createAndPublishListing, saveListingDraft } from "@/lib/publish";
 import { urgenteAllowedFor, URGENTE_MAX_DAYS } from "@/lib/listingBadges";
-import { VerifyIdentityDialog, type ConfirmedIdentity, type PersonType } from "@/components/VerifyIdentityDialog";
+import { ListingCard } from "@/components/ListingCard";
+import { FALLBACK_IMG } from "@/lib/listings";
+import type { Listing } from "@/data/mockData";
+import { type PersonType } from "@/components/VerifyIdentityDialog";
+import { fetchMyIdentity, personKindLabel, docKindLabel } from "@/lib/identity";
 import { getCreditBalance, spendCredits } from "@/lib/credits";
 import { fetchActivePromotions, bestPromoForCategory, applyDiscount, type Promotion } from "@/lib/promotions";
 import { fetchPricingSettings } from "@/lib/pricingRemote";
@@ -37,10 +41,13 @@ interface PhotoItem { id: string; url: string; name: string; file: File; }
 
 const DURATIONS: DurationDays[] = [3, 7, 15, 30, 60, 90];
 
+// "Imagen adicional" admite hasta 3 por aviso (además de la portada incluida).
+const MAX_EXTRA_IMAGES = 3;
+
 // Extras del paquete (cantidad numérica por cada uno)
 type ExtraKey = "img500" | "pdf500" | "urgente" | "destacado" | "confidencial";
 const EXTRA_DEFS: Array<{ key: ExtraKey; label: string; sub?: string; icon: typeof Sparkles }> = [
-  { key: "img500", label: "Segunda imagen por aviso", sub: "hasta 500 KB", icon: ImagePlus },
+  { key: "img500", label: "Imagen adicional", sub: "hasta 500 KB · hasta 3", icon: ImagePlus },
   { key: "pdf500", label: "PDF adjunto por aviso", sub: "hasta 500 KB", icon: FileText },
   { key: "urgente", label: "Marcar como Urgente", icon: Flame },
   { key: "destacado", label: "Marcar como Destacado", icon: Star },
@@ -53,7 +60,6 @@ const DRAFT_KEY = "effe:publish-draft";
 
 const AdvertiserPublish = () => {
   const session = useSession();
-  const hasSession = !!session;
   const navigate = useNavigate();
   const categories = useCategories();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -76,21 +82,35 @@ const AdvertiserPublish = () => {
     return () => { active = false; };
   }, [navigate]);
 
-  // Verificación de identidad (se solicita al presionar "Publicar aviso").
-  // El cuadro vive en <VerifyIdentityDialog>; aquí solo guardamos el RESULTADO
-  // confirmado, que alimenta el comprobante. `verified` = el usuario confirmó que
-  // la ficha de RENIEC/SUNAT es suya: consultar el documento no equivale a
-  // aceptarlo, y sin confirmación explícita no se publica nada.
-  const [verifyOpen, setVerifyOpen] = useState(false);
+  // Identidad verificada por Factiliza. Ya NO se pide en un modal al publicar:
+  // se toma del perfil (se verificó al comprar saldo o en una publicación previa)
+  // y alimenta el comprobante. Así el usuario no repite la verificación.
   const [personType, setPersonType] = useState<PersonType>("");
   const [docNumber, setDocNumber] = useState("");
   const [verified, setVerified] = useState(false);
   const [verifiedName, setVerifiedName] = useState("");
 
-  // Imágenes — solo 2 slots por aviso
+  // Precarga la identidad verificada del perfil para el comprobante (sin modal).
+  useEffect(() => {
+    let active = true;
+    fetchMyIdentity().then((id) => {
+      if (!active || !id) return;
+      if (id.docNumber) setDocNumber(id.docNumber);
+      if (id.docType) setPersonType(id.docType === "ruc" ? "juridica" : "natural");
+      if (id.name) setVerifiedName(id.name);
+      setVerified(id.verified);
+    });
+    return () => { active = false; };
+  }, [session?.supabase]);
+
+  // Imágenes: portada incluida + hasta MAX_EXTRA_IMAGES adicionales (según el
+  // adicional "Imagen adicional"). extraPhotos es un array fijo de 3 slots.
   const [mainPhoto, setMainPhoto] = useState<PhotoItem | null>(null);
-  const [secondPhoto, setSecondPhoto] = useState<PhotoItem | null>(null);
-  const secondFileRef = useRef<HTMLInputElement>(null);
+  const [extraPhotos, setExtraPhotos] = useState<(PhotoItem | null)[]>(
+    () => Array(MAX_EXTRA_IMAGES).fill(null),
+  );
+  const extraFileRef = useRef<HTMLInputElement>(null);
+  const pickingSlot = useRef<number>(0);
 
   // PDF adjunto (adicional "PDF adjunto por aviso"). Solo se muestra su apartado
   // si el adicional está activo; si se desactiva, el archivo elegido se descarta.
@@ -142,6 +162,9 @@ const AdvertiserPublish = () => {
   // aviso, no publicar uno nuevo: eso creaba un duplicado.
   const pendingChargeListingId = useRef<string | null>(null);
   const [successOpen, setSuccessOpen] = useState<{ open: boolean; number: string; email: string }>({ open: false, number: "", email: "" });
+  // Único modal al publicar: confirmar la publicación (la identidad ya viene del
+  // perfil; NO se pide verificación aquí).
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   // Pricing en vivo: arranca del caché local y se refresca desde la BD.
   const [settings, setSettings] = useState<PricingSettings>(() => loadSettings());
@@ -203,9 +226,14 @@ const AdvertiserPublish = () => {
   // Para la vista previa del aviso individual
   const basePrice = priceForDuration(1, duration, settings);
 
+  // "Condición" solo aplica en categorías con condition_enabled (p.ej. NO en
+  // Servicios ni Empleos). Cuando está oculta, el aviso se guarda como "No aplica".
+  const conditionEnabled = categories.find((c) => c.id === form.category)?.conditionEnabled ?? true;
+  const formForSubmit = conditionEnabled ? form : { ...form, condition: "na" };
+
   const updateForm = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
-  const pickPhoto = (slot: "main" | "second", files: FileList | null) => {
+  const pickPhoto = (slot: "main" | "extra", files: FileList | null) => {
     if (!files || files.length === 0) return;
     const f = files[0];
     const item: PhotoItem = {
@@ -214,28 +242,41 @@ const AdvertiserPublish = () => {
       name: f.name,
       file: f,
     };
-    if (slot === "main") setMainPhoto(item);
-    else setSecondPhoto(item);
+    if (slot === "main") {
+      setMainPhoto(item);
+    } else {
+      const i = pickingSlot.current;
+      setExtraPhotos((prev) => { const next = [...prev]; next[i] = item; return next; });
+    }
   };
 
+  // Abre el selector de archivo para el slot adicional `i`.
+  const openExtraPicker = (i: number) => { pickingSlot.current = i; extraFileRef.current?.click(); };
+  const removeExtraPhoto = (i: number) =>
+    setExtraPhotos((prev) => { const next = [...prev]; next[i] = null; return next; });
+
+  // Tope por adicional: "Imagen adicional" hasta MAX_EXTRA_IMAGES; el resto a la
+  // cantidad de avisos (aquí siempre 1: un aviso por publicación).
+  const maxForExtra = (key: ExtraKey) => (key === "img500" ? MAX_EXTRA_IMAGES : quantity);
+
   const setExtraCount = (key: ExtraKey, count: number) => {
-    const max = quantity;
-    const v = Math.max(0, Math.min(max, count));
+    const v = Math.max(0, Math.min(maxForExtra(key), count));
     setExtras((e) => ({ ...e, [key]: v }));
   };
 
-  // Si cambia la cantidad, recortar extras al nuevo máximo
+  // Si cambia la cantidad, recortar extras a su máximo (img500 tiene su propio tope).
   useEffect(() => {
     setExtras((prev) => {
       const next: ExtrasCount = {};
       (Object.keys(prev) as ExtraKey[]).forEach((k) => {
-        next[k] = Math.min(prev[k] ?? 0, quantity);
+        next[k] = Math.min(prev[k] ?? 0, maxForExtra(k));
       });
       return next;
     });
   }, [quantity]);
 
-  const hasSecondImageInPackage = (extras.img500 ?? 0) > 0;
+  // Cuántos slots de imagen adicional mostrar (según el adicional comprado).
+  const extraImageCount = Math.min(extras.img500 ?? 0, MAX_EXTRA_IMAGES);
   const hasPdfInPackage = (extras.pdf500 ?? 0) > 0;
 
   // "Urgente" solo se ofrece en avisos cortos (≤ 7 días): su fin es respuesta
@@ -250,6 +291,30 @@ const AdvertiserPublish = () => {
       setExtras((e) => ({ ...e, urgente: 0 }));
     }
   }, [urgenteAllowed, extras.urgente]);
+
+  // Vista previa REAL: el mismo componente ListingCard que se ve publicado, para
+  // que las insignias (Destacado/Urgente/Confidencial), el marco dorado del
+  // destacado y el contador de urgente se vean idénticos a lo que se publicará.
+  const previewListing: Listing = {
+    id: "preview",
+    title: form.title || "Título de tu aviso",
+    description: form.description || "",
+    price: Number(form.price) || 0,
+    currency: form.currency || "PEN",
+    category: form.category || "categoría",
+    location: form.location || "Ubicación",
+    imageUrl: mainPhoto?.url || FALLBACK_IMG,
+    date: new Date().toISOString().slice(0, 10),
+    featured: (extras.destacado ?? 0) > 0,
+    urgent: (extras.urgente ?? 0) > 0,
+    confidential: (extras.confidencial ?? 0) > 0,
+    advertiser: verifiedName || session?.name || "Anunciante",
+    views: 0,
+    lat: coords?.lat ?? null,
+    lng: coords?.lng ?? null,
+    // Vigencia estimada según la duración elegida → alimenta el contador de "Urgente".
+    expiresAt: new Date(Date.now() + duration * 86_400_000).toISOString(),
+  };
 
   // Al desactivar el adicional del PDF, se descarta el archivo elegido: el
   // apartado se oculta y no debe quedar un PDF "colgado" para publicar.
@@ -284,35 +349,10 @@ const AdvertiserPublish = () => {
     } catch { /* noop */ }
   };
 
-  // El usuario confirmó que la ficha de RENIEC/SUNAT es suya. Recién aquí
-  // `verified` pasa a true y se puede publicar.
-  //
-  // Confirmar es el punto de envío real (encadena la publicación), así que lleva
-  // el mismo guard SÍNCRONO que `doPublish`: dos toques seguidos —o el
-  // ghost-click de touch→click en el WebView de Android— leerían el mismo
-  // `verified === false` del closure y encadenarían dos publicaciones.
-  const confirmingRef = useRef(false);
-  const confirmIdentity = (identity: ConfirmedIdentity) => {
-    if (confirmingRef.current) return;
-    confirmingRef.current = true;
-    setPersonType(identity.personType);
-    setDocNumber(identity.docNumber);
-    setVerifiedName(identity.name);
-    setVerified(true);
-    setVerifyOpen(false);
-    toast({
-      title: "Identidad confirmada",
-      description: `${identity.docType.toUpperCase()} ${identity.docNumber} · ${identity.name}`,
-    });
-    setTimeout(() => {
-      confirmingRef.current = false;
-      openPublishFlowAfterVerify();
-    }, 250);
-  };
-
   const canPublish = form.category && form.title && form.description && form.price && form.location && !!mainPhoto;
 
-  // Decide qué modal abrir según el saldo disponible
+  // Publica según el saldo disponible. La identidad ya viene precargada del
+  // perfil (verificada al comprar saldo): no se abre ningún modal de verificación.
   const openPublishFlowAfterVerify = () => {
     if (balanceCredits >= totalCredits) {
       // Tiene créditos: se publica directo y se descuenta (sin cuadro de pagos).
@@ -334,13 +374,13 @@ const AdvertiserPublish = () => {
       navigate("/auth?redirect=/dashboard/anunciante/publicar");
       return;
     }
-    // Identidad verificada contra RENIEC/SUNAT y confirmada por el usuario.
-    // Sin esto se publicaba sin pedir documento alguno cuando ya había saldo:
-    // el cuadro de verificación existía pero NADIE lo abría.
-    if (!verified) {
-      setVerifyOpen(true);
-      return;
-    }
+    // Único modal: confirmar la publicación. La identidad ya está verificada
+    // (perfil), así que no se abre ningún cuadro de verificación.
+    setConfirmOpen(true);
+  };
+
+  const confirmAndPublish = () => {
+    setConfirmOpen(false);
     openPublishFlowAfterVerify();
   };
 
@@ -351,7 +391,7 @@ const AdvertiserPublish = () => {
   const resetPublishForm = () => {
     setForm({ category: "", title: "", description: "", price: "", currency: "PEN", location: "", condition: "nuevo" });
     setMainPhoto(null);
-    setSecondPhoto(null);
+    setExtraPhotos(Array(MAX_EXTRA_IMAGES).fill(null));
     setCoords(null);
     setExtras({});
     setDuration(7);
@@ -386,10 +426,12 @@ const AdvertiserPublish = () => {
     setSavingDraft(true);
     try {
       const id = await saveListingDraft({
-        form, lat: coords?.lat ?? null, lng: coords?.lng ?? null,
+        form: formForSubmit, lat: coords?.lat ?? null, lng: coords?.lng ?? null,
         quantity, duration, extras,
         mainPhoto: mainPhoto ? { file: mainPhoto.file, name: mainPhoto.name } : null,
-        secondPhoto: secondPhoto ? { file: secondPhoto.file, name: secondPhoto.name } : null,
+        extraPhotos: extraPhotos.slice(0, extraImageCount)
+          .filter((p): p is PhotoItem => !!p)
+          .map((p) => ({ file: p.file, name: p.name })),
         pdf: hasPdfInPackage && pdfFile ? { file: pdfFile.file, name: pdfFile.name } : null,
         draftId: draftListingId.current,
       });
@@ -400,6 +442,8 @@ const AdvertiserPublish = () => {
         title: "Guardado en tus borradores",
         description: "Lo encuentras en Mis avisos › Borradores. Puedes publicarlo cuando quieras.",
       });
+      // Flujo pedido: tras guardar, llevar al usuario a Mis avisos › Borradores.
+      navigate("/dashboard/anunciante/avisos?tab=borradores");
     } catch (err: unknown) {
       toast({
         title: "No se pudo guardar el borrador",
@@ -425,7 +469,7 @@ const AdvertiserPublish = () => {
       setCreditBalance(newBalance);
       if (!spent) {
         toast({
-          title: "No se pudieron descontar los créditos",
+          title: "No se pudo descontar el saldo",
           description: "Tu saldo sigue sin alcanzar para este aviso.",
           variant: "destructive",
         });
@@ -437,7 +481,7 @@ const AdvertiserPublish = () => {
         advertiser: verifiedName || session?.name || "Anunciante",
         listingTitle: form.title,
         amount: total,
-        detail: `Boleta · Aviso ${duration} días · ${totalCredits} créditos (${formatSoles(total)})`,
+        detail: `Boleta · Aviso ${duration} días · ${formatSoles(total)}`,
         docNumber: docNumber || undefined,
       });
       setSuccessOpen({ open: true, number: localInv.number, email });
@@ -463,7 +507,7 @@ const AdvertiserPublish = () => {
     try {
       // 1) Crear el aviso y publicarlo
       const { listingId, invoiceNumber, published, invoiceSaved } = await createAndPublishListing({
-        form,
+        form: formForSubmit,
         lat: coords?.lat ?? null,
         lng: coords?.lng ?? null,
         quantity,
@@ -474,7 +518,9 @@ const AdvertiserPublish = () => {
         // dos, uno en borradores y otro activo.
         draftId: draftListingId.current,
         mainPhoto: mainPhoto ? { file: mainPhoto.file, name: mainPhoto.name } : null,
-        secondPhoto: hasSecondImageInPackage && secondPhoto ? { file: secondPhoto.file, name: secondPhoto.name } : null,
+        extraPhotos: extraPhotos.slice(0, extraImageCount)
+          .filter((p): p is PhotoItem => !!p)
+          .map((p) => ({ file: p.file, name: p.name })),
         pdf: hasPdfInPackage && pdfFile ? { file: pdfFile.file, name: pdfFile.name } : null,
         receiptType: "boleta",
         email,
@@ -493,8 +539,8 @@ const AdvertiserPublish = () => {
         // "¡Pago confirmado!" por algo que todavía no se cobró.
         pendingChargeListingId.current = listingId;
         toast({
-          title: "No se pudieron descontar los créditos",
-          description: "Tu saldo cambió y ya no alcanza. Compra créditos para completar.",
+          title: "No se pudo descontar el saldo",
+          description: "Tu saldo cambió y ya no alcanza. Compra saldo para completar.",
           variant: "destructive",
         });
         setBuyCreditsOpen(true);
@@ -508,7 +554,7 @@ const AdvertiserPublish = () => {
         advertiser: verifiedName || session?.name || "Anunciante",
         listingTitle: form.title,
         amount: total,
-        detail: `Boleta · Aviso ${duration} días · ${totalCredits} créditos (${formatSoles(total)})`,
+        detail: `Boleta · Aviso ${duration} días · ${formatSoles(total)}`,
         docNumber: docNumber || undefined,
         number: invoiceNumber || undefined,
       });
@@ -630,7 +676,7 @@ const AdvertiserPublish = () => {
                   <span className="w-8 h-8 bg-primary text-primary-foreground text-xs font-extrabold flex items-center justify-center">02</span>
                   <div>
                     <CardTitle className="text-base flex items-center gap-2"><Camera size={16} className="text-secondary" /> Imágenes del aviso</CardTitle>
-                    <CardDescription className="text-xs">Cada aviso admite hasta 2 imágenes: la principal incluida y una segunda opcional.</CardDescription>
+                    <CardDescription className="text-xs">La imagen principal va incluida. Con el adicional “Imagen adicional” puedes sumar hasta 3 imágenes más (4 en total).</CardDescription>
                   </div>
                 </div>
               </CardHeader>
@@ -677,62 +723,63 @@ const AdvertiserPublish = () => {
                   </p>
                 </div>
 
-                {/* Slot 2 — Segunda imagen (requiere adicional) */}
-                <div>
-                  <input
-                    ref={secondFileRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => { pickPhoto("second", e.target.files); if (secondFileRef.current) secondFileRef.current.value = ""; }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => hasSecondImageInPackage && secondFileRef.current?.click()}
-                    disabled={!hasSecondImageInPackage}
-                    className={`relative w-full aspect-[4/3] border-2 border-dashed transition-colors flex items-center justify-center overflow-hidden ${
-                      hasSecondImageInPackage
-                        ? "border-border hover:border-secondary/60 hover:bg-muted/30 bg-muted/20"
-                        : "border-border bg-muted/40 cursor-not-allowed opacity-80"
-                    }`}
-                  >
-                    {hasSecondImageInPackage && secondPhoto ? (
-                      <>
-                        <img src={secondPhoto.url} alt="Segunda" className="absolute inset-0 w-full h-full object-cover" />
-                        <span
-                          role="button"
-                          aria-label="Quitar segunda imagen"
-                          onClick={(e) => { e.stopPropagation(); setSecondPhoto(null); }}
-                          className="absolute top-1.5 right-1.5 w-7 h-7 bg-white text-destructive flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground"
-                        >
-                          <X size={14} />
-                        </span>
-                      </>
-                    ) : (
+                {/* Input compartido para las imágenes adicionales (retargeteado por slot). */}
+                <input
+                  ref={extraFileRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => { pickPhoto("extra", e.target.files); if (extraFileRef.current) extraFileRef.current.value = ""; }}
+                />
+
+                {/* Slots de imagen adicional: uno por cada "Imagen adicional" comprada. */}
+                {extraImageCount === 0 ? (
+                  <div>
+                    <div className="relative w-full aspect-[4/3] border-2 border-dashed border-border bg-muted/40 flex items-center justify-center opacity-80">
                       <div className="text-center px-4">
-                        {hasSecondImageInPackage ? (
-                          <>
-                            <ImagePlus size={28} className="mx-auto text-muted-foreground mb-2" />
-                            <p className="text-xs font-semibold text-foreground">Segunda imagen</p>
-                            <p className="text-[11px] text-muted-foreground">Disponible · hasta 500 KB</p>
-                          </>
-                        ) : (
-                          <>
-                            <Lock size={24} className="mx-auto text-muted-foreground mb-2" />
-                            <p className="text-xs font-semibold text-foreground">Segunda imagen</p>
-                            <p className="text-[11px] text-muted-foreground">Hasta 500 KB</p>
-                          </>
-                        )}
+                        <Lock size={24} className="mx-auto text-muted-foreground mb-2" />
+                        <p className="text-xs font-semibold text-foreground">Imagen adicional</p>
+                        <p className="text-[11px] text-muted-foreground">Hasta 500 KB · hasta 3</p>
                       </div>
-                    )}
-                  </button>
-                  <p className="mt-2 text-[11px] text-muted-foreground">
-                    <span className="font-semibold text-foreground">Segunda imagen (hasta 500 KB)</span> — incluida si compraste este adicional en tu paquete.
-                  </p>
-                  {!hasSecondImageInPackage && (
-                    <p className="mt-1 text-[11px] text-warning">No tienes este adicional en tu paquete actual.</p>
-                  )}
-                </div>
+                    </div>
+                    <p className="mt-2 text-[11px] text-warning">
+                      Activa “Imagen adicional” en los adicionales para subir hasta 3 imágenes más.
+                    </p>
+                  </div>
+                ) : (
+                  Array.from({ length: extraImageCount }).map((_, i) => {
+                    const photo = extraPhotos[i];
+                    return (
+                      <div key={i}>
+                        <button
+                          type="button"
+                          onClick={() => openExtraPicker(i)}
+                          className="relative w-full aspect-[4/3] border-2 border-dashed border-border hover:border-secondary/60 hover:bg-muted/30 bg-muted/20 transition-colors flex items-center justify-center overflow-hidden"
+                        >
+                          {photo ? (
+                            <>
+                              <img src={photo.url} alt={`Imagen adicional ${i + 1}`} className="absolute inset-0 w-full h-full object-cover" />
+                              <span
+                                role="button"
+                                aria-label={`Quitar imagen adicional ${i + 1}`}
+                                onClick={(e) => { e.stopPropagation(); removeExtraPhoto(i); }}
+                                className="absolute top-1.5 right-1.5 w-7 h-7 bg-white text-destructive flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground"
+                              >
+                                <X size={14} />
+                              </span>
+                            </>
+                          ) : (
+                            <div className="text-center px-4">
+                              <ImagePlus size={28} className="mx-auto text-muted-foreground mb-2" />
+                              <p className="text-xs font-semibold text-foreground">Imagen adicional {i + 1}</p>
+                              <p className="text-[11px] text-muted-foreground">Disponible · hasta 500 KB</p>
+                            </div>
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
 
                 {/* PDF adjunto — el apartado aparece solo si el adicional está activo. */}
                 {hasPdfInPackage && (
@@ -834,18 +881,20 @@ const AdvertiserPublish = () => {
                   }
                   required
                 />
-                <div className="sm:w-1/2">
-                  <Label>Condición</Label>
-                  <Select value={form.condition} onValueChange={(v) => updateForm("condition", v)}>
-                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="nuevo">Nuevo</SelectItem>
-                      <SelectItem value="usado">Usado</SelectItem>
-                      <SelectItem value="reacondicionado">Reacondicionado</SelectItem>
-                      <SelectItem value="na">No aplica</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                {conditionEnabled && (
+                  <div className="sm:w-1/2">
+                    <Label>Condición</Label>
+                    <Select value={form.condition} onValueChange={(v) => updateForm("condition", v)}>
+                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="nuevo">Nuevo</SelectItem>
+                        <SelectItem value="usado">Usado</SelectItem>
+                        <SelectItem value="reacondicionado">Reacondicionado</SelectItem>
+                        <SelectItem value="na">No aplica</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -915,7 +964,7 @@ const AdvertiserPublish = () => {
                               <Minus size={12} />
                             </button>
                             <span className="w-8 text-center text-sm font-bold">{count}</span>
-                            <button type="button" aria-label={`Agregar ${label}`} onClick={() => setExtraCount(key, count + 1)} className="w-8 h-8 flex items-center justify-center hover:bg-muted disabled:opacity-30" disabled={count >= quantity}>
+                            <button type="button" aria-label={`Agregar ${label}`} onClick={() => setExtraCount(key, count + 1)} className="w-8 h-8 flex items-center justify-center hover:bg-muted disabled:opacity-30" disabled={count >= maxForExtra(key)}>
                               <Plus size={12} />
                             </button>
                           </div>
@@ -937,11 +986,11 @@ const AdvertiserPublish = () => {
                     <span className="font-bold">{formatCredits(solesToCredits(extrasSum))}</span>
                   </div>
                   <div className="border-t pt-2 flex items-baseline justify-between">
-                    <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Total en créditos</span>
+                    <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Total a pagar</span>
                     <span className="text-2xl font-extrabold text-primary">{formatCredits(totalCredits)}</span>
                   </div>
                   <p className="text-[11px] text-muted-foreground pt-1">
-                    Se descontará de tu saldo de créditos al publicar. (Boleta: {formatSoles(total)})
+                    Se descontará de tu saldo al publicar. (Boleta: {formatSoles(total)})
                   </p>
                 </div>
               </CardContent>
@@ -955,7 +1004,7 @@ const AdvertiserPublish = () => {
             <Card className="border-secondary/40 border-2">
               <CardHeader className="border-b bg-secondary/5">
                 <CardTitle className="text-sm uppercase tracking-widest text-secondary flex items-center gap-2">
-                  <Wallet size={14} /> Costo en créditos
+                  <Wallet size={14} /> Costo
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-5 space-y-3">
@@ -979,7 +1028,7 @@ const AdvertiserPublish = () => {
                   <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Total</span>
                   <span className="text-3xl font-extrabold text-primary">
                     {promoPct > 0 && (
-                      <span className="text-sm font-normal text-muted-foreground line-through mr-2">{baseCredits}</span>
+                      <span className="text-sm font-normal text-muted-foreground line-through mr-2">{formatCredits(baseCredits)}</span>
                     )}
                     {formatCredits(totalCredits)}
                   </span>
@@ -996,7 +1045,7 @@ const AdvertiserPublish = () => {
                 </div>
                 {!creditLoading && balanceCredits < totalCredits && (
                   <p className="text-[11px] text-destructive">
-                    Faltan {totalCredits - balanceCredits} créditos. Cómpralos al publicar.
+                    Falta {formatCredits(totalCredits - balanceCredits)}. Cómpralo al publicar.
                   </p>
                 )}
                 {!creditLoading && (
@@ -1019,23 +1068,12 @@ const AdvertiserPublish = () => {
               <CardHeader className="border-b">
                 <CardTitle className="text-sm uppercase tracking-widest text-secondary">Vista previa</CardTitle>
               </CardHeader>
-              <CardContent className="p-0">
-                <div className="aspect-[4/3] bg-muted relative overflow-hidden">
-                  {mainPhoto ? (
-                    <img src={mainPhoto.url} alt="Portada" className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs uppercase tracking-widest">Sin imagen</div>
-                  )}
-                </div>
-                <div className="p-4 space-y-2">
-                  <p className="text-[10px] uppercase tracking-widest font-bold text-secondary">
-                    {categories.find((c) => c.id === form.category)?.name || "Categoría"}
-                  </p>
-                  <h3 className="font-semibold text-foreground line-clamp-2 min-h-[2.5rem]">{form.title || "Título de tu aviso"}</h3>
-                  <p className="text-lg font-extrabold text-primary">
-                    {form.price ? `${form.currency === "USD" ? "US$" : "S/"} ${Number(form.price).toLocaleString()}` : "S/ —"}
-                  </p>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1"><MapPin size={11} /> {form.location || "Ubicación"}</p>
+              <CardContent className="p-4 bg-muted/30">
+                {/* La MISMA tarjeta que se ve publicada: insignias, marco dorado
+                    del destacado y contador de urgente idénticos. `pointer-events-none`
+                    la deja como muestra estática (sin navegar ni marcar favorito). */}
+                <div className="pointer-events-none max-w-[280px] mx-auto">
+                  <ListingCard listing={previewListing} layout="grid" />
                 </div>
               </CardContent>
             </Card>
@@ -1064,7 +1102,7 @@ const AdvertiserPublish = () => {
               </Button>
 
               <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 justify-center text-center">
-                <Wallet size={12} className="text-secondary" /> Se descontarán créditos de tu saldo al publicar.
+                <Wallet size={12} className="text-secondary" /> Se descontará de tu saldo al publicar.
                 Guardar como borrador es gratis.
               </p>
             </div>
@@ -1073,17 +1111,6 @@ const AdvertiserPublish = () => {
       </div>
 
 
-
-      {/* Verificación de identidad — consulta RENIEC/SUNAT y exige confirmación.
-          Componente compartido con la publicación de borradores. */}
-      <VerifyIdentityDialog
-        open={verifyOpen}
-        onOpenChange={setVerifyOpen}
-        enabled={hasSession}
-        defaultPersonType={personType}
-        defaultDocNumber={docNumber}
-        onConfirmed={confirmIdentity}
-      />
 
       {/* Modal compra de créditos — configurador (cuando no hay saldo suficiente) */}
       <BuyCreditsModal
@@ -1103,12 +1130,70 @@ const AdvertiserPublish = () => {
             else doPublish();
           } else {
             toast({
-              title: "Créditos añadidos",
+              title: "Saldo añadido",
               description: `Tu saldo es ${formatCredits(newBalance)}, pero este aviso cuesta ${formatCredits(totalCredits)}. Compra un poco más para publicar.`,
             });
           }
         }}
       />
+
+      {/* Único modal al publicar: confirmar. La identidad ya viene del perfil
+          (verificada al comprar saldo), así que aquí solo se confirma. */}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldCheck className="text-secondary" size={20} /> Confirmar publicación
+            </DialogTitle>
+            <DialogDescription>
+              Revisa los datos y confirma para publicar tu aviso.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <div className="p-3 border bg-muted/30 space-y-1.5">
+              <div className="flex justify-between gap-3">
+                <span className="text-muted-foreground">Aviso</span>
+                <span className="font-medium text-right">{form.title || "—"}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-muted-foreground">Duración</span>
+                <span className="font-medium">{duration} días</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-muted-foreground">Total</span>
+                <span className="font-extrabold text-primary">{formatSoles(total)}</span>
+              </div>
+            </div>
+            {verifiedName ? (
+              <div className="p-3 border bg-muted/30 space-y-1.5">
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Datos del comprobante</p>
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Nombre</span>
+                  <span className="font-medium text-right break-words">{verifiedName}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">{docKindLabel(personType === "juridica" ? "ruc" : "dni", docNumber)}</span>
+                  <span className="font-mono">{docNumber || "—"}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Tipo</span>
+                  <span className="font-medium">{personKindLabel(personType === "juridica" ? "ruc" : "dni", docNumber)}</span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                El comprobante se emitirá a nombre de <span className="font-semibold text-foreground">{session?.name || "tu cuenta"}</span>.
+              </p>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancelar</Button>
+            <Button onClick={confirmAndPublish} disabled={publishing}>
+              Confirmar y publicar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Confirmación post-pago */}
       <Dialog open={successOpen.open} onOpenChange={(o) => setSuccessOpen((s) => ({ ...s, open: o }))}>

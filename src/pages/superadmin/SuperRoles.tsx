@@ -11,7 +11,7 @@ import { fetchRoleCounts, fetchRolePermissions, setRolePermission, type RolePerm
 const roleCards = [
   { key: "superadmin", name: "Superadministrador", color: "bg-gradient-to-br from-secondary to-primary text-white", icon: Crown, desc: "Acceso total. Define qué puede hacer cada rol." },
   { key: "admin", name: "Administrador", color: "bg-secondary text-secondary-foreground", icon: ShieldCheck, desc: "Opera la plataforma según los permisos otorgados." },
-  { key: "moderador", name: "Moderador", color: "bg-warning/80 text-white", icon: Gavel, desc: "Revisa denuncias y modera contenido y usuarios." },
+  { key: "moderador", name: "Moderador", color: "bg-warning/80 text-white", icon: Gavel, desc: "Revisa reclamos y modera contenido y usuarios." },
   { key: "soporte", name: "Soporte", color: "bg-primary/80 text-white", icon: LifeBuoy, desc: "Atiende consultas y gestiona casos de usuarios." },
 ];
 

@@ -38,7 +38,12 @@ vi.mock("@/components/DashboardLayout", () => ({
 const navigate = vi.fn();
 vi.mock("react-router-dom", async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>);
-  return { ...actual, useNavigate: () => navigate, Link: ({ children, ...p }: any) => <a {...p}>{children}</a> };
+  return {
+    ...actual,
+    useNavigate: () => navigate,
+    useSearchParams: () => [new URLSearchParams(), vi.fn()],
+    Link: ({ children, ...p }: any) => <a {...p}>{children}</a>,
+  };
 });
 
 const toast = vi.fn();

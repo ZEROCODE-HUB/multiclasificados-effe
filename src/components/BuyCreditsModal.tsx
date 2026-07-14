@@ -164,11 +164,12 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
         advertiserName: verifiedName,
         docType: personType === "natural" ? "dni" : "ruc",
         docNumber: docNumber.trim(),
+        factilizaData: docData,
       };
       const { newBalance, invoiceNumber } = await purchaseCredits(pkg, invoiceData);
       toast({
-        title: "¡Créditos acreditados!",
-        description: `Se añadieron ${formatCredits(creditsToBuy)} en créditos. Comprobante: ${invoiceNumber}`,
+        title: "¡Saldo acreditado!",
+        description: `Se añadió ${formatCredits(creditsToBuy)} a tu saldo. Comprobante: ${invoiceNumber}`,
       });
       onPurchaseComplete(newBalance);
       onClose();
@@ -191,10 +192,10 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Wallet size={18} className="text-secondary" /> Comprar créditos
+            <Wallet size={18} className="text-secondary" /> Comprar saldo
           </DialogTitle>
           <DialogDescription>
-            Arma tu compra: elige cantidad de avisos, duración y adicionales. 1 crédito vale 1 sol, así que pagas justo lo que ves.
+            Arma tu compra: elige cantidad de avisos, duración y adicionales. Pagas justo lo que ves, en soles.
           </DialogDescription>
         </DialogHeader>
 
@@ -278,7 +279,7 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
             </div>
           )}
           <div className="border-t pt-2 flex justify-between items-baseline">
-            <span className="font-bold uppercase tracking-wider text-xs">Créditos a comprar</span>
+            <span className="font-bold uppercase tracking-wider text-xs">Saldo a comprar</span>
             <span className="text-2xl font-extrabold text-secondary">{formatCredits(creditsToBuy)}</span>
           </div>
           <div className="flex justify-between text-[11px] text-muted-foreground">

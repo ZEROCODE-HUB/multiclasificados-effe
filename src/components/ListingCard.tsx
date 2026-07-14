@@ -1,4 +1,5 @@
-import { MapPin, Heart, ShieldCheck, Star } from "lucide-react";
+import { useEffect, useState } from "react";
+import { MapPin, Heart, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -8,6 +9,7 @@ import type { Listing } from "@/data/mockData";
 import { useSession } from "@/hooks/useSession";
 import { useFavorites } from "@/hooks/useFavorites";
 import { listingBadges } from "@/lib/listingBadges";
+import { urgentTimeLeft } from "@/lib/listings";
 
 interface ListingCardProps {
   listing: Listing;
@@ -58,31 +60,43 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
   // Colores oficiales (dorado / rojo / celeste) en @/lib/listingBadges.
   const badgeDefs = listingBadges(listing);
 
+  // Cuenta regresiva del adicional "Urgente": horas que le quedan al aviso.
+  // Solo tickeamos (cada minuto) si el aviso es urgente y tiene vencimiento.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!listing.urgent || !listing.expiresAt) return;
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, [listing.urgent, listing.expiresAt]);
+  const urgent = listing.urgent ? urgentTimeLeft(listing.expiresAt ?? null, now) : null;
+
   // Los chips (icono + tooltip). El contenedor decide la dirección: en el grid
   // van en columna por la izquierda (no crecen hacia "Verificado"); en la lista,
-  // en fila junto al título.
+  // en fila junto al título. En "Urgente" el chip crece para mostrar el contador.
   const badgeChips = badgeDefs.length > 0 && (
     <TooltipProvider delayDuration={100}>
-      {badgeDefs.map(({ label, icon: Icon, cls }) => (
-        <Tooltip key={label}>
-          <TooltipTrigger asChild>
-            <span
-              aria-label={label}
-              onClick={(e) => e.stopPropagation()}
-              className={`w-7 h-7 flex items-center justify-center shadow-md ${cls}`}
-            >
-              <Icon size={14} />
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>{label}</TooltipContent>
-        </Tooltip>
-      ))}
+      {badgeDefs.map(({ key, label, icon: Icon, cls }) => {
+        const showCount = key === "urgent" && urgent && !urgent.expired;
+        return (
+          <Tooltip key={label}>
+            <TooltipTrigger asChild>
+              <span
+                aria-label={showCount ? `${label} · quedan ${urgent!.short}` : label}
+                onClick={(e) => e.stopPropagation()}
+                className={`h-7 flex items-center justify-center gap-1 shadow-md ${showCount ? "px-1.5 w-auto" : "w-7"} ${cls}`}
+              >
+                <Icon size={14} />
+                {showCount && (
+                  <span className="text-[11px] font-bold leading-none tabular-nums">{urgent!.short}</span>
+                )}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{showCount ? `Urgente · quedan ${urgent!.long}` : label}</TooltipContent>
+          </Tooltip>
+        );
+      })}
     </TooltipProvider>
   );
-
-  // Sin reseñas reales todavía → valores neutros
-  const rating = "0.0";
-  const reviews = 0;
 
   // Destacado = "marco dorado" + fondo ligeramente distinto (documento eFFe).
   // Solo estético; la insignia sigue indicando la modalidad.
@@ -154,15 +168,8 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
 
         {isAuthed ? (
           <>
-            {/* Rating */}
+            {/* Ubicación */}
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <Star size={12} className="text-secondary fill-secondary" />
-                <span className="font-semibold text-foreground">{rating}</span>
-              </span>
-              <span className="text-muted-foreground/60">·</span>
-              <span>{reviews} reseñas</span>
-              <span className="text-muted-foreground/60">·</span>
               <span className="flex items-center gap-1 truncate"><MapPin size={11} />{listing.location}</span>
             </div>
 

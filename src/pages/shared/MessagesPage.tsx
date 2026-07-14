@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { ArrowLeft, Send, Search, CheckCircle2, Check, CheckCheck, Flag } from "lucide-react";
+import { ArrowLeft, Send, Search, CheckCircle2, Check, CheckCheck, Flag, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 import { reportUser, USER_REPORT_REASONS } from "@/lib/reports";
@@ -51,6 +51,7 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
   const [selectedId, setSelectedId] = useState<string | null>(params.get("c"));
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
   const [filter, setFilter] = useState("");
   const [sold, setSold] = useState(() => loadSold());
   const [loadingConvs, setLoadingConvs] = useState(true);
@@ -160,9 +161,11 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
   };
 
   const send = async () => {
+    if (sending) return; // evita doble envío al pulsar (o Enter) dos veces
     if (!draft.trim() || !selectedId) return;
     const text = draft;
     setDraft("");
+    setSending(true);
     try {
       const inserted = await sendMessage(selectedId, text);
       if (inserted) {
@@ -171,6 +174,8 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
     } catch (e) {
       setDraft(text);
       toast({ title: "No se pudo enviar", description: e instanceof Error ? e.message : "Intenta de nuevo.", variant: "destructive" });
+    } finally {
+      setSending(false);
     }
   };
 
@@ -343,10 +348,10 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
                     className="flex-1"
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && send()}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !sending) send(); }}
                   />
-                  <Button size="icon" variant="hero" onClick={send}>
-                    <Send size={16} />
+                  <Button size="icon" variant="hero" onClick={send} disabled={sending || !draft.trim()}>
+                    {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
                   </Button>
                 </div>
               </>

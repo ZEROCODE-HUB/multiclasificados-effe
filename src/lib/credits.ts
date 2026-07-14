@@ -27,6 +27,8 @@ export interface PurchaseInvoiceData {
   advertiserName: string;
   docType?: "dni" | "ruc";
   docNumber?: string;
+  // Ficha completa de Factiliza (domicilio, ubigeo, estado del RUC, etc.).
+  factilizaData?: Record<string, unknown> | null;
 }
 
 // ─── Lectura de saldo ──────────────────────────────────────────────────────
@@ -84,7 +86,7 @@ export async function purchaseCredits(
   invoiceData: PurchaseInvoiceData,
 ): Promise<{ newBalance: number; orderId: string; invoiceNumber: string }> {
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Debes iniciar sesión para comprar créditos.");
+  if (!user) throw new Error("Debes iniciar sesión para comprar saldo.");
 
   const total = pkg.price_soles;
   const { subtotal, igv } = splitIgv(total);
@@ -110,14 +112,16 @@ export async function purchaseCredits(
 
   // 2) Guardar documento en el perfil si se provee
   if (invoiceData.docType && invoiceData.docNumber) {
-    await supabase
-      .from("profiles")
-      .update({
-        doc_type: invoiceData.docType,
-        doc_number: invoiceData.docNumber,
-        verified: true,
-      })
-      .eq("id", user.id);
+    // Persistimos el nombre de Factiliza (legal_name) para reusarlo al publicar
+    // sin volver a pedir la verificación.
+    const pf: Record<string, unknown> = {
+      doc_type: invoiceData.docType,
+      doc_number: invoiceData.docNumber,
+      verified: true,
+    };
+    if (invoiceData.advertiserName) pf.legal_name = invoiceData.advertiserName;
+    if (invoiceData.factilizaData) pf.factiliza_data = invoiceData.factilizaData;
+    await supabase.from("profiles").update(pf).eq("id", user.id);
   }
 
   // 3) Generar comprobante
@@ -129,9 +133,11 @@ export async function purchaseCredits(
       type: invoiceData.receiptType,
       email: invoiceData.email,
       advertiser_name: invoiceData.advertiserName,
+      doc_type: invoiceData.docType ?? null,
       doc_number: invoiceData.docNumber ?? null,
+      factiliza_data: invoiceData.factilizaData ?? null,
       amount: total,
-      detail: `Compra de créditos: ${pkg.name} (${pkg.credits_amount} créditos)`,
+      detail: `Compra de saldo: ${pkg.name} (S/ ${pkg.credits_amount})`,
     })
     .select("number")
     .single();
@@ -141,10 +147,10 @@ export async function purchaseCredits(
   const { error: addErr } = await supabase.rpc("add_credits", {
     p_user_id: user.id,
     p_credits: pkg.credits_amount,
-    p_description: `Compra ${pkg.name} — ${pkg.credits_amount} créditos`,
+    p_description: `Compra ${pkg.name} — S/ ${pkg.credits_amount}`,
     p_order_id: order.id,
   });
-  if (addErr) throw new Error("Créditos no acreditados: " + addErr.message);
+  if (addErr) throw new Error("Saldo no acreditado: " + addErr.message);
 
   // 5) Devolver saldo actualizado
   const newBalance = await getCreditBalance();

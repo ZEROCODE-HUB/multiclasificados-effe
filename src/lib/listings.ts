@@ -5,7 +5,7 @@
 import { supabase } from "@/lib/supabase";
 import type { Listing } from "@/data/mockData";
 
-const FALLBACK_IMG =
+export const FALLBACK_IMG =
   "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=400&h=300&fit=crop";
 
 const isUuid = (v: string) =>
@@ -18,6 +18,7 @@ interface CardRow {
   description: string | null;
   price: number | string;
   currency: string;
+  condition: string | null;
   category_id: string;
   location: string | null;
   lat: number | string | null;
@@ -28,6 +29,7 @@ interface CardRow {
   views: number | null;
   published_at: string | null;
   created_at: string | null;
+  expires_at: string | null;
   advertiser: string | null;
   image_url: string | null;
 }
@@ -39,6 +41,7 @@ export function mapCard(r: CardRow): Listing {
     description: r.description ?? "",
     price: Number(r.price) || 0,
     currency: r.currency || "PEN",
+    condition: (r.condition ?? "na") as ListingCondition,
     category: r.category_id,
     location: r.location ?? "",
     lat: r.lat != null ? Number(r.lat) : null,
@@ -50,6 +53,7 @@ export function mapCard(r: CardRow): Listing {
     confidential: !!r.confidential,
     advertiser: r.advertiser ?? "Anunciante",
     views: Number(r.views) || 0,
+    expiresAt: r.expires_at ?? null,
   };
 }
 
@@ -207,6 +211,33 @@ export function expiryInfo(expiresAt: string | null, now: number = Date.now()): 
 
   const tone: ExpiryInfo["tone"] = days >= 7 ? "normal" : days >= 1 ? "warning" : "urgent";
   return { text, tone };
+}
+
+// Cuenta regresiva del adicional "Urgente": cuánto le queda al aviso antes de
+// caducar (el urgente solo se vende en planes ≤7 días, así que es una urgencia
+// real por horas). `short` va en la insignia de la tarjeta; `long` en el
+// detalle. Devuelve null si no hay fecha de vencimiento.
+export interface UrgentTimeLeft { short: string; long: string; hours: number; expired: boolean }
+export function urgentTimeLeft(expiresAt: string | null, now: number = Date.now()): UrgentTimeLeft | null {
+  if (!expiresAt) return null;
+  const ms = new Date(expiresAt).getTime() - now;
+  if (Number.isNaN(ms)) return null;
+  if (ms <= 0) return { short: "0h", long: "Urgencia vencida", hours: 0, expired: true };
+
+  const totalMin = Math.floor(ms / 60000);
+  const totalHours = Math.floor(totalMin / 60);
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  const mins = totalMin % 60;
+
+  // Insignia: enfocada en horas y compacta ("47h", o "45m" en la última hora).
+  const short = totalHours >= 1 ? `${totalHours}h` : `${mins}m`;
+  // Detalle: desglose legible.
+  const long =
+    days >= 1 ? `${days}d ${hours}h ${mins}m`
+    : totalHours >= 1 ? `${totalHours}h ${mins}m`
+    : `${mins}m`;
+  return { short, long, hours: totalHours, expired: false };
 }
 
 export interface MyListing extends Listing {

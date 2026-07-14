@@ -72,6 +72,9 @@ export interface AdminInvoice {
   date: string;
   advertiser: string;
   email: string;
+  docType: string | null;
+  docNumber: string | null;
+  factilizaData: Record<string, unknown> | null;
   listingTitle: string;
   amount: number;
 }
@@ -87,6 +90,9 @@ interface InvoiceRow {
   type: string;
   email: string | null;
   advertiser_name: string | null;
+  doc_type: string | null;
+  doc_number: string | null;
+  factiliza_data: Record<string, unknown> | null;
   amount: number | string;
   detail: string | null;
   issued_at: string;
@@ -99,7 +105,7 @@ export async function fetchAllInvoices(): Promise<{ data: AdminInvoice[]; real: 
       const { data, error } = await supabase
         .from("invoices")
         .select(
-          "id, number, type, email, advertiser_name, amount, detail, issued_at, " +
+          "id, number, type, email, advertiser_name, doc_type, doc_number, factiliza_data, amount, detail, issued_at, " +
             "orders ( order_listings ( listings ( title ) ) )"
         )
         .order("issued_at", { ascending: false });
@@ -117,6 +123,9 @@ export async function fetchAllInvoices(): Promise<{ data: AdminInvoice[]; real: 
           date: r.issued_at,
           advertiser: r.advertiser_name || "—",
           email: r.email || "—",
+          docType: r.doc_type ?? null,
+          docNumber: r.doc_number ?? null,
+          factilizaData: r.factiliza_data ?? null,
           listingTitle: title || r.detail || "—",
           amount: Number(r.amount) || 0,
         };
@@ -133,6 +142,9 @@ export async function fetchAllInvoices(): Promise<{ data: AdminInvoice[]; real: 
     date: l.date,
     advertiser: l.advertiser,
     email: l.email,
+    docType: null,
+    docNumber: (l as { docNumber?: string | null }).docNumber ?? null,
+    factilizaData: null,
     listingTitle: l.listingTitle,
     amount: l.amount,
   }));
@@ -141,7 +153,10 @@ export async function fetchAllInvoices(): Promise<{ data: AdminInvoice[]; real: 
 
 // ------------------------------------------------------------------ Categorías
 export interface AdminCategory {
-  id: string; name: string; icon: string; sort_order: number; active: boolean; count: number;
+  id: string; name: string; icon: string; sort_order: number; active: boolean;
+  // Si es false, el formulario de publicar oculta el campo "Condición".
+  condition_enabled: boolean;
+  count: number;
 }
 
 // Categorías reales (tabla categories) + nº de avisos por categoría.
@@ -149,7 +164,7 @@ export async function fetchCategories(): Promise<{ data: AdminCategory[]; real: 
   try {
     const { data: cats, error } = await supabase
       .from("categories")
-      .select("id, name, icon, sort_order, active")
+      .select("id, name, icon, sort_order, active, condition_enabled")
       .order("sort_order", { ascending: true });
     if (error) throw error;
     if (cats && (cats.length || (await isAuthed()))) {
@@ -158,6 +173,7 @@ export async function fetchCategories(): Promise<{ data: AdminCategory[]; real: 
       (ls ?? []).forEach((r: any) => { counts[r.category_id] = (counts[r.category_id] ?? 0) + 1; });
       const rows: AdminCategory[] = (cats as any[]).map((c) => ({
         id: c.id, name: c.name, icon: c.icon, sort_order: c.sort_order, active: c.active,
+        condition_enabled: c.condition_enabled !== false,
         count: counts[c.id] ?? 0,
       }));
       return { data: rows, real: true };
@@ -165,12 +181,12 @@ export async function fetchCategories(): Promise<{ data: AdminCategory[]; real: 
   } catch { /* fallback */ }
   // Modo demo (sin sesión): set base de categorías con icono como texto.
   const fallback: AdminCategory[] = [
-    { id: "inmuebles", name: "Inmuebles", icon: "Home", sort_order: 0, active: true, count: 0 },
-    { id: "vehiculos", name: "Vehículos", icon: "Car", sort_order: 1, active: true, count: 0 },
-    { id: "empleos", name: "Empleos", icon: "Briefcase", sort_order: 2, active: true, count: 0 },
-    { id: "tecnologia", name: "Tecnología", icon: "Smartphone", sort_order: 3, active: true, count: 0 },
-    { id: "productos", name: "Productos", icon: "Package", sort_order: 4, active: true, count: 0 },
-    { id: "servicios", name: "Servicios", icon: "Wrench", sort_order: 5, active: true, count: 0 },
+    { id: "inmuebles", name: "Inmuebles", icon: "Home", sort_order: 0, active: true, condition_enabled: true, count: 0 },
+    { id: "vehiculos", name: "Vehículos", icon: "Car", sort_order: 1, active: true, condition_enabled: true, count: 0 },
+    { id: "empleos", name: "Empleos", icon: "Briefcase", sort_order: 2, active: true, condition_enabled: false, count: 0 },
+    { id: "tecnologia", name: "Tecnología", icon: "Smartphone", sort_order: 3, active: true, condition_enabled: true, count: 0 },
+    { id: "productos", name: "Productos", icon: "Package", sort_order: 4, active: true, condition_enabled: true, count: 0 },
+    { id: "servicios", name: "Servicios", icon: "Wrench", sort_order: 5, active: true, condition_enabled: false, count: 0 },
   ];
   return { data: fallback, real: false };
 }
@@ -182,17 +198,18 @@ export function slugify(name: string): string {
     .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
-export async function createCategory(input: { name: string; icon: string; sort_order: number }) {
+export async function createCategory(input: { name: string; icon: string; sort_order: number; condition_enabled?: boolean }) {
   const id = slugify(input.name);
   if (!id) throw new Error("Nombre de categoría inválido.");
   const { error } = await supabase.from("categories").insert({
     id, name: input.name.trim(), icon: input.icon || "Tag", sort_order: input.sort_order, active: true,
+    condition_enabled: input.condition_enabled ?? true,
   });
   if (error) throw error;
   return id;
 }
 
-export async function updateCategory(id: string, patch: { name?: string; icon?: string; active?: boolean }) {
+export async function updateCategory(id: string, patch: { name?: string; icon?: string; active?: boolean; condition_enabled?: boolean }) {
   const { error } = await supabase.from("categories").update(patch).eq("id", id);
   if (error) throw error;
 }
@@ -439,6 +456,7 @@ export async function fetchUserActivity(userId: string) {
 export interface AdminListingRow {
   id: string; title: string; category_id: string; status: string; featured: boolean;
   price: number; currency: string; advertiser: string | null; views: number; created_at: string;
+  published_at?: string | null; expires_at?: string | null;
 }
 
 export async function fetchAdminListings(opts?: { search?: string; status?: string }): Promise<{ data: AdminListingRow[]; real: boolean }> {
@@ -455,6 +473,7 @@ export async function fetchAdminListings(opts?: { search?: string; status?: stri
           : l.status === "Rechazado" ? "rejected" : "active",
     featured: l.status === "Destacado", price: 0, currency: "PEN",
     advertiser: l.advertiser, views: 0, created_at: l.date,
+    published_at: null, expires_at: null,
   }));
   return { data: mapped, real: false };
 }
@@ -462,6 +481,16 @@ export async function fetchAdminListings(opts?: { search?: string; status?: stri
 export async function setListingStatus(listingId: string, status: string, reason?: string) {
   const { error } = await supabase.rpc("admin_set_listing_status", {
     p_listing: listingId, p_status: status, p_reason: reason ?? null,
+  });
+  if (error) throw error;
+}
+
+// Herramienta de PRUEBA (superadmin): mueve la fecha de publicación/creación
+// de un aviso conservando su duración, para testear la caducidad sin esperar.
+// La BD recalcula expires_at y reevalúa el estado (active <-> expired).
+export async function setListingPublishedAt(listingId: string, publishedAtISO: string) {
+  const { error } = await supabase.rpc("admin_set_listing_published", {
+    p_listing: listingId, p_published_at: publishedAtISO,
   });
   if (error) throw error;
 }

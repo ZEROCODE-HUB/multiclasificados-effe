@@ -28,7 +28,9 @@ export interface DraftInput {
   duration: number;
   extras: Record<string, number | undefined>;
   mainPhoto: PublishPhoto | null;
-  secondPhoto: PublishPhoto | null;
+  // Imágenes adicionales (adicional "Imagen adicional", hasta 3). Van después de
+  // la portada, en orden.
+  extraPhotos: PublishPhoto[];
   // PDF adjunto (adicional "PDF adjunto"). Se sube al bucket privado listing-docs
   // y su ruta queda en listings.document_url. Null = no se adjuntó / se quitó.
   pdf?: PublishPhoto | null;
@@ -73,11 +75,11 @@ const listingRow = (input: DraftInput) => ({
   plan_extras: input.extras,
 });
 
-// Sube la portada y la segunda foto. En una actualización se reemplazan las
-// filas anteriores: si no, al volver a guardar el borrador el aviso acumularía
+// Sube la portada y las imágenes adicionales. En una actualización se reemplazan
+// las filas anteriores: si no, al volver a guardar el borrador el aviso acumularía
 // imágenes viejas junto a las nuevas.
 async function uploadListingPhotos(userId: string, listingId: string, input: DraftInput, replace: boolean) {
-  const photos = [input.mainPhoto, input.secondPhoto].filter(Boolean) as PublishPhoto[];
+  const photos = [input.mainPhoto, ...(input.extraPhotos ?? [])].filter(Boolean) as PublishPhoto[];
   if (!photos.length) return;
   if (replace) await supabase.from("listing_images").delete().eq("listing_id", listingId);
 
@@ -193,12 +195,21 @@ export async function finalizeListingPublication(
   // 1.b) Persistir la identidad verificada (Factiliza) en el perfil del usuario,
   //      para que el DNI/RUC quede en la base de datos y coincida con el comprobante.
   if (input.docType && input.docNumber) {
-    const { error: pfErr } = await supabase
-      .from("profiles")
-      .update({ doc_type: input.docType, doc_number: input.docNumber, verified: true })
-      .eq("id", user.id);
+    // Guardamos también el nombre/razón social de Factiliza (legal_name) para
+    // reusarlo al publicar sin volver a pedir la verificación.
+    const pf: Record<string, unknown> = {
+      doc_type: input.docType, doc_number: input.docNumber, verified: true,
+    };
+    if (input.advertiserName) pf.legal_name = input.advertiserName;
+    const { error: pfErr } = await supabase.from("profiles").update(pf).eq("id", user.id);
     if (pfErr) console.error("[publish] No se pudo guardar el documento en el perfil:", pfErr.message);
   }
+
+  // Ficha completa de Factiliza guardada en el perfil (verificada al comprar
+  // saldo): la copiamos al comprobante para que muestre nombre, domicilio, etc.
+  const { data: prof } = await supabase
+    .from("profiles").select("factiliza_data").eq("id", user.id).maybeSingle();
+  const factilizaData = (prof as { factiliza_data?: unknown } | null)?.factiliza_data ?? null;
 
   // 3) Orden + comprobante — TODO comprobante debe guardarse: los errores se
   //    registran (no se ignoran en silencio) para poder diagnosticarlos.
@@ -235,7 +246,9 @@ export async function finalizeListingPublication(
         type: input.receiptType,
         email: input.email,
         advertiser_name: input.advertiserName,
+        doc_type: input.docType ?? null,
         doc_number: input.docNumber ?? null,
+        factiliza_data: factilizaData,
         amount: input.total,
         detail: `Aviso ${input.duration} días · ${input.quantity} unidad(es)`,
       })

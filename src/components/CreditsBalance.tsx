@@ -39,7 +39,7 @@ export function CreditsBalance({ variant = "chip" }: { variant?: "chip" | "row" 
           <span className="flex items-center gap-3">
             <Coins size={16} className="text-secondary" />
             <span className="flex flex-col items-start leading-tight">
-              Mis créditos
+              Mi saldo
               {avisos !== null && <span className="text-[11px] text-muted-foreground font-normal">{avisosLabel} disponibles</span>}
             </span>
           </span>
@@ -50,7 +50,7 @@ export function CreditsBalance({ variant = "chip" }: { variant?: "chip" | "row" 
       ) : (
         <button
           onClick={() => setOpen(true)}
-          title={avisos === null ? "Mis créditos · Comprar" : `Mis créditos · ${avisosLabel} · Comprar`}
+          title={avisos === null ? "Mi saldo · Comprar" : `Mi saldo · ${avisosLabel} · Comprar`}
           className="flex items-center gap-1.5 px-3 py-1.5 border border-border hover:border-secondary/50 hover:bg-muted/50 transition-all rounded-none"
         >
           <Coins size={16} className="text-secondary" />

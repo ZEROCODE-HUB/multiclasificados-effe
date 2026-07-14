@@ -6,6 +6,15 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { useSession } from "@/hooks/useSession";
 import {
   fetchNotifications, fetchUnreadNotifications, markAllNotificationsRead, markNotificationRead,
@@ -40,6 +49,9 @@ export function NotificationsBell() {
   const [items, setItems] = useState<AppNotification[]>([]);
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
+  // Notificación abierta en el modal (las informativas, que no llevan a otra
+  // pantalla). Las de mensaje/aviso/búsqueda siguen redirigiendo como antes.
+  const [detail, setDetail] = useState<AppNotification | null>(null);
 
   useEffect(() => {
     if (!session?.supabase) {
@@ -75,7 +87,10 @@ export function NotificationsBell() {
       setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x)));
     }
     const to = notificationLink(n, session?.role ?? "buscador");
+    // Si la notificación lleva a otra pantalla (mensaje → chat, aviso, búsqueda),
+    // redirigimos. Si es informativa (sin destino), la mostramos en un modal.
     if (to && to !== "#") navigate(to);
+    else setDetail(n);
   };
 
   const markAll = async () => {
@@ -86,7 +101,10 @@ export function NotificationsBell() {
 
   if (!session?.supabase) return null;
 
+  const DetailIcon = detail ? iconFor(detail.type) : Bell;
+
   return (
+    <>
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger
         className="relative p-2 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors outline-none"
@@ -99,7 +117,7 @@ export function NotificationsBell() {
           </span>
         )}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-80 bg-card rounded-none p-0">
+      <DropdownMenuContent align="end" className="w-80 max-w-[92vw] bg-card rounded-none p-0">
         <div className="flex items-center justify-between px-3 py-2.5 border-b border-border">
           <span className="text-sm font-bold text-foreground">Notificaciones</span>
           {unread > 0 && (
@@ -142,5 +160,32 @@ export function NotificationsBell() {
         </div>
       </DropdownMenuContent>
     </DropdownMenu>
+
+    {/* Modal para las notificaciones informativas (mensajes del equipo,
+        advertencias, suspensiones…): muestran su contenido completo sin
+        sacar al usuario de donde está. */}
+    <Dialog open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <span className="p-2 rounded-full bg-secondary/15 text-secondary flex-shrink-0">
+              <DetailIcon size={16} />
+            </span>
+            {detail?.title ?? "Notificación"}
+          </DialogTitle>
+          <DialogDescription className="sr-only">Detalle de la notificación</DialogDescription>
+        </DialogHeader>
+        {detail && (
+          <div className="space-y-2">
+            <p className="text-sm text-foreground whitespace-pre-wrap break-words">{notificationText(detail)}</p>
+            <p className="text-[11px] text-muted-foreground">{timeAgo(detail.created_at)}</p>
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setDetail(null)}>Entendido</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

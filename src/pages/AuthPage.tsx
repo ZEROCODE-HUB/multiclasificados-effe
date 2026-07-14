@@ -58,6 +58,13 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
   const [termsOpen, setTermsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Dispositivo compartido: al abrir la pantalla de acceso los campos deben estar
+  // vacíos para el nuevo usuario. Mantenemos las credenciales en solo-lectura
+  // hasta el primer foco para que el navegador (y el WebView del APK) no
+  // autocomplete la contraseña guardada de otra persona; al enfocar cualquier
+  // campo se desbloquean y se puede escribir con normalidad.
+  const [fieldsLocked, setFieldsLocked] = useState(true);
+
   // Captcha de seguridad: solo en el login de staff y SOLO en web. En la app
   // nativa (APK) el WebView corre sobre localhost y el widget de hCaptcha no
   // aplica; ahí el staff queda protegido por el 2FA obligatorio del panel.
@@ -81,6 +88,16 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.supabase, session?.role]);
+
+  // Al montar la pantalla (p. ej. tras cerrar sesión y volver a /auth), dejamos
+  // todos los campos limpios: nada de la sesión anterior debe quedar escrito.
+  useEffect(() => {
+    setEmail(""); setPassword("");
+    setRegEmail(""); setRegPassword(""); setRegPasswordConfirm(""); setPhone("");
+    setAcceptedTerms(false);
+    setFieldsLocked(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Explorar la plataforma como visitante: NO crea perfiles demo (esos usuarios
   // "Juan Mendoza"/"Ana García" no existen en la BD). Limpia cualquier sesión
@@ -183,9 +200,16 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
         toast.success("Cuenta creada. Revisa tu correo para confirmar el registro.");
       }
       // Tras crear la cuenta, llevamos al usuario a la pantalla de iniciar sesión
-      // (con el correo precargado para mayor comodidad).
+      // (con el correo precargado para mayor comodidad) y VACIAMOS el formulario
+      // de registro: la contraseña recién tecleada no debe quedar guardada para
+      // el siguiente que use el dispositivo.
       setEmail(regEmail);
       setPassword("");
+      setRegEmail("");
+      setRegPassword("");
+      setRegPasswordConfirm("");
+      setPhone("");
+      setAcceptedTerms(false);
       setActiveTab("login");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "No se pudo crear la cuenta.");
@@ -264,7 +288,10 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
 
       {/* Right side - Auth forms */}
       <div className="flex-1 flex items-start lg:items-center justify-center p-4 sm:p-6 lg:p-12 bg-background overflow-y-auto -mt-6 lg:mt-0 z-10">
-        <div className="w-full max-w-md bg-card lg:bg-transparent rounded-2xl lg:rounded-none shadow-xl lg:shadow-none border lg:border-0 p-5 sm:p-6 lg:p-0">
+        <div
+          className="w-full max-w-md bg-card lg:bg-transparent rounded-2xl lg:rounded-none shadow-xl lg:shadow-none border lg:border-0 p-5 sm:p-6 lg:p-0"
+          onFocusCapture={() => setFieldsLocked(false)}
+        >
           {/* Desktop logo - centered */}
           <Link to="/" className="hidden lg:flex justify-center mb-8">
             <BrandMark size="lg" asLink={false} />
@@ -296,13 +323,13 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
             <div className="space-y-4 animate-fade-in">
               <div>
                 <Label htmlFor="email">Correo electrónico</Label>
-                <Input ref={loginEmailRef} id="email" type="email" autoComplete="off" placeholder="tu@correo.com" className="mt-1"
+                <Input ref={loginEmailRef} id="email" type="email" autoComplete="off" readOnly={fieldsLocked} placeholder="tu@correo.com" className="mt-1"
                   value={email} onChange={(e) => setEmail(e.target.value)} />
               </div>
               <div>
                 <Label htmlFor="password">Contraseña</Label>
                 <div className="relative mt-1">
-                  <Input id="password" type={showPassword ? "text" : "password"} autoComplete="new-password" placeholder="••••••••"
+                  <Input id="password" type={showPassword ? "text" : "password"} autoComplete="new-password" readOnly={fieldsLocked} placeholder="••••••••"
                     value={password} onChange={(e) => setPassword(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") handleLogin(); }} />
                   <button
@@ -356,7 +383,7 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
             <div className="space-y-4 animate-fade-in">
               <div>
                 <Label htmlFor="regEmail">Correo electrónico *</Label>
-                <Input id="regEmail" type="email" inputMode="email" autoComplete="off" placeholder="tu@correo.com" className="mt-1"
+                <Input id="regEmail" type="email" inputMode="email" autoComplete="off" readOnly={fieldsLocked} placeholder="tu@correo.com" className="mt-1"
                   value={regEmail} onChange={(e) => setRegEmail(e.target.value)} />
                 {regEmail && !EMAIL_RE.test(regEmail) && (
                   <p className="text-xs text-destructive mt-1">Ingresa un correo válido.</p>
@@ -389,12 +416,12 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
               </div>
               <div>
                 <Label htmlFor="regPassword">Contraseña *</Label>
-                <Input id="regPassword" type="password" autoComplete="new-password" placeholder="Mínimo 8 caracteres" className="mt-1"
+                <Input id="regPassword" type="password" autoComplete="new-password" readOnly={fieldsLocked} placeholder="Mínimo 8 caracteres" className="mt-1"
                   value={regPassword} onChange={(e) => setRegPassword(e.target.value)} />
               </div>
               <div>
                 <Label htmlFor="regPasswordConfirm">Confirmar contraseña *</Label>
-                <Input id="regPasswordConfirm" type="password" autoComplete="new-password" placeholder="Repite tu contraseña" className="mt-1"
+                <Input id="regPasswordConfirm" type="password" autoComplete="new-password" readOnly={fieldsLocked} placeholder="Repite tu contraseña" className="mt-1"
                   value={regPasswordConfirm} onChange={(e) => setRegPasswordConfirm(e.target.value)} />
                 {regPasswordConfirm.length > 0 && regPassword !== regPasswordConfirm && (
                   <p className="text-xs text-destructive mt-1">Las contraseñas no coinciden.</p>

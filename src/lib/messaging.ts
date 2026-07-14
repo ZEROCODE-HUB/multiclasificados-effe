@@ -26,6 +26,9 @@ export interface Conversation {
   listing_category: string;
   counterpart_id: string;
   counterpart_name: string;
+  // En avisos confidenciales, el anunciante se muestra por su CORREO (no su
+  // nombre) y solo lo ve el comprador. Este flag deja que la UI lo señale.
+  counterpart_is_email: boolean;
   unread: number;
 }
 
@@ -87,6 +90,16 @@ export async function fetchConversations(): Promise<Conversation[]> {
       (profs ?? []).forEach((p: { id: string; full_name: string }) => names.set(p.id, p.full_name));
     }
 
+    // Avisos confidenciales: si soy el comprador, muestro el CORREO del
+    // anunciante en vez de su nombre (RPC security-definer acotado al comprador).
+    const emailByConv = new Map<string, string>();
+    try {
+      const { data: emailRows } = await supabase.rpc("confidential_counterpart_emails");
+      (emailRows ?? []).forEach((e: { conversation_id: string; email: string }) => {
+        if (e.email) emailByConv.set(e.conversation_id, e.email);
+      });
+    } catch { /* si falla, se muestra el nombre normal */ }
+
     // No leídos: mensajes dirigidos a mí sin leer, por conversación.
     const unreadByConv = new Map<string, number>();
     const { data: unreadRows } = await supabase
@@ -100,6 +113,7 @@ export async function fetchConversations(): Promise<Conversation[]> {
 
     return rows.map((r: any): Conversation => {
       const counterpartId = r.buyer_id === user.id ? r.seller_id : r.buyer_id;
+      const confidentialEmail = emailByConv.get(r.id);
       return {
         id: r.id,
         listing_id: r.listing_id,
@@ -110,7 +124,8 @@ export async function fetchConversations(): Promise<Conversation[]> {
         listing_title: r.listings?.title ?? "Aviso",
         listing_category: r.listings?.category_id ?? "",
         counterpart_id: counterpartId,
-        counterpart_name: names.get(counterpartId) ?? "Usuario",
+        counterpart_name: confidentialEmail ?? names.get(counterpartId) ?? "Usuario",
+        counterpart_is_email: !!confidentialEmail,
         unread: unreadByConv.get(r.id) ?? 0,
       };
     });

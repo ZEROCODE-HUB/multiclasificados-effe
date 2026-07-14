@@ -133,7 +133,7 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
     const u = grantFor;
     const amt = Number(grantAmount);
     setGrantFor(null);
-    run(`Se otorgaron ${amt} créditos`, u, () => grantCredits(u.id, amt).then(() => undefined));
+    run(`Se otorgó ${formatCredits(amt)} de saldo`, u, () => grantCredits(u.id, amt).then(() => undefined));
   };
 
   const initials = (name: string) => (name || "?").split(" ").map((n) => n[0]).slice(0, 2).join("");
@@ -251,7 +251,7 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
           size={size}
           variant={Btn as any}
           className="text-secondary"
-          title="Otorgar créditos"
+          title="Otorgar saldo"
           onClick={() => { setGrantFor(u); setGrantAmount(""); }}
         >
           <Coins size={iconSize} />
@@ -428,7 +428,7 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-              <Coins size={18} className="text-secondary" /> Otorgar créditos
+              <Coins size={18} className="text-secondary" /> Otorgar saldo
             </AlertDialogTitle>
             <AlertDialogDescription>
               Se sumarán al saldo de <b>{grantFor?.full_name}</b> ({grantFor?.email}). Queda registrado en auditoría.
@@ -440,7 +440,7 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
               min="1"
               step="1"
               autoFocus
-              placeholder="Cantidad de créditos (ej. 100)"
+              placeholder="Monto en S/ (ej. 100)"
               value={grantAmount}
               onChange={(e) => setGrantAmount(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && Number(grantAmount) > 0) doGrant(); }}

@@ -129,7 +129,7 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
               );
             })}
             {filtered.length === 0 && (
-              <p className="text-xs text-muted-foreground text-center py-8">No hay denuncias.</p>
+              <p className="text-xs text-muted-foreground text-center py-8">No hay reclamos.</p>
             )}
           </CardContent>
         </Card>
@@ -150,12 +150,12 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
               </CardHeader>
               <CardContent className="flex-1 overflow-y-auto py-4 space-y-3 bg-muted/30">
                 <div className="rounded-xl border bg-card p-4 space-y-2">
-                  <p className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Detalle de la denuncia</p>
+                  <p className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Detalle del reclamo</p>
                   <p className="text-sm"><span className="text-muted-foreground">Tipo:</span> {item.target_type === "user" ? "Usuario" : "Aviso"}</p>
                   {item.listing_title && <p className="text-sm"><span className="text-muted-foreground">Aviso:</span> {item.listing_title}</p>}
                   <p className="text-sm"><span className="text-muted-foreground">Motivo:</span> {item.reason}</p>
                   {item.category && <p className="text-sm"><span className="text-muted-foreground">Categoría:</span> {item.category}</p>}
-                  {item.assignee && <p className="text-sm"><span className="text-muted-foreground">Asignada a:</span> {item.assignee}</p>}
+                  {item.assignee && <p className="text-sm"><span className="text-muted-foreground">Asignado a:</span> {item.assignee}</p>}
                   {item.action_taken && <p className="text-sm"><span className="text-muted-foreground">Acción tomada:</span> {item.action_taken}</p>}
                   {/* Denuncia sobre un aviso: sin esto el moderador no puede ver
                       qué se publicó. Se abre aquí mismo, sin salir de la denuncia. */}

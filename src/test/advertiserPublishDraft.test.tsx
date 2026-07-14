@@ -114,6 +114,9 @@ describe("AdvertiserPublish — Guardar en mis borradores", () => {
     expect(screen.queryByText(/verifica tu identidad/i)).toBeNull();
     await waitFor(() =>
       expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: "Guardado en tus borradores" })));
+    // Flujo pedido: tras guardar, lleva a Mis avisos › Borradores.
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith("/dashboard/anunciante/avisos?tab=borradores"));
   });
 
   it("guardar DOS veces actualiza el mismo borrador, no crea otro", async () => {
@@ -136,18 +139,15 @@ describe("AdvertiserPublish — Guardar en mis borradores", () => {
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("1000 créditos");
+    await screen.findByText("S/ 1000");
     uploadMainPhoto();
 
     fireEvent.click(draftButton());
     await waitFor(() => expect(saveListingDraft).toHaveBeenCalledTimes(1));
 
-    // Ahora publica: verifica identidad y confirma.
+    // Ahora publica: un solo modal de confirmación (la identidad viene del perfil).
     fireEvent.click(screen.getByRole("button", { name: /publicar aviso/i }));
-    fireEvent.click(await screen.findByRole("button", { name: /persona natural/i }));
-    fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "12345678" } });
-    await screen.findByText("JUAN PEREZ");
-    fireEvent.click(screen.getByRole("button", { name: /confirmar y continuar/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /confirmar y publicar/i }));
 
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
     // Clave: se publica el borrador ya creado.

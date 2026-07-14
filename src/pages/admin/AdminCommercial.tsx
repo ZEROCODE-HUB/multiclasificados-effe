@@ -13,7 +13,9 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Trash2, FileText, SlidersHorizontal, Save, GripVertical } from "lucide-react";
+import { Plus, Pencil, Trash2, FileText, SlidersHorizontal, Save, GripVertical, Eye } from "lucide-react";
+import { InvoiceDetailDialog } from "@/components/InvoiceDetailDialog";
+import { personKindLabel } from "@/lib/identity";
 import {
   DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors,
   type DragEndEvent,
@@ -116,6 +118,7 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
   const [catDialog, setCatDialog] = useState<{ open: boolean; editing: AdminCategory | null }>({ open: false, editing: null });
   const [catName, setCatName] = useState("");
   const [catIcon, setCatIcon] = useState("Tag");
+  const [catConditionEnabled, setCatConditionEnabled] = useState(true);
   const [savingCat, setSavingCat] = useState(false);
 
   const loadCats = () => {
@@ -153,19 +156,19 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
     setSavingOrder(false);
   };
 
-  const openNewCat = () => { setCatName(""); setCatIcon("Tag"); setCatDialog({ open: true, editing: null }); };
-  const openEditCat = (c: AdminCategory) => { setCatName(c.name); setCatIcon(c.icon); setCatDialog({ open: true, editing: c }); };
+  const openNewCat = () => { setCatName(""); setCatIcon("Tag"); setCatConditionEnabled(true); setCatDialog({ open: true, editing: null }); };
+  const openEditCat = (c: AdminCategory) => { setCatName(c.name); setCatIcon(c.icon); setCatConditionEnabled(c.condition_enabled); setCatDialog({ open: true, editing: c }); };
 
   const saveCat = async () => {
     if (!catName.trim()) return;
     setSavingCat(true);
     try {
       if (catDialog.editing) {
-        await updateCategory(catDialog.editing.id, { name: catName.trim(), icon: catIcon });
+        await updateCategory(catDialog.editing.id, { name: catName.trim(), icon: catIcon, condition_enabled: catConditionEnabled });
         toast({ title: "Categoría actualizada", description: catName.trim() });
       } else {
         // `sort_order` es 1-based (como el seed): la nueva va al final.
-        await createCategory({ name: catName.trim(), icon: catIcon, sort_order: cats.length + 1 });
+        await createCategory({ name: catName.trim(), icon: catIcon, sort_order: cats.length + 1, condition_enabled: catConditionEnabled });
         toast({ title: "Categoría creada", description: catName.trim() });
       }
       setCatDialog({ open: false, editing: null });
@@ -216,6 +219,7 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
   // ===== Boletas y facturas (todos los anunciantes, desde la BD) =====
   const [invoices, setInvoices] = useState<AdminInvoice[]>([]);
   const [invoicesLoading, setInvoicesLoading] = useState(true);
+  const [invoiceDetail, setInvoiceDetail] = useState<AdminInvoice | null>(null);
   const invoicesPager = usePagination(invoices, 10, invoices.length);
 
   useEffect(() => {
@@ -344,6 +348,15 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
                     })}
                   </div>
                 </div>
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="space-y-0.5 pr-3">
+                    <Label htmlFor="cat-condition" className="cursor-pointer">Habilitar condición</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Muestra el campo "Condición" (Nuevo / Usado) al publicar. Desactívalo en categorías como Servicios o Empleos.
+                    </p>
+                  </div>
+                  <Switch id="cat-condition" checked={catConditionEnabled} onCheckedChange={setCatConditionEnabled} />
+                </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setCatDialog({ open: false, editing: null })}>Cancelar</Button>
@@ -422,9 +435,11 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
                       <TableHead>Tipo</TableHead>
                       <TableHead>Fecha</TableHead>
                       <TableHead>Anunciante</TableHead>
-                      <TableHead>Correo</TableHead>
+                      <TableHead>DNI/RUC</TableHead>
+                      <TableHead>Usuario/Empresa</TableHead>
                       <TableHead>Aviso</TableHead>
                       <TableHead className="text-right">Monto</TableHead>
+                      <TableHead className="text-right">Ver</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -434,9 +449,15 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
                         <TableCell className="text-xs capitalize">{inv.type}</TableCell>
                         <TableCell className="text-xs">{new Date(inv.date).toLocaleDateString("es-PE")}</TableCell>
                         <TableCell className="text-sm">{inv.advertiser}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{inv.email}</TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground">{inv.docNumber || "—"}</TableCell>
+                        <TableCell className="text-xs">{personKindLabel(inv.docType, inv.docNumber)}</TableCell>
                         <TableCell className="text-sm font-medium">{inv.listingTitle}</TableCell>
                         <TableCell className="text-right font-bold">{formatSoles(inv.amount)}</TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setInvoiceDetail(inv)}>
+                            <Eye size={14} /> Ver
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -449,6 +470,8 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <InvoiceDetailDialog invoice={invoiceDetail} onClose={() => setInvoiceDetail(null)} />
     </>
   );
 };
