@@ -31,6 +31,7 @@ import {
 } from "@/lib/promotions";
 import { supabase } from "@/lib/supabase";
 import { useCategories } from "@/hooks/useCategories";
+import { usePermissions } from "@/hooks/usePermissions";
 import { toast } from "@/hooks/use-toast";
 
 // ===== Promociones (persistidas en la base de datos) =====
@@ -51,6 +52,11 @@ const QUANTITY_ROWS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const DURATION_ROWS: Array<7 | 15 | 30 | 60 | 90> = [7, 15, 30, 60, 90];
 
 const AdminPricing = ({ role }: { role: AdminRole }) => {
+  // Editar tarifas/promos/paquetes exige 'Pagos y planes' · Editar (edit); el
+  // servidor lo reexige vía RLS (pricing_settings / promotions / credit_packages).
+  const { can } = usePermissions(role === "admin");
+  const canEdit = can("Pagos y planes", "edit");
+
   const categories = useCategories();
   const [s, setS] = useState<PricingSettings>(() => loadSettings());
   const [settingsLoading, setSettingsLoading] = useState(true);
@@ -275,6 +281,11 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
 
   return (
     <>
+      {!canEdit && (
+        <p className="mb-4 text-xs rounded-lg border bg-muted/50 px-3 py-2 text-muted-foreground">
+          Solo lectura: no tienes permiso para editar tarifas, promociones ni paquetes. Un superadministrador puede habilitarlo en Roles y permisos.
+        </p>
+      )}
       <Tabs defaultValue="descuentos">
         <TabsList className="w-full overflow-x-auto justify-start no-scrollbar">
           <TabsTrigger value="descuentos">Parámetros de descuento</TabsTrigger>
@@ -401,7 +412,7 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
           </Card>
 
           <div className="flex gap-2">
-            <Button onClick={save} className="gap-2"><Save size={14} /> Guardar cambios</Button>
+            <Button onClick={save} disabled={!canEdit} className="gap-2"><Save size={14} /> Guardar cambios</Button>
             <Button variant="outline" onClick={reset} className="gap-2"><RotateCcw size={14} /> Restablecer</Button>
           </div>
         </TabsContent>
@@ -466,7 +477,9 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
                   Descuento por categoría y período. Se aplica automáticamente al publicar.
                 </CardDescription>
               </div>
-              <Button size="sm" className="gap-2" onClick={openNewOffer}><Plus size={14} /> Nueva promoción</Button>
+              {canEdit && (
+                <Button size="sm" className="gap-2" onClick={openNewOffer}><Plus size={14} /> Nueva promoción</Button>
+              )}
             </CardHeader>
             <CardContent className="pt-5 overflow-x-auto">
               {offersLoading ? (
@@ -513,8 +526,14 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
                                 : <Badge variant="outline">Programada</Badge>}
                           </TableCell>
                           <TableCell className="text-right">
-                            <Button size="icon" variant="ghost" onClick={() => openEditOffer(o)}><Pencil size={14} /></Button>
-                            <Button size="icon" variant="ghost" className="text-destructive" onClick={() => deleteOffer(o.id)}><Trash2 size={14} /></Button>
+                            {canEdit ? (
+                              <>
+                                <Button size="icon" variant="ghost" onClick={() => openEditOffer(o)}><Pencil size={14} /></Button>
+                                <Button size="icon" variant="ghost" className="text-destructive" onClick={() => deleteOffer(o.id)}><Trash2 size={14} /></Button>
+                              </>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
                           </TableCell>
                         </TableRow>
                       );
@@ -646,7 +665,9 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
                   Los usuarios compran saldo (en soles) y lo gastan al publicar.
                 </CardDescription>
               </div>
-              <Button size="sm" className="gap-2" onClick={openNewPkg}><Plus size={14} /> Nuevo paquete</Button>
+              {canEdit && (
+                <Button size="sm" className="gap-2" onClick={openNewPkg}><Plus size={14} /> Nuevo paquete</Button>
+              )}
             </CardHeader>
             <CardContent className="pt-5">
               {pkgLoading ? (
@@ -683,8 +704,14 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Button size="icon" variant="ghost" onClick={() => openEditPkg(pkg)}><Pencil size={14} /></Button>
-                            <Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDeletePkg(pkg.id)}><Trash2 size={14} /></Button>
+                            {canEdit ? (
+                              <>
+                                <Button size="icon" variant="ghost" onClick={() => openEditPkg(pkg)}><Pencil size={14} /></Button>
+                                <Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDeletePkg(pkg.id)}><Trash2 size={14} /></Button>
+                              </>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}

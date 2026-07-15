@@ -1,5 +1,8 @@
 # Pendientes de desarrollo e implementación — Multiclasificados eFFe
 
+> ⚠️ **DOCUMENTO HISTÓRICO / DESACTUALIZADO.** Reemplazado por [`CHECKLIST.md`](./CHECKLIST.md) (15-jul-2026).
+> Varios pendientes de abajo ya están resueltos (pagos Izipay, mapa real, reportes a tabla real, hilo de moderación, Factiliza/boletas). Usar `CHECKLIST.md` como fuente de verdad.
+
 > Estado al **23 de junio de 2026**. Branch de trabajo: `desarrollo`.
 > El núcleo del marketplace ya está integrado con **Supabase** (auth, avisos, mensajería en tiempo real, reseñas, postulaciones, búsquedas guardadas, notificaciones y panel admin). Este documento lista lo que **falta** para considerar el sistema completo y productivo.
 

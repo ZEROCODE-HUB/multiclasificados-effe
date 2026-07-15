@@ -120,7 +120,7 @@ beforeEach(() => {
   pollOrderStatus.mockReset().mockResolvedValue("paid");
   getPurchaseResult.mockReset().mockResolvedValue({ balance: 1000, invoiceNumber: "B001-000100" });
   createAndPublishListing.mockReset().mockResolvedValue({
-    listingId: "L1", invoiceNumber: "B001-000099", published: true, invoiceSaved: true,
+    listingId: "L1", published: true,
   });
   navigate.mockClear();
   toast.mockClear();
@@ -146,7 +146,7 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     expect(spendCredits).toHaveBeenCalledWith(COST_CREDITS, "L1");
 
     // Muestra el éxito y NO abre el configurador de compra.
-    await screen.findByText(/pago confirmado/i);
+    await screen.findByText(/aviso publicado/i);
     expect(screen.queryByText(/saldo a comprar/i)).toBeNull();
   });
 
@@ -235,7 +235,7 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     await waitFor(() => expect(createPayment).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
     expect(spendCredits).toHaveBeenCalledWith(COST_CREDITS, "L1");
-    await screen.findByText(/pago confirmado/i);
+    await screen.findByText(/aviso publicado/i);
   });
 });
 
@@ -269,6 +269,6 @@ describe("AdvertiserPublish — un solo modal de confirmación (sin verificació
 
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
     expect(spendCredits).toHaveBeenCalledWith(COST_CREDITS, "L1");
-    await screen.findByText(/pago confirmado/i);
+    await screen.findByText(/aviso publicado/i);
   });
 });

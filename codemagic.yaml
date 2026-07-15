@@ -14,19 +14,53 @@ workflows:
       node: 22
       vars:
         XCODE_SCHEME: App
+        # Definir los VALORES en Codemagic → Environment variables (marcadas como
+        # secure). VITE_PUBLIC_SITE_URL es imprescindible: sin ella el pago Izipay
+        # y los enlaces de compartir se rompen en iOS (ver PLAN-IMPLEMENTACION.md).
         VITE_SUPABASE_URL: $VITE_SUPABASE_URL
         VITE_SUPABASE_ANON_KEY: $VITE_SUPABASE_ANON_KEY
+        VITE_PUBLIC_SITE_URL: $VITE_PUBLIC_SITE_URL
+        VITE_IZIPAY_PUBLIC_KEY: $VITE_IZIPAY_PUBLIC_KEY
+        VITE_HCAPTCHA_SITE_KEY: $VITE_HCAPTCHA_SITE_KEY
     scripts:
       - name: Install dependencies
-        script: |
-          npm ci
-          npm install @capacitor/ios
+        # @capacitor/ios ya está en package.json → lo instala `npm ci`.
+        script: npm ci
       - name: Build React app
         script: npm run build
       - name: Add iOS platform
         script: npx cap add ios
       - name: Sync Capacitor
         script: npx cap sync ios
+      - name: Configure iOS (deep link, permisos, Firebase, iconos)
+        # `cap add ios` regenera ios/ en cada build, así que la config nativa se
+        # reinyecta aquí por script (no se pierde entre compilaciones).
+        script: |
+          PLIST=ios/App/App/Info.plist
+          # URL scheme del retorno del OAuth (equivale a AndroidManifest.xml).
+          # Sin esto, appUrlOpen (nativeInit.ts) nunca dispara y el login social queda colgado.
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes array" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0 dict" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLName string com.effe.multiclasificados" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes array" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string com.effe.multiclasificados" "$PLIST" || true
+          # Textos de permiso (obligatorios en iOS para el selector de fotos al publicar).
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'Usamos la cámara para que adjuntes fotos a tus avisos.'" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string 'Accedemos a tus fotos para adjuntar imágenes a tus avisos.'" "$PLIST" || true
+          # Firebase (push iOS): copia el plist si está versionado en el repo.
+          if [ -f ios-config/GoogleService-Info.plist ]; then
+            cp ios-config/GoogleService-Info.plist ios/App/App/GoogleService-Info.plist
+            echo "GoogleService-Info.plist copiado."
+          else
+            echo "AVISO: falta ios-config/GoogleService-Info.plist; el push en iOS no funcionará hasta agregarlo (ver PLAN-IMPLEMENTACION.md)."
+          fi
+          # Iconos/splash de iOS a partir de un master 1024x1024 (evita el placeholder de Capacitor).
+          if [ -f assets/icon.png ]; then
+            npx @capacitor/assets generate --ios
+            echo "Iconos iOS generados."
+          else
+            echo "AVISO: falta assets/icon.png (1024x1024); la app saldría con el ícono placeholder de Capacitor."
+          fi
       - name: Increment build number
         script: |
           cd ios/App

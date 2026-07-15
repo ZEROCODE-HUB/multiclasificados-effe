@@ -9,6 +9,7 @@ import { Search, AlertOctagon, ArrowLeft, Eye } from "lucide-react";
 import { fetchReports, assignReport, resolveReport, fetchConversationBetween, type AdminReport, type ModMessage } from "@/lib/admin";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
+import { usePermissions } from "@/hooks/usePermissions";
 
 // Mapa estado real (BD) -> etiqueta + color del diseño existente.
 const statusMeta: Record<string, { label: string; color: string }> = {
@@ -33,6 +34,10 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
   // Aviso denunciado, que se muestra en un diálogo sin salir de la denuncia.
   const [avisoId, setAvisoId] = useState<string | null>(null);
   const convoRef = useRef<HTMLDivElement>(null);
+  // Solo restringe al rol admin (superadmin = acceso total). "Resolver" reclamos
+  // exige Conversaciones reportadas · edit (mismo permiso que exige el servidor).
+  const { can } = usePermissions(role === "admin");
+  const canResolve = can("Conversaciones reportadas", "edit");
 
   const load = () => fetchReports().then(({ data }) => setReports(data));
   useEffect(() => {
@@ -216,6 +221,7 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
                   )}
                 </div>
               </CardContent>
+              {canResolve ? (
               <div className="border-t p-4 flex flex-col sm:flex-row gap-2">
                 {/* Solo se marca en revisión una denuncia abierta: una vez asignada
                     (o resuelta) volver a pulsar no hace nada útil. */}
@@ -225,6 +231,13 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
                 <Button variant="outline" className="flex-1 text-warning" disabled={busy} onClick={warnUser}>Advertir usuario</Button>
                 <Button className="flex-1 bg-destructive hover:bg-destructive/90" disabled={busy} onClick={suspendUser}>Suspender cuenta</Button>
               </div>
+              ) : (
+              <div className="border-t p-4">
+                <p className="text-xs text-muted-foreground text-center">
+                  Puedes revisar este reclamo, pero no tienes permiso para resolverlo.
+                </p>
+              </div>
+              )}
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center text-center p-8">

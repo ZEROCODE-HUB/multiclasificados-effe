@@ -7,9 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import { BadgeCheck, ShieldAlert, Loader2, Eye, EyeOff, ScrollText, Trash2, AlertTriangle } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { fetchMyProfile, updateMyProfile, uploadMyAvatar, type MyProfile } from "@/lib/auth";
+import {
+  fetchNotificationPrefs, saveNotificationPref, prefOrDefault, eventsForRole, type NotifPref,
+} from "@/lib/notificationPrefs";
 import { normalizeDocNumber } from "@/lib/verifyDoc";
 import { deleteMyAccount } from "@/lib/account";
 import { TermsDialog } from "@/components/LegalTerms";
@@ -51,6 +55,13 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
   // Alto del teclado en móvil: se usa como espacio inferior para que los
   // últimos campos (datos de empresa) puedan subir por encima del teclado.
   const [kbPad, setKbPad] = useState(0);
+  // Preferencias de notificación (pestaña Notificaciones): mapa event → canales.
+  const [notifPrefs, setNotifPrefs] = useState<Record<string, NotifPref>>({});
+  const [notifSaving, setNotifSaving] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchNotificationPrefs().then(setNotifPrefs);
+  }, []);
 
   useEffect(() => {
     fetchMyProfile().then((p) => {
@@ -123,12 +134,31 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
     }
   };
 
+  // Cambia un canal (in-app/push/email) de un evento. Optimista: actualiza la UI
+  // al instante y revierte si el guardado falla.
+  const toggleNotif = async (event: string, channel: keyof NotifPref, value: boolean) => {
+    const current = prefOrDefault(notifPrefs, event);
+    const next = { ...current, [channel]: value };
+    setNotifPrefs((m) => ({ ...m, [event]: next }));
+    setNotifSaving(event);
+    try {
+      await saveNotificationPref(event, next);
+    } catch (e) {
+      setNotifPrefs((m) => ({ ...m, [event]: current }));
+      toast({ title: "No se pudo guardar", description: e instanceof Error ? e.message : "Error", variant: "destructive" });
+    } finally {
+      setNotifSaving(null);
+    }
+  };
+
   // Móvil (Capacitor): al abrir/cerrar el teclado, reservamos abajo el alto del
   // teclado como espacio para poder desplazar cualquier campo por encima de él.
+  // Solo en Android: en iOS `resize:'native'` ya reduce el WebView (ver useKeyboardInset).
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
+    const isAndroid = Capacitor.getPlatform() === "android";
     const handles: Array<{ remove: () => void }> = [];
-    const onShow = (info: { keyboardHeight: number }) => setKbPad(info.keyboardHeight || 0);
+    const onShow = (info: { keyboardHeight: number }) => { if (isAndroid) setKbPad(info.keyboardHeight || 0); };
     const onHide = () => setKbPad(0);
     Keyboard.addListener("keyboardWillShow", onShow).then((h) => handles.push(h));
     Keyboard.addListener("keyboardDidShow", onShow).then((h) => handles.push(h));
@@ -199,6 +229,7 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
         <Tabs defaultValue="perfil">
           <TabsList>
             <TabsTrigger value="perfil">Perfil</TabsTrigger>
+            <TabsTrigger value="notificaciones">Notificaciones</TabsTrigger>
             <TabsTrigger value="seguridad">Seguridad</TabsTrigger>
           </TabsList>
 
@@ -305,6 +336,52 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
                 <Button variant="hero" onClick={save} disabled={saving}>
                   {saving ? "Guardando..." : "Guardar cambios"}
                 </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="notificaciones">
+            <Card>
+              <CardHeader>
+                <CardTitle>Preferencias de notificación</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-0">
+                {/* Encabezado de columnas (solo en pantallas medianas para arriba). */}
+                <div className="hidden sm:flex items-center justify-end gap-6 pb-2 pr-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  <span className="w-9 text-center">App</span>
+                  <span className="w-9 text-center">Push</span>
+                  <span className="w-9 text-center">Correo</span>
+                </div>
+                {eventsForRole(role).map((ev) => {
+                  const p = prefOrDefault(notifPrefs, ev.event);
+                  const busy = notifSaving === ev.event;
+                  return (
+                    <div key={ev.event} className="flex items-center justify-between gap-4 py-3 border-t border-border first:border-t-0">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground">{ev.label}</p>
+                        <p className="text-xs text-muted-foreground">{ev.desc}</p>
+                      </div>
+                      <div className="flex items-center gap-6 shrink-0">
+                        <div className="flex flex-col items-center gap-1 w-9">
+                          <span className="sm:hidden text-[9px] font-bold uppercase text-muted-foreground">App</span>
+                          <Switch checked={p.in_app} disabled={busy} onCheckedChange={(v) => toggleNotif(ev.event, "in_app", v)} aria-label={`${ev.label} en la app`} />
+                        </div>
+                        <div className="flex flex-col items-center gap-1 w-9">
+                          <span className="sm:hidden text-[9px] font-bold uppercase text-muted-foreground">Push</span>
+                          <Switch checked={p.push} disabled={busy} onCheckedChange={(v) => toggleNotif(ev.event, "push", v)} aria-label={`${ev.label} por push`} />
+                        </div>
+                        <div className="flex flex-col items-center gap-1 w-9">
+                          <span className="sm:hidden text-[9px] font-bold uppercase text-muted-foreground">Correo</span>
+                          <Switch checked={p.email} disabled={busy} onCheckedChange={(v) => toggleNotif(ev.event, "email", v)} aria-label={`${ev.label} por correo`} />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                <p className="text-[11px] text-muted-foreground pt-4 leading-relaxed">
+                  <b>App</b>: la campanita dentro de la plataforma. <b>Push</b>: aviso en tu teléfono (requiere la app instalada). <b>Correo</b>: al email de tu cuenta.
+                  Los avisos de <b>seguridad y moderación</b> se envían siempre.
+                </p>
               </CardContent>
             </Card>
           </TabsContent>

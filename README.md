@@ -1,73 +1,82 @@
-# Welcome to your Lovable project
+# eFFe Clasificados
 
-## Project info
+Marketplace de avisos clasificados para Perú: publicación de avisos con modelo de
+**créditos prepagados**, verificación de identidad (DNI/RUC vía Factiliza), pasarela
+de pagos **Izipay/Lyra**, mensajería en tiempo real, panel de administración con
+control de acceso por rol y app móvil (Android hoy; iOS en preparación) vía Capacitor.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Stack
 
-## How can I edit this code?
+- **Frontend:** React 18 + TypeScript + Vite, Tailwind CSS, shadcn/ui (Radix).
+- **Backend:** Supabase (Postgres + RLS, Auth, Realtime, Storage, Edge Functions en Deno).
+- **Móvil:** Capacitor 8 (APK Android; pipeline iOS → TestFlight en `codemagic.yaml`).
+- **Mapas:** Leaflet + OpenStreetMap. **Gráficas:** Recharts. **Tests:** Vitest + Testing Library + PGlite.
 
-There are several ways of editing your application.
+## Requisitos
 
-**Use Lovable**
+- Node.js 20+ y npm.
+- Un proyecto de Supabase (para desarrollo real) o el `.env` de pruebas (ver abajo).
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+## Puesta en marcha
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+npm install
+cp .env.example .env   # y completa los valores
+npm run dev            # http://localhost:8080
 ```
 
-**Edit a file directly in GitHub**
+### Variables de entorno (`.env`)
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+| Variable | Uso |
+|---|---|
+| `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` | Conexión a Supabase (obligatorias). |
+| `VITE_PUBLIC_SITE_URL` | Dominio público; base de los enlaces de correo y de la página de pago `/pay`. |
+| `VITE_IZIPAY_PUBLIC_KEY` | Clave pública de Izipay (Back Office → Claves de API REST). |
+| `VITE_HCAPTCHA_SITE_KEY` | Sitekey de hCaptcha (login de staff). Sin ella se usa la de prueba. |
 
-**Use GitHub Codespaces**
+Las llaves **secretas** (Izipay Shop/Password/HMAC, Factiliza, Resend, `service_role`)
+viven como *secrets* de las Edge Functions, **nunca** en el repo. Ver los `DEPLOY.md`
+en `supabase/functions/*/`.
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Scripts
 
-## What technologies are used for this project?
+```sh
+npm run dev        # servidor de desarrollo
+npm run build      # build de producción (dist/)
+npm run lint       # ESLint
+npm run test       # suite de Vitest (una pasada)
+npm run test:watch # Vitest en modo watch
+```
 
-This project is built with:
+> **Tests:** requieren un `.env` local con `VITE_SUPABASE_URL`/`ANON_KEY` (aunque sean
+> valores dummy), o `createClient("")` lanza «supabaseUrl is required». El `.env` está
+> en `.gitignore`. Algunos tests de migraciones usan PGlite (Postgres en WASM); si la
+> máquina va lenta puede hacer falta subir el `--hookTimeout`.
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Estructura
 
-## How can I deploy this project?
+```
+src/
+  pages/        # rutas por rol (público, buscador, anunciante, admin, superadmin)
+  components/   # UI y componentes de dominio (Navbar, layouts, modales…)
+  lib/          # acceso a datos y lógica (auth, publish, credits, payments, pricing…)
+  hooks/        # hooks (useSession, useUnreadMessages, useKeyboardInset…)
+  test/         # Vitest
+supabase/
+  migrations/   # esquema SQL versionado (0001–00xx), RLS, RPCs, triggers
+  functions/    # Edge Functions (create-payment, payment-webhook, verify-doc…)
+android/        # proyecto Capacitor Android
+capacitor.config.ts
+codemagic.yaml  # CI de build iOS → TestFlight
+```
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+## Móvil
 
-## Can I connect a custom domain to my Lovable project?
+- **Android:** `npm run build && npx cap sync android`, luego abrir `android/` en Android Studio.
+- **iOS:** lo compila `codemagic.yaml` (regenera `ios/` con `npx cap add ios` en cada build).
+  Estado y pendientes de iOS en [`CHECKLIST.md`](./CHECKLIST.md) y [`PLAN-IMPLEMENTACION.md`](./PLAN-IMPLEMENTACION.md).
 
-Yes, you can!
+## Documentación de estado
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+- [`CHECKLIST.md`](./CHECKLIST.md) — inventario «hecho / falta» de todo el proyecto.
+- [`PLAN-IMPLEMENTACION.md`](./PLAN-IMPLEMENTACION.md) — plan por fases y pendientes externos (llaves, APNs…).

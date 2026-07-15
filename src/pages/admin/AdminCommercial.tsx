@@ -28,6 +28,7 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { usePagination, TablePagination } from "@/components/TablePagination";
 import { toast } from "@/hooks/use-toast";
+import { usePermissions } from "@/hooks/usePermissions";
 import { cn } from "@/lib/utils";
 import { formatSoles } from "@/lib/pricing";
 import { CATEGORY_ICON_NAMES as ICON_OPTIONS, iconFor, invalidateCategories } from "@/lib/categories";
@@ -40,9 +41,10 @@ import {
 // Tarjeta arrastrable. El asa (grip) es el único punto de agarre para que los
 // botones de editar/eliminar sigan siendo clicables y la página pueda scrollear
 // con el dedo en móvil.
-function SortableCategoryCard({ cat, disabled, onEdit, onDelete }: {
+function SortableCategoryCard({ cat, disabled, canEdit, onEdit, onDelete }: {
   cat: AdminCategory;
   disabled: boolean;
+  canEdit: boolean;
   onEdit: (c: AdminCategory) => void;
   onDelete: (c: AdminCategory) => void;
 }) {
@@ -78,28 +80,30 @@ function SortableCategoryCard({ cat, disabled, onEdit, onDelete }: {
             <Icon size={18} />
           </div>
         </div>
-        <div className="flex gap-1">
-          <Button size="icon" variant="ghost" title="Editar" onClick={() => onEdit(cat)}><Pencil size={14} /></Button>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button size="icon" variant="ghost" className="text-destructive" title="Eliminar"><Trash2 size={14} /></Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>¿Eliminar "{cat.name}"?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  {cat.count > 0
-                    ? `Esta categoría tiene ${cat.count} aviso(s) asociados. No podrás eliminarla hasta reasignar o quitar esos avisos.`
-                    : "Esta acción es permanente. La categoría dejará de estar disponible para nuevos avisos."}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={() => onDelete(cat)}>Eliminar</AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
+        {canEdit && (
+          <div className="flex gap-1">
+            <Button size="icon" variant="ghost" title="Editar" onClick={() => onEdit(cat)}><Pencil size={14} /></Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button size="icon" variant="ghost" className="text-destructive" title="Eliminar"><Trash2 size={14} /></Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>¿Eliminar "{cat.name}"?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {cat.count > 0
+                      ? `Esta categoría tiene ${cat.count} aviso(s) asociados. No podrás eliminarla hasta reasignar o quitar esos avisos.`
+                      : "Esta acción es permanente. La categoría dejará de estar disponible para nuevos avisos."}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => onDelete(cat)}>Eliminar</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        )}
       </div>
       <p className="font-semibold text-sm">{cat.name}</p>
       <p className="text-xs text-muted-foreground">{cat.count.toLocaleString()} avisos</p>
@@ -109,6 +113,13 @@ function SortableCategoryCard({ cat, disabled, onEdit, onDelete }: {
 
 
 const AdminCommercial = ({ role }: { role: AdminRole }) => {
+  // Editar categorías exige 'Configuración comercial' · Editar (edit); el
+  // servidor lo reexige vía RLS. Las variables del sistema siguen siendo
+  // superadmin-only (set_setting / RLS settings_manage_super).
+  const { can } = usePermissions(role === "admin");
+  const canEdit = can("Configuración comercial", "edit");
+  const isSuper = role === "superadmin";
+
   // ===== Categorías (tabla real `categories`) =====
   const [cats, setCats] = useState<AdminCategory[]>([]);
   const [catsLoading, setCatsLoading] = useState(true);
@@ -132,7 +143,7 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
-  const canReorder = catsReal && cats.length > 1;
+  const canReorder = catsReal && cats.length > 1 && canEdit;
 
   const onDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
@@ -281,6 +292,11 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
             <CardHeader className="flex flex-row items-center justify-between gap-3">
               <div className="min-w-0">
                 <CardTitle className="text-base md:text-lg">Categorías y subcategorías</CardTitle>
+                {!canEdit && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Solo lectura: no tienes permiso para editar categorías. Un superadministrador puede habilitarlo en Roles y permisos.
+                  </p>
+                )}
                 {canReorder && (
                   <p className="text-xs text-muted-foreground mt-1">
                     {savingOrder
@@ -289,7 +305,9 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
                   </p>
                 )}
               </div>
-              <Button size="sm" className="gap-2 shrink-0" onClick={openNewCat}><Plus size={14} /> Nueva</Button>
+              {canEdit && (
+                <Button size="sm" className="gap-2 shrink-0" onClick={openNewCat}><Plus size={14} /> Nueva</Button>
+              )}
             </CardHeader>
             <CardContent>
               {catsLoading && <p className="text-sm text-muted-foreground py-6 text-center">Cargando categorías…</p>}
@@ -302,6 +320,7 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
                         key={c.id}
                         cat={c}
                         disabled={!canReorder}
+                        canEdit={canEdit}
                         onEdit={openEditCat}
                         onDelete={deleteCat}
                       />
@@ -405,8 +424,11 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
                 </div>
               </div>
 
-              <div className="flex justify-end">
-                <Button onClick={saveSettings} disabled={savingSettings} className="gap-2">
+              <div className="flex items-center justify-end gap-3">
+                {!isSuper && (
+                  <p className="text-xs text-muted-foreground">Solo un superadministrador puede cambiar estas variables.</p>
+                )}
+                <Button onClick={saveSettings} disabled={savingSettings || !isSuper} className="gap-2">
                   <Save size={14} /> {savingSettings ? "Guardando..." : "Guardar configuración"}
                 </Button>
               </div>

@@ -51,7 +51,6 @@ import { toast } from "@/hooks/use-toast";
 import { useSession } from "@/hooks/useSession";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useKeyboardInset } from "@/hooks/useKeyboardInset";
-import { ListingReviews } from "@/components/ListingReviews";
 import { ListingLocationMap } from "@/components/ListingLocationMap";
 import { fetchSellerInfo, fetchReviews } from "@/lib/reviews";
 import { applyToListing, fetchMyApplication, STATUS_LABEL, type ApplicationStatus } from "@/lib/applications";
@@ -618,10 +617,10 @@ export default function ListingDetail() {
             <p className="text-xs text-muted-foreground mt-3">Ubicación aproximada por seguridad. La dirección exacta se comparte tras coordinar con el anunciante.</p>
           </section>
 
-          {/* Reseñas (REQ-07) */}
-          {isJobs && listing.id && (
-            <ListingReviews listingId={listing.id} isOwner={isOwner} onChange={loadReviewMeta} />
-          )}
+          {/* Reseñas (REQ-07): ocultas por ahora (decisión 15-jul). El componente
+              ListingReviews sigue existiendo; para reactivarlas, volver a montarlo
+              aquí con `{isJobs && listing.id && (...)}`. `loadReviewMeta` sigue
+              cargando el ownerId que usa isOwner. */}
         </div>
 
         {/* RIGHT — Sticky purchase / contact panel */}

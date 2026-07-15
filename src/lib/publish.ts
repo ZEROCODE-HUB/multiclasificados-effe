@@ -1,7 +1,7 @@
-// REQ-01: crea un aviso real, sube las imágenes al Storage, genera la orden +
-// comprobante y lo publica con vigencia. Devuelve el id y el número de boleta.
+// REQ-01: crea un aviso real, sube las imágenes al Storage y lo publica con
+// vigencia. NO emite comprobante: la boleta se emite SOLO al COMPRAR créditos
+// (flujo Izipay). Publicar únicamente descuenta saldo, lo hace el llamador.
 import { supabase } from "@/lib/supabase";
-import { splitIgv } from "@/lib/pricing";
 
 export interface PublishPhoto {
   file: File;
@@ -172,7 +172,7 @@ export interface FinalizeInput {
 
 export async function createAndPublishListing(
   input: PublishInput
-): Promise<{ listingId: string; invoiceNumber: string; published: boolean; invoiceSaved: boolean }> {
+): Promise<{ listingId: string; published: boolean }> {
   // 1) Crear el aviso en `draft` y subir las imágenes. Si `draftId` viene, se
   //    reutiliza ese borrador: publicar tras haber pulsado "Guardar en mis
   //    borradores" no debe dejar DOS avisos.
@@ -186,17 +186,16 @@ export async function createAndPublishListing(
 export async function finalizeListingPublication(
   listingId: string,
   input: FinalizeInput,
-): Promise<{ invoiceNumber: string; published: boolean; invoiceSaved: boolean }> {
+): Promise<{ published: boolean }> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Debes iniciar sesión para publicar.");
 
-  // 1.b) Persistir la identidad verificada (Factiliza) en el perfil del usuario,
-  //      para que el DNI/RUC quede en la base de datos y coincida con el comprobante.
+  // Persistir la identidad verificada (Factiliza) en el perfil del usuario, para
+  // que el DNI/RUC quede en la base de datos. Se reutiliza en la compra de
+  // créditos, que es el único punto donde se emite el comprobante.
   if (input.docType && input.docNumber) {
-    // Guardamos también el nombre/razón social de Factiliza (legal_name) para
-    // reusarlo al publicar sin volver a pedir la verificación.
     const pf: Record<string, unknown> = {
       doc_type: input.docType, doc_number: input.docNumber, verified: true,
     };
@@ -205,68 +204,15 @@ export async function finalizeListingPublication(
     if (pfErr) console.error("[publish] No se pudo guardar el documento en el perfil:", pfErr.message);
   }
 
-  // Ficha completa de Factiliza guardada en el perfil (verificada al comprar
-  // saldo): la copiamos al comprobante para que muestre nombre, domicilio, etc.
-  const { data: prof } = await supabase
-    .from("profiles").select("factiliza_data").eq("id", user.id).maybeSingle();
-  const factilizaData = (prof as { factiliza_data?: unknown } | null)?.factiliza_data ?? null;
-
-  // 3) Orden + comprobante — TODO comprobante debe guardarse: los errores se
-  //    registran (no se ignoran en silencio) para poder diagnosticarlos.
-  //    El total ya incluye IGV (ver IGV_RATE en el motor de precios).
-  let invoiceNumber = "";
-  let invoiceSaved = false;
-  const { subtotal, igv } = splitIgv(input.total);
-  const { data: order, error: oErr } = await supabase
-    .from("orders")
-    .insert({
-      user_id: user.id,
-      listing_qty: input.quantity,
-      duration_days: input.duration,
-      extras: input.extras,
-      subtotal,
-      igv,
-      total: input.total,
-      status: "paid",
-    })
-    .select("id")
-    .single();
-  if (oErr || !order) {
-    console.error("[publish] No se pudo crear la orden:", oErr?.message);
-  } else {
-    const { error: olErr } = await supabase
-      .from("order_listings")
-      .insert({ order_id: order.id, listing_id: listingId });
-    if (olErr) console.error("[publish] No se pudo vincular el aviso a la orden:", olErr.message);
-
-    const { data: inv, error: iErr } = await supabase
-      .from("invoices")
-      .insert({
-        order_id: order.id,
-        type: input.receiptType,
-        email: input.email,
-        advertiser_name: input.advertiserName,
-        doc_type: input.docType ?? null,
-        doc_number: input.docNumber ?? null,
-        factiliza_data: factilizaData,
-        amount: input.total,
-        detail: `Aviso ${input.duration} días · ${input.quantity} unidad(es)`,
-      })
-      .select("number")
-      .single();
-    if (iErr) console.error("[publish] No se pudo generar el comprobante en la BD:", iErr.message);
-    invoiceNumber = inv?.number ?? "";
-    invoiceSaved = !iErr && !!inv;
-  }
-
-  // 4) Publicar: estado active + vigencia (published_at / expires_at).
-  //    Si falla, NO descartamos el comprobante: devolvemos published=false para
-  //    que el llamador guarde igualmente la boleta y avise al usuario.
+  // Publicar: estado active + vigencia (published_at / expires_at). NO se crea
+  // orden ni comprobante: el cobro real y la boleta ocurren al COMPRAR créditos.
+  // Publicar solo descuenta saldo (lo hace el llamador con spendCredits, que ya
+  // registra el listing_id en credit_transactions).
   const { error: pErr } = await supabase.rpc("publish_listing", {
     p_listing: listingId,
     p_duration_days: input.duration,
   });
   if (pErr) console.error("[publish] No se pudo activar el aviso:", pErr.message);
 
-  return { invoiceNumber, published: !pErr, invoiceSaved };
+  return { published: !pErr };
 }

@@ -43,6 +43,7 @@ const clearSession = vi.fn();
 vi.mock("@/hooks/useSession", () => ({
   setSessionData: (s: unknown) => setSessionData(s),
   clearSession: () => clearSession(),
+  getSession: () => null,
   isStaffRole: (r: string) => r === "admin" || r === "superadmin",
 }));
 

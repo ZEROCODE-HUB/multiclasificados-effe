@@ -2,7 +2,7 @@
 // de useSession ({ role, name, initials }) para NO romper el diseño actual.
 import { supabase } from "@/lib/supabase";
 import { savePushToken } from "@/lib/push";
-import { clearSession, isStaffRole, setSessionData, type Session, type SessionRole } from "@/hooks/useSession";
+import { clearSession, getSession, isStaffRole, setSessionData, type Session, type SessionRole } from "@/hooks/useSession";
 
 // Prioridad de rol cuando un usuario tiene varios (para elegir el panel destino).
 const ROLE_PRIORITY: SessionRole[] = ["superadmin", "admin", "moderador", "soporte", "anunciante", "buscador"];
@@ -30,6 +30,16 @@ export class AccountBlockedError extends Error {
   }
 }
 
+// Error cuando NO se pudo leer el rol por un fallo de red (no por ausencia de
+// roles). Se usa para NO degradar a un admin a "buscador" ante un error
+// transitorio: mejor pedir reintentar que persistir un rol falso.
+export class RoleSyncError extends Error {
+  constructor() {
+    super("No se pudo verificar tu cuenta. Inténtalo de nuevo.");
+    this.name = "RoleSyncError";
+  }
+}
+
 // ¿El estado del perfil impide el acceso? Suspensión con fecha pasada ya no bloquea.
 function isBlocked(status?: string | null, suspendedUntil?: string | null): false | "suspended" | "banned" {
   if (status === "banned") return "banned";
@@ -53,7 +63,7 @@ export async function syncSession(): Promise<Session | null> {
   const user = sessionData.session?.user;
   if (!user) return null;
 
-  const [{ data: profile }, { data: roles }] = await Promise.all([
+  const [{ data: profile }, { data: roles, error: rolesError }] = await Promise.all([
     supabase.from("profiles").select("full_name, initials, status, suspended_until").eq("id", user.id).maybeSingle(),
     supabase.from("user_roles").select("role").eq("user_id", user.id),
   ]);
@@ -64,6 +74,16 @@ export async function syncSession(): Promise<Session | null> {
     await supabase.auth.signOut();
     clearSession();
     throw new AccountBlockedError(blocked);
+  }
+
+  // Un ERROR de red al leer los roles NO debe degradar el rol a "buscador"
+  // (supabase-js devuelve data:null sin lanzar). Distinto de "0 roles legítimos"
+  // (data:[] sin error), que sí es un buscador real. En un refresh conservamos el
+  // rol vigente; en un login sin sesión previa, fallamos cerrado (no persistir).
+  if (rolesError) {
+    const prev = getSession();
+    if (prev) return prev;
+    throw new RoleSyncError();
   }
 
   const roleSet = new Set((roles ?? []).map((r: { role: SessionRole }) => r.role));
@@ -164,6 +184,14 @@ export function landingPath(session: Session | null, redirect?: string | null): 
   }
   if (redirect) return redirect;
   return "/";
+}
+
+// Destino tras CERRAR sesión: el staff vuelve a su login (con hCaptcha), el
+// usuario a la portada. Centraliza la decisión /auth/staff vs / que usan el
+// Navbar (compartido) y las áreas de staff. Evita que un admin caiga en /auth,
+// que rechaza cuentas de staff y lo dejaría sin poder reingresar.
+export function logoutPath(role: SessionRole | null | undefined): string {
+  return isStaffRole(role) ? "/auth/staff" : "/";
 }
 
 // ¿La ruta pertenece al área de staff? Se compara contra el prefijo del panel
@@ -276,14 +304,14 @@ export async function signUpWithPassword(input: SignUpInput): Promise<Session | 
 // Deep link al que vuelve el OAuth en el APK (registrado en AndroidManifest).
 export const NATIVE_OAUTH_REDIRECT = "com.effe.multiclasificados://auth-callback";
 
-// Flujo OAuth unificado. En web redirige a /auth/callback; en el APK (Capacitor)
-// abre el navegador del sistema y vuelve a la app por deep link (lo completa
-// el listener `appUrlOpen` de nativeInit).
-async function oauthSignIn(provider: "google" | "facebook", redirect?: string): Promise<void> {
+// Login con Google. En web redirige a /auth/callback; en el APK (Capacitor) abre
+// el navegador del sistema y vuelve a la app por deep link (lo completa el
+// listener `appUrlOpen` de nativeInit).
+export async function signInWithGoogle(redirect?: string): Promise<void> {
   const { Capacitor } = await import("@capacitor/core");
   if (Capacitor.isNativePlatform()) {
     const { data, error } = await supabase.auth.signInWithOAuth({
-      provider,
+      provider: "google",
       options: { redirectTo: NATIVE_OAUTH_REDIRECT, skipBrowserRedirect: true },
     });
     if (error) throw error;
@@ -296,16 +324,8 @@ async function oauthSignIn(provider: "google" | "facebook", redirect?: string): 
   const redirectTo = `${window.location.origin}/auth/callback${
     redirect ? `?redirect=${encodeURIComponent(redirect)}` : ""
   }`;
-  const { error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo } });
+  const { error } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo } });
   if (error) throw error;
-}
-
-export async function signInWithGoogle(redirect?: string): Promise<void> {
-  return oauthSignIn("google", redirect);
-}
-
-export async function signInWithFacebook(redirect?: string): Promise<void> {
-  return oauthSignIn("facebook", redirect);
 }
 
 export async function signOut(): Promise<void> {

@@ -26,7 +26,7 @@ export function SupabaseAuthBridge() {
       supabase.realtime.setAuth(data.session?.access_token ?? null);
     });
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       // Mantiene el token de Realtime sincronizado en login, logout y
       // refresco automático de token (TOKEN_REFRESHED cada ~1h).
       supabase.realtime.setAuth(session?.access_token ?? null);
@@ -44,8 +44,12 @@ export function SupabaseAuthBridge() {
         safeSync();
         // Asocia el token de push del dispositivo a este usuario (en el APK).
         savePushToken();
-      } else {
-        // Solo limpiamos si la sesión local provenía de Supabase (no la demo).
+      } else if (event === "SIGNED_OUT") {
+        // Limpiamos SOLO en un cierre REAL. Un session=null de otros eventos
+        // (INITIAL_SESSION sin sesión, o un auto-refresh transitorio que falla y
+        // reintenta) provocaba cierres espontáneos. GoTrue v2 emite SIGNED_OUT en
+        // el fallo DEFINITIVO de refresh/expiración, así que no quedan sesiones
+        // zombie. Solo limpiamos si la sesión local provenía de Supabase (no demo).
         const current = getSession();
         if (current?.supabase) clearSession();
       }

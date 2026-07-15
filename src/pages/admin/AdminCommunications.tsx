@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Send, Megaphone, Users, Target, Mail, Bell, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { usePermissions } from "@/hooks/usePermissions";
 import { fetchAudienceCount, sendIndividualMessage, broadcastMessage, fetchCommStats, type CommStats } from "@/lib/admin";
 
 const timeAgo = (iso: string) => {
@@ -31,6 +32,12 @@ const AUDIENCES = [
 ];
 
 const AdminCommunications = ({ role }: { role: AdminRole }) => {
+  // Enviar exige el permiso 'Comunicaciones' · Enviar (edit). El servidor lo
+  // vuelve a exigir en admin_send_message/admin_broadcast; esto solo evita
+  // mostrar botones que fallarían. superadmin corre con enforce=false.
+  const { can } = usePermissions(role === "admin");
+  const canSend = can("Comunicaciones", "edit");
+
   // Estadísticas reales (BD) de la tarjeta "Resumen de envíos".
   const [stats, setStats] = useState<CommStats | null>(null);
   const loadStats = () => fetchCommStats().then(setStats).catch(() => setStats(null));
@@ -110,6 +117,11 @@ const AdminCommunications = ({ role }: { role: AdminRole }) => {
               <CardTitle className="text-base md:text-lg">Centro de mensajes</CardTitle>
             </CardHeader>
             <CardContent>
+              {!canSend && (
+                <p className="mb-4 text-xs rounded-lg border bg-muted/50 px-3 py-2 text-muted-foreground">
+                  Solo lectura: no tienes permiso para enviar comunicaciones. Un superadministrador puede habilitarlo en Roles y permisos.
+                </p>
+              )}
               <Tabs defaultValue="individual">
                 <TabsList className="grid grid-cols-2 w-full md:w-auto">
                   <TabsTrigger value="individual" className="gap-2"><Send size={14} /> Individual</TabsTrigger>
@@ -142,7 +154,7 @@ const AdminCommunications = ({ role }: { role: AdminRole }) => {
                     <Checkbox checked={indEmail} onCheckedChange={(v) => setIndEmail(!!v)} />
                     <Mail size={14} /> <span>Enviar también por correo electrónico</span>
                   </label>
-                  <Button className="w-full md:w-auto" onClick={sendIndividual} disabled={sendingInd}>
+                  <Button className="w-full md:w-auto" onClick={sendIndividual} disabled={sendingInd || !canSend}>
                     {sendingInd && <Loader2 size={14} className="mr-2 animate-spin" />}
                     Enviar mensaje
                   </Button>
@@ -187,7 +199,7 @@ const AdminCommunications = ({ role }: { role: AdminRole }) => {
                     {massEmail && <Badge variant="outline" className="gap-1"><Mail size={12} /> Email</Badge>}
                     {copyStaff && <Badge variant="outline" className="text-secondary border-secondary/40">CC: equipo interno</Badge>}
                   </div>
-                  <Button className="w-full md:w-auto" onClick={sendMasivo} disabled={sendingMass || count === 0}>
+                  <Button className="w-full md:w-auto" onClick={sendMasivo} disabled={sendingMass || count === 0 || !canSend}>
                     {sendingMass && <Loader2 size={14} className="mr-2 animate-spin" />}
                     Enviar a {count === null ? "…" : count.toLocaleString()}
                   </Button>

@@ -55,7 +55,7 @@ const AdvertiserInvoices = () => {
             <p className="text-sm text-destructive text-center py-8">{error}</p>
           ) : invoices.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">
-              Aún no tienes boletas. Se generarán automáticamente al publicar un aviso.
+              Aún no tienes boletas. Se generan automáticamente al comprar créditos.
             </p>
           ) : (
             <>
