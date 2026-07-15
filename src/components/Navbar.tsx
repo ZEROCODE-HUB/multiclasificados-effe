@@ -18,7 +18,7 @@ import {
 import { useSession, isStaffRole } from "@/hooks/useSession";
 import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 import { NotificationsBell } from "@/components/NotificationsBell";
-import { signOut } from "@/lib/auth";
+import { signOut, logoutPath } from "@/lib/auth";
 import { BrandMark } from "@/components/BrandMark";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { CreditsBalance } from "@/components/CreditsBalance";
@@ -37,9 +37,11 @@ export function Navbar() {
     setMobileOpen(false);
   };
 
-  const logout = () => {
-    signOut();
-    navigate("/");
+  // Espera a signOut() antes de navegar: si no, la sesión aún sin limpiar haría
+  // que StaffHomeRedirect rebotara al panel. El staff vuelve a /auth/staff.
+  const logout = async () => {
+    await signOut();
+    navigate(logoutPath(session?.role));
   };
 
   const isUser = session && (session.role === "anunciante" || session.role === "buscador");
@@ -74,7 +76,7 @@ export function Navbar() {
 
   return (
     <>
-    <header className="w-full z-50 bg-card border-b border-border sticky top-0 shadow-[0_1px_0_0_hsl(var(--border))]">
+    <header className="w-full z-50 bg-card border-b border-border sticky top-0 pt-safe shadow-[0_1px_0_0_hsl(var(--border))]">
       <div className="container mx-auto flex items-center gap-3 lg:gap-8 h-16 md:h-[76px] px-3 md:px-6">
         <BrandMark size="md" />
 

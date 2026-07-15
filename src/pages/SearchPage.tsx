@@ -23,7 +23,6 @@ import {
   SlidersHorizontal,
   MapPin,
   Heart,
-  Star,
   Bookmark,
   X,
   ChevronLeft,
@@ -527,13 +526,6 @@ export default function SearchPage() {
                     </div>
                     <h3 className="font-semibold text-sm text-foreground line-clamp-2 mt-1">{l.title}</h3>
                     <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-1.5">
-                      {session?.supabase && (
-                        <>
-                          <Star size={11} className="text-secondary fill-secondary" />
-                          <span className="font-semibold text-foreground">0.0</span>
-                          <span>·</span>
-                        </>
-                      )}
                       <span className="truncate">
                         <MapPin size={10} className="inline" /> {l.location}
                       </span>

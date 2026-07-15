@@ -121,7 +121,7 @@ beforeEach(() => {
   pollOrderStatus.mockReset().mockResolvedValue("paid");
   getPurchaseResult.mockReset().mockResolvedValue({ balance: 1000, invoiceNumber: "B001-000100" });
   createAndPublishListing.mockReset().mockResolvedValue({
-    listingId: "L1", invoiceNumber: "B001-000099", published: true, invoiceSaved: true,
+    listingId: "L1", published: true,
   });
   navigate.mockClear();
   toast.mockClear();
@@ -138,13 +138,13 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     uploadMainPhoto();
     await publishConfirmed();
 
-    await screen.findByText(/pago confirmado/i);
+    await screen.findByText(/aviso publicado/i);
     expect(createAndPublishListing).toHaveBeenCalledTimes(1);
     expect(spendCredits).toHaveBeenCalledTimes(1);
 
     // El usuario cierra la ventanita con Esc (no con los botones que navegan).
     fireEvent.keyDown(document.body, { key: "Escape", code: "Escape" });
-    await waitFor(() => expect(screen.queryByText(/pago confirmado/i)).toBeNull());
+    await waitFor(() => expect(screen.queryByText(/aviso publicado/i)).toBeNull());
 
     // El formulario quedó vacío: ya no hay aviso que reenviar.
     expect(screen.queryByDisplayValue("Casa bonita")).toBeNull();
@@ -177,9 +177,9 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     const btn = confirmButton();
     await act(async () => { btn.click(); btn.click(); btn.click(); });
 
-    resolvePublish({ listingId: "L1", invoiceNumber: "B001-000099", published: true, invoiceSaved: true });
+    resolvePublish({ listingId: "L1", published: true });
 
-    await screen.findByText(/pago confirmado/i);
+    await screen.findByText(/aviso publicado/i);
     expect(createAndPublishListing).toHaveBeenCalledTimes(1);
     expect(spendCredits).toHaveBeenCalledTimes(1);
   });
@@ -218,8 +218,8 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     await waitFor(() => expect(btn).toBeDisabled());
     expect(screen.getByText(/publicando/i)).toBeTruthy();
 
-    resolvePublish({ listingId: "L1", invoiceNumber: "B001-000099", published: true, invoiceSaved: true });
-    await screen.findByText(/pago confirmado/i);
+    resolvePublish({ listingId: "L1", published: true });
+    await screen.findByText(/aviso publicado/i);
   });
 
   it("SI FALLA EL COBRO: al pagar el saldo se cobra el aviso ya publicado, no se republica", async () => {
@@ -238,7 +238,7 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
     await screen.findByText(/saldo a comprar/i);
     // No se anuncia un pago que no ocurrió.
-    expect(screen.queryByText(/pago confirmado/i)).toBeNull();
+    expect(screen.queryByText(/aviso publicado/i)).toBeNull();
 
     fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "12345678" } });
     fireEvent.change(screen.getByPlaceholderText("tu@correo.com"), { target: { value: "comprador@correo.com" } });
@@ -247,7 +247,7 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     fireEvent.click(await screen.findByText("SIMULAR_PAGO"));
 
     await waitFor(() => expect(createPayment).toHaveBeenCalledTimes(1));
-    await screen.findByText(/pago confirmado/i);
+    await screen.findByText(/aviso publicado/i);
 
     // Clave: el aviso NO se volvió a crear; solo se cobró el que ya existía.
     expect(createAndPublishListing).toHaveBeenCalledTimes(1);

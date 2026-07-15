@@ -5,34 +5,27 @@ import { usePermissions, type Can } from "@/hooks/usePermissions";
 import { useSession } from "@/hooks/useSession";
 import {
   LayoutDashboard,
-  ClipboardList,
-  Users,
-  Send,
-  Tags,
-  DollarSign,
-  FileBarChart,
   ShieldCheck,
-  Settings,
-  ScrollText,
-  Lock,
-  Flag,
   Menu,
   LogOut,
   Bell,
   ChevronRight,
   type LucideIcon,
 } from "lucide-react";
+import { PERM_MODULES, MODULE_BY_SUB } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/auth";
 
-// Cierra la sesión real (Supabase + estado local) y va al login.
+// Cierra la sesión real (Supabase + estado local) y vuelve al login de STAFF
+// (/auth/staff). Es un área exclusiva de staff, así que el destino es fijo; /auth
+// rechaza cuentas de staff y dejaría al admin sin poder reingresar.
 async function handleLogout() {
   try {
     await signOut();
   } finally {
-    window.location.href = "/auth";
+    window.location.href = "/auth/staff";
   }
 }
 
@@ -40,45 +33,40 @@ export type AdminRole = "admin" | "superadmin";
 
 type MenuItem = { title: string; url: string; icon: LucideIcon; group?: string; module?: string };
 
-// Módulo de la matriz de permisos por sub-ruta (para filtrar menú y bloquear
-// el acceso directo por URL). Dashboard y Roles no se filtran.
-const MODULE_BY_SUB: Record<string, string> = {
-  avisos: "Gestión de avisos",
-  usuarios: "Gestión de usuarios",
-  comercial: "Configuración comercial",
-  tarifas: "Pagos y planes",
-  conversaciones: "Conversaciones reportadas",
-  reportes: "Reportes",
-  comunicaciones: "Comunicaciones",
-  auditoria: "Auditoría y logs",
-};
+// El mapa sub-ruta → módulo (para filtrar el menú y bloquear el acceso directo
+// por URL) sale del catálogo único de permisos (MODULE_BY_SUB en permissions.ts).
+// Dashboard y "Roles y permisos" no tienen módulo, así que no se filtran.
 
 const buildMenu = (role: AdminRole): MenuItem[] => {
+  const toItem = (m: (typeof PERM_MODULES)[number]): MenuItem => ({
+    title: m.label, url: `/dashboard/${role}/${m.sub}`, icon: m.icon, group: m.group, module: m.id,
+  });
   const base: MenuItem[] = [
     { title: "Dashboard", url: `/dashboard/${role}`, icon: LayoutDashboard, group: "Principal" },
-    { title: "Gestión de avisos", url: `/dashboard/${role}/avisos`, icon: ClipboardList, group: "Operación", module: "Gestión de avisos" },
-    { title: "Gestión de usuarios", url: `/dashboard/${role}/usuarios`, icon: Users, group: "Operación", module: "Gestión de usuarios" },
-    { title: "Config. comercial", url: `/dashboard/${role}/comercial`, icon: Tags, group: "Operación", module: "Configuración comercial" },
-    { title: "Tarifas y Descuentos", url: `/dashboard/${role}/tarifas`, icon: DollarSign, group: "Operación", module: "Pagos y planes" },
-    { title: "Reclamos", url: `/dashboard/${role}/conversaciones`, icon: Flag, group: "Operación", module: "Conversaciones reportadas" },
-    { title: "Reportes", url: `/dashboard/${role}/reportes`, icon: FileBarChart, group: "Operación", module: "Reportes" },
-    { title: "Comunicaciones", url: `/dashboard/${role}/comunicaciones`, icon: Send, group: "Comunicaciones", module: "Comunicaciones" },
+    ...PERM_MODULES.filter((m) => !m.superadminOnly).map(toItem),
   ];
   if (role === "admin") return base;
   return [
     ...base,
     { title: "Roles y permisos", url: `/dashboard/superadmin/roles`, icon: ShieldCheck, group: "Plataforma" },
-    { title: "Auditoría y logs", url: `/dashboard/superadmin/auditoria`, icon: ScrollText, group: "Plataforma", module: "Auditoría y logs" },
+    ...PERM_MODULES.filter((m) => m.superadminOnly).map(toItem),
   ];
 };
 
-const primaryMobile = (role: AdminRole): MenuItem[] => [
-  { title: "Inicio", url: `/dashboard/${role}`, icon: LayoutDashboard },
-  { title: "Avisos", url: `/dashboard/${role}/avisos`, icon: ClipboardList, module: "Gestión de avisos" },
-  { title: "Usuarios", url: `/dashboard/${role}/usuarios`, icon: Users, module: "Gestión de usuarios" },
-  { title: "Reportes", url: `/dashboard/${role}/reportes`, icon: FileBarChart, module: "Reportes" },
-  { title: "Comunic.", url: `/dashboard/${role}/comunicaciones`, icon: Send, module: "Comunicaciones" },
-];
+const primaryMobile = (role: AdminRole): MenuItem[] => {
+  // Subconjunto curado para la barra inferior; iconos/módulos del catálogo.
+  const mk = (sub: string, title: string): MenuItem => {
+    const m = PERM_MODULES.find((x) => x.sub === sub);
+    return { title, url: `/dashboard/${role}/${sub}`, icon: m?.icon ?? LayoutDashboard, module: m?.id };
+  };
+  return [
+    { title: "Inicio", url: `/dashboard/${role}`, icon: LayoutDashboard },
+    mk("avisos", "Avisos"),
+    mk("usuarios", "Usuarios"),
+    mk("reportes", "Reportes"),
+    mk("comunicaciones", "Comunic."),
+  ];
+};
 
 interface Props {
   children: React.ReactNode;
@@ -177,7 +165,7 @@ export function AdminLayout({ children, role, title, breadcrumb, can }: Props) {
 
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
-        <header className="sticky top-0 z-30 h-14 lg:h-16 flex items-center bg-card/95 backdrop-blur-md border-b px-4 lg:px-8 gap-3">
+        <header className="sticky top-0 z-30 min-h-[3.5rem] lg:min-h-[4rem] pt-safe flex items-center bg-card/95 backdrop-blur-md border-b px-4 lg:px-8 gap-3">
           <Link to={`/dashboard/${role}`} className="lg:hidden flex items-center gap-2">
             <div className={cn(
               "w-8 h-8 rounded-md flex items-center justify-center text-sm font-extrabold shadow-sm",
@@ -279,7 +267,7 @@ function AdminBottomNav({ role, can }: { role: AdminRole; can?: Can }) {
   const home = `/dashboard/${role}`;
   const isActive = (url: string) => (url === home ? pathname === url : pathname.startsWith(url));
   return (
-    <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-primary text-primary-foreground border-t border-primary/40 shadow-[0_-8px_24px_-6px_rgba(0,0,0,0.25)]">
+    <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 pb-safe bg-primary text-primary-foreground border-t border-primary/40 shadow-[0_-8px_24px_-6px_rgba(0,0,0,0.25)]">
       <div className="grid grid-cols-5 h-16">
         {items.map((item) => {
           const active = isActive(item.url);

@@ -9,6 +9,8 @@ import { MaintenanceGate } from "@/components/MaintenanceGate";
 import { UpdateGate } from "@/components/UpdateGate";
 import { FavoritesProvider } from "@/hooks/useFavorites";
 import { RequireRole } from "@/components/RequireRole";
+import { StaffHomeRedirect } from "@/components/StaffHomeRedirect";
+import { IosSwipeBack } from "@/components/IosSwipeBack";
 import { AdminShell } from "@/components/AdminLayout";
 
 // Páginas críticas (primer render): se cargan de inmediato.
@@ -27,7 +29,6 @@ const AdvertiserPublish = lazy(() => import("./pages/advertiser/AdvertiserPublis
 const AdvertiserListings = lazy(() => import("./pages/advertiser/AdvertiserListings.tsx"));
 const AdvertiserApplications = lazy(() => import("./pages/advertiser/AdvertiserApplications.tsx"));
 const AdvertiserStats = lazy(() => import("./pages/advertiser/AdvertiserStats.tsx"));
-const SeekerSearch = lazy(() => import("./pages/seeker/SeekerSearch.tsx"));
 const SeekerFavorites = lazy(() => import("./pages/seeker/SeekerFavorites.tsx"));
 const SeekerSearches = lazy(() => import("./pages/seeker/SeekerSearches.tsx"));
 const MessagesPage = lazy(() => import("./pages/shared/MessagesPage.tsx"));
@@ -56,11 +57,13 @@ const App = () => (
       <UpdateGate />
       <FavoritesProvider>
       <BrowserRouter>
+        {/* Swipe-back desde el borde izquierdo en iOS (no tiene botón físico). */}
+        <IosSwipeBack />
         {/* Dentro del router: necesita la ruta para dejar pasar /auth/staff. */}
         <MaintenanceGate>
         <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><div className="w-9 h-9 rounded-full border-[3px] border-muted border-t-secondary animate-spin" /></div>}>
         <Routes>
-          <Route path="/" element={<Index />} />
+          <Route path="/" element={<StaffHomeRedirect><Index /></StaffHomeRedirect>} />
           <Route path="/auth" element={<AuthPage />} />
           {/* Login de staff (admin/superadmin): mismo formulario pero CON hCaptcha. */}
           <Route path="/auth/staff" element={<AuthPage requireCaptcha />} />
@@ -93,7 +96,9 @@ const App = () => (
 
             {/* Seeker */}
             <Route path="/dashboard/buscador" element={<SeekerDashboard />} />
-            <Route path="/dashboard/buscador/buscar" element={<SeekerSearch />} />
+            {/* El seeker busca en /buscar (buscador público real); esta ruta vieja
+                solo redirige por si quedó algún enlace/marcador. */}
+            <Route path="/dashboard/buscador/buscar" element={<Navigate to="/buscar" replace />} />
             <Route path="/dashboard/buscador/favoritos" element={<SeekerFavorites />} />
             <Route path="/dashboard/buscador/busquedas" element={<SeekerSearches />} />
             <Route path="/dashboard/buscador/mensajes" element={<MessagesPage role="buscador" />} />

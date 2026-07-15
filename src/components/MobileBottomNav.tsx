@@ -57,7 +57,7 @@ export function MobileBottomNav() {
   const isActive = (url: string) => url === activeUrl;
 
   return (
-    <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-primary text-primary-foreground border-t border-primary/40 shadow-[0_-8px_24px_-6px_rgba(0,0,0,0.25)]">
+    <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 pb-safe bg-primary text-primary-foreground border-t border-primary/40 shadow-[0_-8px_24px_-6px_rgba(0,0,0,0.25)]">
       <div className="grid grid-cols-5 h-16">
         {primary.map((item) => {
           const active = isActive(item.url);

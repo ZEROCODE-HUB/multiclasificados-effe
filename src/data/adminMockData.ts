@@ -61,15 +61,6 @@ export const auditLogs = [
   { id: "L-2197", actor: "sistema", action: "Backup completo", entity: "DB principal", ip: "internal", time: "2026-06-09 03:00" },
 ];
 
-export const integrations = [
-  { name: "Stripe", desc: "Procesador de pagos", status: "Conectado", color: "success" },
-  { name: "Mailgun", desc: "Envío transaccional de correos", status: "Conectado", color: "success" },
-  { name: "Google Analytics", desc: "Métricas y comportamiento", status: "Conectado", color: "success" },
-  { name: "Twilio", desc: "SMS y WhatsApp", status: "Desconectado", color: "muted" },
-  { name: "Cloudinary", desc: "Hospedaje de imágenes", status: "Conectado", color: "success" },
-  { name: "Slack", desc: "Notificaciones internas", status: "Pendiente", color: "warning" },
-];
-
 export const plans = [
   { id: "free", name: "Gratis", price: "S/ 0", listings: 3, featured: 0, active: 12350 },
   { id: "basic", name: "Básico", price: "S/ 29", listings: 15, featured: 2, active: 1820 },

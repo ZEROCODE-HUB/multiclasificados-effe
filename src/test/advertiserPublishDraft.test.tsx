@@ -89,7 +89,7 @@ beforeEach(() => {
   spendCredits.mockResolvedValue(true);
   saveListingDraft.mockResolvedValue("L-DRAFT");
   createAndPublishListing.mockResolvedValue({
-    listingId: "L-DRAFT", invoiceNumber: "B001-000099", published: true, invoiceSaved: true,
+    listingId: "L-DRAFT", published: true,
   });
 });
 

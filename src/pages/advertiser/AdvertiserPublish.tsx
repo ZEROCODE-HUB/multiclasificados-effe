@@ -20,7 +20,7 @@ import { useNavigate } from "react-router-dom";
 import { useSession } from "@/hooks/useSession";
 import { toast } from "@/hooks/use-toast";
 import {
-  loadSettings, priceForDuration, formatSoles, formatCredits, addInvoice, avisosBreakdown, solesToCredits,
+  loadSettings, priceForDuration, formatSoles, formatCredits, avisosBreakdown, solesToCredits,
   type DurationDays, type PricingSettings, type ExtraPrices,
 } from "@/lib/pricing";
 import { createAndPublishListing, saveListingDraft } from "@/lib/publish";
@@ -476,15 +476,7 @@ const AdvertiserPublish = () => {
         return;
       }
       pendingChargeListingId.current = null;
-      const localInv = addInvoice({
-        email,
-        advertiser: verifiedName || session?.name || "Anunciante",
-        listingTitle: form.title,
-        amount: total,
-        detail: `Boleta · Aviso ${duration} días · ${formatSoles(total)}`,
-        docNumber: docNumber || undefined,
-      });
-      setSuccessOpen({ open: true, number: localInv.number, email });
+      setSuccessOpen({ open: true, number: "", email });
       resetPublishForm();
     } finally {
       publishingRef.current = false;
@@ -506,7 +498,7 @@ const AdvertiserPublish = () => {
     setPublishing(true);
     try {
       // 1) Crear el aviso y publicarlo
-      const { listingId, invoiceNumber, published, invoiceSaved } = await createAndPublishListing({
+      const { listingId, published } = await createAndPublishListing({
         form: formForSubmit,
         lat: coords?.lat ?? null,
         lng: coords?.lng ?? null,
@@ -548,31 +540,15 @@ const AdvertiserPublish = () => {
       }
       pendingChargeListingId.current = null;
 
-      // 3) Guardar comprobante local como respaldo
-      const localInv = addInvoice({
-        email,
-        advertiser: verifiedName || session?.name || "Anunciante",
-        listingTitle: form.title,
-        amount: total,
-        detail: `Boleta · Aviso ${duration} días · ${formatSoles(total)}`,
-        docNumber: docNumber || undefined,
-        number: invoiceNumber || undefined,
-      });
-
-      setSuccessOpen({ open: true, number: invoiceNumber || localInv.number, email });
-      // Publicado y cobrado: vaciamos el formulario para que no se pueda reenviar.
+      // 3) Publicado y saldo descontado. NO se emite boleta al publicar: el
+      //    comprobante ya se emitió al comprar los créditos. Confirmamos y
+      //    vaciamos el formulario para que no se pueda reenviar.
+      setSuccessOpen({ open: true, number: "", email });
       resetPublishForm();
-      if (!invoiceSaved) {
-        toast({
-          title: "Comprobante no registrado en la base de datos",
-          description: "El aviso se publicó, pero el comprobante no se guardó en el servidor.",
-          variant: "destructive",
-        });
-      }
       if (!published) {
         toast({
-          title: "Comprobante guardado",
-          description: "Tu boleta quedó registrada, pero el aviso quedó pendiente de activación. Nuestro equipo lo revisará.",
+          title: "Aviso pendiente de activación",
+          description: "Se descontó tu saldo, pero el aviso quedó pendiente de activación. Nuestro equipo lo revisará.",
         });
       }
     } catch (e) {
@@ -990,7 +966,7 @@ const AdvertiserPublish = () => {
                     <span className="text-2xl font-extrabold text-primary">{formatCredits(totalCredits)}</span>
                   </div>
                   <p className="text-[11px] text-muted-foreground pt-1">
-                    Se descontará de tu saldo al publicar. (Boleta: {formatSoles(total)})
+                    Se descontará de tu saldo al publicar. El comprobante se emite al comprar créditos.
                   </p>
                 </div>
               </CardContent>
@@ -1200,25 +1176,20 @@ const AdvertiserPublish = () => {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Check className="text-success" size={20} /> ¡Pago confirmado!
+              <Check className="text-success" size={20} /> ¡Aviso publicado!
             </DialogTitle>
             <DialogDescription>
-              Tu aviso ha sido publicado correctamente.
+              Tu aviso ya está visible y se descontó el saldo correspondiente.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 text-sm">
-            <div className="p-3 border bg-muted/30 space-y-1">
-              <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Boleta electrónica</p>
-              <p className="font-mono font-bold">{successOpen.number}</p>
-              <p className="text-xs text-muted-foreground">Enviado a <span className="font-semibold text-foreground">{successOpen.email}</span></p>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              También puedes verlo en <span className="font-semibold text-foreground">Mis comprobantes</span>.
+            <p className="text-muted-foreground">
+              El comprobante se emite al <span className="font-semibold text-foreground">comprar créditos</span>; puedes revisarlos en <span className="font-semibold text-foreground">Mis comprobantes</span>.
             </p>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setSuccessOpen({ open: false, number: "", email: "" }); navigate("/dashboard/anunciante/boletas"); }}>
-              Ver mis comprobantes
+            <Button variant="outline" onClick={() => setSuccessOpen({ open: false, number: "", email: "" })}>
+              Cerrar
             </Button>
             <Button onClick={() => { setSuccessOpen({ open: false, number: "", email: "" }); navigate("/dashboard/anunciante/avisos"); }}>
               Ir a mis avisos

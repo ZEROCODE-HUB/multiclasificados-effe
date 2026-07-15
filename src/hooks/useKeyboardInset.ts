@@ -14,13 +14,18 @@ export function useKeyboardInset() {
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
+    // Solo Android reserva el alto del teclado como padding (comportamiento ya
+    // probado en producción). En iOS, con Keyboard resize:'native' el WebView ya
+    // se reduce al abrir el teclado, así que sumar el alto además del resize
+    // duplicaría el espacio; ahí `kbPad` queda en 0 y basta con el auto-scroll.
+    const isAndroid = Capacitor.getPlatform() === "android";
     let active = true;
     const handles: Array<{ remove: () => void }> = [];
     (async () => {
       // Import dinámico: el plugin nativo solo se carga en el APK/IPA.
       const { Keyboard } = await import("@capacitor/keyboard");
       const onShow = (info: { keyboardHeight: number }) => {
-        if (active) setKbPad(info.keyboardHeight || 0);
+        if (active && isAndroid) setKbPad(info.keyboardHeight || 0);
       };
       const onHide = () => { if (active) setKbPad(0); };
       const events: Array<[string, (i: { keyboardHeight: number }) => void]> = [

@@ -55,7 +55,8 @@ export function MfaGate({ onVerified }: { onVerified: () => void }) {
 
   const cancel = async () => {
     await signOut();
-    window.location.href = "/auth";
+    // MfaGate solo se monta en área de staff (RequireRole): volver a su login.
+    window.location.href = "/auth/staff";
   };
 
   return (

@@ -48,6 +48,7 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
   // Matriz de permisos: solo restringe al rol admin (superadmin = acceso total).
   const { can } = usePermissions(role === "admin");
   const canEdit = can("Gestión de usuarios", "edit");
+  const canApprove = can("Gestión de usuarios", "approve"); // verificar identidad
   const canDelete = can("Gestión de usuarios", "delete");
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [q, setQ] = useState("");
@@ -216,7 +217,12 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        </>
+        )}
 
+        {/* Verificar identidad cuelga de "approve" (lo exige el servidor,
+            admin_verify_user), no de "edit". */}
+        {canApprove && (
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <Button size={size} variant={Btn as any} className={u.verified ? "text-secondary" : "text-muted-foreground"} title={u.verified ? "Quitar verificación" : "Verificar"}><BadgeCheck size={iconSize} /></Button>
@@ -236,7 +242,10 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        )}
 
+        {canEdit && (
+        <>
         <Button
           size={size}
           variant={Btn as any}

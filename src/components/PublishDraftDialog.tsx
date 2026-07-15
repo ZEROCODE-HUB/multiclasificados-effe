@@ -74,8 +74,8 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
   const totalCredits = solesToCredits(totalSoles);
   const enoughCredits = balance !== null && balance >= totalCredits;
 
-  // Cobra y activa el borrador. `finalizeListingPublication` NO crea el aviso:
-  // solo genera la orden, el comprobante y llama al RPC publish_listing.
+  // Cobra y activa el borrador. `finalizeListingPublication` NO crea el aviso ni
+  // emite comprobante: solo descuenta saldo (spendCredits) y activa el aviso.
   const publish = async (confirmed: ConfirmedIdentity) => {
     if (!draft || publishing) return;
     setPublishing(true);
@@ -93,7 +93,7 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
         return;
       }
 
-      const { published, invoiceNumber, invoiceSaved } = await finalizeListingPublication(draft.id, {
+      const { published } = await finalizeListingPublication(draft.id, {
         quantity, duration, extras, total: totalSoles,
         receiptType: confirmed.docType === "ruc" ? "factura" : "boleta",
         email,
@@ -103,19 +103,17 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
       });
 
       if (!published) {
-        // El cobro ya ocurrió: no lo escondemos detrás de un "publicado" falso.
+        // El saldo ya se descontó: no lo escondemos detrás de un "publicado" falso.
         toast({
-          title: "Se cobró pero el aviso no se activó",
-          description: "Escribe a soporte con tu comprobante. No vuelvas a publicarlo.",
+          title: "Se descontó el saldo pero el aviso no se activó",
+          description: "Escribe a soporte con los datos del aviso. No vuelvas a publicarlo.",
           variant: "destructive",
         });
         return;
       }
       toast({
         title: "¡Aviso publicado!",
-        description: invoiceSaved && invoiceNumber
-          ? `Ya está activo por ${duration} días. Comprobante ${invoiceNumber}.`
-          : `Ya está activo por ${duration} días.`,
+        description: `Ya está activo por ${duration} días.`,
       });
       onPublished();
       onClose();

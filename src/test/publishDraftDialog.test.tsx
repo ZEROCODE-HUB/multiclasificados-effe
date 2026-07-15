@@ -87,7 +87,7 @@ beforeEach(() => {
   getCreditBalance.mockResolvedValue(1000);
   spendCredits.mockResolvedValue(true);
   verifyDocument.mockResolvedValue({ ok: true, nombre: "JUAN PEREZ", data: {} });
-  finalizeListingPublication.mockResolvedValue({ invoiceNumber: "B001-000200", published: true, invoiceSaved: true });
+  finalizeListingPublication.mockResolvedValue({ published: true });
 });
 
 describe("PublishDraftDialog — publicar un borrador guardado", () => {
@@ -182,14 +182,14 @@ describe("PublishDraftDialog — publicar un borrador guardado", () => {
   });
 
   it("si se cobró pero el RPC no activó el aviso, lo dice en vez de fingir éxito", async () => {
-    finalizeListingPublication.mockResolvedValue({ invoiceNumber: "", published: false, invoiceSaved: false });
+    finalizeListingPublication.mockResolvedValue({ published: false });
     renderDialog();
     await screen.findAllByText(`S/ ${COST_CREDITS}`);
     fireEvent.click(screen.getByRole("button", { name: /publicar por/i }));
     await confirmIdentity();
 
     await waitFor(() =>
-      expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: "Se cobró pero el aviso no se activó" })));
+      expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: "Se descontó el saldo pero el aviso no se activó" })));
     expect(onPublished).not.toHaveBeenCalled();
   });
 });

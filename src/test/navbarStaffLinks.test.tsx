@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import type { Session, SessionRole } from "@/hooks/useSession";
 
@@ -8,17 +8,28 @@ beforeEach(() => {
   if (!window.matchMedia) (window as any).matchMedia = () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
 });
 
-const { sessionRef } = vi.hoisted(() => ({ sessionRef: { current: null as Session | null } }));
+const { sessionRef, navigateSpy, signOutMock } = vi.hoisted(() => ({
+  sessionRef: { current: null as Session | null },
+  navigateSpy: vi.fn(),
+  signOutMock: vi.fn(() => Promise.resolve()),
+}));
 vi.mock("@/hooks/useSession", async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>);
   return { ...actual, useSession: () => sessionRef.current };
+});
+vi.mock("react-router-dom", async (orig) => {
+  const actual = await (orig() as Promise<Record<string, unknown>>);
+  return { ...actual, useNavigate: () => navigateSpy };
 });
 
 vi.mock("@/hooks/useUnreadMessages", () => ({ useUnreadMessages: () => 0 }));
 vi.mock("@/components/NotificationsBell", () => ({ NotificationsBell: () => null }));
 vi.mock("@/components/MobileBottomNav", () => ({ MobileBottomNav: () => null }));
 vi.mock("@/components/CreditsBalance", () => ({ CreditsBalance: () => <div>CHIP CREDITOS</div> }));
-vi.mock("@/lib/auth", () => ({ signOut: vi.fn() }));
+vi.mock("@/lib/auth", () => ({
+  signOut: () => signOutMock(),
+  logoutPath: (r: string) => (["admin", "superadmin", "moderador", "soporte"].includes(r) ? "/auth/staff" : "/"),
+}));
 
 import { Navbar } from "@/components/Navbar";
 
@@ -97,5 +108,24 @@ describe("Navbar — menú móvil (hamburguesa)", () => {
     // "Ingresar" aparece también en el trigger de escritorio: basta con que exista.
     expect(screen.getAllByText("Ingresar").length).toBeGreaterThan(0);
     expect(screen.getByText("Publicar aviso")).toBeInTheDocument();
+  });
+});
+
+describe("Navbar — destino al cerrar sesión (Bug 1)", () => {
+  const openMobileMenu = () => fireEvent.click(screen.getByRole("button", { name: "Menú" }));
+
+  it("ADMIN: 'Cerrar sesión' lleva al login de STAFF (/auth/staff)", async () => {
+    renderNav("admin");
+    openMobileMenu();
+    fireEvent.click(screen.getByText("Cerrar sesión"));
+    await waitFor(() => expect(navigateSpy).toHaveBeenCalledWith("/auth/staff"));
+    expect(signOutMock).toHaveBeenCalled(); // se cierra la sesión antes de navegar
+  });
+
+  it("ANUNCIANTE: 'Cerrar sesión' lleva a la portada (/)", async () => {
+    renderNav("anunciante");
+    openMobileMenu();
+    fireEvent.click(screen.getByText("Cerrar sesión"));
+    await waitFor(() => expect(navigateSpy).toHaveBeenCalledWith("/"));
   });
 });

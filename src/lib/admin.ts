@@ -39,6 +39,17 @@ export async function fetchAdminStats(): Promise<{ data: AdminStats; real: boole
     if (error) throw error;
     if (data && Object.keys(data).length) return { data: data as AdminStats, real: true };
   } catch { /* fallback */ }
+  // Con sesión de staff NO mostramos KPIs demo: si el RPC no respondió, ceros
+  // reales (el mock queda solo para el modo demo sin sesión).
+  if (await isAuthed()) {
+    return {
+      real: true,
+      data: {
+        users: 0, active_listings: 0, pending_listings: 0, sold_listings: 0,
+        total_listings: 0, reports_open: 0, revenue: 0,
+      },
+    };
+  }
   return {
     real: false,
     data: {
@@ -58,6 +69,8 @@ export async function fetchGrowthSeries() {
       mes: r.mes, ingresos: Number(r.ingresos) || 0, usuarios: Number(r.usuarios) || 0,
     }));
   } catch { /* fallback */ }
+  // Con sesión de staff: sin datos reales → serie vacía, nunca la demo.
+  if (await isAuthed()) return [] as typeof mockSeries;
   return mockSeries;
 }
 

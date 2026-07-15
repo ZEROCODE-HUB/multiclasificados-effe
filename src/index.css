@@ -4,6 +4,18 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  /* Áreas seguras del dispositivo (notch / Dynamic Island / home indicator).
+     En iOS devuelven el inset real (index.html ya trae viewport-fit=cover).
+     En Android valen 0: MainActivity aplica los insets nativos a la vista raíz
+     y los CONSUME, así que no llegan al WebView y NO se duplica el margen.
+     En web también valen 0. */
+  .pt-safe { padding-top: env(safe-area-inset-top); }
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+  .pl-safe { padding-left: env(safe-area-inset-left); }
+  .pr-safe { padding-right: env(safe-area-inset-right); }
+}
+
 @layer base {
   :root {
     /* La plataforma es SOLO tema claro. Sin esto, un navegador con el sistema en
