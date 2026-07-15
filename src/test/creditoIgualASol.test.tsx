@@ -12,8 +12,14 @@ beforeEach(() => {
   if (!Element.prototype.releasePointerCapture) (Element.prototype as any).releasePointerCapture = () => {};
 });
 
-const purchaseCredits = vi.fn().mockResolvedValue({ newBalance: 100, invoiceNumber: "B001-1" });
-vi.mock("@/lib/credits", () => ({ purchaseCredits: (...a: unknown[]) => purchaseCredits(...a) }));
+const createPayment = vi.fn().mockResolvedValue({ orderId: "ord-1", formToken: "tok", publicKey: "pk-1" });
+vi.mock("@/lib/payments", () => ({
+  createPayment: (...a: unknown[]) => createPayment(...a),
+  pollOrderStatus: vi.fn().mockResolvedValue("paid"),
+  getPurchaseResult: vi.fn().mockResolvedValue({ balance: 100, invoiceNumber: "B001-1" }),
+  hostedPaymentUrl: () => "https://x/pay",
+}));
+vi.mock("@/components/PaymentForm", () => ({ PaymentForm: () => <div>FORM_PAGO</div> }));
 
 const verifyDocument = vi.fn().mockResolvedValue({ ok: true, nombre: "ANA TORRES", data: {} });
 vi.mock("@/lib/verifyDoc", async (orig) => ({
@@ -38,7 +44,7 @@ const abrir = (props: Partial<{ creditCost: number; currentBalance: number }> = 
     />,
   );
 
-beforeEach(() => { purchaseCredits.mockClear(); });
+beforeEach(() => { createPayment.mockClear(); });
 
 describe("Conversión — 1 sol = 1 crédito", () => {
   it("un sol es un crédito", () => {
@@ -65,27 +71,31 @@ describe("Comprar saldo — la app muestra todo en soles", () => {
     expect(screen.getByText(/^Faltan/)).toHaveTextContent("Faltan S/ 11.14");
   });
 
-  it("el botón compra en soles y la boleta también", async () => {
+  it("el botón muestra el total en soles y la boleta también", async () => {
     abrir();
     await screen.findByText(/saldo a comprar/i);
 
-    expect(screen.getByRole("button", { name: /comprar S\/ 16\.14/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /continuar al pago · S\/ 16\.14/i })).toBeInTheDocument();
     // La cifra en soles que se paga en la boleta.
     expect(screen.getByText("Pagas (boleta)")).toBeInTheDocument();
     expect(screen.getAllByText("S/ 16.14").length).toBeGreaterThan(0);
   });
 
-  it("compra tantos soles como paga (conversión 1:1)", async () => {
+  it("saldo a comprar = soles a pagar (conversión 1:1)", async () => {
     abrir();
+    // La UI muestra el mismo importe como "Saldo a comprar" y como "Pagas (boleta)".
+    await screen.findByText(/saldo a comprar/i);
+    const saldo = solesToCredits(ESTANDAR);
+    expect(saldo).toBe(ESTANDAR);
+    expect(formatCredits(saldo)).toBe("S/ 16.14");
+
+    // Y al continuar, se inicia el pago (el monto lo recalcula el servidor).
     fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "44443333" } });
     await screen.findByText("ANA TORRES");
     fireEvent.change(screen.getByPlaceholderText("tu@correo.com"), { target: { value: "ana@correo.com" } });
 
-    fireEvent.click(screen.getByRole("button", { name: /comprar S\//i }));
-
-    await waitFor(() => expect(purchaseCredits).toHaveBeenCalled());
-    const [pkg] = purchaseCredits.mock.calls[0];
-    expect(pkg.credits_amount).toBe(pkg.price_soles);
-    expect(pkg.credits_amount).toBe(ESTANDAR);
+    fireEvent.click(screen.getByRole("button", { name: /continuar al pago/i }));
+    await waitFor(() => expect(createPayment).toHaveBeenCalled());
+    expect(createPayment.mock.calls[0][0]).toMatchObject({ quantity: 1, duration: 7 });
   });
 });

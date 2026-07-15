@@ -18,11 +18,24 @@ beforeEach(() => {
 
 const getCreditBalance = vi.fn();
 const spendCredits = vi.fn();
-const purchaseCredits = vi.fn();
 vi.mock("@/lib/credits", () => ({
   getCreditBalance: (...a: unknown[]) => getCreditBalance(...a),
   spendCredits: (...a: unknown[]) => spendCredits(...a),
-  purchaseCredits: (...a: unknown[]) => purchaseCredits(...a),
+}));
+
+// Pasarela de pago (Izipay) simulada: createPayment → formToken; el formulario
+// embebido (stub) dispara onPaid y el polling resuelve como pagado.
+const createPayment = vi.fn();
+const pollOrderStatus = vi.fn();
+const getPurchaseResult = vi.fn();
+vi.mock("@/lib/payments", () => ({
+  createPayment: (...a: unknown[]) => createPayment(...a),
+  pollOrderStatus: (...a: unknown[]) => pollOrderStatus(...a),
+  getPurchaseResult: (...a: unknown[]) => getPurchaseResult(...a),
+  hostedPaymentUrl: () => "https://x/pay",
+}));
+vi.mock("@/components/PaymentForm", () => ({
+  PaymentForm: ({ onPaid }: { onPaid: () => void }) => <button onClick={onPaid}>SIMULAR_PAGO</button>,
 }));
 
 const createAndPublishListing = vi.fn();
@@ -104,7 +117,9 @@ beforeEach(() => {
   localStorage.clear();
   getCreditBalance.mockReset().mockResolvedValue(1000);
   spendCredits.mockReset().mockResolvedValue(true);
-  purchaseCredits.mockReset();
+  createPayment.mockReset().mockResolvedValue({ orderId: "o1", formToken: "tok", publicKey: "pk" });
+  pollOrderStatus.mockReset().mockResolvedValue("paid");
+  getPurchaseResult.mockReset().mockResolvedValue({ balance: 1000, invoiceNumber: "B001-000100" });
   createAndPublishListing.mockReset().mockResolvedValue({
     listingId: "L1", invoiceNumber: "B001-000099", published: true, invoiceSaved: true,
   });
@@ -207,10 +222,9 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     await screen.findByText(/pago confirmado/i);
   });
 
-  it("SI FALLA EL COBRO: al comprar créditos se cobra el aviso ya publicado, no se republica", async () => {
+  it("SI FALLA EL COBRO: al pagar el saldo se cobra el aviso ya publicado, no se republica", async () => {
     // El aviso se publica, pero el saldo cambió y spend_credits devuelve false.
     spendCredits.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
-    purchaseCredits.mockResolvedValue({ newBalance: 1000, orderId: "o1", invoiceNumber: "B001-000100" });
 
     seedDraft();
     render(<AdvertiserPublish />);
@@ -229,9 +243,10 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "12345678" } });
     fireEvent.change(screen.getByPlaceholderText("tu@correo.com"), { target: { value: "comprador@correo.com" } });
     await screen.findByText("JUAN PEREZ");
-    fireEvent.click(screen.getByRole("button", { name: /comprar/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continuar al pago/i }));
+    fireEvent.click(await screen.findByText("SIMULAR_PAGO"));
 
-    await waitFor(() => expect(purchaseCredits).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(createPayment).toHaveBeenCalledTimes(1));
     await screen.findByText(/pago confirmado/i);
 
     // Clave: el aviso NO se volvió a crear; solo se cobró el que ya existía.

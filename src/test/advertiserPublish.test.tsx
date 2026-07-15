@@ -14,11 +14,24 @@ beforeEach(() => {
 // --- Mocks de la capa de datos y del entorno ---
 const getCreditBalance = vi.fn();
 const spendCredits = vi.fn().mockResolvedValue(true);
-const purchaseCredits = vi.fn();
 vi.mock("@/lib/credits", () => ({
   getCreditBalance: (...a: unknown[]) => getCreditBalance(...a),
   spendCredits: (...a: unknown[]) => spendCredits(...a),
-  purchaseCredits: (...a: unknown[]) => purchaseCredits(...a),
+}));
+
+// Pasarela de pago (Izipay). El pago se simula: createPayment devuelve un
+// formToken, el formulario embebido (stub) dispara onPaid y el polling resuelve.
+const createPayment = vi.fn();
+const pollOrderStatus = vi.fn();
+const getPurchaseResult = vi.fn();
+vi.mock("@/lib/payments", () => ({
+  createPayment: (...a: unknown[]) => createPayment(...a),
+  pollOrderStatus: (...a: unknown[]) => pollOrderStatus(...a),
+  getPurchaseResult: (...a: unknown[]) => getPurchaseResult(...a),
+  hostedPaymentUrl: () => "https://x/pay",
+}));
+vi.mock("@/components/PaymentForm", () => ({
+  PaymentForm: ({ onPaid }: { onPaid: () => void }) => <button onClick={onPaid}>SIMULAR_PAGO</button>,
 }));
 
 const createAndPublishListing = vi.fn();
@@ -103,7 +116,9 @@ beforeEach(() => {
   localStorage.clear();
   getCreditBalance.mockReset();
   spendCredits.mockClear().mockResolvedValue(true);
-  purchaseCredits.mockReset();
+  createPayment.mockReset().mockResolvedValue({ orderId: "o1", formToken: "tok", publicKey: "pk" });
+  pollOrderStatus.mockReset().mockResolvedValue("paid");
+  getPurchaseResult.mockReset().mockResolvedValue({ balance: 1000, invoiceNumber: "B001-000100" });
   createAndPublishListing.mockReset().mockResolvedValue({
     listingId: "L1", invoiceNumber: "B001-000099", published: true, invoiceSaved: true,
   });
@@ -168,7 +183,7 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     // Se abre el modal configurador (anuncios/días/extras → créditos).
     await screen.findByText(/saldo a comprar/i);
     expect(screen.getByText(/arma tu compra/i)).toBeTruthy();
-    expect(screen.getByRole("button", { name: /comprar/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /continuar al pago/i })).toBeTruthy();
 
     // No se publicó ni se descontó nada.
     expect(createAndPublishListing).not.toHaveBeenCalled();
@@ -195,9 +210,9 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     expect(createAndPublishListing).toHaveBeenCalledWith(expect.objectContaining({ total: 8.07 }));
   });
 
-  it("POST-COMPRA: tras comprar en el configurador, recién publica y descuenta", async () => {
+  it("POST-COMPRA: tras pagar en el configurador, recién publica y descuenta", async () => {
     getCreditBalance.mockResolvedValue(0); // arranca sin saldo → abre el configurador
-    purchaseCredits.mockResolvedValue({ newBalance: 1000, orderId: "o1", invoiceNumber: "B001-000100" });
+    getPurchaseResult.mockResolvedValue({ balance: 1000, invoiceNumber: "B001-000100" });
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
@@ -206,15 +221,18 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     await clickPublish();
     await screen.findByText(/saldo a comprar/i);
 
-    // Completa datos del comprobante y compra.
+    // Completa datos del comprobante y continúa al pago.
     fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "12345678" } });
     fireEvent.change(screen.getByPlaceholderText("tu@correo.com"), { target: { value: "comprador@correo.com" } });
-    // El DNI se autoverifica con Factiliza; esperamos a que confirme antes de comprar.
+    // El DNI se autoverifica con Factiliza; esperamos a que confirme antes de pagar.
     await screen.findByText("JUAN PEREZ");
-    fireEvent.click(screen.getByRole("button", { name: /comprar/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continuar al pago/i }));
+
+    // Paga en el formulario embebido (stub) → se confirma por polling.
+    fireEvent.click(await screen.findByText("SIMULAR_PAGO"));
 
     // Al acreditarse y cubrir el costo, publica automáticamente y descuenta.
-    await waitFor(() => expect(purchaseCredits).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(createPayment).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
     expect(spendCredits).toHaveBeenCalledWith(COST_CREDITS, "L1");
     await screen.findByText(/pago confirmado/i);
