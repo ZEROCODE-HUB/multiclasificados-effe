@@ -20,7 +20,7 @@ import { LocationPicker } from "@/components/LocationPicker";
 import { useSession } from "@/hooks/useSession";
 import { supabase } from "@/lib/supabase";
 import { PlusCircle, ClipboardList, Eye, MessageSquare, TrendingUp, Search, SlidersHorizontal, ImagePlus, Loader2 } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
 import type { Listing } from "@/data/mockData";
 import { useCategories } from "@/hooks/useCategories";
@@ -65,7 +65,13 @@ interface EditState {
 
 const AdvertiserListings = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const categories = useCategories();
+  // Pestaña inicial: la del parámetro ?tab= (p. ej. al llegar desde "Guardar
+  // en borradores"), si es una válida; si no, "Activos".
+  const TAB_KEYS = ["activos", "pausados", "vencidos", "borradores"] as const;
+  const paramTab = searchParams.get("tab") ?? "";
+  const initialTab = (TAB_KEYS as readonly string[]).includes(paramTab) ? paramTab : "activos";
   const [listings, setListings] = useState<MyListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -289,7 +295,7 @@ const AdvertiserListings = () => {
           ))}
         </div>
 
-        <Tabs defaultValue="activos">
+        <Tabs defaultValue={initialTab}>
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             {/* El margen negativo debe igualar el padding de <main> (px-3 en móvil).
                 Con -mx-4 la tira sobresalía 4px y la página entera scrolleaba en horizontal. */}

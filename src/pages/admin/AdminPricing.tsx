@@ -281,7 +281,7 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
           <TabsTrigger value="adicionales">Precios de adicionales</TabsTrigger>
           <TabsTrigger value="ofertas">Promociones</TabsTrigger>
           <TabsTrigger value="matriz">Matriz de precios</TabsTrigger>
-          <TabsTrigger value="creditos">Paquetes de créditos</TabsTrigger>
+          <TabsTrigger value="creditos">Paquetes de saldo</TabsTrigger>
         </TabsList>
 
         {/* ===== Parámetros de descuento ===== */}
@@ -463,7 +463,7 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
                   <Percent size={16} className="text-secondary" /> Promociones
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  Descuento en créditos por categoría y período. Se aplica automáticamente al publicar.
+                  Descuento por categoría y período. Se aplica automáticamente al publicar.
                 </CardDescription>
               </div>
               <Button size="sm" className="gap-2" onClick={openNewOffer}><Plus size={14} /> Nueva promoción</Button>
@@ -529,7 +529,7 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
             <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{offerDialog.editing ? "Editar promoción" : "Nueva promoción"}</DialogTitle>
-                <DialogDescription>El descuento se aplica automáticamente al costo en créditos al publicar en las categorías elegidas durante el período.</DialogDescription>
+                <DialogDescription>El descuento se aplica automáticamente al costo al publicar en las categorías elegidas durante el período.</DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div>
@@ -559,7 +559,7 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
                     className="mt-1 max-w-[160px]"
                   />
                   {(parseFloat(discountText) || 0) === 100 && (
-                    <p className="text-[11px] text-secondary font-semibold mt-1">Publicar en esas categorías costará 0 créditos.</p>
+                    <p className="text-[11px] text-secondary font-semibold mt-1">Publicar en esas categorías costará S/ 0.</p>
                   )}
                 </div>
                 <label className="flex items-center gap-2 cursor-pointer text-sm">
@@ -640,10 +640,10 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
             <CardHeader className="border-b flex flex-row items-center justify-between">
               <div>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Wallet size={16} className="text-secondary" /> Paquetes de créditos
+                  <Wallet size={16} className="text-secondary" /> Paquetes de saldo
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  1 crédito = 1 sol. Los usuarios compran créditos y los gastan al publicar.
+                  Los usuarios compran saldo (en soles) y lo gastan al publicar.
                 </CardDescription>
               </div>
               <Button size="sm" className="gap-2" onClick={openNewPkg}><Plus size={14} /> Nuevo paquete</Button>
@@ -663,7 +663,7 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Nombre</TableHead>
-                        <TableHead>Créditos</TableHead>
+                        <TableHead>Saldo (S/)</TableHead>
                         <TableHead>Precio (S/)</TableHead>
                         <TableHead>Orden</TableHead>
                         <TableHead>Estado</TableHead>
@@ -699,8 +699,8 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
           <Dialog open={pkgDialog.open} onOpenChange={(o) => setPkgDialog((p) => ({ ...p, open: o }))}>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
-                <DialogTitle>{pkgDialog.editing ? "Editar paquete" : "Nuevo paquete de créditos"}</DialogTitle>
-                <DialogDescription>Los créditos se acreditan automáticamente al completarse el pago.</DialogDescription>
+                <DialogTitle>{pkgDialog.editing ? "Editar paquete" : "Nuevo paquete de saldo"}</DialogTitle>
+                <DialogDescription>El saldo se acredita automáticamente al completarse el pago.</DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div>
@@ -708,13 +708,13 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
                   <Input
                     value={pkgForm.name ?? ""}
                     onChange={(e) => setPkgForm({ ...pkgForm, name: e.target.value })}
-                    placeholder="Ej. Pro — 229 créditos"
+                    placeholder="Ej. Pro — S/ 229"
                     className="mt-1"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Label>Créditos (1 crédito = S/ 1)</Label>
+                    <Label>Saldo (S/)</Label>
                     <Input
                       type="number"
                       step="1"

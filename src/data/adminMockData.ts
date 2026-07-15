@@ -25,7 +25,7 @@ export const categoryDistribution = [
   { name: "Otros", value: 760 },
 ];
 
-export type AdminListingStatus = "Pendiente" | "Activo" | "Rechazado" | "Destacado";
+export type AdminListingStatus = "Pendiente" | "Activo" | "Rechazado" | "Destacado" | "Vencido";
 export const adminListings = [
   { id: "AV-10241", title: "Departamento Miraflores 3 dorm.", advertiser: "Inmobiliaria Pacífico", category: "Inmuebles", status: "Pendiente" as AdminListingStatus, date: "2026-06-09", price: "USD 1,200" },
   { id: "AV-10240", title: "Toyota Corolla 2024 full", advertiser: "Carlos Mendoza", category: "Vehículos", status: "Activo" as AdminListingStatus, date: "2026-06-09", price: "USD 22,500" },

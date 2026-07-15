@@ -21,7 +21,7 @@ const ACTION_LABELS: Record<string, string> = {
   set_setting: "Cambió configuración",
   send_message: "Envió mensaje",
   broadcast: "Envió comunicado masivo",
-  grant_credits: "Otorgó créditos",
+  grant_credits: "Otorgó saldo",
 };
 
 const ENTITY_LABELS: Record<string, string> = {

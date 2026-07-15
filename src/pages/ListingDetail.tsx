@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { type Listing } from "@/data/mockData";
 import { useCategories } from "@/hooks/useCategories";
-import { fetchListingById, fetchListingImages, fetchListings, fetchListingDocumentUrl, trackEvent } from "@/lib/listings";
+import { fetchListingById, fetchListingImages, fetchListings, fetchListingDocumentUrl, trackEvent, urgentTimeLeft } from "@/lib/listings";
 import { listingBadges, advertiserDisplayName } from "@/lib/listingBadges";
 import {
   ChevronRight,
@@ -14,7 +14,6 @@ import {
   Share2,
   Flag,
   ShieldCheck,
-  Star,
   Eye,
   Calendar,
   Phone,
@@ -34,6 +33,7 @@ import {
   FileText,
   Upload,
   X,
+  Loader2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
@@ -90,6 +90,15 @@ export default function ListingDetail() {
   const { kbPad, scrollFocusedIntoView } = useKeyboardInset();
   const fav = isFavorite(listing.id);
 
+  // Cuenta regresiva del adicional "Urgente": horas restantes del aviso.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!listing.urgent || !listing.expiresAt) return;
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, [listing.urgent, listing.expiresAt]);
+  const urgent = listing.urgent ? urgentTimeLeft(listing.expiresAt ?? null, now) : null;
+
   // Reseñas (rating real del vendedor) + postulación del usuario
   const [sellerRating, setSellerRating] = useState(0);
   const [reviewCount, setReviewCount] = useState(0);
@@ -98,6 +107,7 @@ export default function ListingDetail() {
   const [applyMsg, setApplyMsg] = useState("");
   const [applyCv, setApplyCv] = useState<File | null>(null);
   const [applying, setApplying] = useState(false);
+  const [sendingMsg, setSendingMsg] = useState(false);
 
   const closeApply = () => {
     setApplyOpen(false);
@@ -282,11 +292,13 @@ export default function ListingDetail() {
   };
 
   const handleSendMessage = async () => {
+    if (sendingMsg) return; // evita doble envío al pulsar dos veces
     if (!messageText.trim() || !id) return;
     if (!ownerId) {
       toast({ title: "No disponible", description: "No se pudo identificar al anunciante.", variant: "destructive" });
       return;
     }
+    setSendingMsg(true);
     try {
       const convId = await getOrCreateConversation(id, ownerId);
       await sendMessage(convId, messageText);
@@ -304,6 +316,8 @@ export default function ListingDetail() {
         description: e instanceof Error ? e.message : "Intenta nuevamente.",
         variant: "destructive",
       });
+    } finally {
+      setSendingMsg(false);
     }
   };
 
@@ -314,6 +328,7 @@ export default function ListingDetail() {
   };
 
   const handleApply = async () => {
+    if (applying) return; // evita doble postulación al pulsar dos veces
     if (!id) return;
     if (!applyCv) {
       toast({ title: "Adjunta tu CV", description: "Sube tu CV en formato PDF para postular.", variant: "destructive" });
@@ -348,9 +363,16 @@ export default function ListingDetail() {
   const formatPrice = (price: number, currency: string) =>
     currency === "USD" ? `US$ ${price.toLocaleString()}` : `S/ ${price.toLocaleString()}`;
 
+  // "Condición" solo se muestra si la categoría la tiene habilitada (no aplica
+  // en Servicios/Empleos). Y si la categoría se pudiera resolver aún.
+  const CONDITION_LABEL: Record<string, string> = { nuevo: "Nuevo", usado: "Usado", na: "No aplica" };
+  const showCondition = category ? category.conditionEnabled : true;
+
   const specs = [
     { label: "Categoría", value: category?.name ?? listing.category },
-    { label: "Condición", value: "—" },
+    ...(showCondition
+      ? [{ label: "Condición", value: CONDITION_LABEL[listing.condition ?? "na"] ?? "No aplica" }]
+      : []),
     { label: "Ubicación", value: listing.location },
     { label: "Publicado", value: new Date(listing.date).toLocaleDateString("es-PE", { day: "2-digit", month: "long", year: "numeric" }) },
     { label: "Código de aviso", value: `EFFE-${listing.id.padStart(6, "0")}` },
@@ -414,9 +436,12 @@ export default function ListingDetail() {
               <div className={`relative bg-muted overflow-hidden ${listing.featured ? "ring-2 ring-amber-400" : ""}`} style={{ aspectRatio: "4 / 3" }}>
                 <img src={gallery[activeImg]} alt={listing.title} className="absolute inset-0 w-full h-full object-cover" />
                 <div className="absolute top-4 left-4 flex flex-wrap gap-1.5 max-w-[70%]">
-                  {listingBadges(listing).map(({ label, icon: Icon, cls }) => (
+                  {listingBadges(listing).map(({ key, label, icon: Icon, cls }) => (
                     <span key={label} className={`inline-flex items-center gap-1 px-3 py-1.5 ${cls} text-[10px] font-bold uppercase tracking-wider shadow-md`}>
                       <Icon size={11} /> {label}
+                      {key === "urgent" && urgent && !urgent.expired && (
+                        <span className="tabular-nums">· {urgent.short}</span>
+                      )}
                     </span>
                   ))}
                 </div>
@@ -450,7 +475,11 @@ export default function ListingDetail() {
               <span className="flex items-center gap-1.5"><MapPin size={14} className="text-secondary" /> {listing.location}</span>
               <span className="flex items-center gap-1.5"><Eye size={14} /> {listing.views.toLocaleString()} vistas</span>
               <span className="flex items-center gap-1.5"><Calendar size={14} /> Publicado el {new Date(listing.date).toLocaleDateString("es-PE")}</span>
-              <span className="flex items-center gap-1.5"><Star size={14} className="text-secondary fill-secondary" /> {sellerRating.toFixed(1)} ({reviewCount} reseña{reviewCount === 1 ? "" : "s"})</span>
+              {urgent && !urgent.expired && (
+                <span className="flex items-center gap-1.5 font-semibold text-red-600">
+                  <Clock size={14} /> Urgente · quedan {urgent.long}
+                </span>
+              )}
             </div>
             <div className="flex flex-wrap gap-2 pt-2">
               <Button
@@ -687,11 +716,7 @@ export default function ListingDetail() {
                 </p>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-2 pt-2">
-              <div className="text-center py-2 bg-muted/40 border border-border">
-                <p className="text-base font-extrabold text-primary">{sellerRating.toFixed(1)}</p>
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Rating</p>
-              </div>
+            <div className="grid grid-cols-2 gap-2 pt-2">
               <div className="text-center py-2 bg-muted/40 border border-border">
                 <p className="text-base font-extrabold text-primary">0</p>
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Avisos</p>
@@ -818,9 +843,10 @@ export default function ListingDetail() {
             </p>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setMessageOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSendMessage} className="gap-2">
-              <Send size={14} /> Enviar mensaje
+            <Button variant="ghost" onClick={() => setMessageOpen(false)} disabled={sendingMsg}>Cancelar</Button>
+            <Button onClick={handleSendMessage} className="gap-2" disabled={sendingMsg || !messageText.trim()}>
+              {sendingMsg ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+              {sendingMsg ? "Enviando…" : "Enviar mensaje"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -914,7 +940,8 @@ export default function ListingDetail() {
           <DialogFooter>
             <Button variant="ghost" onClick={closeApply} disabled={applying}>Cancelar</Button>
             <Button onClick={handleApply} className="gap-2" disabled={applying || !applyCv}>
-              <ClipboardCheck size={14} /> {applying ? "Enviando…" : "Enviar postulación"}
+              {applying ? <Loader2 size={14} className="animate-spin" /> : <ClipboardCheck size={14} />}
+              {applying ? "Enviando…" : "Enviar postulación"}
             </Button>
           </DialogFooter>
         </DialogContent>

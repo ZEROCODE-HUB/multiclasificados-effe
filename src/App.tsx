@@ -43,6 +43,7 @@ const SuperAudit = lazy(() => import("./pages/superadmin/SuperAudit.tsx"));
 const SuperConversations = lazy(() => import("./pages/superadmin/SuperConversations.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword.tsx"));
+const PaymentPage = lazy(() => import("./pages/PaymentPage.tsx"));
 
 const queryClient = new QueryClient();
 
@@ -66,6 +67,10 @@ const App = () => (
           <Route path="/auth/callback" element={<AuthCallback />} />
           {/* Nueva contraseña: destino del enlace del correo de recuperación. */}
           <Route path="/reset-password" element={<ResetPassword />} />
+          {/* Página de pago (redirect del APK): se abre en el navegador del
+              sistema con el formToken de Izipay. Pública: solo renderiza el
+              formulario; el webhook acredita y la app confirma por polling. */}
+          <Route path="/pay" element={<PaymentPage />} />
           <Route path="/buscar" element={<SearchPage />} />
           <Route path="/aviso/:id" element={<ListingDetail />} />
           <Route path="/planes" element={<Navigate to="/dashboard/anunciante/publicar" replace />} />

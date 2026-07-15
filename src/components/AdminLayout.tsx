@@ -60,7 +60,7 @@ const buildMenu = (role: AdminRole): MenuItem[] => {
     { title: "Gestión de usuarios", url: `/dashboard/${role}/usuarios`, icon: Users, group: "Operación", module: "Gestión de usuarios" },
     { title: "Config. comercial", url: `/dashboard/${role}/comercial`, icon: Tags, group: "Operación", module: "Configuración comercial" },
     { title: "Tarifas y Descuentos", url: `/dashboard/${role}/tarifas`, icon: DollarSign, group: "Operación", module: "Pagos y planes" },
-    { title: "Denuncias", url: `/dashboard/${role}/conversaciones`, icon: Flag, group: "Operación", module: "Conversaciones reportadas" },
+    { title: "Reclamos", url: `/dashboard/${role}/conversaciones`, icon: Flag, group: "Operación", module: "Conversaciones reportadas" },
     { title: "Reportes", url: `/dashboard/${role}/reportes`, icon: FileBarChart, group: "Operación", module: "Reportes" },
     { title: "Comunicaciones", url: `/dashboard/${role}/comunicaciones`, icon: Send, group: "Comunicaciones", module: "Comunicaciones" },
   ];
@@ -234,7 +234,7 @@ const ADMIN_META: Record<string, { title: string; breadcrumb: string[] }> = {
   usuarios: { title: "Gestión de usuarios", breadcrumb: ["Operación", "Usuarios"] },
   comercial: { title: "Configuración comercial", breadcrumb: ["Operación", "Comercial"] },
   tarifas: { title: "Tarifas y Descuentos", breadcrumb: ["Operación", "Tarifas y Descuentos"] },
-  conversaciones: { title: "Denuncias / Moderación", breadcrumb: ["Operación", "Denuncias"] },
+  conversaciones: { title: "Reclamos / Moderación", breadcrumb: ["Operación", "Reclamos"] },
   reportes: { title: "Reportes", breadcrumb: ["Operación", "Reportes"] },
   comunicaciones: { title: "Comunicaciones", breadcrumb: ["Comunicaciones", "Centro"] },
   roles: { title: "Roles y permisos", breadcrumb: ["Plataforma", "Roles"] },

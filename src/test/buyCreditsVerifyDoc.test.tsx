@@ -9,8 +9,15 @@ beforeEach(() => {
 });
 
 vi.mock("@/lib/pricingRemote", () => ({ fetchPricingSettings: () => new Promise(() => {}) }));
-const purchaseCredits = vi.fn().mockResolvedValue({ newBalance: 100, invoiceNumber: "B001-1" });
-vi.mock("@/lib/credits", () => ({ purchaseCredits: (...a: unknown[]) => purchaseCredits(...a) }));
+const createPayment = vi.fn();
+vi.mock("@/lib/payments", () => ({
+  createPayment: (...a: unknown[]) => createPayment(...a),
+  pollOrderStatus: vi.fn().mockResolvedValue("paid"),
+  getPurchaseResult: vi.fn().mockResolvedValue({ balance: 100, invoiceNumber: "B001-1" }),
+  hostedPaymentUrl: () => "https://x/pay",
+}));
+// Stub del formulario embebido: evita cargar Krypton por CDN en el paso 2.
+vi.mock("@/components/PaymentForm", () => ({ PaymentForm: () => <div>FORM_PAGO</div> }));
 vi.mock("@/hooks/use-toast", () => ({ toast: vi.fn() }));
 
 const verifyDocument = vi.fn();
@@ -27,7 +34,7 @@ const open = () =>
 
 beforeEach(() => {
   vi.clearAllMocks();
-  purchaseCredits.mockResolvedValue({ newBalance: 100, invoiceNumber: "B001-1" });
+  createPayment.mockResolvedValue({ orderId: "ord-1", formToken: "tok", publicKey: "pk-1" });
 });
 
 describe("BuyCreditsModal — verificación de documento con Factiliza + campos obligatorios", () => {
@@ -129,7 +136,7 @@ describe("BuyCreditsModal — verificación de documento con Factiliza + campos 
     await screen.findByText(/No se encontró información/i);
   });
 
-  it("el botón Comprar queda deshabilitado sin documento verificado y NO compra", async () => {
+  it("el botón de pago queda deshabilitado sin documento verificado y NO inicia el pago", async () => {
     verifyDocument.mockResolvedValue({ ok: false, error: "Documento inválido." });
     open();
 
@@ -138,13 +145,13 @@ describe("BuyCreditsModal — verificación de documento con Factiliza + campos 
     fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "00000000" } });
     await screen.findByText(/Documento inválido/i);
 
-    const comprar = screen.getByRole("button", { name: /comprar/i });
-    expect(comprar).toBeDisabled();
-    fireEvent.click(comprar);
-    expect(purchaseCredits).not.toHaveBeenCalled();
+    const continuar = screen.getByRole("button", { name: /continuar al pago/i });
+    expect(continuar).toBeDisabled();
+    fireEvent.click(continuar);
+    expect(createPayment).not.toHaveBeenCalled();
   });
 
-  it("con documento verificado y correo válido, habilita y compra (con el nombre real)", async () => {
+  it("con documento verificado y correo válido, habilita e inicia el pago (con el nombre real)", async () => {
     verifyDocument.mockResolvedValue({ ok: true, nombre: "JUAN PEREZ", data: {} });
     open();
 
@@ -152,12 +159,12 @@ describe("BuyCreditsModal — verificación de documento con Factiliza + campos 
     fireEvent.change(screen.getByPlaceholderText("tu@correo.com"), { target: { value: "juan@correo.com" } });
     await screen.findByText("JUAN PEREZ");
 
-    const comprar = screen.getByRole("button", { name: /comprar/i });
-    await waitFor(() => expect(comprar).not.toBeDisabled());
-    fireEvent.click(comprar);
+    const continuar = screen.getByRole("button", { name: /continuar al pago/i });
+    await waitFor(() => expect(continuar).not.toBeDisabled());
+    fireEvent.click(continuar);
 
-    await waitFor(() => expect(purchaseCredits).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(createPayment).toHaveBeenCalledTimes(1));
     // El comprobante lleva el nombre verificado.
-    expect(purchaseCredits.mock.calls[0][1]).toMatchObject({ advertiserName: "JUAN PEREZ", email: "juan@correo.com" });
+    expect(createPayment.mock.calls[0][0].receipt).toMatchObject({ advertiserName: "JUAN PEREZ", email: "juan@correo.com" });
   });
 });

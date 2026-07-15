@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
-// En la app se paga con CRÉDITOS, no con dinero. Lo único que cambió es la
-// conversión: antes 1 sol = 10 créditos (y se mostraban como "161 cr"), ahora
-// 1 sol = 1 crédito. El símbolo "S/" solo aparece donde hay dinero real: la
-// boleta de la compra.
+// Internamente el saldo se lleva en créditos con conversión 1 sol = 1 crédito,
+// pero en la UI TODO se muestra como dinero, con la sigla "S/" ("S/ 16.14").
+// Ya no aparece la palabra "créditos" de cara al usuario.
 
 beforeEach(() => {
   (globalThis as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
@@ -13,8 +12,14 @@ beforeEach(() => {
   if (!Element.prototype.releasePointerCapture) (Element.prototype as any).releasePointerCapture = () => {};
 });
 
-const purchaseCredits = vi.fn().mockResolvedValue({ newBalance: 100, invoiceNumber: "B001-1" });
-vi.mock("@/lib/credits", () => ({ purchaseCredits: (...a: unknown[]) => purchaseCredits(...a) }));
+const createPayment = vi.fn().mockResolvedValue({ orderId: "ord-1", formToken: "tok", publicKey: "pk-1" });
+vi.mock("@/lib/payments", () => ({
+  createPayment: (...a: unknown[]) => createPayment(...a),
+  pollOrderStatus: vi.fn().mockResolvedValue("paid"),
+  getPurchaseResult: vi.fn().mockResolvedValue({ balance: 100, invoiceNumber: "B001-1" }),
+  hostedPaymentUrl: () => "https://x/pay",
+}));
+vi.mock("@/components/PaymentForm", () => ({ PaymentForm: () => <div>FORM_PAGO</div> }));
 
 const verifyDocument = vi.fn().mockResolvedValue({ ok: true, nombre: "ANA TORRES", data: {} });
 vi.mock("@/lib/verifyDoc", async (orig) => ({
@@ -39,7 +44,7 @@ const abrir = (props: Partial<{ creditCost: number; currentBalance: number }> = 
     />,
   );
 
-beforeEach(() => { purchaseCredits.mockClear(); });
+beforeEach(() => { createPayment.mockClear(); });
 
 describe("Conversión — 1 sol = 1 crédito", () => {
   it("un sol es un crédito", () => {
@@ -47,55 +52,50 @@ describe("Conversión — 1 sol = 1 crédito", () => {
     expect(solesToCredits(ESTANDAR)).toBe(ESTANDAR);
   });
 
-  it("el saldo se escribe en créditos, nunca en 'cr' ni en 'S/'", () => {
-    expect(formatCredits(ESTANDAR)).toBe("16.14 créditos");
-    expect(formatCredits(1)).toBe("1 crédito");
-    // Un entero no arrastra decimales: "8472 créditos", no "8472.00".
-    expect(formatCredits(8472)).toBe("8472 créditos");
+  it("el saldo se escribe como dinero, con la sigla 'S/'", () => {
+    expect(formatCredits(ESTANDAR)).toBe("S/ 16.14");
+    expect(formatCredits(1)).toBe("S/ 1");
+    // Un entero no arrastra decimales: "S/ 8472", no "S/ 8472.00".
+    expect(formatCredits(8472)).toBe("S/ 8472");
   });
 });
 
-describe("Comprar créditos — la app cobra en créditos y la boleta en soles", () => {
-  it("no queda la sigla 'cr' suelta por ninguna parte", async () => {
+describe("Comprar saldo — la app muestra todo en soles", () => {
+  it("el costo del aviso, el saldo y lo que falta van en S/", async () => {
     abrir({ creditCost: ESTANDAR, currentBalance: 5 });
-    await screen.findByText(/créditos a comprar/i);
-
-    // "cr" suelto, no el prefijo de "créditos": \b no vale porque la tilde de
-    // "créditos" no es carácter de palabra y abre un límite tras "cr".
-    expect(document.body.textContent).not.toMatch(/(?<!\p{L})cr(?!\p{L})/iu);
-  });
-
-  it("el costo del aviso, el saldo y lo que falta van en créditos", async () => {
-    abrir({ creditCost: ESTANDAR, currentBalance: 5 });
-    await screen.findByText(/créditos a comprar/i);
+    await screen.findByText(/saldo a comprar/i);
 
     const aviso = screen.getByText(/Para publicar tu aviso necesitas/i);
-    expect(aviso).toHaveTextContent("16.14 créditos");
-    expect(aviso).toHaveTextContent("tu saldo: 5 créditos");
-    expect(screen.getByText(/^Faltan/)).toHaveTextContent("Faltan 11.14 créditos");
+    expect(aviso).toHaveTextContent("S/ 16.14");
+    expect(aviso).toHaveTextContent("tu saldo: S/ 5");
+    expect(screen.getByText(/^Faltan/)).toHaveTextContent("Faltan S/ 11.14");
   });
 
-  it("el botón compra créditos; el sol solo aparece en la boleta", async () => {
+  it("el botón muestra el total en soles y la boleta también", async () => {
     abrir();
-    await screen.findByText(/créditos a comprar/i);
+    await screen.findByText(/saldo a comprar/i);
 
-    expect(screen.getByRole("button", { name: /comprar 16\.14 créditos/i })).toBeInTheDocument();
-    // La única cifra en soles del cuadro de totales es la que se paga.
+    expect(screen.getByRole("button", { name: /continuar al pago · S\/ 16\.14/i })).toBeInTheDocument();
+    // La cifra en soles que se paga en la boleta.
     expect(screen.getByText("Pagas (boleta)")).toBeInTheDocument();
-    expect(screen.getByText("S/ 16.14")).toBeInTheDocument();
+    expect(screen.getAllByText("S/ 16.14").length).toBeGreaterThan(0);
   });
 
-  it("compra tantos créditos como soles paga (conversión 1:1)", async () => {
+  it("saldo a comprar = soles a pagar (conversión 1:1)", async () => {
     abrir();
+    // La UI muestra el mismo importe como "Saldo a comprar" y como "Pagas (boleta)".
+    await screen.findByText(/saldo a comprar/i);
+    const saldo = solesToCredits(ESTANDAR);
+    expect(saldo).toBe(ESTANDAR);
+    expect(formatCredits(saldo)).toBe("S/ 16.14");
+
+    // Y al continuar, se inicia el pago (el monto lo recalcula el servidor).
     fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "44443333" } });
     await screen.findByText("ANA TORRES");
     fireEvent.change(screen.getByPlaceholderText("tu@correo.com"), { target: { value: "ana@correo.com" } });
 
-    fireEvent.click(screen.getByRole("button", { name: /comprar .* créditos/i }));
-
-    await waitFor(() => expect(purchaseCredits).toHaveBeenCalled());
-    const [pkg] = purchaseCredits.mock.calls[0];
-    expect(pkg.credits_amount).toBe(pkg.price_soles);
-    expect(pkg.credits_amount).toBe(ESTANDAR);
+    fireEvent.click(screen.getByRole("button", { name: /continuar al pago/i }));
+    await waitFor(() => expect(createPayment).toHaveBeenCalled());
+    expect(createPayment.mock.calls[0][0]).toMatchObject({ quantity: 1, duration: 7 });
   });
 });

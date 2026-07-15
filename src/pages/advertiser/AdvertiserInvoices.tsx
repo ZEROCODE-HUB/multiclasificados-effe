@@ -2,15 +2,19 @@ import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileText } from "lucide-react";
+import { FileText, Eye } from "lucide-react";
 import { formatSoles } from "@/lib/pricing";
 import { loadInvoicesFromDb, type DbInvoice } from "@/lib/invoices";
+import { personKindLabel } from "@/lib/identity";
+import { InvoiceDetailDialog } from "@/components/InvoiceDetailDialog";
 
 const AdvertiserInvoices = () => {
   const [invoices, setInvoices] = useState<DbInvoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [detail, setDetail] = useState<DbInvoice | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -64,10 +68,11 @@ const AdvertiserInvoices = () => {
                       <TableHead>Tipo</TableHead>
                       <TableHead>Fecha</TableHead>
                       <TableHead>Aviso</TableHead>
+                      <TableHead>Nombre</TableHead>
                       <TableHead>DNI/RUC</TableHead>
-                      <TableHead>Correo</TableHead>
+                      <TableHead>Usuario/Empresa</TableHead>
                       <TableHead className="text-right">Monto</TableHead>
-                      <TableHead>Estado</TableHead>
+                      <TableHead className="text-right">Ver</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -77,11 +82,14 @@ const AdvertiserInvoices = () => {
                         <TableCell className="text-xs capitalize">{inv.type}</TableCell>
                         <TableCell className="text-xs">{new Date(inv.date).toLocaleDateString("es-PE")}</TableCell>
                         <TableCell className="font-medium text-sm">{inv.listingTitle}</TableCell>
+                        <TableCell className="text-sm">{inv.advertiser || "—"}</TableCell>
                         <TableCell className="font-mono text-xs text-muted-foreground">{inv.docNumber || "—"}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{inv.email}</TableCell>
+                        <TableCell className="text-xs">{personKindLabel(inv.docType, inv.docNumber)}</TableCell>
                         <TableCell className="text-right font-bold">{formatSoles(inv.amount)}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-success border-success/30 bg-success/10">Enviada</Badge>
+                        <TableCell className="text-right">
+                          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setDetail(inv)}>
+                            <Eye size={14} /> Ver
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -107,21 +115,24 @@ const AdvertiserInvoices = () => {
                         <p className="text-foreground">{new Date(inv.date).toLocaleDateString("es-PE")}</p>
                       </div>
                       <div>
-                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Tipo</p>
-                        <p className="text-foreground capitalize">{inv.type}</p>
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Usuario/Empresa</p>
+                        <p className="text-foreground">{personKindLabel(inv.docType, inv.docNumber)}</p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Nombre</p>
+                        <p className="text-foreground truncate">{inv.advertiser || "—"}</p>
                       </div>
                       <div>
                         <p className="text-[10px] uppercase tracking-wide text-muted-foreground">DNI/RUC</p>
                         <p className="font-mono text-foreground">{inv.docNumber || "—"}</p>
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Correo</p>
-                        <p className="text-foreground truncate">{inv.email}</p>
-                      </div>
                     </div>
 
-                    <div className="mt-3 pt-3 border-t flex justify-end">
+                    <div className="mt-3 pt-3 border-t flex items-center justify-between gap-2">
                       <Badge variant="outline" className="text-success border-success/30 bg-success/10">Enviada</Badge>
+                      <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setDetail(inv)}>
+                        <Eye size={14} /> Ver
+                      </Button>
                     </div>
                   </div>
                 ))}
@@ -130,6 +141,8 @@ const AdvertiserInvoices = () => {
           )}
         </CardContent>
       </Card>
+
+      <InvoiceDetailDialog invoice={detail} onClose={() => setDetail(null)} />
     </DashboardLayout>
   );
 };

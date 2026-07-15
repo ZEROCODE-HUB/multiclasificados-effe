@@ -18,11 +18,24 @@ beforeEach(() => {
 
 const getCreditBalance = vi.fn();
 const spendCredits = vi.fn();
-const purchaseCredits = vi.fn();
 vi.mock("@/lib/credits", () => ({
   getCreditBalance: (...a: unknown[]) => getCreditBalance(...a),
   spendCredits: (...a: unknown[]) => spendCredits(...a),
-  purchaseCredits: (...a: unknown[]) => purchaseCredits(...a),
+}));
+
+// Pasarela de pago (Izipay) simulada: createPayment → formToken; el formulario
+// embebido (stub) dispara onPaid y el polling resuelve como pagado.
+const createPayment = vi.fn();
+const pollOrderStatus = vi.fn();
+const getPurchaseResult = vi.fn();
+vi.mock("@/lib/payments", () => ({
+  createPayment: (...a: unknown[]) => createPayment(...a),
+  pollOrderStatus: (...a: unknown[]) => pollOrderStatus(...a),
+  getPurchaseResult: (...a: unknown[]) => getPurchaseResult(...a),
+  hostedPaymentUrl: () => "https://x/pay",
+}));
+vi.mock("@/components/PaymentForm", () => ({
+  PaymentForm: ({ onPaid }: { onPaid: () => void }) => <button onClick={onPaid}>SIMULAR_PAGO</button>,
 }));
 
 const createAndPublishListing = vi.fn();
@@ -85,21 +98,18 @@ const uploadMainPhoto = () => {
   fireEvent.change(fileInput);
 };
 
-const publishButton = () => screen.getByRole("button", { name: /publicar/i });
-const confirmButton = () => screen.getByRole("button", { name: /confirmar y continuar/i });
+const publishButton = () => screen.getByRole("button", { name: /publicar aviso/i });
+const confirmButton = () => screen.getByRole("button", { name: /confirmar y publicar/i });
 
-// Publicar exige verificar el documento contra RENIEC/SUNAT. Deja el cuadro de
-// identidad abierto con la ficha ya cargada, listo para confirmar.
-const openIdentityDialog = async () => {
+// Publicar abre un ÚNICO modal de confirmación (la identidad viene del perfil).
+const openConfirm = async () => {
   fireEvent.click(publishButton());
-  fireEvent.click(await screen.findByRole("button", { name: /persona natural/i }));
-  fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "12345678" } });
-  await screen.findByText("JUAN PEREZ");
+  await screen.findByText(/confirmar publicación/i);
 };
 
-// Confirmar la identidad encadena la publicación (o el configurador de compra).
-const publishWithIdentity = async () => {
-  await openIdentityDialog();
+// Confirmar en el modal encadena la publicación (o el configurador de compra).
+const publishConfirmed = async () => {
+  await openConfirm();
   fireEvent.click(confirmButton());
 };
 
@@ -107,7 +117,9 @@ beforeEach(() => {
   localStorage.clear();
   getCreditBalance.mockReset().mockResolvedValue(1000);
   spendCredits.mockReset().mockResolvedValue(true);
-  purchaseCredits.mockReset();
+  createPayment.mockReset().mockResolvedValue({ orderId: "o1", formToken: "tok", publicKey: "pk" });
+  pollOrderStatus.mockReset().mockResolvedValue("paid");
+  getPurchaseResult.mockReset().mockResolvedValue({ balance: 1000, invoiceNumber: "B001-000100" });
   createAndPublishListing.mockReset().mockResolvedValue({
     listingId: "L1", invoiceNumber: "B001-000099", published: true, invoiceSaved: true,
   });
@@ -121,10 +133,10 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("1000 créditos");
+    await screen.findByText("S/ 1000");
 
     uploadMainPhoto();
-    await publishWithIdentity();
+    await publishConfirmed();
 
     await screen.findByText(/pago confirmado/i);
     expect(createAndPublishListing).toHaveBeenCalledTimes(1);
@@ -145,18 +157,18 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
   });
 
   it("DOBLE TOQUE rápido en 'Confirmar' publica una sola vez y cobra una sola vez", async () => {
-    // Confirmar la identidad es ahora el punto de envío real: encadena la
-    // publicación. El ghost-click de touch→click del WebView de Android pega
-    // aquí, no en "Publicar aviso".
+    // Confirmar es ahora el punto de envío real: encadena la publicación. El
+    // ghost-click de touch→click del WebView de Android pega aquí, no en
+    // "Publicar aviso".
     let resolvePublish: (v: unknown) => void = () => {};
     createAndPublishListing.mockReturnValue(new Promise((res) => { resolvePublish = res; }));
 
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("1000 créditos");
+    await screen.findByText("S/ 1000");
     uploadMainPhoto();
-    await openIdentityDialog();
+    await openConfirm();
 
     // Tres clics en el MISMO task de JS: `.click()` nativo dentro de un solo
     // `act` corre los tres handlers antes de que React vuelva a renderizar.
@@ -172,17 +184,18 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     expect(spendCredits).toHaveBeenCalledTimes(1);
   });
 
-  it("DOBLE TOQUE en 'Publicar' sin verificar: abre el cuadro de identidad y NO publica", async () => {
+  it("DOBLE TOQUE en 'Publicar': abre el modal de confirmación y NO publica", async () => {
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("1000 créditos");
+    await screen.findByText("S/ 1000");
     uploadMainPhoto();
 
     const btn = publishButton();
     await act(async () => { btn.click(); btn.click(); btn.click(); });
 
-    await screen.findByText(/verifica tu identidad/i);
+    // Solo abre el modal de confirmación; no publica hasta confirmar.
+    await screen.findByText(/confirmar publicación/i);
     expect(createAndPublishListing).not.toHaveBeenCalled();
     expect(spendCredits).not.toHaveBeenCalled();
   });
@@ -194,13 +207,13 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("1000 créditos");
+    await screen.findByText("S/ 1000");
     uploadMainPhoto();
 
     // Se captura el nodo antes: al publicar, el botón pasa a decir "Publicando…"
     // y deja de matchear /publicar/i.
     const btn = publishButton();
-    await publishWithIdentity();
+    await publishConfirmed();
 
     await waitFor(() => expect(btn).toBeDisabled());
     expect(screen.getByText(/publicando/i)).toBeTruthy();
@@ -209,31 +222,31 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     await screen.findByText(/pago confirmado/i);
   });
 
-  it("SI FALLA EL COBRO: al comprar créditos se cobra el aviso ya publicado, no se republica", async () => {
+  it("SI FALLA EL COBRO: al pagar el saldo se cobra el aviso ya publicado, no se republica", async () => {
     // El aviso se publica, pero el saldo cambió y spend_credits devuelve false.
     spendCredits.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
-    purchaseCredits.mockResolvedValue({ newBalance: 1000, orderId: "o1", invoiceNumber: "B001-000100" });
 
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("1000 créditos");
+    await screen.findByText("S/ 1000");
     uploadMainPhoto();
 
-    await publishWithIdentity();
+    await publishConfirmed();
 
     // Publicó una vez, no cobró, y abrió el configurador de compra.
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
-    await screen.findByText(/créditos a comprar/i);
+    await screen.findByText(/saldo a comprar/i);
     // No se anuncia un pago que no ocurrió.
     expect(screen.queryByText(/pago confirmado/i)).toBeNull();
 
     fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "12345678" } });
     fireEvent.change(screen.getByPlaceholderText("tu@correo.com"), { target: { value: "comprador@correo.com" } });
     await screen.findByText("JUAN PEREZ");
-    fireEvent.click(screen.getByRole("button", { name: /comprar/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continuar al pago/i }));
+    fireEvent.click(await screen.findByText("SIMULAR_PAGO"));
 
-    await waitFor(() => expect(purchaseCredits).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(createPayment).toHaveBeenCalledTimes(1));
     await screen.findByText(/pago confirmado/i);
 
     // Clave: el aviso NO se volvió a crear; solo se cobró el que ya existía.

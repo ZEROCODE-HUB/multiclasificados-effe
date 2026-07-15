@@ -46,7 +46,7 @@ const abrirDenuncia = async () => {
   render(<SuperConversations role="superadmin" />);
   const fila = await screen.findByRole("button", { name: /Ana → Luis/ });
   fireEvent.click(fila);
-  await screen.findByText("Detalle de la denuncia");
+  await screen.findByText("Detalle del reclamo");
 };
 
 const AVISO = {
@@ -84,7 +84,7 @@ describe("denuncia sobre un aviso: el moderador ve el contenido reportado", () =
     expect(dialogo).toHaveTextContent("42"); // vistas
 
     // La denuncia sigue detrás: no se navegó a ningún sitio.
-    expect(screen.getByText("Detalle de la denuncia")).toBeInTheDocument();
+    expect(screen.getByText("Detalle del reclamo")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Ver aviso/ })).toBeNull();
   });
 

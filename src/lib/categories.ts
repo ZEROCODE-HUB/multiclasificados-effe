@@ -15,6 +15,8 @@ export interface PlatformCategory {
   id: string;
   name: string;
   icon: LucideIcon;
+  // Si es false, el formulario de publicar oculta el campo "Condición".
+  conditionEnabled: boolean;
 }
 
 // El icono se guarda como texto en la BD; aquí se resuelve al componente.
@@ -28,17 +30,17 @@ export const iconFor = (name: string): LucideIcon => CATEGORY_ICONS[name] ?? Tag
 // Se usa mientras llega la respuesta de la BD, y como red de seguridad si la
 // consulta falla (APK sin conexión, modo demo sin sesión…).
 export const FALLBACK_CATEGORIES: PlatformCategory[] = [
-  { id: "inmuebles", name: "Inmuebles", icon: Home },
-  { id: "vehiculos", name: "Vehículos", icon: Car },
-  { id: "empleos", name: "Empleos", icon: Briefcase },
-  { id: "tecnologia", name: "Tecnología", icon: Smartphone },
-  { id: "productos", name: "Productos", icon: Package },
-  { id: "servicios", name: "Servicios", icon: Wrench },
-  { id: "educacion-finanzas", name: "Educación y Finanzas", icon: GraduationCap },
-  { id: "salud-belleza-moda", name: "Salud, Belleza y Moda", icon: Sparkles },
+  { id: "inmuebles", name: "Inmuebles", icon: Home, conditionEnabled: true },
+  { id: "vehiculos", name: "Vehículos", icon: Car, conditionEnabled: true },
+  { id: "empleos", name: "Empleos", icon: Briefcase, conditionEnabled: false },
+  { id: "tecnologia", name: "Tecnología", icon: Smartphone, conditionEnabled: true },
+  { id: "productos", name: "Productos", icon: Package, conditionEnabled: true },
+  { id: "servicios", name: "Servicios", icon: Wrench, conditionEnabled: false },
+  { id: "educacion-finanzas", name: "Educación y Finanzas", icon: GraduationCap, conditionEnabled: true },
+  { id: "salud-belleza-moda", name: "Salud, Belleza y Moda", icon: Sparkles, conditionEnabled: true },
 ];
 
-interface StoredCategory { id: string; name: string; icon: string }
+interface StoredCategory { id: string; name: string; icon: string; condition_enabled?: boolean }
 const STORAGE_KEY = "effe_categories";
 
 let cache: PlatformCategory[] | null = null;
@@ -47,7 +49,7 @@ let inFlight: Promise<PlatformCategory[]> | null = null;
 const listeners = new Set<() => void>();
 
 const toPlatform = (rows: StoredCategory[]): PlatformCategory[] =>
-  rows.map((r) => ({ id: r.id, name: r.name, icon: iconFor(r.icon) }));
+  rows.map((r) => ({ id: r.id, name: r.name, icon: iconFor(r.icon), conditionEnabled: r.condition_enabled !== false }));
 
 // El orden ya visto se guarda en el navegador para que el primer render tras
 // recargar no parpadee con el orden por defecto antes de que responda la BD.
@@ -92,7 +94,7 @@ export async function loadCategories(force = false): Promise<PlatformCategory[]>
     try {
       const { data, error } = await supabase
         .from("categories")
-        .select("id, name, icon")
+        .select("id, name, icon, condition_enabled")
         .eq("active", true)
         .order("sort_order", { ascending: true })
         .order("name", { ascending: true });

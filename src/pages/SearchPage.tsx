@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { Capacitor } from "@capacitor/core";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +9,7 @@ import { ListingsMap } from "@/components/ListingsMap";
 import { Navbar } from "@/components/Navbar";
 import { type Listing } from "@/data/mockData";
 import { useCategories } from "@/hooks/useCategories";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { searchListings, fetchListingsByOwner, type SortKey } from "@/lib/listings";
 import { useSession } from "@/hooks/useSession";
 import { useFavorites } from "@/hooks/useFavorites";
@@ -33,10 +33,11 @@ import {
 type ViewMode = "list" | "map";
 type Layout = "grid" | "list";
 
-// La lista de resultados se pagina de 10 en 10 (5 arriba + 5 abajo en escritorio).
-// Solo en la WEB: en la app (APK) se mantiene la lista continua de siempre.
-const PAGE_SIZE = 10;
-const PAGINATE = !Capacitor.isNativePlatform();
+// La lista de resultados se pagina: 20 por página en escritorio (web) y 10 en
+// móvil (pantallas < 768px, incluido el APK). Antes el APK mostraba la lista
+// continua; ahora también pagina para no volcar cientos de avisos de golpe.
+const WEB_PAGE_SIZE = 20;
+const MOBILE_PAGE_SIZE = 10;
 
 // Números de página a mostrar, con "…" cuando hay muchas. Siempre incluye la
 // primera, la última y una ventana alrededor de la actual.
@@ -57,6 +58,7 @@ const formatPrice = (price: number, currency: string) =>
 
 export default function SearchPage() {
   const categories = useCategories();
+  const isMobile = useIsMobile();
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const session = useSession();
@@ -73,6 +75,8 @@ export default function SearchPage() {
   const [category, setCategory] = useState<string>(params.get("cat") || "");
   const [priceMin, setPriceMin] = useState<string>("");
   const [priceMax, setPriceMax] = useState<string>("");
+  // Filtro de ubicación (el RPC no lo soporta: se aplica sobre los resultados).
+  const [location, setLocation] = useState<string>("");
   const [sort, setSort] = useState<SortKey>((params.get("sort") as SortKey) || "recent");
   const [page, setPage] = useState(1);
 
@@ -155,24 +159,27 @@ export default function SearchPage() {
             sort,
           });
       load.then((rows) => {
-        setListings(rows);
-        setActive(rows[0]?.id ?? null);
+        const loc = location.trim().toLowerCase();
+        const filtered = loc
+          ? rows.filter((r) => (r.location ?? "").toLowerCase().includes(loc))
+          : rows;
+        setListings(filtered);
+        setActive(filtered[0]?.id ?? null);
       });
     }, owner ? 0 : 250);
     return () => clearTimeout(t);
-  }, [q, category, priceMin, priceMax, sort, owner]);
+  }, [q, category, priceMin, priceMax, location, sort, owner]);
 
   // Al cambiar la búsqueda o los filtros, vuelve a la primera página.
-  useEffect(() => { setPage(1); }, [q, category, priceMin, priceMax, sort, owner]);
+  useEffect(() => { setPage(1); }, [q, category, priceMin, priceMax, location, sort, owner]);
 
   // Porción visible de resultados según la página actual (clamp por si la lista
-  // encogió tras filtrar y la página quedó fuera de rango). En la app no se
-  // pagina: se muestran todos los avisos.
-  const totalPages = Math.max(1, Math.ceil(listings.length / PAGE_SIZE));
+  // encogió tras filtrar y la página quedó fuera de rango). 20 por página en
+  // escritorio, 10 en móvil (< 768px, incluido el APK).
+  const pageSize = isMobile ? MOBILE_PAGE_SIZE : WEB_PAGE_SIZE;
+  const totalPages = Math.max(1, Math.ceil(listings.length / pageSize));
   const currentPage = Math.min(page, totalPages);
-  const pageListings = PAGINATE
-    ? listings.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
-    : listings;
+  const pageListings = listings.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const goToPage = (p: number) => setPage(Math.min(totalPages, Math.max(1, p)));
 
   const applyFilters = () => setShowFilters(false);
@@ -225,15 +232,18 @@ export default function SearchPage() {
 
           {/* Categories row (scrollable) + en desktop, todo en una sola línea */}
           <div className="flex items-center gap-3 overflow-x-auto no-scrollbar">
+            {/* Solo en tablet (md–lg): en lg+ el panel ya vive en la barra lateral.
+                Sin el `lg:hidden`, en desktop este botón abría el Sheet (cuyo
+                contenido es `lg:hidden`) y solo se veía el overlay → pantalla negra. */}
             <Button
               variant="outline"
               size="sm"
               onClick={() => setShowFilters(true)}
-              className="gap-2 rounded-full shrink-0 hidden md:inline-flex"
+              className="gap-2 rounded-full shrink-0 hidden md:inline-flex lg:hidden"
             >
               <SlidersHorizontal size={14} /> Filtros
             </Button>
-            {categories.slice(0, 6).map((c) => (
+            {categories.map((c) => (
               <button
                 key={c.id}
                 onClick={() => setCategory((prev) => (prev === c.id ? "" : c.id))}
@@ -288,7 +298,8 @@ export default function SearchPage() {
       </div>
       <div>
         <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Ubicación</label>
-        <Input placeholder="Ej: Lima, Miraflores" className="mt-1.5 rounded-none" />
+        <Input placeholder="Ej: Lima, Miraflores" className="mt-1.5 rounded-none"
+          value={location} onChange={(e) => setLocation(e.target.value)} />
       </div>
       <div>
         <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Ordenar por</label>
@@ -413,7 +424,7 @@ export default function SearchPage() {
                     ))}
                   </div>
 
-                  {PAGINATE && totalPages > 1 && (
+                  {totalPages > 1 && (
                     <nav
                       className="flex flex-wrap items-center justify-center gap-1.5 mt-8"
                       aria-label="Paginación de resultados"

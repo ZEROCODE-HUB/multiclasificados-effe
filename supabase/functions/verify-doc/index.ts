@@ -102,12 +102,16 @@ Deno.serve(async (req) => {
     const payload = await res.json().catch(() => null);
 
     // Factiliza responde { success, status, message, data }.
+    // Cuando el documento no existe, Factiliza devuelve un mensaje genérico
+    // ("Problemas con el servicio de consulta de DNI, por favor comuníquese con
+    // el Proveedor") que confunde al usuario. Lo unificamos a un mensaje claro.
+    // Solo el 401 (token inválido/vencido) se mantiene aparte: es un problema de
+    // configuración nuestro, no del documento que ingresó el usuario.
     if (!res.ok || !payload?.success || !payload?.data) {
       const msg =
-        payload?.message ??
-        (res.status === 401
+        res.status === 401
           ? "Token de Factiliza inválido o vencido."
-          : "No se encontró el documento.");
+          : "No se encontró el USUARIO/EMPRESA con el DNI/RUC ingresado";
       return json({ success: false, error: msg });
     }
 

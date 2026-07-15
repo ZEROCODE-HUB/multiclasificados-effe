@@ -85,8 +85,8 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
       setBalance(newBalance);
       if (!spent) {
         toast({
-          title: "No se pudieron descontar los créditos",
-          description: "Tu saldo cambió y ya no alcanza. Compra créditos para completar.",
+          title: "No se pudo descontar el saldo",
+          description: "Tu saldo cambió y ya no alcanza. Compra saldo para completar.",
           variant: "destructive",
         });
         setBuyOpen(true);
@@ -192,7 +192,7 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
 
             {balance !== null && !enoughCredits && (
               <p className="text-xs text-muted-foreground">
-                Te faltan {formatCredits(totalCredits - balance)} en créditos. Al pulsar el botón abrirás la compra.
+                Te falta {formatCredits(totalCredits - balance)} de saldo. Al pulsar el botón abrirás la compra.
               </p>
             )}
           </div>
@@ -204,7 +204,7 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
                 ? <><Loader2 size={14} className="animate-spin" /> Publicando…</>
                 : enoughCredits
                   ? <><ShieldCheck size={14} /> Publicar por {formatCredits(totalCredits)}</>
-                  : <>Comprar créditos</>}
+                  : <>Comprar saldo</>}
             </Button>
           </DialogFooter>
         </DialogContent>

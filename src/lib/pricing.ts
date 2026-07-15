@@ -113,20 +113,23 @@ export function priceForDuration(n: number, dias: DurationDays, s: PricingSettin
   return priceFor(n, dias, s);
 }
 
+// Cada extra puede ser un flag (true/false) o una CANTIDAD (p. ej. "Imagen
+// adicional" admite hasta 3). El costo se multiplica por la cantidad.
 export interface ExtrasSelection {
-  img100?: boolean;
-  img500?: boolean;
-  pdf100?: boolean;
-  pdf500?: boolean;
-  urgente?: boolean;
-  destacado?: boolean;
-  confidencial?: boolean;
+  img100?: boolean | number;
+  img500?: boolean | number;
+  pdf100?: boolean | number;
+  pdf500?: boolean | number;
+  urgente?: boolean | number;
+  destacado?: boolean | number;
+  confidencial?: boolean | number;
 }
 
 export function extrasTotal(sel: ExtrasSelection, s: PricingSettings = loadSettings()): number {
   let total = 0;
   (Object.keys(s.extras) as Array<keyof ExtraPrices>).forEach((k) => {
-    if (sel[k]) total += s.extras[k];
+    // Number(true) = 1, Number(3) = 3, Number(undefined) = NaN → 0.
+    total += s.extras[k] * (Number(sel[k]) || 0);
   });
   return Math.round(total * 100) / 100;
 }
@@ -210,14 +213,12 @@ export function formatSoles(v: number) {
   return `S/ ${v.toFixed(2)}`;
 }
 
-// En la app se paga con CRÉDITOS, no con dinero: el saldo y el costo de un
-// aviso se escriben "16.14 créditos", nunca con la sigla "cr" ni con "S/".
-// El símbolo del sol queda para donde hay dinero real (la boleta).
-// Los enteros no arrastran ".00": "8472 créditos", no "8472.00 créditos".
+// 1 crédito = 1 sol: el saldo y el costo de un aviso se muestran como dinero,
+// con la sigla "S/" ("S/ 16.14"). Los enteros no arrastran ".00": "S/ 8472".
 export function formatCredits(v: number) {
   const n = Math.round(v * 100) / 100;
   const cifra = Number.isInteger(n) ? String(n) : n.toFixed(2);
-  return `${cifra} ${n === 1 ? "crédito" : "créditos"}`;
+  return `S/ ${cifra}`;
 }
 
 // === Helpers para reportes/cierre de venta/boletas (persistidos en localStorage) ===

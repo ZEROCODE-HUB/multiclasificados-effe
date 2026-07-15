@@ -419,7 +419,7 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
               Eliminar tu cuenta borra <b>de forma permanente</b> tu perfil, tus avisos, favoritos,
-              mensajes y créditos. Esta acción no se puede deshacer.
+              mensajes y saldo. Esta acción no se puede deshacer.
             </p>
             <Button variant="destructive" className="gap-2" onClick={() => { setDeleteConfirm(""); setDeleteOpen(true); }}>
               <Trash2 size={16} /> Eliminar mi cuenta

@@ -14,11 +14,24 @@ beforeEach(() => {
 // --- Mocks de la capa de datos y del entorno ---
 const getCreditBalance = vi.fn();
 const spendCredits = vi.fn().mockResolvedValue(true);
-const purchaseCredits = vi.fn();
 vi.mock("@/lib/credits", () => ({
   getCreditBalance: (...a: unknown[]) => getCreditBalance(...a),
   spendCredits: (...a: unknown[]) => spendCredits(...a),
-  purchaseCredits: (...a: unknown[]) => purchaseCredits(...a),
+}));
+
+// Pasarela de pago (Izipay). El pago se simula: createPayment devuelve un
+// formToken, el formulario embebido (stub) dispara onPaid y el polling resuelve.
+const createPayment = vi.fn();
+const pollOrderStatus = vi.fn();
+const getPurchaseResult = vi.fn();
+vi.mock("@/lib/payments", () => ({
+  createPayment: (...a: unknown[]) => createPayment(...a),
+  pollOrderStatus: (...a: unknown[]) => pollOrderStatus(...a),
+  getPurchaseResult: (...a: unknown[]) => getPurchaseResult(...a),
+  hostedPaymentUrl: () => "https://x/pay",
+}));
+vi.mock("@/components/PaymentForm", () => ({
+  PaymentForm: ({ onPaid }: { onPaid: () => void }) => <button onClick={onPaid}>SIMULAR_PAGO</button>,
 }));
 
 const createAndPublishListing = vi.fn();
@@ -90,22 +103,22 @@ const uploadMainPhoto = () => {
   fireEvent.change(fileInput);
 };
 
-// Publicar exige verificar el documento contra RENIEC/SUNAT y confirmar la ficha
-// devuelta. Pulsa "Publicar aviso", completa el DNI y confirma; al confirmar se
-// encadena el flujo de publicación (publica o abre el configurador de compra).
-const publishAndConfirmIdentity = async () => {
+// Publicar ya NO abre un modal de verificación: la identidad viene del perfil
+// (verificada al comprar saldo). Pulsar "Publicar aviso" abre un ÚNICO modal de
+// confirmación; al confirmar se encadena el flujo (publica o abre el configurador
+// de compra si falta saldo).
+const clickPublish = async () => {
   fireEvent.click(screen.getByRole("button", { name: /publicar aviso/i }));
-  fireEvent.click(await screen.findByRole("button", { name: /persona natural/i }));
-  fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "12345678" } });
-  await screen.findByText("JUAN PEREZ");
-  fireEvent.click(screen.getByRole("button", { name: /confirmar y continuar/i }));
+  fireEvent.click(await screen.findByRole("button", { name: /confirmar y publicar/i }));
 };
 
 beforeEach(() => {
   localStorage.clear();
   getCreditBalance.mockReset();
   spendCredits.mockClear().mockResolvedValue(true);
-  purchaseCredits.mockReset();
+  createPayment.mockReset().mockResolvedValue({ orderId: "o1", formToken: "tok", publicKey: "pk" });
+  pollOrderStatus.mockReset().mockResolvedValue("paid");
+  getPurchaseResult.mockReset().mockResolvedValue({ balance: 1000, invoiceNumber: "B001-000100" });
   createAndPublishListing.mockReset().mockResolvedValue({
     listingId: "L1", invoiceNumber: "B001-000099", published: true, invoiceSaved: true,
   });
@@ -123,10 +136,10 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
 
     // El formulario se cargó (borrador restaurado) y el saldo se leyó (1000 créditos).
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("1000 créditos");
+    await screen.findByText("S/ 1000");
 
     uploadMainPhoto();
-    await publishAndConfirmIdentity();
+    await clickPublish();
 
     // Publica directo: crea el aviso y descuenta el costo en créditos.
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
@@ -134,7 +147,7 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
 
     // Muestra el éxito y NO abre el configurador de compra.
     await screen.findByText(/pago confirmado/i);
-    expect(screen.queryByText(/créditos a comprar/i)).toBeNull();
+    expect(screen.queryByText(/saldo a comprar/i)).toBeNull();
   });
 
   it("RESPETA LA DURACIÓN elegida: publica por los días que el usuario seleccionó y pagó", async () => {
@@ -149,7 +162,7 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     fireEvent.click(btn90);
 
     uploadMainPhoto();
-    await publishAndConfirmIdentity();
+    await clickPublish();
 
     // La duración que llega a la publicación es la elegida (90), no la del borrador (7).
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
@@ -165,12 +178,12 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     await screen.findByDisplayValue("Casa bonita");
 
     uploadMainPhoto();
-    await publishAndConfirmIdentity();
+    await clickPublish();
 
     // Se abre el modal configurador (anuncios/días/extras → créditos).
-    await screen.findByText(/créditos a comprar/i);
+    await screen.findByText(/saldo a comprar/i);
     expect(screen.getByText(/arma tu compra/i)).toBeTruthy();
-    expect(screen.getByRole("button", { name: /comprar/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /continuar al pago/i })).toBeTruthy();
 
     // No se publicó ni se descontó nada.
     expect(createAndPublishListing).not.toHaveBeenCalled();
@@ -189,7 +202,7 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     await screen.findByText(/Día de la Madre/i);
 
     uploadMainPhoto();
-    await publishAndConfirmIdentity();
+    await clickPublish();
 
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
     // Dinero: 16.14 × (1 − 0.50) = 8.07 soles. Créditos: round(8.07 × 10) = 81.
@@ -197,35 +210,38 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     expect(createAndPublishListing).toHaveBeenCalledWith(expect.objectContaining({ total: 8.07 }));
   });
 
-  it("POST-COMPRA: tras comprar en el configurador, recién publica y descuenta", async () => {
+  it("POST-COMPRA: tras pagar en el configurador, recién publica y descuenta", async () => {
     getCreditBalance.mockResolvedValue(0); // arranca sin saldo → abre el configurador
-    purchaseCredits.mockResolvedValue({ newBalance: 1000, orderId: "o1", invoiceNumber: "B001-000100" });
+    getPurchaseResult.mockResolvedValue({ balance: 1000, invoiceNumber: "B001-000100" });
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
 
     uploadMainPhoto();
-    await publishAndConfirmIdentity();
-    await screen.findByText(/créditos a comprar/i);
+    await clickPublish();
+    await screen.findByText(/saldo a comprar/i);
 
-    // Completa datos del comprobante y compra.
+    // Completa datos del comprobante y continúa al pago.
     fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "12345678" } });
     fireEvent.change(screen.getByPlaceholderText("tu@correo.com"), { target: { value: "comprador@correo.com" } });
-    // El DNI se autoverifica con Factiliza; esperamos a que confirme antes de comprar.
+    // El DNI se autoverifica con Factiliza; esperamos a que confirme antes de pagar.
     await screen.findByText("JUAN PEREZ");
-    fireEvent.click(screen.getByRole("button", { name: /comprar/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continuar al pago/i }));
+
+    // Paga en el formulario embebido (stub) → se confirma por polling.
+    fireEvent.click(await screen.findByText("SIMULAR_PAGO"));
 
     // Al acreditarse y cubrir el costo, publica automáticamente y descuenta.
-    await waitFor(() => expect(purchaseCredits).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(createPayment).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
     expect(spendCredits).toHaveBeenCalledWith(COST_CREDITS, "L1");
     await screen.findByText(/pago confirmado/i);
   });
 });
 
-describe("AdvertiserPublish — la identidad se valida contra RENIEC/SUNAT", () => {
-  it("NO publica sin verificar: pulsar Publicar abre el cuadro de identidad", async () => {
-    getCreditBalance.mockResolvedValue(1000); // saldo de sobra: nada más lo frena
+describe("AdvertiserPublish — un solo modal de confirmación (sin verificación al publicar)", () => {
+  it("pulsar Publicar abre SOLO el modal de confirmación y NO abre el cuadro de identidad", async () => {
+    getCreditBalance.mockResolvedValue(1000); // saldo de sobra
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
@@ -233,13 +249,15 @@ describe("AdvertiserPublish — la identidad se valida contra RENIEC/SUNAT", () 
 
     fireEvent.click(screen.getByRole("button", { name: /publicar aviso/i }));
 
-    await screen.findByText(/verifica tu identidad/i);
+    // Aparece el modal de confirmación, NO el de verificación de identidad.
+    await screen.findByText(/confirmar publicación/i);
+    expect(screen.queryByText(/verifica tu identidad/i)).toBeNull();
+    // Aún no publica: espera la confirmación explícita.
     expect(createAndPublishListing).not.toHaveBeenCalled();
     expect(spendCredits).not.toHaveBeenCalled();
   });
 
-  it("DNI FALSO (12345678): Factiliza no lo encuentra, se muestra el error y NO se publica", async () => {
-    verifyDocument.mockResolvedValue({ ok: false, error: "No se encontró el documento." });
+  it("al confirmar en el modal, recién publica y descuenta", async () => {
     getCreditBalance.mockResolvedValue(1000);
     seedDraft();
     render(<AdvertiserPublish />);
@@ -247,50 +265,10 @@ describe("AdvertiserPublish — la identidad se valida contra RENIEC/SUNAT", () 
     uploadMainPhoto();
 
     fireEvent.click(screen.getByRole("button", { name: /publicar aviso/i }));
-    fireEvent.click(await screen.findByRole("button", { name: /persona natural/i }));
-    fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "12345678" } });
+    fireEvent.click(await screen.findByRole("button", { name: /confirmar y publicar/i }));
 
-    // Se consultó de verdad y el error de RENIEC llega al usuario.
-    await waitFor(() => expect(verifyDocument).toHaveBeenCalledWith("dni", "12345678"));
-    await screen.findByText(/no se encontró el documento/i);
-
-    // "Confirmar y continuar" sigue bloqueado: sin ficha no hay nada que confirmar.
-    expect(screen.getByRole("button", { name: /confirmar y continuar/i })).toBeDisabled();
-    expect(createAndPublishListing).not.toHaveBeenCalled();
-    expect(spendCredits).not.toHaveBeenCalled();
-  });
-
-  it("consulta Factiliza UNA sola vez por documento (no en cada render)", async () => {
-    getCreditBalance.mockResolvedValue(1000);
-    seedDraft();
-    render(<AdvertiserPublish />);
-    await screen.findByDisplayValue("Casa bonita");
-    uploadMainPhoto();
-
-    fireEvent.click(screen.getByRole("button", { name: /publicar aviso/i }));
-    fireEvent.click(await screen.findByRole("button", { name: /persona natural/i }));
-    fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "12345678" } });
-    await screen.findByText("JUAN PEREZ");
-
-    // Cada consulta cuesta saldo de Factiliza y expone datos personales.
-    expect(verifyDocument).toHaveBeenCalledTimes(1);
-  });
-
-  it("un borrador con {verified:true} en localStorage NO salta la verificación", async () => {
-    getCreditBalance.mockResolvedValue(1000);
-    // El borrador vive en localStorage: el usuario puede editarlo a mano.
-    localStorage.setItem("effe:publish-draft", JSON.stringify({
-      form: { category: "inmuebles", title: "Casa bonita", description: "Descripción larga del aviso", price: "100", currency: "PEN", location: "Lima", condition: "nuevo" },
-      duration: 7, quantity: 1, extras: {},
-      verified: true, verifiedName: "QUIEN SEA", personType: "natural", docNumber: "12345678",
-    }));
-    render(<AdvertiserPublish />);
-    await screen.findByDisplayValue("Casa bonita");
-    uploadMainPhoto();
-
-    fireEvent.click(screen.getByRole("button", { name: /publicar aviso/i }));
-
-    await screen.findByText(/verifica tu identidad/i);
-    expect(createAndPublishListing).not.toHaveBeenCalled();
+    await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
+    expect(spendCredits).toHaveBeenCalledWith(COST_CREDITS, "L1");
+    await screen.findByText(/pago confirmado/i);
   });
 });

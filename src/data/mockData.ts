@@ -7,6 +7,8 @@ export interface Listing {
   description: string;
   price: number;
   currency: string;
+  // Estado del artículo: "nuevo" | "usado" | "na" (No aplica).
+  condition?: string;
   category: string;
   location: string;
   imageUrl: string;
@@ -19,6 +21,8 @@ export interface Listing {
   views: number;
   lat?: number | null;
   lng?: number | null;
+  // Vencimiento del aviso. En avisos "Urgente" alimenta la cuenta regresiva.
+  expiresAt?: string | null;
 }
 
 export const featuredListings: Listing[] = [
