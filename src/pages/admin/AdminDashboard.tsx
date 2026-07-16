@@ -12,8 +12,8 @@ import { Users, ClipboardList, CheckCircle2, XCircle, DollarSign, ArrowUpRight, 
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
 import {
   fetchAdminStats, fetchGrowthSeries, fetchCategoryDistribution,
-  fetchAdminListings, fetchRecentActivity,
-  type AdminStats, type AdminListingRow, type ActivityItem,
+  fetchAdminListings, fetchRecentActivity, GROWTH_RANGES,
+  type AdminStats, type AdminListingRow, type ActivityItem, type GrowthRange,
 } from "@/lib/admin";
 import { auditEntityLabel, lowercaseFirst } from "@/lib/auditLabels";
 
@@ -30,6 +30,7 @@ function fullDate(at: string): string {
 
 const AdminDashboard = ({ role }: Props) => {
   const [catFilter, setCatFilter] = useState<string>("all");
+  const [rangeFilter, setRangeFilter] = useState<GrowthRange>("6m");
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [series, setSeries] = useState<{ mes: string; ingresos: number; usuarios: number }[]>([]);
   const [catDist, setCatDist] = useState<{ name: string; value: number }[]>([]);
@@ -41,11 +42,19 @@ const AdminDashboard = ({ role }: Props) => {
   // Datos reales de Supabase (con fallback a mock dentro de la capa admin).
   useEffect(() => {
     fetchAdminStats().then(({ data }) => setStats(data));
-    fetchGrowthSeries().then(setSeries);
     fetchCategoryDistribution().then(setCatDist);
     fetchAdminListings().then(({ data }) => setListings(data));
     fetchRecentActivity().then(({ data }) => setActivity(data));
   }, []);
+
+  // La serie se recarga al cambiar el rango. El flag descarta la respuesta si
+  // el rango cambió otra vez mientras la anterior seguía en vuelo (si no, una
+  // respuesta lenta puede pisar a la del rango ya elegido).
+  useEffect(() => {
+    let cancelled = false;
+    fetchGrowthSeries(rangeFilter).then((s) => { if (!cancelled) setSeries(s); });
+    return () => { cancelled = true; };
+  }, [rangeFilter]);
 
   const allCats = useMemo(
     () => Array.from(new Set(listings.map((l) => l.category_id))).filter(Boolean),
@@ -110,7 +119,19 @@ const AdminDashboard = ({ role }: Props) => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle className="text-base md:text-lg">Ingresos y usuarios (6 meses)</CardTitle>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <CardTitle className="text-base md:text-lg">Ingresos y usuarios</CardTitle>
+              <Select value={rangeFilter} onValueChange={(v) => setRangeFilter(v as GrowthRange)}>
+                <SelectTrigger className="w-44 h-9" aria-label="Rango del gráfico">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {GROWTH_RANGES.map((r) => (
+                    <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </CardHeader>
           <CardContent className="h-72">
             <ResponsiveContainer width="100%" height="100%">
