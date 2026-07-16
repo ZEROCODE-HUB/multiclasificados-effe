@@ -61,9 +61,20 @@ export async function fetchAdminStats(): Promise<{ data: AdminStats; real: boole
   };
 }
 
-export async function fetchGrowthSeries() {
+// Rango del gráfico de crecimiento. Los valores viajan tal cual a la RPC.
+export type GrowthRange = "7d" | "30d" | "6m" | "12m" | "all";
+
+export const GROWTH_RANGES: { value: GrowthRange; label: string }[] = [
+  { value: "7d", label: "Esta semana" },
+  { value: "30d", label: "Últimos 30 días" },
+  { value: "6m", label: "Últimos 6 meses" },
+  { value: "12m", label: "Últimos 12 meses" },
+  { value: "all", label: "Histórico" },
+];
+
+export async function fetchGrowthSeries(range: GrowthRange = "6m") {
   try {
-    const { data, error } = await supabase.rpc("admin_growth_series");
+    const { data, error } = await supabase.rpc("admin_growth_series", { p_range: range });
     if (error) throw error;
     if (data?.length) return (data as any[]).map((r) => ({
       mes: r.mes, ingresos: Number(r.ingresos) || 0, usuarios: Number(r.usuarios) || 0,
@@ -71,6 +82,8 @@ export async function fetchGrowthSeries() {
   } catch { /* fallback */ }
   // Con sesión de staff: sin datos reales → serie vacía, nunca la demo.
   if (await isAuthed()) return [] as typeof mockSeries;
+  // Demo (sin sesión): la serie de ejemplo son 6 meses fijos y no reacciona al
+  // rango; el filtro solo tiene efecto real contra la base.
   return mockSeries;
 }
 

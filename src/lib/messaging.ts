@@ -66,6 +66,29 @@ export async function getOrCreateConversation(
   return data.id as string;
 }
 
+// ¿El usuario actual ya le escribió al vendedor por este aviso?
+// La conversación se crea recién al enviar el primer mensaje (ver el flujo de
+// contacto en ListingDetail), así que la existencia de la fila ya significa que
+// hubo chat: no hace falta contar mensajes.
+// La RLS de conversations solo deja ver las propias, así que un extraño siempre
+// obtiene false aunque manipule la consulta.
+export async function hasConversationWithSeller(
+  listingId: string,
+  sellerId: string
+): Promise<boolean> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user || user.id === sellerId) return false;
+  const { data, error } = await supabase
+    .from("conversations")
+    .select("id")
+    .eq("listing_id", listingId)
+    .eq("buyer_id", user.id)
+    .eq("seller_id", sellerId)
+    .maybeSingle();
+  if (error) return false;
+  return !!data?.id;
+}
+
 // Lista las conversaciones del usuario actual con nombre del otro y no leídos.
 export async function fetchConversations(): Promise<Conversation[]> {
   const { data: { user } } = await supabase.auth.getUser();

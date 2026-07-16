@@ -359,6 +359,20 @@ export async function deleteListing(id: string): Promise<void> {
   if (error) throw error;
 }
 
+// Teléfono del anunciante de un aviso, o null si no corresponde mostrarlo.
+// Las reglas viven en la RPC (exige sesión, nunca revela avisos confidenciales)
+// porque la RLS de profiles impide leer el perfil ajeno desde el cliente.
+export async function fetchAdvertiserPhone(listingId: string): Promise<string | null> {
+  if (!isUuid(listingId)) return null;
+  try {
+    const { data, error } = await supabase.rpc("listing_advertiser_phone", { p_listing_id: listingId });
+    if (error) throw error;
+    return (data as string | null)?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 // REQ-08: registra una vista / clic (no rompe si el visitante es anónimo).
 export async function trackEvent(listingId: string, type: "view" | "contact_click" | "phone_click") {
   if (!isUuid(listingId)) return;

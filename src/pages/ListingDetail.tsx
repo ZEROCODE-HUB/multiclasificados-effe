@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { type Listing } from "@/data/mockData";
 import { useCategories } from "@/hooks/useCategories";
-import { fetchListingById, fetchListingImages, fetchListings, fetchListingDocumentUrl, trackEvent, urgentTimeLeft } from "@/lib/listings";
+import { fetchListingById, fetchListingImages, fetchListings, fetchListingDocumentUrl, fetchAdvertiserPhone, trackEvent, urgentTimeLeft } from "@/lib/listings";
 import { listingBadges, advertiserDisplayName } from "@/lib/listingBadges";
 import {
   ChevronRight,
@@ -66,7 +66,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/lib/supabase";
-import { getOrCreateConversation, sendMessage } from "@/lib/messaging";
+import { getOrCreateConversation, sendMessage, hasConversationWithSeller } from "@/lib/messaging";
 
 
 export default function ListingDetail() {
@@ -184,6 +184,21 @@ export default function ListingDetail() {
   // El dueño del aviso no puede postularse ni reseñar su propia publicación.
   const isOwner = !!currentUserId && !!ownerId && currentUserId === ownerId;
 
+  // El cierre de venta solo se le ofrece a quien de verdad habló con el vendedor
+  // por este aviso. Sin chat previo no hay trato que confirmar, y el vendedor no
+  // lo ve acá: él confirma desde el chat con el comprador (ver MessagesPage),
+  // que es donde consta con quién cerró.
+  const [hasChatWithSeller, setHasChatWithSeller] = useState(false);
+  useEffect(() => {
+    if (!id || !ownerId || !currentUserId || isOwner || isJobs) {
+      setHasChatWithSeller(false);
+      return;
+    }
+    let cancelled = false;
+    hasConversationWithSeller(id, ownerId).then((v) => { if (!cancelled) setHasChatWithSeller(v); });
+    return () => { cancelled = true; };
+  }, [id, ownerId, currentUserId, isOwner, isJobs]);
+
   // Imágenes de demo (solo para avisos mock, no para avisos reales).
   const MOCK_EXTRA_IMAGES = [
     "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=1200&h=800&fit=crop",
@@ -211,8 +226,11 @@ export default function ListingDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, listing.imageUrl]);
 
-  // Sin teléfono público (se coordina por mensaje).
-  const phoneNumber = "No disponible";
+  // El teléfono se pide recién al pulsar "Mostrar teléfono" (nunca al cargar la
+  // página): la RPC decide si corresponde darlo. null = no hay o no aplica.
+  const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
+  const [phoneLoading, setPhoneLoading] = useState(false);
+  const phoneLabel = phoneLoading ? "Buscando…" : (phoneNumber ?? "No disponible");
 
   // Aviso CONFIDENCIAL (documento eFFe): la identidad del anunciante permanece
   // oculta (nombre, teléfono). El interesado solo puede contactar por el chat
@@ -235,9 +253,18 @@ export default function ListingDetail() {
   const [userReportSubmitting, setUserReportSubmitting] = useState(false);
   const [soldState, setSoldState] = useState(() => loadSold()[listing.id]);
 
-  const [messageText, setMessageText] = useState(
-    `Hola${advertiserFirstName ? " " + advertiserFirstName : ""}, estoy interesado en "${listing.title}". ¿Sigue disponible?`,
-  );
+  // OJO: el aviso llega por fetch, así que en el primer render `listing` todavía
+  // es el placeholder y su título está vacío. Un useState con el texto ya armado
+  // se quedaba congelado con las comillas vacías para siempre; por eso se
+  // recalcula cuando el título llega.
+  const defaultMessage =
+    `Hola${advertiserFirstName ? " " + advertiserFirstName : ""}, estoy interesado en "${listing.title}". ¿Sigue disponible?`;
+  const [messageText, setMessageText] = useState(defaultMessage);
+  // Si el interesado ya escribió lo suyo, su texto manda: no se pisa.
+  const [messageEdited, setMessageEdited] = useState(false);
+  useEffect(() => {
+    if (!messageEdited) setMessageText(defaultMessage);
+  }, [defaultMessage, messageEdited]);
 
   const handleReport = async () => {
     if (!reportCategory || !listing.id) return;
@@ -320,10 +347,17 @@ export default function ListingDetail() {
     }
   };
 
-  const handleRevealPhone = () => {
+  const handleRevealPhone = async () => {
     setPhoneRevealed(true);
     setPhoneOpen(true);
-    if (id) trackEvent(id, "phone_click"); // REQ-08: clic de contacto (teléfono)
+    if (!id) return;
+    trackEvent(id, "phone_click"); // REQ-08: clic de contacto (teléfono)
+    setPhoneLoading(true);
+    try {
+      setPhoneNumber(await fetchAdvertiserPhone(id));
+    } finally {
+      setPhoneLoading(false);
+    }
   };
 
   const handleApply = async () => {
@@ -351,6 +385,7 @@ export default function ListingDetail() {
   };
 
   const handleCopyPhone = async () => {
+    if (!phoneNumber) return;
     try {
       await navigator.clipboard.writeText(phoneNumber);
       toast({ title: "Teléfono copiado", description: phoneNumber });
@@ -666,7 +701,7 @@ export default function ListingDetail() {
                       onClick={() => requireAuthOrRun(handleRevealPhone)}
                     >
                       <Phone size={16} />
-                      {phoneRevealed ? phoneNumber : "Mostrar teléfono"}
+                      {phoneRevealed ? phoneLabel : "Mostrar teléfono"}
                     </Button>
                   )}
                 </>
@@ -747,27 +782,19 @@ export default function ListingDetail() {
             )}
           </div>
 
-          {/* Sale closure — no aplica a empleos (no es una venta de producto) */}
-          {!isJobs && (
+          {/* Cierre de venta — no aplica a empleos (no es una venta de producto).
+              Solo lo ve el comprador que ya tiene chat con el vendedor por este
+              aviso; el vendedor confirma desde su propio chat, no desde aquí. */}
+          {!isJobs && !isOwner && hasChatWithSeller && (
             <div className="bg-card border border-border p-5 space-y-3">
               <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-secondary">Cierre de venta</p>
               <p className="text-xs text-muted-foreground">Marca si concretaron la transacción. Ambos lados pueden confirmar.</p>
-              {isOwner ? (
-                <label className="flex items-center gap-2 text-sm cursor-pointer">
-                  <Checkbox checked={!!soldState?.seller} onCheckedChange={() => requireAuthOrRun(() => toggleSold("seller"))} />
-                  <span>Soy el vendedor y la venta se concretó</span>
-                </label>
-              ) : (
-                <label className="flex items-center gap-2 text-sm cursor-pointer">
-                  <Checkbox checked={!!soldState?.buyer} onCheckedChange={() => requireAuthOrRun(() => toggleSold("buyer"))} />
-                  <span>Soy el comprador y la venta se concretó</span>
-                </label>
-              )}
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <Checkbox checked={!!soldState?.buyer} onCheckedChange={() => requireAuthOrRun(() => toggleSold("buyer"))} />
+                <span>Soy el comprador y la venta se concretó</span>
+              </label>
               {/* Estado del otro lado (solo informativo) */}
-              {isOwner && soldState?.buyer && (
-                <p className="text-[11px] text-muted-foreground">El comprador ya confirmó la transacción.</p>
-              )}
-              {!isOwner && soldState?.seller && (
+              {soldState?.seller && (
                 <p className="text-[11px] text-muted-foreground">El vendedor ya confirmó la transacción.</p>
               )}
               {(soldState?.buyer || soldState?.seller) && (
@@ -834,7 +861,7 @@ export default function ListingDetail() {
               id="msg"
               rows={5}
               value={messageText}
-              onChange={(e) => setMessageText(e.target.value)}
+              onChange={(e) => { setMessageEdited(true); setMessageText(e.target.value); }}
               placeholder="Cuéntale al anunciante qué te interesa, fechas, formas de pago…"
             />
             <p className="text-xs text-muted-foreground">
@@ -864,18 +891,26 @@ export default function ListingDetail() {
             <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-secondary">
               {advertiserName}
             </p>
-            <p className="text-2xl font-extrabold text-primary tracking-tight">{phoneNumber}</p>
+            <p className="text-2xl font-extrabold text-primary tracking-tight">{phoneLabel}</p>
             <p className="text-xs text-muted-foreground">Código de aviso: EFFE-{listing.id.padStart(6, "0")}</p>
           </div>
+          {/* Sin número no hay nada que copiar ni a quién llamar: los botones se
+              desactivan en vez de ofrecer un tel: vacío. */}
           <DialogFooter className="sm:justify-between gap-2">
-            <Button variant="outline" onClick={handleCopyPhone} className="gap-2">
+            <Button variant="outline" onClick={handleCopyPhone} className="gap-2" disabled={!phoneNumber}>
               <Copy size={14} /> Copiar
             </Button>
-            <Button asChild className="gap-2">
-              <a href={`tel:${phoneNumber.replace(/\s+/g, "")}`}>
+            {phoneNumber ? (
+              <Button asChild className="gap-2">
+                <a href={`tel:${phoneNumber.replace(/\s+/g, "")}`}>
+                  <Phone size={14} /> Llamar ahora
+                </a>
+              </Button>
+            ) : (
+              <Button className="gap-2" disabled>
                 <Phone size={14} /> Llamar ahora
-              </a>
-            </Button>
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
