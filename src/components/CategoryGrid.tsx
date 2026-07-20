@@ -3,16 +3,29 @@ import { useEffect, useState } from "react";
 import { fetchCategoryCounts } from "@/lib/stats";
 import { useCategories } from "@/hooks/useCategories";
 
-const images: Record<string, string> = {
-  inmuebles: "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800&h=600&fit=crop",
-  vehiculos: "https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=800&h=600&fit=crop",
-  empleos: "https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=800&h=600&fit=crop",
-  tecnologia: "https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&h=600&fit=crop",
-  productos: "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=800&h=600&fit=crop",
-  servicios: "https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?w=800&h=600&fit=crop",
-  "educacion-finanzas": "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=800&h=600&fit=crop",
-  "salud-belleza-moda": "https://images.unsplash.com/photo-1445205170230-053b83016050?w=800&h=600&fit=crop",
+// Solo el id de la foto: el tamaño se decide abajo, no se fija aquí.
+const photos: Record<string, string> = {
+  inmuebles: "photo-1560448204-e02f11c3d0e2",
+  vehiculos: "photo-1494976388531-d1058494cdd8",
+  empleos: "photo-1521737711867-e3b97375f902",
+  tecnologia: "photo-1518770660439-4636190af475",
+  productos: "photo-1607082348824-0a96f2a4b9da",
+  servicios: "photo-1581092918056-0c4c3acd3789",
+  "educacion-finanzas": "photo-1503676260728-1c00da094a0b",
+  "salud-belleza-moda": "photo-1445205170230-053b83016050",
 };
+
+// Las tarjetas se muestran a ~300×225 CSS. Antes se pedían siempre a 800×600 y
+// el navegador tiraba el resto: ~80-110 KiB desperdiciados por imagen.
+// `auto=format` hace que Unsplash sirva WebP/AVIF si el navegador lo soporta.
+const unsplash = (id: string, w: number) =>
+  `https://images.unsplash.com/${id}?w=${w}&h=${Math.round(w * 0.75)}&fit=crop&auto=format&q=70`;
+
+// Varios escalones para que el navegador baje solo el que necesita según el
+// ancho de la tarjeta y la densidad de pantalla. Sin el de 400 saltaba al de
+// 600 en pantallas normales, descargando casi el doble de lo necesario.
+const srcSet = (id: string) =>
+  [300, 400, 600, 800].map((w) => `${unsplash(id, w)} ${w}w`).join(", ");
 
 export function CategoryGrid() {
   const categories = useCategories();
@@ -32,11 +45,16 @@ export function CategoryGrid() {
         >
           <div className="relative aspect-[4/3] overflow-hidden">
             {/* Las categorías que cree el staff no tienen foto: cae a un fondo sólido. */}
-            {images[cat.id] ? (
+            {photos[cat.id] ? (
               <img
-                src={images[cat.id]}
+                src={unsplash(photos[cat.id], 300)}
+                srcSet={srcSet(photos[cat.id])}
+                sizes="(min-width: 1024px) 25vw, (min-width: 768px) 33vw, 50vw"
+                width={300}
+                height={225}
                 alt={cat.name}
                 loading="lazy"
+                decoding="async"
                 className="absolute inset-0 w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700 group-hover:scale-[1.08]"
               />
             ) : (

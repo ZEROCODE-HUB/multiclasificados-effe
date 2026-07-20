@@ -38,8 +38,17 @@
     --primary: 220 56% 20%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 24 95% 53%;
+    /* Naranja de marca. Va en DOS tonos porque un solo valor no puede cumplir
+       contraste AA en los dos contextos:
+         · sobre fondo CLARO (y como relleno con texto blanco) hace falta oscuro:
+           el #f97015 original daba 2.73:1, muy por debajo del 4.5:1 exigido.
+         · sobre el hero/sidebar OSCUROS pasa lo contrario: el oscuro cae a 3.05:1
+           mientras el vivo cumple de sobra (5.01:1).
+       Por eso: --secondary para fondo claro, --secondary-bright para fondo oscuro. */
+    --secondary: 24 95% 38%;         /* #bd4e05 — 4.73:1 sobre #fafafa (39% daba
+                                        4.50 justo, sin margen ante redondeos) */
     --secondary-foreground: 0 0% 100%;
+    --secondary-bright: 24 95% 53%;  /* #f97015 — solo sobre fondos oscuros */
 
     --muted: 220 14% 94%;
     --muted-foreground: 220 10% 46%;
@@ -98,12 +107,25 @@
   .gradient-hero {
     background: linear-gradient(135deg, hsl(220 56% 20%) 0%, hsl(220 56% 12%) 100%);
   }
+  /* Relleno naranja que siempre lleva texto blanco encima (botón "hero", avatares).
+     Va con el tono oscuro: con el vivo, el blanco encima daba 2.85:1. */
   .gradient-secondary {
-    background: linear-gradient(135deg, hsl(24 95% 53%) 0%, hsl(24 95% 45%) 100%);
+    background: linear-gradient(135deg, hsl(24 95% 39%) 0%, hsl(24 95% 33%) 100%);
   }
   .gradient-accent {
     background: linear-gradient(135deg, hsl(166 70% 87%) 0%, hsl(166 60% 78%) 100%);
   }
+  /* --- Naranja sobre fondos oscuros -------------------------------------
+     `--secondary` se oscureció para cumplir contraste sobre fondo claro, pero
+     sobre el navy del hero/mapa/footer ese mismo tono cae a 2.9:1. Aquí lo
+     devolvemos al tono vivo, que sobre oscuro da 5.0:1.
+     Se hace por contexto y no clase por clase porque son ~25 usos (contando los
+     `hover:`) y cualquiera nuevo dentro de estas secciones queda cubierto solo. */
+  :is(.gradient-hero, .bg-primary, footer) :is(.text-secondary, .hover\:text-secondary:hover) {
+    color: hsl(var(--secondary-bright));
+  }
+
+  /* Solo se usa sobre el hero oscuro: mantiene el naranja vivo. */
   .text-gradient {
     background: linear-gradient(135deg, hsl(24 95% 53%), hsl(24 95% 60%));
     -webkit-background-clip: text;

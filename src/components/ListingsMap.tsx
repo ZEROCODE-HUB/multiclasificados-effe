@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
+import { imgUrl } from "@/lib/imageUrl";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
 import L from "leaflet";
@@ -118,7 +119,7 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
               <Popup>
                 <Link to={hrefFor(l.id)} className="block w-52 no-underline">
                   <div className="aspect-[4/3] bg-muted overflow-hidden rounded-t">
-                    <img src={l.imageUrl} alt={l.title} className="w-full h-full object-cover" />
+                    <img src={imgUrl(l.imageUrl, 300)} alt={l.title} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                   </div>
                   <div className="pt-2">
                     <span className="text-[10px] uppercase tracking-wider font-bold text-secondary">

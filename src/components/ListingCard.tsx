@@ -10,6 +10,7 @@ import { useSession } from "@/hooks/useSession";
 import { useFavorites } from "@/hooks/useFavorites";
 import { listingBadges } from "@/lib/listingBadges";
 import { urgentTimeLeft } from "@/lib/listings";
+import { imgUrl, imgSrcSet } from "@/lib/imageUrl";
 
 interface ListingCardProps {
   listing: Listing;
@@ -106,7 +107,8 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
     return (
       <div role="link" tabIndex={0} onClick={goToDetail} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && goToDetail()} className={`flex gap-4 p-3 hover:shadow-lg transition-all cursor-pointer group ${featured ? "bg-amber-50/50 border-2 border-amber-400 hover:border-amber-500" : "bg-card border border-border hover:border-secondary/40"}`}>
         <div className="relative w-40 flex-shrink-0 overflow-hidden bg-muted" style={{ aspectRatio: "4 / 3" }}>
-          <img src={listing.imageUrl} alt={listing.title} className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.05]" loading="lazy" />
+          {/* La miniatura se muestra a 160 px: pedimos ese tamaño, no el original. */}
+          <img src={imgUrl(listing.imageUrl, 200)} srcSet={imgSrcSet(listing.imageUrl, 200)} sizes="160px" alt={listing.title} className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.05]" loading="lazy" decoding="async" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
@@ -135,9 +137,12 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
       {/* Image — taller, near-square for a premium presence */}
       <div className="relative overflow-hidden bg-muted" style={{ aspectRatio: "1 / 1" }}>
         <img
-          src={listing.imageUrl}
+          src={imgUrl(listing.imageUrl, 400)}
+          srcSet={imgSrcSet(listing.imageUrl, 400)}
+          sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
           alt={listing.title}
           loading="lazy"
+          decoding="async"
           className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.05]"
         />
         {/* Insignias — iconos apilados por la izquierda (nombre en el tooltip).

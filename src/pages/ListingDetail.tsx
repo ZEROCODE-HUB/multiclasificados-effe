@@ -452,7 +452,7 @@ export default function ListingDetail() {
       </div>
 
       {/* Back link */}
-      <div className="container mx-auto px-4 md:px-6 pt-6">
+      <div className="container mx-auto max-w-[1500px] px-4 md:px-6 pt-6">
         <button
           onClick={() => navigate(-1)}
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -461,14 +461,33 @@ export default function ListingDetail() {
         </button>
       </div>
 
-      <div className="container mx-auto px-4 md:px-6 py-6 md:py-8 grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-8 lg:gap-12">
+      {/* `max-w`: el .container del proyecto es fluido (sin tope), y sin límite la
+          foto principal se estiraba hasta 2.4:1 en monitores anchos. */}
+      <div className="container mx-auto max-w-[1500px] px-4 md:px-6 py-6 md:py-8 grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-8 lg:gap-12">
         {/* LEFT — Gallery + Content */}
         <div className="min-w-0 space-y-10">
           {/* Gallery */}
           <section>
-            <div className="grid grid-cols-1 md:grid-cols-[1fr_120px] gap-3">
-              <div className={`relative bg-muted overflow-hidden ${listing.featured ? "ring-2 ring-amber-400" : ""}`} style={{ aspectRatio: "4 / 3" }}>
-                <img src={gallery[activeImg]} alt={listing.title} className="absolute inset-0 w-full h-full object-cover" />
+            {/* Desde xl mandamos por ALTURA fija, no por proporción: así la foto
+                ocupa todo el ancho disponible. Con `aspect-ratio` + `max-h` el
+                navegador conserva la proporción encogiendo el ancho, y quedaba un
+                hueco muerto entre la foto y las miniaturas.
+                Por debajo de xl la columna izquierda es estrecha (el aside fijo de
+                400 px se come el espacio) y un alto fijo dejaría la foto casi
+                cuadrada, así que ahí seguimos con 4/3. */}
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_140px] xl:grid-cols-[1fr_200px] gap-3 xl:h-[560px]">
+              <div className={`relative bg-muted overflow-hidden aspect-[4/3] xl:aspect-auto xl:h-full ${listing.featured ? "ring-2 ring-amber-400" : ""}`}>
+                {/* `contain` y no `cover`: la foto se ve COMPLETA, sin recortar.
+                    El fondo neutro rellena lo que sobra según la proporción. */}
+                {/* Se sirve TAL CUAL, sin transformar: las fotos ya se guardan
+                    comprimidas (~1600px WebP) al subirlas, así que no re-procesamos
+                    al mostrar y se ve con la calidad original. */}
+                <img
+                  src={gallery[activeImg]}
+                  alt={listing.title}
+                  decoding="async"
+                  className="absolute inset-0 w-full h-full object-contain"
+                />
                 <div className="absolute top-4 left-4 flex flex-wrap gap-1.5 max-w-[70%]">
                   {listingBadges(listing).map(({ key, label, icon: Icon, cls }) => (
                     <span key={label} className={`inline-flex items-center gap-1 px-3 py-1.5 ${cls} text-[10px] font-bold uppercase tracking-wider shadow-md`}>
@@ -486,7 +505,13 @@ export default function ListingDetail() {
                   {activeImg + 1} / {gallery.length}
                 </div>
               </div>
-              <div className="flex md:flex-col gap-3 overflow-x-auto md:overflow-y-auto md:max-h-[480px]">
+              {/* Miniaturas en recuadro fijo 4/3 con la foto rellenando el marco
+                  (`cover`). Es el comportamiento original: la tira queda pareja y
+                  cada miniatura se reconoce de un vistazo. Probé mostrar la foto
+                  entera (`contain`) y dejar que cada una tomara su forma, pero con
+                  fotos verticales quedaban como tiras finas. La foto completa se ve
+                  en la grande, que sí usa `contain`. */}
+              <div className="flex md:flex-col gap-3 overflow-x-auto md:overflow-y-auto md:h-full">
                 {gallery.map((src, i) => (
                   <button
                     key={i}
@@ -494,7 +519,13 @@ export default function ListingDetail() {
                     className={`relative shrink-0 w-24 md:w-full bg-muted overflow-hidden border-2 transition-all ${activeImg === i ? "border-secondary" : "border-transparent hover:border-border"}`}
                     style={{ aspectRatio: "4 / 3" }}
                   >
-                    <img src={src} alt={`Vista ${i + 1}`} className="absolute inset-0 w-full h-full object-cover" />
+                    <img
+                      src={src}
+                      alt={`Vista ${i + 1}`}
+                      loading="lazy"
+                      decoding="async"
+                      className="absolute inset-0 w-full h-full object-cover"
+                    />
                   </button>
                 ))}
               </div>

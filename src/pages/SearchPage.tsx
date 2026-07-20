@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { imgUrl, imgSrcSet } from "@/lib/imageUrl";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -506,7 +507,7 @@ export default function SearchPage() {
                     className="w-24 lg:w-32 shrink-0 bg-muted overflow-hidden"
                     style={{ aspectRatio: "4 / 3" }}
                   >
-                    <img src={l.imageUrl} alt={l.title} className="w-full h-full object-cover" loading="lazy" />
+                    <img src={imgUrl(l.imageUrl, 400)} srcSet={imgSrcSet(l.imageUrl, 400)} sizes="(min-width: 1024px) 25vw, 50vw" alt={l.title} className="w-full h-full object-cover" loading="lazy" decoding="async" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
