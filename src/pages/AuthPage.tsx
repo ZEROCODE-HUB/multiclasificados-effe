@@ -386,9 +386,10 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
                 <Label htmlFor="regEmail">Correo electrónico *</Label>
                 <Input id="regEmail" type="email" inputMode="email" autoComplete="off" readOnly={fieldsLocked} placeholder="tu@correo.com" className="mt-1"
                   value={regEmail} onChange={(e) => setRegEmail(e.target.value)} />
-                {regEmail && !EMAIL_RE.test(regEmail) && (
-                  <p className="text-xs text-destructive mt-1">Ingresa un correo válido.</p>
-                )}
+                {/* Slot con alto reservado: el error no debe empujar el layout al aparecer. */}
+                <p className="text-xs text-destructive mt-1 min-h-[1rem]">
+                  {regEmail && !EMAIL_RE.test(regEmail) ? "Ingresa un correo válido." : ""}
+                </p>
               </div>
               <div>
                 <Label htmlFor="phone">Teléfono <span className="text-muted-foreground font-normal">(opcional)</span></Label>
@@ -411,9 +412,9 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
                     onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 9))}
                   />
                 </div>
-                {phone.length > 0 && phone.length !== 9 && (
-                  <p className="text-xs text-destructive mt-1">El número debe tener exactamente 9 dígitos.</p>
-                )}
+                <p className="text-xs text-destructive mt-1 min-h-[1rem]">
+                  {phone.length > 0 && phone.length !== 9 ? "El número debe tener exactamente 9 dígitos." : ""}
+                </p>
               </div>
               <div>
                 <Label htmlFor="regPassword">Contraseña *</Label>
@@ -424,9 +425,9 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
                 <Label htmlFor="regPasswordConfirm">Confirmar contraseña *</Label>
                 <Input id="regPasswordConfirm" type="password" autoComplete="new-password" readOnly={fieldsLocked} placeholder="Repite tu contraseña" className="mt-1"
                   value={regPasswordConfirm} onChange={(e) => setRegPasswordConfirm(e.target.value)} />
-                {regPasswordConfirm.length > 0 && regPassword !== regPasswordConfirm && (
-                  <p className="text-xs text-destructive mt-1">Las contraseñas no coinciden.</p>
-                )}
+                <p className="text-xs text-destructive mt-1 min-h-[1rem]">
+                  {regPasswordConfirm.length > 0 && regPassword !== regPasswordConfirm ? "Las contraseñas no coinciden." : ""}
+                </p>
               </div>
 
               <label className="flex items-start gap-2 text-sm text-muted-foreground cursor-pointer">
