@@ -7,7 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Wallet, User, Building2, Check, CheckCircle2, AlertCircle, Loader2, Minus, Plus, CreditCard, ArrowLeft, FlaskConical } from "lucide-react";
+import { Wallet, User, Building2, Check, CheckCircle2, AlertCircle, Loader2, Minus, Plus, CreditCard, ArrowLeft } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
   loadSettings, priceForDuration, extrasTotal, formatSoles, formatCredits, solesToCredits,
@@ -21,9 +21,6 @@ import {
   type PurchaseConfig, type CreatePaymentResult, type OrderOutcome,
 } from "@/lib/payments";
 import { PaymentForm } from "@/components/PaymentForm";
-import { useSession, isStaffRole } from "@/hooks/useSession";
-import { grantCredits } from "@/lib/admin";
-import { supabase } from "@/lib/supabase";
 
 // Correo válido para el comprobante.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -49,13 +46,6 @@ const EXTRA_DEFS: Array<{ key: keyof ExtraPrices; label: string; sub: string }> 
 export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onPurchaseComplete }: Props) {
   const [settings, setSettings] = useState<PricingSettings>(() => loadSettings());
   const [buying, setBuying] = useState(false);
-  // Simulador de pago: SOLO en dev (`npm run dev`) y solo para staff. Nunca se
-  // renderiza en el build de producción desplegado, así que no puede usarse para
-  // acreditar créditos sin pagar en la app real. Además usa grantCredits, que el
-  // servidor valida con has_perm (fail-closed para no-staff).
-  const session = useSession();
-  const canSimulate = import.meta.env.DEV && isStaffRole(session?.role);
-  const [simulating, setSimulating] = useState(false);
 
   // Paso del flujo: "config" (arma la compra) → "paying" (formulario Izipay web).
   const [step, setStep] = useState<"config" | "paying">("config");
@@ -232,26 +222,6 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
     } finally {
       setBuying(false);
       setConfirming(false);
-    }
-  };
-
-  // Simula un pago aprobado (solo dev + staff): acredita el saldo vía grantCredits
-  // sin pasar por Izipay, para poder probar el flujo cuando la pasarela no está
-  // configurada. NO emite boleta (es un atajo de prueba).
-  const handleSimulate = async () => {
-    if (creditsToBuy <= 0) { toast({ title: "Selecciona qué comprar", variant: "destructive" }); return; }
-    setSimulating(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Sin sesión.");
-      const balance = await grantCredits(user.id, creditsToBuy, "Pago simulado (prueba, solo dev)");
-      toast({ title: "Saldo acreditado (simulado)", description: `Se añadió ${formatCredits(creditsToBuy)} a tu saldo. Solo para pruebas.` });
-      onPurchaseComplete(balance);
-      onClose();
-    } catch (e) {
-      toast({ title: "No se pudo simular", description: e instanceof Error ? e.message : "Requiere una sesión de staff.", variant: "destructive" });
-    } finally {
-      setSimulating(false);
     }
   };
 
@@ -482,18 +452,6 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
             </div>
 
             <DialogFooter className="gap-2 pt-2">
-              {canSimulate && (
-                <Button
-                  variant="outline"
-                  onClick={handleSimulate}
-                  disabled={simulating || buying || creditsToBuy <= 0}
-                  className="gap-2 border-dashed mr-auto"
-                  title="Solo en dev: acredita el saldo sin pasar por Izipay (para pruebas)"
-                >
-                  {simulating ? <Loader2 size={14} className="animate-spin" /> : <FlaskConical size={14} />}
-                  Simular pago
-                </Button>
-              )}
               <Button variant="ghost" onClick={onClose} disabled={buying}>Cancelar</Button>
               <Button onClick={handleContinue} disabled={buying || creditsToBuy <= 0 || verifyingDoc || !verifiedName || !emailValid} className="gap-2">
                 {buying
