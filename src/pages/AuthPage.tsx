@@ -302,7 +302,7 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
             <div className="flex bg-muted rounded-lg p-1 mb-6">
               <button
                 onClick={() => setActiveTab("login")}
-                className={`flex-1 py-2.5 text-sm font-semibold rounded-md transition-all ${
+                className={`flex-1 py-2.5 text-sm font-semibold rounded-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                   activeTab === "login" ? "bg-card text-primary shadow-sm" : "text-muted-foreground"
                 }`}
               >
@@ -310,7 +310,7 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
               </button>
               <button
                 onClick={() => setActiveTab("register")}
-                className={`flex-1 py-2.5 text-sm font-semibold rounded-md transition-all ${
+                className={`flex-1 py-2.5 text-sm font-semibold rounded-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                   activeTab === "register" ? "bg-card text-primary shadow-sm" : "text-muted-foreground"
                 }`}
               >
@@ -334,6 +334,7 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
                     onKeyDown={(e) => { if (e.key === "Enter") handleLogin(); }} />
                   <button
                     type="button"
+                    aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
                   >

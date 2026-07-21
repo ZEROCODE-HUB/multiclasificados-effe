@@ -108,6 +108,10 @@ export function notificationText(n: AppNotification): string {
     }
     case "new_review":
       return `Recibiste una nueva reseña (${p.rating ?? "—"}★)`;
+    case "new_application": {
+      const title = (p.listing_title as string) || "tu aviso";
+      return `Nueva postulación en "${title}"`;
+    }
     case "listing_disabled": {
       const title = (p.listing_title as string) || "Tu aviso";
       const reason = (p.reason as string) || "";
@@ -150,6 +154,9 @@ export function notificationLink(n: AppNotification, role: string): string {
     case "application_status":
     case "new_review":
       return p.listing_id ? `/aviso/${p.listing_id}` : "#";
+    case "new_application":
+      // El dueño revisa las postulaciones recibidas en su panel de anunciante.
+      return "/dashboard/anunciante/postulaciones";
     case "listing_disabled":
     case "listing_enabled":
     case "listing_expiring":

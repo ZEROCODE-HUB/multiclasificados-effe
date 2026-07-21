@@ -32,6 +32,7 @@ export const NOTIF_EVENTS: NotifEventDef[] = [
   { event: "new_message", label: "Mensajes nuevos", desc: "Cuando alguien te escribe por un aviso." },
   { event: "saved_search_match", label: "Coincidencias de búsqueda", desc: "Avisos nuevos que coinciden con tus búsquedas guardadas.", roles: ["buscador"] },
   { event: "application_status", label: "Estado de postulaciones", desc: "Cuando cambia el estado de una postulación tuya.", roles: ["buscador"] },
+  { event: "new_application", label: "Postulaciones recibidas", desc: "Cuando alguien postula a tu aviso de empleo.", roles: ["anunciante"] },
   { event: "new_review", label: "Nuevas reseñas", desc: "Cuando recibes una reseña." },
   { event: "listing_expiring", label: "Avisos por vencer", desc: "Cuando un aviso tuyo está por expirar.", roles: ["anunciante"] },
 ];

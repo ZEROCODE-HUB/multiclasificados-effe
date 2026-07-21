@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Eye, MapPin, Calendar, MoreVertical, Edit, Pause, Play, Trash2, Rocket, Clock, Flame, EyeOff } from "lucide-react";
+import { Eye, MapPin, Calendar, MoreVertical, Edit, Pause, Play, Trash2, Rocket, Clock, Flame, EyeOff, Ban } from "lucide-react";
 import type { Listing } from "@/data/mockData";
 import { expiryInfo } from "@/lib/listings";
 import {
@@ -22,6 +22,8 @@ interface ListingRowProps {
   onTogglePause?: (listing: Listing) => void;
   /** Solo en borradores: cobra y activa el aviso ya guardado. */
   onPublish?: (listing: Listing) => void;
+  /** Motivo de rechazo de moderación; si viene, se muestra un aviso. */
+  rejectionReason?: string | null;
 }
 
 const statusStyles: Record<string, string> = {
@@ -39,7 +41,7 @@ const expiryStyles: Record<string, string> = {
   urgent: "text-destructive font-semibold",
 };
 
-export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEdit, onDelete, onTogglePause, onPublish }: ListingRowProps) {
+export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEdit, onDelete, onTogglePause, onPublish, rejectionReason }: ListingRowProps) {
   const hasActions = !!(onView || onEdit || onDelete || onTogglePause || onPublish);
   // El contador solo tiene sentido en un aviso activo (los vencidos ya caducaron).
   const expiry = status === "Activo" ? expiryInfo(expiresAt ?? null) : null;
@@ -122,6 +124,15 @@ export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEd
             </span>
           )}
         </div>
+
+        {/* Motivo de rechazo de moderación: antes un aviso rechazado se veía igual
+            que uno vencido o vendido. */}
+        {rejectionReason && (
+          <div className="mb-3 flex items-start gap-1.5 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
+            <Ban size={12} className="mt-0.5 shrink-0" />
+            <span><span className="font-semibold">Rechazado:</span> {rejectionReason}</span>
+          </div>
+        )}
 
         {/* Envuelve en móvil: con 3 acciones (4 en un borrador, por "Publicar") no
             caben junto al precio y el último botón se salía de la tarjeta. */}
