@@ -336,7 +336,7 @@ export async function replaceMainListingPhoto(listingId: string, file: File): Pr
 
   const { error: upErr } = await supabase.storage
     .from("listing-images")
-    .upload(path, compressed, { upsert: true, contentType: compressed.type || undefined });
+    .upload(path, compressed, { upsert: true, cacheControl: "2592000", contentType: compressed.type || undefined });
   if (upErr) throw upErr;
 
   const { data: pub } = supabase.storage.from("listing-images").getPublicUrl(path);

@@ -92,7 +92,7 @@ async function uploadListingPhotos(userId: string, listingId: string, input: Dra
     const path = `${userId}/${listingId}/${sort}-${sanitize(file.name)}`;
     const { error: upErr } = await supabase.storage
       .from("listing-images")
-      .upload(path, file, { upsert: true, contentType: file.type || undefined });
+      .upload(path, file, { upsert: true, cacheControl: "2592000", contentType: file.type || undefined });
     if (!upErr) {
       const { data: pub } = supabase.storage.from("listing-images").getPublicUrl(path);
       await supabase.from("listing_images").insert({
