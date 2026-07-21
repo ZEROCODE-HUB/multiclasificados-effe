@@ -17,7 +17,6 @@ import { useFavorites } from "@/hooks/useFavorites";
 import { createSavedSearch, DUPLICATE_SEARCH_MSG } from "@/lib/savedSearches";
 import { toast } from "@/hooks/use-toast";
 import {
-  Search,
   LayoutGrid,
   List as ListIcon,
   Map as MapIcon,
@@ -33,10 +32,10 @@ import {
 type ViewMode = "list" | "map";
 type Layout = "grid" | "list";
 
-// La lista de resultados se pagina: 20 por página en escritorio (web) y 10 en
-// móvil (pantallas < 768px, incluido el APK). Antes el APK mostraba la lista
-// continua; ahora también pagina para no volcar cientos de avisos de golpe.
-const WEB_PAGE_SIZE = 20;
+// La lista de resultados se pagina: 18 por página en escritorio (web) — 6 por
+// fila × 3 filas — y 10 en móvil (pantallas < 768px, incluido el APK). Antes el
+// APK mostraba la lista continua; ahora también pagina para no volcar cientos.
+const WEB_PAGE_SIZE = 18;
 const MOBILE_PAGE_SIZE = 10;
 
 // Números de página a mostrar, con "…" cuando hay muchas. Siempre incluye la
@@ -216,7 +215,7 @@ export default function SearchPage() {
   const FilterBar = useMemo(
     () => (
       <div className="border-b border-border bg-card">
-        <div className="container mx-auto px-4 md:px-6 py-3 space-y-2 md:space-y-0">
+        <div className="container mx-auto px-4 md:px-6 py-2 space-y-2 md:space-y-0">
           {/* Top row: filtros + toggle (siempre visibles, sin scroll) */}
           <div className="flex items-center gap-3 md:hidden">
             <Button
@@ -324,30 +323,10 @@ export default function SearchPage() {
     <div className={`${view === "map" ? "min-h-screen lg:h-screen" : "min-h-screen"} flex flex-col bg-background`}>
       <Navbar />
 
-      {/* Búsqueda en vivo (filtra mientras escribes) */}
-      <div className="border-b border-border bg-card">
-        <div className="container mx-auto px-4 md:px-6 py-3">
-          <div className="flex items-center bg-muted/50 border border-border h-11 max-w-2xl focus-within:border-secondary/40 focus-within:bg-card transition-colors">
-            <Search size={16} className="ml-3 text-muted-foreground shrink-0" />
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Busca por título, descripción o ubicación…"
-              className="flex-1 bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground"
-            />
-            {q && (
-              <button
-                onClick={() => setQ("")}
-                className="px-3 text-muted-foreground hover:text-foreground shrink-0"
-                aria-label="Limpiar búsqueda"
-              >
-                <X size={14} />
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
+      {/* El buscador de texto vive SOLO en el navbar (navega a /buscar?q=… y esta
+          página lo sincroniza desde la URL). Antes había un segundo buscador "en
+          vivo" aquí; se quitó para no duplicar. Guardar búsqueda captura el texto
+          del navbar más los filtros. */}
       {FilterBar}
 
       {owner && (
@@ -372,33 +351,43 @@ export default function SearchPage() {
       )}
 
       {view === "list" ? (
-        <div className="container mx-auto px-4 md:px-6 pt-8 pb-28 lg:pb-8 flex-1">
-          <div className="flex items-baseline justify-between mb-6">
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] font-bold text-secondary">Resultados</p>
-              <h1 className="text-2xl md:text-3xl font-extrabold text-foreground mt-1">
-                {listings.length} avisos disponibles
-              </h1>
-            </div>
-            <div className="hidden md:flex gap-1 border border-border p-0.5">
-              <Button
-                variant={layout === "grid" ? "default" : "ghost"}
-                size="icon"
-                aria-label="Ver en cuadrícula"
-                onClick={() => setLayout("grid")}
-                className="rounded-none h-8 w-8"
-              >
-                <LayoutGrid size={14} />
+        <div className="container mx-auto px-4 md:px-6 pt-4 pb-28 lg:pb-8 flex-1">
+          {/* Contador + acciones en UNA sola línea (antes eran dos: eyebrow + título). */}
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <h1 className="text-lg md:text-xl font-extrabold text-foreground truncate">
+              {listings.length} avisos disponibles
+            </h1>
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Guardar búsqueda: junto al contador para alcanzarlo tras buscar
+                  desde el navbar. En móvil, solo el icono. */}
+              <Button variant="outline" size="sm" onClick={saveCurrentSearch}
+                className="gap-1.5 rounded-none hidden sm:inline-flex">
+                <Bookmark size={14} /> Guardar búsqueda
               </Button>
-              <Button
-                variant={layout === "list" ? "default" : "ghost"}
-                size="icon"
-                aria-label="Ver en lista"
-                onClick={() => setLayout("list")}
-                className="rounded-none h-8 w-8"
-              >
-                <ListIcon size={14} />
+              <Button variant="outline" size="icon" onClick={saveCurrentSearch}
+                aria-label="Guardar búsqueda" className="sm:hidden rounded-none h-8 w-8">
+                <Bookmark size={14} />
               </Button>
+              <div className="hidden md:flex gap-1 border border-border p-0.5">
+                <Button
+                  variant={layout === "grid" ? "default" : "ghost"}
+                  size="icon"
+                  aria-label="Ver en cuadrícula"
+                  onClick={() => setLayout("grid")}
+                  className="rounded-none h-8 w-8"
+                >
+                  <LayoutGrid size={14} />
+                </Button>
+                <Button
+                  variant={layout === "list" ? "default" : "ghost"}
+                  size="icon"
+                  aria-label="Ver en lista"
+                  onClick={() => setLayout("list")}
+                  className="rounded-none h-8 w-8"
+                >
+                  <ListIcon size={14} />
+                </Button>
+              </div>
             </div>
           </div>
 
@@ -417,8 +406,8 @@ export default function SearchPage() {
                   <div
                     className={
                       layout === "grid"
-                        ? "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-5"
-                        : "space-y-4"
+                        ? "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3"
+                        : "space-y-3"
                     }
                   >
                     {pageListings.map((listing) => (

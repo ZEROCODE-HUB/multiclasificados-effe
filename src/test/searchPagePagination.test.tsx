@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
-// /buscar en ESCRITORIO (web) muestra 20 avisos por página y pagina el resto,
-// en vez de volcar todos los resultados de golpe.
+// /buscar en ESCRITORIO (web) muestra 18 avisos por página (6 por fila × 3 filas)
+// y pagina el resto, en vez de volcar todos los resultados de golpe.
 
 beforeEach(() => {
   (globalThis as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
@@ -12,7 +12,7 @@ beforeEach(() => {
   if (!window.matchMedia) (window as any).matchMedia = () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
 });
 
-// 45 avisos → 3 páginas en web (20 + 20 + 5).
+// 45 avisos → 3 páginas en web (18 + 18 + 9).
 const LISTINGS = Array.from({ length: 45 }, (_, i) => ({
   id: `l${i + 1}`, title: `Aviso ${i + 1}`, description: "d", price: 100, currency: "PEN",
   category: "inmuebles", location: "Lima", imageUrl: "x", date: "2026-07-10",
@@ -25,7 +25,7 @@ vi.mock("@/lib/listings", () => ({
   fetchListingsByOwner: vi.fn().mockResolvedValue([]),
 }));
 
-// Escritorio: 20 por página.
+// Escritorio: 18 por página.
 vi.mock("@/hooks/use-mobile", () => ({ useIsMobile: () => false }));
 
 // Children pesados fuera del alcance del test.
@@ -48,13 +48,13 @@ const renderPage = () =>
 
 const cards = () => screen.getAllByTestId("card");
 
-describe("SearchPage — paginación en web (20 por página)", () => {
-  it("muestra solo 20 avisos en la primera página", async () => {
+describe("SearchPage — paginación en web (18 por página)", () => {
+  it("muestra solo 18 avisos en la primera página", async () => {
     renderPage();
-    await waitFor(() => expect(cards().length).toBe(20));
+    await waitFor(() => expect(cards().length).toBe(18));
     expect(screen.getByText("Aviso 1")).toBeInTheDocument();
-    expect(screen.getByText("Aviso 20")).toBeInTheDocument();
-    expect(screen.queryByText("Aviso 21")).not.toBeInTheDocument();
+    expect(screen.getByText("Aviso 18")).toBeInTheDocument();
+    expect(screen.queryByText("Aviso 19")).not.toBeInTheDocument();
   });
 
   it("el total de avisos disponibles refleja TODOS, no solo la página", async () => {
@@ -62,42 +62,42 @@ describe("SearchPage — paginación en web (20 por página)", () => {
     await screen.findByText(/45 avisos disponibles/i);
   });
 
-  it("'Siguiente' pasa a la página 2 con los avisos 21–40", async () => {
+  it("'Siguiente' pasa a la página 2 con los avisos 19–36", async () => {
     renderPage();
-    await waitFor(() => expect(cards().length).toBe(20));
+    await waitFor(() => expect(cards().length).toBe(18));
 
     fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
 
-    await waitFor(() => expect(screen.getByText("Aviso 21")).toBeInTheDocument());
-    expect(screen.getByText("Aviso 40")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("Aviso 19")).toBeInTheDocument());
+    expect(screen.getByText("Aviso 36")).toBeInTheDocument();
     expect(screen.queryByText("Aviso 1")).not.toBeInTheDocument();
-    expect(cards().length).toBe(20);
+    expect(cards().length).toBe(18);
   });
 
-  it("la última página muestra el resto (avisos 41–45)", async () => {
+  it("la última página muestra el resto (avisos 37–45)", async () => {
     renderPage();
-    await waitFor(() => expect(cards().length).toBe(20));
+    await waitFor(() => expect(cards().length).toBe(18));
 
     fireEvent.click(screen.getByRole("button", { name: /página 3/i }));
 
-    await waitFor(() => expect(cards().length).toBe(5));
+    await waitFor(() => expect(cards().length).toBe(9));
     expect(screen.getByText("Aviso 45")).toBeInTheDocument();
   });
 
   it("en la primera página 'Anterior' está deshabilitado", async () => {
     renderPage();
-    await waitFor(() => expect(cards().length).toBe(20));
+    await waitFor(() => expect(cards().length).toBe(18));
     expect(screen.getByRole("button", { name: /anterior/i })).toBeDisabled();
   });
 
-  // Bug de la app: en teléfono salían 2 avisos por fila. La cuadrícula debe
-  // arrancar en UNA columna (el 2-col recién desde 'sm').
-  it("los avisos van de a uno por fila en la base (móvil)", async () => {
+  // Densidad (UI): en móvil se muestran 2 avisos por fila (antes 1) para caber
+  // más por pantalla. Desde 'sm' sube a 3, y en web (xl) son 6 por fila.
+  it("los avisos van de a dos por fila en la base (móvil)", async () => {
     renderPage();
-    await waitFor(() => expect(cards().length).toBe(20));
+    await waitFor(() => expect(cards().length).toBe(18));
     const grid = cards()[0].parentElement!;
-    expect(grid.className).toContain("grid-cols-1");
-    // Sin 2 columnas como base (eso solo aplica desde 'sm:').
-    expect(grid.className).not.toMatch(/(^|\s)grid-cols-2(\s|$)/);
+    expect(grid.className).toMatch(/(^|\s)grid-cols-2(\s|$)/);
+    expect(grid.className).toContain("sm:grid-cols-3");
+    expect(grid.className).toContain("xl:grid-cols-6");
   });
 });

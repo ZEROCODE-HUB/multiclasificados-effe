@@ -7,7 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Wallet, User, Building2, Check, CheckCircle2, AlertCircle, Loader2, Minus, Plus, CreditCard, ArrowLeft } from "lucide-react";
+import { Wallet, User, Building2, Check, CheckCircle2, AlertCircle, Loader2, Minus, Plus, CreditCard, ArrowLeft, Receipt, FlaskConical } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
   loadSettings, priceForDuration, extrasTotal, formatSoles, formatCredits, solesToCredits,
@@ -17,13 +17,19 @@ import { fetchPricingSettings } from "@/lib/pricingRemote";
 import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 import { verifyDocument, normalizeDocNumber } from "@/lib/verifyDoc";
 import {
-  createPayment, pollOrderStatus, getPurchaseResult, hostedPaymentUrl,
-  type PurchaseConfig, type CreatePaymentResult, type OrderOutcome,
+  createPayment, pollOrderStatus, getPurchaseResult, hostedPaymentUrl, simulatePayment,
+  type PurchaseConfig, type CreatePaymentResult, type OrderOutcome, type SimulateResult,
 } from "@/lib/payments";
 import { PaymentForm } from "@/components/PaymentForm";
 
 // Correo válido para el comprobante.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// ⚠️ El botón "Simular pago" solo aparece en desarrollo, o si se habilita
+// explícitamente con VITE_ALLOW_FAKE_PAYMENT=true (staging). En producción no se
+// renderiza. La Edge Function además exige su propio flag de servidor.
+const ALLOW_SIMULATE =
+  import.meta.env.DEV || import.meta.env.VITE_ALLOW_FAKE_PAYMENT === "true";
 
 interface Props {
   open: boolean;
@@ -47,10 +53,13 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
   const [settings, setSettings] = useState<PricingSettings>(() => loadSettings());
   const [buying, setBuying] = useState(false);
 
-  // Paso del flujo: "config" (arma la compra) → "paying" (formulario Izipay web).
-  const [step, setStep] = useState<"config" | "paying">("config");
+  // Paso del flujo: "config" (arma la compra) → "paying" (Izipay web) → "receipt"
+  // (recibo del pago simulado).
+  const [step, setStep] = useState<"config" | "paying" | "receipt">("config");
   const [payment, setPayment] = useState<CreatePaymentResult | null>(null);
   const [confirming, setConfirming] = useState(false); // polling del estado de la orden
+  const [simulating, setSimulating] = useState(false);         // solo pruebas
+  const [simReceipt, setSimReceipt] = useState<SimulateResult | null>(null);
 
   // Configurador de la compra
   const [quantity, setQuantity] = useState(1);
@@ -139,6 +148,7 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
       setStep("config");
       setPayment(null);
       setConfirming(false);
+      setSimReceipt(null);
     }
   }, [open]);
 
@@ -225,6 +235,38 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
     }
   };
 
+  // ⚠️ SOLO PRUEBAS: simula el pago sin cobrar. Genera la boleta real (vía la
+  // Edge Function simulate-payment) y muestra el recibo con el saldo comprado.
+  // No exige verificar DNI: usa lo que haya en el formulario y rellena el resto.
+  const handleSimulate = async () => {
+    if (creditsToBuy <= 0) { toast({ title: "Selecciona qué comprar", variant: "destructive" }); return; }
+    setSimulating(true);
+    try {
+      const config: PurchaseConfig = {
+        quantity,
+        duration,
+        extras: extras as Record<string, boolean | number>,
+        receipt: {
+          receiptType,
+          email: email.trim(),
+          advertiserName: verifiedName,
+          docType: personType === "natural" ? "dni" : "ruc",
+          docNumber: docNumber.trim(),
+          factilizaData: docData,
+        },
+      };
+      const result = await simulatePayment(config);
+      setSimReceipt(result);
+      setStep("receipt");
+      onPurchaseComplete(result.balance);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "No se pudo simular el pago.";
+      toast({ title: "Simulación", description: msg, variant: "destructive" });
+    } finally {
+      setSimulating(false);
+    }
+  };
+
   // El formulario embebido (web) avisó que la transacción quedó PAGADA.
   const handlePaid = async () => {
     if (!payment) return;
@@ -248,13 +290,58 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
             <Wallet size={18} className="text-secondary" /> Comprar saldo
           </DialogTitle>
           <DialogDescription>
-            {step === "config"
-              ? "Arma tu compra: elige cantidad de avisos, duración y adicionales. Pagas justo lo que ves, en soles."
-              : "Ingresa los datos de tu tarjeta en el formulario seguro de Izipay."}
+            {step === "receipt"
+              ? "Pago simulado — no se realizó ningún cobro. Este es tu recibo dentro de la plataforma."
+              : step === "config"
+                ? "Arma tu compra: elige cantidad de avisos, duración y adicionales. Pagas justo lo que ves, en soles."
+                : "Ingresa los datos de tu tarjeta en el formulario seguro de Izipay."}
           </DialogDescription>
         </DialogHeader>
 
-        {step === "paying" && payment ? (
+        {step === "receipt" && simReceipt ? (
+          /* ── Recibo del pago simulado ── */
+          <div className="space-y-4">
+            <div className="flex flex-col items-center text-center gap-2 py-2">
+              <div className="w-12 h-12 rounded-full bg-success/10 flex items-center justify-center">
+                <CheckCircle2 size={26} className="text-success" />
+              </div>
+              <p className="font-bold text-lg">Pago simulado con éxito</p>
+              <span className="text-[10px] uppercase tracking-wider font-bold text-amber-600 border border-amber-500/50 bg-amber-500/5 px-2 py-0.5">
+                Sin cobro real · solo pruebas
+              </span>
+            </div>
+
+            {/* Saldo comprado y saldo nuevo */}
+            <div className="border p-3 bg-secondary/5 space-y-2">
+              <div className="flex justify-between items-baseline">
+                <span className="text-xs text-muted-foreground">Saldo comprado</span>
+                <span className="text-2xl font-extrabold text-secondary">{formatCredits(simReceipt.credits)}</span>
+              </div>
+              <div className="border-t pt-2 flex justify-between items-baseline">
+                <span className="text-xs text-muted-foreground">Tu nuevo saldo</span>
+                <span className="text-lg font-bold text-success">{formatSoles(simReceipt.balance)}</span>
+              </div>
+            </div>
+
+            {/* Recibo emitido en la plataforma */}
+            <div className="border p-3 space-y-1.5">
+              <p className="flex items-center gap-1.5 text-xs uppercase tracking-wider font-bold text-muted-foreground">
+                <Receipt size={13} className="text-secondary" /> Comprobante emitido
+              </p>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">N° {receiptType === "factura" ? "de factura" : "de boleta"}</span>
+                <span className="font-bold tabular-nums">{simReceipt.invoiceNumber || "—"}</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground pt-1">
+                Lo encontrarás en <b className="text-foreground">Mis boletas</b> (marcado como <b>[SIMULADO]</b>).
+              </p>
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button onClick={onClose} className="w-full">Listo</Button>
+            </DialogFooter>
+          </div>
+        ) : step === "paying" && payment ? (
           /* ── Paso 2 (web): formulario embebido de Izipay ── */
           <div className="space-y-4">
             <div className="border p-3 bg-secondary/5 flex justify-between items-baseline">
@@ -452,13 +539,33 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
             </div>
 
             <DialogFooter className="gap-2 pt-2">
-              <Button variant="ghost" onClick={onClose} disabled={buying}>Cancelar</Button>
-              <Button onClick={handleContinue} disabled={buying || creditsToBuy <= 0 || verifyingDoc || !verifiedName || !emailValid} className="gap-2">
+              <Button variant="ghost" onClick={onClose} disabled={buying || simulating}>Cancelar</Button>
+              <Button onClick={handleContinue} disabled={buying || simulating || creditsToBuy <= 0 || verifyingDoc || !verifiedName || !emailValid} className="gap-2">
                 {buying
                   ? <><Loader2 size={14} className="animate-spin" /> {confirming ? "Confirmando…" : "Procesando…"}</>
                   : <><CreditCard size={14} /> Continuar al pago · {formatSoles(solesTotal)}</>}
               </Button>
             </DialogFooter>
+
+            {/* ⚠️ SOLO PRUEBAS — no se renderiza en producción (ALLOW_SIMULATE).
+                Va debajo del botón de confirmar. Acredita el saldo y emite la
+                boleta SIN cobrar. No exige verificar DNI. */}
+            {ALLOW_SIMULATE && (
+              <div className="mt-2 border border-dashed border-amber-500/60 bg-amber-500/5 p-3 space-y-2">
+                <p className="text-[11px] text-amber-700 dark:text-amber-500 leading-snug">
+                  <b>Modo pruebas.</b> Simula el pago sin cobrar: acredita el saldo y
+                  emite la boleta en la plataforma. No existe en producción.
+                </p>
+                <Button type="button" variant="outline" size="sm"
+                  onClick={handleSimulate}
+                  disabled={simulating || buying || creditsToBuy <= 0}
+                  className="w-full gap-2 border-amber-500/60">
+                  {simulating
+                    ? <><Loader2 size={14} className="animate-spin" /> Simulando…</>
+                    : <><FlaskConical size={14} /> Simular pago · {formatSoles(solesTotal)}</>}
+                </Button>
+              </div>
+            )}
           </>
         )}
       </DialogContent>

@@ -7,6 +7,7 @@
 import {
   Home, Car, Briefcase, Smartphone, Package, Wrench, GraduationCap, Sparkles, Tag,
   ShoppingBag, Heart, Building2, Plane, PawPrint, Dumbbell, Music, Camera, Utensils,
+  Tractor, Bike,
   type LucideIcon,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -23,21 +24,27 @@ export interface PlatformCategory {
 export const CATEGORY_ICONS: Record<string, LucideIcon> = {
   Home, Car, Briefcase, Smartphone, Package, Wrench, GraduationCap, Sparkles, Tag,
   ShoppingBag, Heart, Building2, Plane, PawPrint, Dumbbell, Music, Camera, Utensils,
+  Tractor, Bike,
 };
 export const CATEGORY_ICON_NAMES = Object.keys(CATEGORY_ICONS);
 export const iconFor = (name: string): LucideIcon => CATEGORY_ICONS[name] ?? Tag;
 
 // Se usa mientras llega la respuesta de la BD, y como red de seguridad si la
 // consulta falla (APK sin conexión, modo demo sin sesión…).
+// Espeja el orden y los nombres reales de la BD (12 categorías).
 export const FALLBACK_CATEGORIES: PlatformCategory[] = [
-  { id: "inmuebles", name: "Inmuebles", icon: Home, conditionEnabled: true },
-  { id: "vehiculos", name: "Vehículos", icon: Car, conditionEnabled: true },
   { id: "empleos", name: "Empleos", icon: Briefcase, conditionEnabled: false },
+  { id: "inmuebles", name: "Inmuebles", icon: Home, conditionEnabled: true },
+  { id: "vehiculos", name: "Vehículos y Repuestos", icon: Car, conditionEnabled: true },
+  { id: "maquinaria", name: "Equipos y Maquinaria Pesada, Industrial y Herramientas", icon: Tractor, conditionEnabled: true },
+  { id: "motos", name: "Motos, bicicletas y Repuestos", icon: Bike, conditionEnabled: true },
   { id: "tecnologia", name: "Tecnología", icon: Smartphone, conditionEnabled: true },
-  { id: "productos", name: "Productos", icon: Package, conditionEnabled: true },
   { id: "servicios", name: "Servicios", icon: Wrench, conditionEnabled: false },
-  { id: "educacion-finanzas", name: "Educación y Finanzas", icon: GraduationCap, conditionEnabled: true },
+  { id: "educacion-finanzas", name: "Insumos y Materias Primas", icon: Building2, conditionEnabled: true },
+  { id: "productos", name: "Alimentos y Productos Terminados", icon: Package, conditionEnabled: true },
   { id: "salud-belleza-moda", name: "Salud, Belleza y Moda", icon: Sparkles, conditionEnabled: true },
+  { id: "eventos", name: "Eventos, Entretenimiento y Equipos Deportivos", icon: Music, conditionEnabled: true },
+  { id: "mascotas", name: "Mascotas", icon: PawPrint, conditionEnabled: true },
 ];
 
 interface StoredCategory { id: string; name: string; icon: string; condition_enabled?: boolean }

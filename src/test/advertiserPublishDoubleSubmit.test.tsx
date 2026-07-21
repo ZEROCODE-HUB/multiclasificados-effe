@@ -133,7 +133,7 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("S/ 1000");
+    await screen.findByText("S/ 1000.00");
 
     uploadMainPhoto();
     await publishConfirmed();
@@ -166,7 +166,7 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("S/ 1000");
+    await screen.findByText("S/ 1000.00");
     uploadMainPhoto();
     await openConfirm();
 
@@ -188,7 +188,7 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("S/ 1000");
+    await screen.findByText("S/ 1000.00");
     uploadMainPhoto();
 
     const btn = publishButton();
@@ -207,7 +207,7 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("S/ 1000");
+    await screen.findByText("S/ 1000.00");
     uploadMainPhoto();
 
     // Se captura el nodo antes: al publicar, el botón pasa a decir "Publicando…"
@@ -229,7 +229,7 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("S/ 1000");
+    await screen.findByText("S/ 1000.00");
     uploadMainPhoto();
 
     await publishConfirmed();

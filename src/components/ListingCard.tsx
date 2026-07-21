@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MapPin, Heart, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -71,6 +70,18 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
   }, [listing.urgent, listing.expiresAt]);
   const urgent = listing.urgent ? urgentTimeLeft(listing.expiresAt ?? null, now) : null;
 
+  // "Verificado": en móvil no hay hover y Radix no abre el tooltip al tocar, así
+  // que controlamos la apertura — al tocarlo lo mostramos ~2 s. En escritorio el
+  // hover sigue funcionando vía onOpenChange.
+  const [verifiedOpen, setVerifiedOpen] = useState(false);
+  const verifiedTimer = useRef<ReturnType<typeof setTimeout>>();
+  const revealVerified = () => {
+    setVerifiedOpen(true);
+    clearTimeout(verifiedTimer.current);
+    verifiedTimer.current = setTimeout(() => setVerifiedOpen(false), 2000);
+  };
+  useEffect(() => () => clearTimeout(verifiedTimer.current), []);
+
   // Los chips (icono + tooltip). El contenedor decide la dirección: en el grid
   // van en columna por la izquierda (no crecen hacia "Verificado"); en la lista,
   // en fila junto al título. En "Urgente" el chip crece para mostrar el contador.
@@ -134,8 +145,8 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
   return (
     <div role="link" tabIndex={0} onClick={goToDetail} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && goToDetail()} className={`group cursor-pointer flex flex-col overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5 ${featured ? "bg-amber-50/50 border-2 border-amber-400 ring-1 ring-amber-300/60 hover:border-amber-500" : "bg-card border border-border/70 hover:border-secondary/40"}`}>
 
-      {/* Image — taller, near-square for a premium presence */}
-      <div className="relative overflow-hidden bg-muted" style={{ aspectRatio: "1 / 1" }}>
+      {/* Image — 4/3 (más baja que 1/1) para caber más tarjetas por pantalla. */}
+      <div className="relative overflow-hidden bg-muted" style={{ aspectRatio: "4 / 3" }}>
         <img
           src={imgUrl(listing.imageUrl, 400)}
           srcSet={imgSrcSet(listing.imageUrl, 400)}
@@ -150,9 +161,32 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
         <div className="absolute top-3 left-3 flex flex-col gap-1.5">
           {badgeChips}
         </div>
-        <span className="absolute top-3 right-12 inline-flex items-center gap-1 px-2.5 py-1 bg-white/95 backdrop-blur-sm text-primary text-[10px] font-bold uppercase tracking-wider shadow-sm">
-          <ShieldCheck size={10} /> Verificado
-        </span>
+        {/* "Verificado" como icono (antes era una píldora con texto que apretaba
+            las tarjetas compactas de móvil). El nombre sale en el tooltip: al pasar
+            el mouse en escritorio, y al tocarlo en móvil (es un <button>, recibe
+            foco → Radix abre el tooltip). stopPropagation: no navega la tarjeta. */}
+        {/* `open` totalmente controlado por nosotros: si dejamos que Radix lo
+            maneje, cierra el tooltip al hacer click en el trigger y el tap de
+            móvil no funciona. Hover/foco (escritorio) y tap (móvil) lo abren. */}
+        <TooltipProvider delayDuration={100}>
+          <Tooltip open={verifiedOpen}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label="Anunciante verificado por eFFe"
+                onClick={(e) => { e.stopPropagation(); revealVerified(); }}
+                onMouseEnter={() => setVerifiedOpen(true)}
+                onMouseLeave={() => setVerifiedOpen(false)}
+                onFocus={() => setVerifiedOpen(true)}
+                onBlur={() => setVerifiedOpen(false)}
+                className="absolute top-3 right-12 w-8 h-8 bg-white/95 backdrop-blur-sm flex items-center justify-center hover:bg-white transition-all shadow-sm text-primary"
+              >
+                <ShieldCheck size={15} />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Verificado por eFFe</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         {/* Favorite */}
         <button
           onClick={handleFav}
@@ -164,41 +198,23 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
 
       </div>
 
-      {/* Content — generous spacing */}
-      <div className="flex flex-col gap-3 p-5">
-        <span className="text-[10px] uppercase tracking-[0.18em] font-bold text-secondary">{listing.category}</span>
-        <h3 className="font-semibold text-foreground text-[15px] leading-snug line-clamp-2 group-hover:text-primary transition-colors min-h-[2.5rem]">
+      {/* Content — compacto. Sin botón "Ver detalle": la tarjeta entera ya es
+          clicable (role="link" / onClick), y el botón solo añadía alto. */}
+      <div className="flex flex-col gap-1 p-3">
+        <span className="text-[10px] uppercase tracking-[0.15em] font-bold text-secondary truncate">{listing.category}</span>
+        <h3 className="font-semibold text-foreground text-sm leading-snug line-clamp-2 group-hover:text-primary transition-colors">
           {listing.title}
         </h3>
 
+        <div className="flex items-center gap-1 text-[11px] text-muted-foreground truncate">
+          <MapPin size={11} className="shrink-0" /> <span className="truncate">{listing.location}</span>
+        </div>
+
         {isAuthed ? (
-          <>
-            {/* Ubicación */}
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1 truncate"><MapPin size={11} />{listing.location}</span>
-            </div>
-
-            {/* Price */}
-            <div className="flex items-baseline gap-2">
-              <p className="text-xl font-extrabold text-primary tracking-tight">{formatPrice(listing.price, listing.currency)}</p>
-            </div>
-          </>
+          <p className="text-base font-extrabold text-primary tracking-tight mt-0.5">{formatPrice(listing.price, listing.currency)}</p>
         ) : (
-          /* Visibilidad restringida para no logueados: solo ciudad */
-          <div className="flex items-center gap-1 text-xs text-muted-foreground truncate">
-            <MapPin size={11} />{listing.location}
-          </div>
+          <p className="text-xs text-secondary font-semibold mt-0.5 group-hover:underline">Ver detalle</p>
         )}
-
-        {/* CTA — mismo botón para todos; si no hay sesión, lleva al login */}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={(e) => { e.stopPropagation(); goToDetail(); }}
-          className="w-full mt-1 font-semibold border-border hover:border-primary hover:bg-primary hover:text-primary-foreground transition-all rounded-none"
-        >
-          Ver detalle
-        </Button>
       </div>
     </div>
   );
