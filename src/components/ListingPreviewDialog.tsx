@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { imgUrl } from "@/lib/imageUrl";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { fetchAdminListing, type AdminListingDetail } from "@/lib/admin";
@@ -81,7 +82,7 @@ export function ListingPreviewDialog({ listingId, reason, fallbackTitle, onClose
             {aviso.images.length > 0 && (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {aviso.images.map((url) => (
-                  <img key={url} src={url} alt="" loading="lazy" className="w-full h-28 object-cover rounded-lg border" />
+                  <img key={url} src={imgUrl(url, 300)} alt="" loading="lazy" decoding="async" className="w-full h-28 object-cover rounded-lg border" />
                 ))}
               </div>
             )}

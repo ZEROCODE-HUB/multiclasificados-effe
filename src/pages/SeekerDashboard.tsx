@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { imgUrl } from "@/lib/imageUrl";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -137,7 +138,7 @@ const SeekerDashboard = () => {
                     to={`/aviso/${listing.id}`}
                     className="flex gap-3 p-3 rounded-lg border hover:shadow-md transition-shadow"
                   >
-                    <img src={listing.imageUrl} alt={listing.title} className="w-20 h-16 object-cover rounded" />
+                    <img src={imgUrl(listing.imageUrl, 160)} alt={listing.title} loading="lazy" decoding="async" className="w-20 h-16 object-cover rounded" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-foreground truncate">{listing.title}</p>
                       <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">

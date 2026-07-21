@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { imgUrl } from "@/lib/imageUrl";
 import { Button } from "@/components/ui/button";
 import { Eye, MapPin, Calendar, MoreVertical, Edit, Pause, Play, Trash2, Rocket, Clock, Flame, EyeOff } from "lucide-react";
 import type { Listing } from "@/data/mockData";
@@ -48,7 +49,9 @@ export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEd
       {/* Image - prominent on mobile (full width), compact on desktop */}
       <div className="relative w-full sm:w-44 md:w-48 h-44 sm:h-32 flex-shrink-0 overflow-hidden bg-muted">
         <img
-          src={listing.imageUrl}
+          src={imgUrl(listing.imageUrl, 200)}
+          loading="lazy"
+          decoding="async"
           alt={listing.title}
           loading="lazy"
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
