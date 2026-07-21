@@ -97,6 +97,10 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
   const [disableTarget, setDisableTarget] = useState<{ id: string; title: string; advertiser: string } | null>(null);
   const [disableReason, setDisableReason] = useState("");
   const [reports, setReports] = useState<AdminReport[]>([]);
+  // Filtro por estado de la pestaña "Reportados". Los resueltos NO se ocultan
+  // (el admin decide qué ver); por defecto se muestran todos.
+  const [reportStatus, setReportStatus] = useState<string>("all");
+  const visibleReports = reportStatus === "all" ? reports : reports.filter((r) => r.status === reportStatus);
   // Aviso denunciado que se está inspeccionando desde la pestaña "Reportados".
   const [reportado, setReportado] = useState<AdminReport | null>(null);
   const [disabled, setDisabled] = useState<Record<string, string>>(() => loadDisabled());
@@ -411,16 +415,31 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
         <TabsContent value="reportados" className="pt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base md:text-lg flex items-center gap-2">
-                <Flag size={16} className="text-destructive" /> Avisos reportados
-              </CardTitle>
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <CardTitle className="text-base md:text-lg flex items-center gap-2">
+                  <Flag size={16} className="text-destructive" /> Avisos reportados
+                </CardTitle>
+                {reports.length > 0 && (
+                  <Select value={reportStatus} onValueChange={setReportStatus}>
+                    <SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos los estados</SelectItem>
+                      {Object.entries(REPORT_STATUS).map(([k, v]) => (
+                        <SelectItem key={k} value={k}>{v.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               {reports.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-8">No hay avisos reportados.</p>
+              ) : visibleReports.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">No hay reportes con ese estado.</p>
               ) : (
                 <div className="space-y-3">
-                  {reports.map((r) => {
+                  {visibleReports.map((r) => {
                     const rowMatch = rows.find((x) => x.id === r.listing_id);
                     const isDisabled = rowMatch?.status === "Rechazado" || !!disabled[r.listing_id ?? ""];
                     const st = REPORT_STATUS[r.status] ?? { label: r.status, cls: "" };
