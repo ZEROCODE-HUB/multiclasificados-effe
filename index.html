@@ -2,7 +2,10 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <!-- Sin `maximum-scale`/`user-scalable=no`: bloquear el zoom impide ampliar a
+         quien lo necesita para leer (WCAG 1.4.4). El `viewport-fit=cover` sí se
+         mantiene: es lo que respeta el notch/barra de gestos en el APK. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <!-- Favicon (icono de la pestaña del navegador) e iconos PWA -->
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />

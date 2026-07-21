@@ -2,6 +2,7 @@
 // vigencia. NO emite comprobante: la boleta se emite SOLO al COMPRAR créditos
 // (flujo Izipay). Publicar únicamente descuenta saldo, lo hace el llamador.
 import { supabase } from "@/lib/supabase";
+import { compressImage } from "@/lib/compressImage";
 
 export interface PublishPhoto {
   file: File;
@@ -85,10 +86,13 @@ async function uploadListingPhotos(userId: string, listingId: string, input: Dra
 
   let sort = 0;
   for (const p of photos) {
-    const path = `${userId}/${listingId}/${sort}-${sanitize(p.name)}`;
+    // Comprime a WebP ~1600px antes de subir: el bucket guarda ya la versión
+    // liviana, no el original de varios MB.
+    const file = await compressImage(p.file);
+    const path = `${userId}/${listingId}/${sort}-${sanitize(file.name)}`;
     const { error: upErr } = await supabase.storage
       .from("listing-images")
-      .upload(path, p.file, { upsert: true });
+      .upload(path, file, { upsert: true, contentType: file.type || undefined });
     if (!upErr) {
       const { data: pub } = supabase.storage.from("listing-images").getPublicUrl(path);
       await supabase.from("listing_images").insert({

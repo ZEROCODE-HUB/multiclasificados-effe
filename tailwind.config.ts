@@ -38,6 +38,9 @@ export default {
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
           foreground: "hsl(var(--secondary-foreground))",
+          // Naranja vivo, SOLO para usar sobre fondos oscuros (hero, sidebar del
+          // admin). Sobre fondo claro no cumple contraste: usa `secondary`.
+          bright: "hsl(var(--secondary-bright))",
         },
         destructive: {
           DEFAULT: "hsl(var(--destructive))",

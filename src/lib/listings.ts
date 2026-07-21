@@ -3,6 +3,7 @@
 // componentes, para NO cambiar el diseño. Si la BD aún no tiene avisos,
 // cae a los datos mock para que la UI nunca se vea vacía.
 import { supabase } from "@/lib/supabase";
+import { compressImage } from "@/lib/compressImage";
 import type { Listing } from "@/data/mockData";
 
 export const FALLBACK_IMG =
@@ -330,11 +331,12 @@ export async function replaceMainListingPhoto(listingId: string, file: File): Pr
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("No hay sesión activa.");
   const sanitize = (n: string) => n.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-40);
-  const path = `${user.id}/${listingId}/0-${Date.now()}-${sanitize(file.name)}`;
+  const compressed = await compressImage(file); // WebP ~1600px antes de subir
+  const path = `${user.id}/${listingId}/0-${Date.now()}-${sanitize(compressed.name)}`;
 
   const { error: upErr } = await supabase.storage
     .from("listing-images")
-    .upload(path, file, { upsert: true, contentType: file.type || undefined });
+    .upload(path, compressed, { upsert: true, contentType: compressed.type || undefined });
   if (upErr) throw upErr;
 
   const { data: pub } = supabase.storage.from("listing-images").getPublicUrl(path);

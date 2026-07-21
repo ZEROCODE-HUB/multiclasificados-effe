@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { imgUrl } from "@/lib/imageUrl";
 import { AdminRole } from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -510,7 +511,7 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
                 {imgLoading ? (
                   "Cargando imagen…"
                 ) : detailImg ? (
-                  <img src={detailImg} alt={detail.title} className="w-full h-full object-cover" loading="lazy" />
+                  <img src={imgUrl(detailImg, 600)} alt={detail.title} className="w-full h-full object-cover" loading="lazy" decoding="async" />
                 ) : (
                   "Este aviso no tiene imagen"
                 )}

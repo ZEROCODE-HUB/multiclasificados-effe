@@ -1,4 +1,5 @@
 import { Navbar } from "@/components/Navbar";
+import { imgUrl } from "@/lib/imageUrl";
 import { BrandMark } from "@/components/BrandMark";
 import { HeroSearch } from "@/components/HeroSearch";
 import { CategoryGrid } from "@/components/CategoryGrid";
@@ -10,7 +11,9 @@ import { fetchListings } from "@/lib/listings";
 import { fetchPlatformStats, type PlatformStats } from "@/lib/stats";
 import { useSession } from "@/hooks/useSession";
 import { useEffect, useMemo, useState } from "react";
-import heroBg from "@/assets/hero-bg.jpg";
+// WebP 1600×900 (191 KiB) en vez del JPG 1920×1080 (378 KiB). El .jpg original
+// se conserva en el repo como fuente para reconvertir, pero ya no se empaqueta.
+import heroBg from "@/assets/hero-bg.webp";
 import { ArrowRight, BadgeCheck, Gem, Headset, Star, TrendingUp, CheckCircle2, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -169,7 +172,7 @@ const Index = () => {
               {/* Columna derecha: una sola tarjeta visual con "avisos activos" (solo desktop) */}
               <div className="hidden lg:flex lg:col-span-5 xl:col-span-5 relative h-[560px]">
                 <div className="absolute inset-0 border border-white/20 shadow-2xl overflow-hidden">
-                  <img src={listings[0]?.imageUrl ?? heroBg} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                  <img src={listings[0]?.imageUrl ? imgUrl(listings[0].imageUrl, 800) : heroBg} alt="" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-gradient-to-b from-primary/20 via-primary/40 to-primary/90" />
                   <div className="absolute inset-x-0 bottom-0 p-8 text-primary-foreground">
                     <div className="flex items-center gap-2 mb-3">
@@ -286,8 +289,10 @@ const Index = () => {
       {/* Map teaser (oculto en móvil para un look más app) */}
       <section className="hidden md:block bg-primary text-primary-foreground relative overflow-hidden">
         <div className="absolute inset-0 opacity-20">
+          {/* Fondo decorativo al 20% de opacidad: no necesita calidad alta.
+              `auto=format` hace que Unsplash sirva AVIF/WebP (291 KiB -> ~40). */}
           <img
-            src="https://images.unsplash.com/photo-1524661135-423995f22d0b?w=1600&h=600&fit=crop"
+            src="https://images.unsplash.com/photo-1524661135-423995f22d0b?w=1200&h=450&fit=crop&auto=format&q=55"
             alt="Mapa de Perú"
             className="w-full h-full object-cover"
             loading="lazy"
@@ -314,7 +319,7 @@ const Index = () => {
           </div>
           <div className="relative aspect-[4/3] rounded-2xl overflow-hidden border border-primary-foreground/15 shadow-2xl">
             <img
-              src="https://images.unsplash.com/photo-1569336415962-a4bd9f69cd83?w=900&h=700&fit=crop"
+              src="https://images.unsplash.com/photo-1569336415962-a4bd9f69cd83?w=700&h=525&fit=crop&auto=format&q=65"
               alt="Vista de mapa con pines de avisos"
               className="w-full h-full object-cover"
               loading="lazy"

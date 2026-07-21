@@ -27,7 +27,7 @@ const COUNTRY_CODES = [
 ];
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-import authBg from "@/assets/auth-bg.jpg";
+import authBg from "@/assets/auth-bg.webp";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Eye, EyeOff, Search, ShieldCheck, Sparkles, Loader2 } from "lucide-react";
 import { toast } from "sonner";

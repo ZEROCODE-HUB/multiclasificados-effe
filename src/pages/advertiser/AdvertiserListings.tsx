@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { imgUrl } from "@/lib/imageUrl";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -349,7 +350,7 @@ const AdvertiserListings = () => {
                 <div className="mt-1 flex items-center gap-4">
                   <div className="w-24 h-20 rounded-lg overflow-hidden bg-muted shrink-0 border">
                     {edit.imageUrl ? (
-                      <img src={edit.imageUrl} alt="Portada" className="w-full h-full object-cover" />
+                      <img src={imgUrl(edit.imageUrl, 400)} alt="Portada" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-muted-foreground">
                         <ImagePlus size={20} />
