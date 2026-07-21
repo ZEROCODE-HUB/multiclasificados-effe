@@ -283,7 +283,7 @@ const Index = () => {
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 3xl:grid-cols-5 4xl:grid-cols-6 5xl:grid-cols-8 gap-x-6 gap-y-10">
+          <div className="grid grid-cols-2 lg:grid-cols-4 3xl:grid-cols-5 4xl:grid-cols-6 5xl:grid-cols-8 gap-3 md:gap-x-6 md:gap-y-8">
             {listings.slice(0, 8).map((listing) => (
               <ListingCard key={listing.id} listing={listing} />
             ))}
@@ -364,7 +364,7 @@ const Index = () => {
             <p className="text-muted-foreground">Aún no hay avisos recientes.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 3xl:grid-cols-5 4xl:grid-cols-6 5xl:grid-cols-8 gap-x-6 gap-y-10">
+          <div className="grid grid-cols-2 lg:grid-cols-4 3xl:grid-cols-5 4xl:grid-cols-6 5xl:grid-cols-8 gap-3 md:gap-x-6 md:gap-y-8">
             {[...listings].slice(0, 4).reverse().map((listing) => (
               <ListingCard key={`new-${listing.id}`} listing={listing} />
             ))}

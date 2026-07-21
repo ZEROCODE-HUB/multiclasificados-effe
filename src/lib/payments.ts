@@ -57,6 +57,39 @@ export async function createPayment(config: PurchaseConfig): Promise<CreatePayme
   };
 }
 
+// ⚠️ SOLO PRUEBAS. Simula la compra vía la Edge Function simulate-payment: crea
+// la orden y la liquida al instante (acredita el saldo y emite la boleta) sin
+// cobrar. La función server-side se niega a correr salvo que el entorno tenga
+// ALLOW_FAKE_PAYMENT=true. Devuelve el saldo nuevo y el número de la boleta.
+export interface SimulateResult {
+  orderId: string;
+  invoiceNumber: string;
+  credits: number;
+  balance: number;
+}
+
+export async function simulatePayment(config: PurchaseConfig): Promise<SimulateResult> {
+  const { data, error } = await supabase.functions.invoke("simulate-payment", { body: config });
+  if (error) {
+    let message = error.message;
+    try {
+      const ctx = (error as { context?: Response }).context;
+      if (ctx && typeof ctx.json === "function") {
+        const body = await ctx.json();
+        if (body?.error) message = body.error;
+      }
+    } catch { /* se mantiene el mensaje original */ }
+    throw new Error(message);
+  }
+  if (!data?.success) throw new Error(data?.error ?? "No se pudo simular el pago.");
+  return {
+    orderId: data.orderId as string,
+    invoiceNumber: (data.invoiceNumber as string) ?? "",
+    credits: Number(data.credits ?? 0),
+    balance: Number(data.balance ?? 0),
+  };
+}
+
 export type OrderOutcome = "paid" | "failed" | "timeout";
 
 interface PollOptions {

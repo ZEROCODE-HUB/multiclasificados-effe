@@ -136,7 +136,7 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
 
     // El formulario se cargó (borrador restaurado) y el saldo se leyó (1000 créditos).
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("S/ 1000");
+    await screen.findByText("S/ 1000.00");
 
     uploadMainPhoto();
     await clickPublish();

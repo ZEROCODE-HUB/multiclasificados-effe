@@ -222,7 +222,9 @@ const AdvertiserPublish = () => {
   // Costo EN CRÉDITOS (enteros). El dinero (soles) va en `total`/`baseTotal`.
   const baseCredits = solesToCredits(baseTotal);
   const totalCredits = solesToCredits(total);
-  const balanceCredits = Math.round(creditBalance);
+  // El saldo es dinero (numeric 12,2): se conserva a 2 decimales, no se redondea
+  // a entero. Con `Math.round` un saldo de 7178.14 se mostraba como "S/ 7178".
+  const balanceCredits = Math.round(creditBalance * 100) / 100;
   // Para la vista previa del aviso individual
   const basePrice = priceForDuration(1, duration, settings);
 
@@ -844,7 +846,13 @@ const AdvertiserPublish = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="sm:col-span-2">
                     <Label>Precio del producto *</Label>
-                    <Input type="number" value={form.price} onChange={(e) => updateForm("price", e.target.value)} placeholder="0.00" className="mt-1" />
+                    {/* Precio: no acepta negativos. Se bloquea la tecla "-"/"e",
+                        se limpia cualquier "-" pegado y `min={0}` cubre el stepper. */}
+                    <Input type="number" inputMode="decimal" min={0} step="0.01"
+                      value={form.price}
+                      onChange={(e) => updateForm("price", e.target.value.replace(/-/g, ""))}
+                      onKeyDown={(e) => { if (e.key === "-" || e.key === "e" || e.key === "E") e.preventDefault(); }}
+                      placeholder="0.00" className="mt-1" />
                   </div>
                   <div>
                     <Label>Moneda</Label>
@@ -1025,7 +1033,10 @@ const AdvertiserPublish = () => {
                     <Loader2 size={14} className="animate-spin text-muted-foreground" />
                   ) : (
                     <span className={`text-sm font-bold ${balanceCredits >= totalCredits ? "text-success" : "text-destructive"}`}>
-                      {formatCredits(balanceCredits)}
+                      {/* `formatSoles` (2 decimales fijos): el saldo es dinero y se
+                          muestra como el TOTAL. `formatCredits` ocultaba los céntimos
+                          de los saldos redondos ("S/ 7178" en vez de "S/ 7178.00"). */}
+                      {formatSoles(balanceCredits)}
                     </span>
                   )}
                 </div>
