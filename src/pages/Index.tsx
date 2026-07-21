@@ -104,6 +104,8 @@ const Index = () => {
       {/* Header — distinct white bar above hero */}
       <Navbar />
 
+      {/* Landmark principal para lectores de pantalla (WCAG / "main landmark"). */}
+      <main>
       {/* Móvil: buscador con título en la parte superior (look app) */}
       <section className="md:hidden gradient-hero px-4 pt-7 pb-6">
         <h1 className="text-primary-foreground font-extrabold tracking-tight text-2xl leading-snug mb-1.5">
@@ -494,6 +496,7 @@ const Index = () => {
       <div className="hidden md:block">
         <LibroReclamaciones />
       </div>
+      </main>
 
       {/* Footer (oculto en móvil para un look más app) */}
       <footer className="hidden md:block bg-primary text-primary-foreground py-16 md:py-24">
@@ -508,7 +511,7 @@ const Index = () => {
               </p>
             </div>
             <div>
-              <h4 className="font-semibold mb-5 uppercase text-secondary" style={{ fontSize: "13px", letterSpacing: "0.08em" }}>Plataforma</h4>
+              <h2 className="font-semibold mb-5 uppercase text-secondary" style={{ fontSize: "13px", letterSpacing: "0.08em" }}>Plataforma</h2>
               <ul className="space-y-3 text-sm text-primary-foreground/70">
                 <li><Link to="/buscar" className="hover:text-secondary transition-colors">Explorar avisos</Link></li>
                 <li><Link to="/dashboard/anunciante/publicar" className="hover:text-secondary transition-colors">Publicar aviso</Link></li>
@@ -517,7 +520,7 @@ const Index = () => {
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold mb-5 uppercase text-secondary" style={{ fontSize: "13px", letterSpacing: "0.08em" }}>Empresa</h4>
+              <h2 className="font-semibold mb-5 uppercase text-secondary" style={{ fontSize: "13px", letterSpacing: "0.08em" }}>Empresa</h2>
               <ul className="space-y-3 text-sm text-primary-foreground/70">
                 <li><a href="#" className="hover:text-secondary transition-colors">Acerca de</a></li>
                 <li><a href="#" className="hover:text-secondary transition-colors">Contacto</a></li>
@@ -526,7 +529,7 @@ const Index = () => {
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold mb-5 uppercase text-secondary" style={{ fontSize: "13px", letterSpacing: "0.08em" }}>Contacto</h4>
+              <h2 className="font-semibold mb-5 uppercase text-secondary" style={{ fontSize: "13px", letterSpacing: "0.08em" }}>Contacto</h2>
               <ul className="space-y-3 text-sm text-primary-foreground/70">
                 <li className="flex items-center gap-2 min-w-0"><CheckCircle2 size={14} className="text-secondary shrink-0" /> <span className="min-w-0 break-all">info@effemulticlasificados.pe</span></li>
                 <li className="flex items-center gap-2"><CheckCircle2 size={14} className="text-secondary" /> +51 1 234 5678</li>
