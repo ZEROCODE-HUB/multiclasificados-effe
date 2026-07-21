@@ -132,6 +132,9 @@ Deno.serve(async (req) => {
       data,
     });
   } catch (e) {
-    return json({ success: false, error: String(e) });
+    // EFFE-053: no exponer el error técnico crudo (timeout, red, etc.) al usuario;
+    // se registra para depurar y se muestra un mensaje amigable.
+    console.error("[verify-doc] error:", e);
+    return json({ success: false, error: "No se pudo verificar el documento en este momento. Inténtalo de nuevo en unos minutos." });
   }
 });

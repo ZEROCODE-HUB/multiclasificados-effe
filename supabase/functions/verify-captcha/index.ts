@@ -29,7 +29,18 @@ Deno.serve(async (req) => {
       body,
     });
     const data = await res.json();
-    return new Response(JSON.stringify({ success: !!data.success }), {
+    // EFFE-048: además de data.success, exigimos que el token sea FRESCO. hCaptcha
+    // devuelve challenge_ts (cuándo se resolvió); si tiene más de 2 min lo
+    // rechazamos, para no aceptar un token viejo fuera de su ventana. Solo se
+    // rechaza cuando la antigüedad es un número finito y claramente grande (un
+    // reloj desfasado o un challenge_ts ausente NO invalidan un login legítimo).
+    const MAX_AGE_MS = 2 * 60 * 1000;
+    let fresh = true;
+    if (data.success && data.challenge_ts) {
+      const age = Date.now() - Date.parse(data.challenge_ts);
+      if (Number.isFinite(age) && age > MAX_AGE_MS) fresh = false;
+    }
+    return new Response(JSON.stringify({ success: !!data.success && fresh }), {
       headers: { ...cors, "Content-Type": "application/json" },
     });
   } catch (e) {
