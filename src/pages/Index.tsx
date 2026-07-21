@@ -6,6 +6,7 @@ import { CategoryGrid } from "@/components/CategoryGrid";
 import { ListingCard } from "@/components/ListingCard";
 import { CountUp } from "@/components/CountUp";
 import { LibroReclamaciones } from "@/components/LibroReclamaciones";
+import { TermsDialog } from "@/components/LegalTerms";
 import { type Listing } from "@/data/mockData";
 import { fetchListings } from "@/lib/listings";
 import { fetchPlatformStats, type PlatformStats } from "@/lib/stats";
@@ -82,6 +83,8 @@ const Index = () => {
   // Avisos reales desde Supabase (vacío hasta que existan avisos publicados).
   const [listings, setListings] = useState<Listing[]>([]);
   const [platform, setPlatform] = useState<PlatformStats | null>(null);
+  // Términos/Privacidad del footer: abren el documento legal (antes eran href="#").
+  const [termsOpen, setTermsOpen] = useState(false);
   useEffect(() => {
     fetchListings({ limit: 8 }).then(setListings);
     fetchPlatformStats().then(setPlatform);
@@ -313,7 +316,7 @@ const Index = () => {
             <p className="text-primary-foreground/75 text-base md:text-lg max-w-md leading-relaxed mb-7 font-light">
               Encuentra inmuebles, empleos, vehículos y servicios cerca de ti con vista geográfica interactiva tipo Airbnb y Zillow.
             </p>
-            <Link to="/buscar">
+            <Link to="/buscar?view=map">
               <Button variant="hero" size="lg" className="gap-2">
                 Probar búsqueda <ArrowRight size={16} />
               </Button>
@@ -524,8 +527,8 @@ const Index = () => {
               <ul className="space-y-3 text-sm text-primary-foreground/70">
                 <li><a href="#" className="hover:text-secondary transition-colors">Acerca de</a></li>
                 <li><a href="#" className="hover:text-secondary transition-colors">Contacto</a></li>
-                <li><a href="#" className="hover:text-secondary transition-colors">Términos y condiciones</a></li>
-                <li><a href="#" className="hover:text-secondary transition-colors">Política de privacidad</a></li>
+                <li><button type="button" onClick={() => setTermsOpen(true)} className="hover:text-secondary transition-colors text-left">Términos y condiciones</button></li>
+                <li><button type="button" onClick={() => setTermsOpen(true)} className="hover:text-secondary transition-colors text-left">Política de privacidad</button></li>
               </ul>
             </div>
             <div>
@@ -545,6 +548,8 @@ const Index = () => {
           </div>
         </div>
       </footer>
+
+      <TermsDialog open={termsOpen} onOpenChange={setTermsOpen} />
     </div>
   );
 };
