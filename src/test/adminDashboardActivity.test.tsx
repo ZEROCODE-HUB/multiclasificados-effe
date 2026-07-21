@@ -26,6 +26,15 @@ const { LISTING_ACTIVITY, USER_ACTIVITY } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/admin", () => ({
+  // GROWTH_RANGES lo agregó el filtro del gráfico (PR #14) y este mock no se
+  // actualizó, dejando el test roto en main; se repone aquí.
+  GROWTH_RANGES: [
+    { value: "7d", label: "Esta semana" },
+    { value: "30d", label: "Últimos 30 días" },
+    { value: "6m", label: "Últimos 6 meses" },
+    { value: "12m", label: "Últimos 12 meses" },
+    { value: "all", label: "Histórico" },
+  ],
   fetchAdminStats: vi.fn().mockResolvedValue({ data: null }),
   fetchGrowthSeries: vi.fn().mockResolvedValue([]),
   fetchCategoryDistribution: vi.fn().mockResolvedValue([]),

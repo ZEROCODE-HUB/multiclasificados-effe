@@ -250,6 +250,8 @@ export interface MyListing extends Listing {
   planDurationDays: number | null;
   planQuantity: number | null;
   planExtras: Record<string, number | undefined> | null;
+  // Motivo de rechazo que dejó moderación (solo en avisos con status 'rejected').
+  rejectionReason: string | null;
 }
 
 // Avisos del anunciante actual (todos sus estados). Usa la tabla `listings`
@@ -263,7 +265,7 @@ export async function fetchMyListings(): Promise<MyListing[]> {
     const { data, error } = await supabase
       .from("listings")
       .select(
-        "id, title, description, price, currency, category_id, condition, location, lat, lng, featured, urgent, confidential, views, status, published_at, expires_at, created_at, plan_duration_days, plan_quantity, plan_extras, listing_images(url, sort_order)"
+        "id, title, description, price, currency, category_id, condition, location, lat, lng, featured, urgent, confidential, views, status, rejection_reason, published_at, expires_at, created_at, plan_duration_days, plan_quantity, plan_extras, listing_images(url, sort_order)"
       )
       .eq("owner_id", user.id)
       .order("created_at", { ascending: false });
@@ -295,6 +297,7 @@ export async function fetchMyListings(): Promise<MyListing[]> {
         planDurationDays: r.plan_duration_days != null ? Number(r.plan_duration_days) : null,
         planQuantity: r.plan_quantity != null ? Number(r.plan_quantity) : null,
         planExtras: (r.plan_extras ?? null) as Record<string, number | undefined> | null,
+        rejectionReason: r.rejection_reason ?? null,
       };
     });
   } catch {

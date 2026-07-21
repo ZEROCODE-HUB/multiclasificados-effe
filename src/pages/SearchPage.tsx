@@ -269,7 +269,7 @@ export default function SearchPage() {
     <div className="bg-card border border-border p-5 space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="font-bold text-foreground">Filtros</h3>
-        <button onClick={() => setShowFilters(false)} className="lg:hidden text-muted-foreground">
+        <button aria-label="Cerrar filtros" onClick={() => setShowFilters(false)} className="lg:hidden text-muted-foreground">
           <X size={16} />
         </button>
       </div>
@@ -384,6 +384,7 @@ export default function SearchPage() {
               <Button
                 variant={layout === "grid" ? "default" : "ghost"}
                 size="icon"
+                aria-label="Ver en cuadrícula"
                 onClick={() => setLayout("grid")}
                 className="rounded-none h-8 w-8"
               >
@@ -392,6 +393,7 @@ export default function SearchPage() {
               <Button
                 variant={layout === "list" ? "default" : "ghost"}
                 size="icon"
+                aria-label="Ver en lista"
                 onClick={() => setLayout("list")}
                 className="rounded-none h-8 w-8"
               >

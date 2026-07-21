@@ -302,7 +302,7 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
             <div className="flex bg-muted rounded-lg p-1 mb-6">
               <button
                 onClick={() => setActiveTab("login")}
-                className={`flex-1 py-2.5 text-sm font-semibold rounded-md transition-all ${
+                className={`flex-1 py-2.5 text-sm font-semibold rounded-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                   activeTab === "login" ? "bg-card text-primary shadow-sm" : "text-muted-foreground"
                 }`}
               >
@@ -310,7 +310,7 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
               </button>
               <button
                 onClick={() => setActiveTab("register")}
-                className={`flex-1 py-2.5 text-sm font-semibold rounded-md transition-all ${
+                className={`flex-1 py-2.5 text-sm font-semibold rounded-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                   activeTab === "register" ? "bg-card text-primary shadow-sm" : "text-muted-foreground"
                 }`}
               >
@@ -334,6 +334,7 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
                     onKeyDown={(e) => { if (e.key === "Enter") handleLogin(); }} />
                   <button
                     type="button"
+                    aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
                   >
@@ -385,9 +386,10 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
                 <Label htmlFor="regEmail">Correo electrónico *</Label>
                 <Input id="regEmail" type="email" inputMode="email" autoComplete="off" readOnly={fieldsLocked} placeholder="tu@correo.com" className="mt-1"
                   value={regEmail} onChange={(e) => setRegEmail(e.target.value)} />
-                {regEmail && !EMAIL_RE.test(regEmail) && (
-                  <p className="text-xs text-destructive mt-1">Ingresa un correo válido.</p>
-                )}
+                {/* Slot con alto reservado: el error no debe empujar el layout al aparecer. */}
+                <p className="text-xs text-destructive mt-1 min-h-[1rem]">
+                  {regEmail && !EMAIL_RE.test(regEmail) ? "Ingresa un correo válido." : ""}
+                </p>
               </div>
               <div>
                 <Label htmlFor="phone">Teléfono <span className="text-muted-foreground font-normal">(opcional)</span></Label>
@@ -410,9 +412,9 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
                     onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 9))}
                   />
                 </div>
-                {phone.length > 0 && phone.length !== 9 && (
-                  <p className="text-xs text-destructive mt-1">El número debe tener exactamente 9 dígitos.</p>
-                )}
+                <p className="text-xs text-destructive mt-1 min-h-[1rem]">
+                  {phone.length > 0 && phone.length !== 9 ? "El número debe tener exactamente 9 dígitos." : ""}
+                </p>
               </div>
               <div>
                 <Label htmlFor="regPassword">Contraseña *</Label>
@@ -423,9 +425,9 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
                 <Label htmlFor="regPasswordConfirm">Confirmar contraseña *</Label>
                 <Input id="regPasswordConfirm" type="password" autoComplete="new-password" readOnly={fieldsLocked} placeholder="Repite tu contraseña" className="mt-1"
                   value={regPasswordConfirm} onChange={(e) => setRegPasswordConfirm(e.target.value)} />
-                {regPasswordConfirm.length > 0 && regPassword !== regPasswordConfirm && (
-                  <p className="text-xs text-destructive mt-1">Las contraseñas no coinciden.</p>
-                )}
+                <p className="text-xs text-destructive mt-1 min-h-[1rem]">
+                  {regPasswordConfirm.length > 0 && regPassword !== regPasswordConfirm ? "Las contraseñas no coinciden." : ""}
+                </p>
               </div>
 
               <label className="flex items-start gap-2 text-sm text-muted-foreground cursor-pointer">

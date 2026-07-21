@@ -247,6 +247,7 @@ const AdvertiserListings = () => {
                 listing={listing}
                 status={ROW_STATUS[tab]}
                 expiresAt={listing.expiresAt}
+                rejectionReason={listing.status === "rejected" ? listing.rejectionReason : null}
                 onView={(l) => navigate(`/aviso/${l.id}`)}
                 onEdit={() => openEdit(listing)}
                 onDelete={() => setToDelete(listing)}

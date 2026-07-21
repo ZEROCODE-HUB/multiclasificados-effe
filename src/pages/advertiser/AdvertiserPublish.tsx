@@ -236,6 +236,16 @@ const AdvertiserPublish = () => {
   const pickPhoto = (slot: "main" | "extra", files: FileList | null) => {
     if (!files || files.length === 0) return;
     const f = files[0];
+    // `accept="image/*"` es solo una sugerencia del selector; validamos de verdad
+    // (antes se aceptaba hasta un .txt como "imagen principal").
+    if (!f.type.startsWith("image/")) {
+      toast({ title: "Debe ser una imagen", description: "Sube un archivo JPG, PNG o WebP.", variant: "destructive" });
+      return;
+    }
+    if (f.size > 10 * 1024 * 1024) {
+      toast({ title: "La imagen supera los 10 MB", description: "Sube una foto más liviana.", variant: "destructive" });
+      return;
+    }
     const item: PhotoItem = {
       id: `${slot}-${Date.now()}`,
       url: URL.createObjectURL(f),

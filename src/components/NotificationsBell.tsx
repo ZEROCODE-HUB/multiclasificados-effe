@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, Check, Search, MessageSquare, ClipboardCheck, Star, AlertTriangle, ShieldAlert, Megaphone } from "lucide-react";
+import { Bell, Check, Search, MessageSquare, ClipboardCheck, Star, AlertTriangle, ShieldAlert, Megaphone, UserPlus } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,6 +28,7 @@ const iconFor = (type: string) => {
     case "saved_search_match": return Search;
     case "new_message": return MessageSquare;
     case "application_status": return ClipboardCheck;
+    case "new_application": return UserPlus;
     case "new_review": return Star;
     case "moderation_warning": return AlertTriangle;
     case "account_suspended": return ShieldAlert;

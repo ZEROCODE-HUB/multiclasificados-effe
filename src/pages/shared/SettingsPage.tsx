@@ -21,6 +21,35 @@ import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { Capacitor } from "@capacitor/core";
+
+// Versión instalada, para confirmar que se está en la build correcta. En el
+// APK/IPA muestra versionName + versionCode (App.getInfo); en web, el modo.
+function AppVersion() {
+  const [v, setV] = useState<string>("");
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        if (Capacitor.isNativePlatform()) {
+          const { App } = await import("@capacitor/app");
+          const info = await App.getInfo();
+          if (active) setV(`v${info.version} (build ${info.build})`);
+        } else if (active) {
+          setV(`Web · ${import.meta.env.MODE}`);
+        }
+      } catch {
+        if (active) setV("—");
+      }
+    })();
+    return () => { active = false; };
+  }, []);
+  return (
+    <p className="text-center text-xs text-muted-foreground pt-1">
+      eFFe Multiclasificados · {v || "…"}
+    </p>
+  );
+}
+import { Capacitor } from "@capacitor/core";
 import { Keyboard } from "@capacitor/keyboard";
 
 // Palabra que el usuario debe escribir para confirmar el borrado irreversible.
@@ -485,6 +514,9 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
             </button>
           </CardContent>
         </Card>
+
+        {/* Número de versión (debajo de "Legal y privacidad"). */}
+        <AppVersion />
 
         {/* Zona de peligro — eliminar la cuenta de forma definitiva. */}
         <Card className="border-destructive/40">

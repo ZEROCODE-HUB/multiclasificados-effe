@@ -13,9 +13,11 @@ export interface ListingBadgeDef {
 }
 
 const ALL: ListingBadgeDef[] = [
-  { key: "featured", label: "Destacado", icon: Award, cls: "bg-amber-500 text-white" },
+  // Colores oscurecidos a -600 para que el texto blanco supere el 3:1 de WCAG
+  // 1.4.11 (amber-500/sky-500 daban 2.15:1 y 2.77:1). Urgente ya cumplía.
+  { key: "featured", label: "Destacado", icon: Award, cls: "bg-amber-600 text-white" },
   { key: "urgent", label: "Urgente", icon: Flame, cls: "bg-red-600 text-white" },
-  { key: "confidential", label: "Confidencial", icon: EyeOff, cls: "bg-sky-500 text-white" },
+  { key: "confidential", label: "Confidencial", icon: EyeOff, cls: "bg-sky-600 text-white" },
 ];
 
 /** Devuelve solo las insignias que el aviso trae activadas, en orden fijo. */
