@@ -85,7 +85,13 @@ export const PERM_MODULES: PermModuleDef[] = [
   {
     id: "Reportes", label: "Reportes", icon: FileBarChart, group: "Operación", sub: "reportes",
     description: "Reportería y métricas comerciales.",
-    actions: [A.see("Ver la reportería y las métricas.")],
+    actions: [
+      A.see("Ver la reportería y las métricas."),
+      // EFFE-054: toggle aparte para el historial de transacciones de crédito
+      // (dato financiero). Sin este permiso, la pestaña "Transacciones" no se ve
+      // y el RPC no devuelve datos. El superadmin siempre lo tiene.
+      { key: "edit", label: "Ver transacciones", description: "Ver el historial de transacciones de crédito de todos los usuarios (dato financiero)." },
+    ],
   },
   {
     id: "Comunicaciones", label: "Comunicaciones", icon: Send, group: "Comunicaciones", sub: "comunicaciones",
