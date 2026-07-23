@@ -29,7 +29,7 @@ import { ListingCard } from "@/components/ListingCard";
 import { FALLBACK_IMG } from "@/lib/listings";
 import type { Listing } from "@/data/mockData";
 import { type PersonType } from "@/components/VerifyIdentityDialog";
-import { fetchMyIdentity, personKindLabel, docKindLabel } from "@/lib/identity";
+import { fetchMyIdentity } from "@/lib/identity";
 import { getCreditBalance, spendCredits } from "@/lib/credits";
 import { fetchActivePromotions, bestPromoForCategory, applyDiscount, type Promotion } from "@/lib/promotions";
 import { fetchPricingSettings } from "@/lib/pricingRemote";
@@ -135,6 +135,11 @@ const AdvertiserPublish = () => {
   // La compra "por volumen" vive en el modal de créditos, no aquí.
   const [quantity] = useState<number>(1);
   const [duration, setDuration] = useState<DurationDays>(7);
+  // EFFE-097: ninguna duración viene preseleccionada. `duration` mantiene un
+  // valor interno (para la vista previa y el cálculo), pero hasta que el usuario
+  // elige explícitamente NO se resalta ninguna opción ni se muestra un costo,
+  // para que nadie crea que se le va a cobrar sin haber elegido.
+  const [durationChosen, setDurationChosen] = useState(false);
   const [extras, setExtras] = useState<ExtrasCount>({});
 
   // Créditos
@@ -191,7 +196,8 @@ const AdvertiserPublish = () => {
       const d = JSON.parse(raw);
       if (d.form) setForm(d.form);
       if (d.coords) setCoords(d.coords);
-      if (d.duration) setDuration(d.duration);
+      // Un borrador ya traía una duración elegida: se restaura como "elegida".
+      if (d.duration) { setDuration(d.duration); setDurationChosen(true); }
       if (d.extras) setExtras(d.extras);
       // `verified`/`verifiedName` NO se restauran: verificar exige sesión, así que
       // un borrador guardado antes del login jamás pudo verificarse de verdad.
@@ -228,8 +234,14 @@ const AdvertiserPublish = () => {
 
   // "Condición" solo aplica en categorías con condition_enabled (p.ej. NO en
   // Servicios ni Empleos). Cuando está oculta, el aviso se guarda como "No aplica".
-  const conditionEnabled = categories.find((c) => c.id === form.category)?.conditionEnabled ?? true;
+  const selectedCategory = categories.find((c) => c.id === form.category);
+  const conditionEnabled = selectedCategory?.conditionEnabled ?? true;
   const formForSubmit = conditionEnabled ? form : { ...form, condition: "na" };
+  // EFFE-087: en "Empleo(s)" pedir "precio del producto" no encaja con una
+  // vacante. Se detecta por el NOMBRE de la categoría (robusto ante slug/UUID),
+  // el campo se muestra como "Salario" y es opcional (muchas vacantes van "a
+  // convenir"). En cualquier otra categoría sigue siendo el precio obligatorio.
+  const isEmpleo = /empleo/i.test(selectedCategory?.name ?? "");
 
   const updateForm = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -359,7 +371,8 @@ const AdvertiserPublish = () => {
     } catch { /* noop */ }
   };
 
-  const canPublish = form.category && form.title && form.description && form.price && form.location && !!mainPhoto;
+  // El salario es opcional en Empleo (EFFE-087); en el resto el precio es obligatorio.
+  const canPublish = form.category && form.title && form.description && (isEmpleo || form.price) && form.location && !!mainPhoto;
 
   // Publica según el saldo disponible. La identidad ya viene precargada del
   // perfil (verificada al comprar saldo): no se abre ningún modal de verificación.
@@ -376,6 +389,11 @@ const AdvertiserPublish = () => {
   const openPublishFlow = () => {
     if (!canPublish) {
       toast({ title: "Completa los datos requeridos", description: "Faltan campos obligatorios o imágenes.", variant: "destructive" });
+      return;
+    }
+    // EFFE-097: publicar exige haber elegido una duración de forma explícita.
+    if (!durationChosen) {
+      toast({ title: "Elige la duración", description: "Selecciona cuántos días durará tu aviso antes de publicar.", variant: "destructive" });
       return;
     }
     if (!session) {
@@ -843,8 +861,8 @@ const AdvertiserPublish = () => {
               <CardContent className="pt-5 space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="sm:col-span-2">
-                    <Label>Precio del producto *</Label>
-                    <Input type="number" value={form.price} onChange={(e) => updateForm("price", e.target.value)} placeholder="0.00" className="mt-1" />
+                    <Label>{isEmpleo ? "Salario / Remuneración (opcional)" : "Precio del producto *"}</Label>
+                    <Input type="number" value={form.price} onChange={(e) => updateForm("price", e.target.value)} placeholder={isEmpleo ? "Opcional — déjalo vacío si es a convenir" : "0.00"} className="mt-1" />
                   </div>
                   <div>
                     <Label>Moneda</Label>
@@ -902,12 +920,12 @@ const AdvertiserPublish = () => {
                   <div className="mt-2 grid grid-cols-3 md:grid-cols-6 gap-2">
                     {DURATIONS.map((d) => {
                       const p = priceForDuration(1, d, settings);
-                      const active = duration === d;
+                      const active = durationChosen && duration === d;
                       return (
                         <button
                           key={d}
                           type="button"
-                          onClick={() => setDuration(d)}
+                          onClick={() => { setDuration(d); setDurationChosen(true); }}
                           className={`border p-3 text-center transition-all ${
                             active ? "border-secondary bg-secondary/10 ring-2 ring-secondary/30" : "border-border hover:border-secondary/40 hover:bg-muted/50"
                           }`}
@@ -961,23 +979,32 @@ const AdvertiserPublish = () => {
                   </div>
                 </div>
 
-                {/* Resumen del paquete (en créditos) */}
+                {/* Resumen del paquete (en créditos). Hasta elegir duración no se
+                    muestra costo alguno (EFFE-097). */}
                 <div className="border bg-muted/30 p-4 space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Aviso ({duration} días)</span>
-                    <span className="font-bold">{formatCredits(solesToCredits(packageBase))}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Adicionales</span>
-                    <span className="font-bold">{formatCredits(solesToCredits(extrasSum))}</span>
-                  </div>
-                  <div className="border-t pt-2 flex items-baseline justify-between">
-                    <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Total a pagar</span>
-                    <span className="text-2xl font-extrabold text-primary">{formatCredits(totalCredits)}</span>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground pt-1">
-                    Se descontará de tu saldo al publicar. El comprobante se emite al comprar créditos.
-                  </p>
+                  {durationChosen ? (
+                    <>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Aviso ({duration} días)</span>
+                        <span className="font-bold">{formatCredits(solesToCredits(packageBase))}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Adicionales</span>
+                        <span className="font-bold">{formatCredits(solesToCredits(extrasSum))}</span>
+                      </div>
+                      <div className="border-t pt-2 flex items-baseline justify-between">
+                        <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Total a pagar</span>
+                        <span className="text-2xl font-extrabold text-primary">{formatCredits(totalCredits)}</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground pt-1">
+                        Se descontará de tu saldo al publicar. El comprobante se emite al comprar créditos.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-1">
+                      Elige una duración arriba para ver el costo de tu aviso.
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -994,31 +1021,41 @@ const AdvertiserPublish = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-5 space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Aviso · {duration} días</span>
-                  <span className="font-bold">{formatCredits(solesToCredits(packageBase))}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Adicionales</span>
-                  <span className="font-bold">{formatCredits(solesToCredits(extrasSum))}</span>
-                </div>
-                {promoPct > 0 && (
-                  <div className="flex justify-between text-sm text-success">
-                    <span className="flex items-center gap-1">
-                      <Percent size={12} /> Promo {activePromo?.name} (−{promoPct}%)
-                    </span>
-                    <span className="font-bold">−{formatCredits(baseCredits - totalCredits)}</span>
-                  </div>
-                )}
-                <div className="border-t pt-3 flex items-baseline justify-between">
-                  <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Total</span>
-                  <span className="text-3xl font-extrabold text-primary">
+                {/* El costo del aviso solo aparece cuando ya se eligió duración
+                    (EFFE-097). El saldo del usuario sí se muestra siempre. */}
+                {durationChosen ? (
+                  <>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Aviso · {duration} días</span>
+                      <span className="font-bold">{formatCredits(solesToCredits(packageBase))}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Adicionales</span>
+                      <span className="font-bold">{formatCredits(solesToCredits(extrasSum))}</span>
+                    </div>
                     {promoPct > 0 && (
-                      <span className="text-sm font-normal text-muted-foreground line-through mr-2">{formatCredits(baseCredits)}</span>
+                      <div className="flex justify-between text-sm text-success">
+                        <span className="flex items-center gap-1">
+                          <Percent size={12} /> Promo {activePromo?.name} (−{promoPct}%)
+                        </span>
+                        <span className="font-bold">−{formatCredits(baseCredits - totalCredits)}</span>
+                      </div>
                     )}
-                    {formatCredits(totalCredits)}
-                  </span>
-                </div>
+                    <div className="border-t pt-3 flex items-baseline justify-between">
+                      <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Total</span>
+                      <span className="text-3xl font-extrabold text-primary">
+                        {promoPct > 0 && (
+                          <span className="text-sm font-normal text-muted-foreground line-through mr-2">{formatCredits(baseCredits)}</span>
+                        )}
+                        {formatCredits(totalCredits)}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground py-1">
+                    Elige la duración de tu aviso para ver el total a pagar.
+                  </p>
+                )}
                 <div className="border-t pt-3 flex items-baseline justify-between">
                   <span className="text-xs text-muted-foreground">Tu saldo</span>
                   {creditLoading ? (
@@ -1029,7 +1066,7 @@ const AdvertiserPublish = () => {
                     </span>
                   )}
                 </div>
-                {!creditLoading && balanceCredits < totalCredits && (
+                {durationChosen && !creditLoading && balanceCredits < totalCredits && (
                   <p className="text-[11px] text-destructive">
                     Falta {formatCredits(totalCredits - balanceCredits)}. Cómpralo al publicar.
                   </p>
@@ -1050,20 +1087,9 @@ const AdvertiserPublish = () => {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader className="border-b">
-                <CardTitle className="text-sm uppercase tracking-widest text-secondary">Vista previa</CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 bg-muted/30">
-                {/* La MISMA tarjeta que se ve publicada: insignias, marco dorado
-                    del destacado y contador de urgente idénticos. `pointer-events-none`
-                    la deja como muestra estática (sin navegar ni marcar favorito). */}
-                <div className="pointer-events-none max-w-[280px] mx-auto">
-                  <ListingCard listing={previewListing} layout="grid" />
-                </div>
-              </CardContent>
-            </Card>
-
+            {/* EFFE-089: las acciones van JUSTO debajo del costo, antes de la
+                vista previa, para que "Publicar aviso" quede siempre a la vista
+                en laptop (antes quedaba debajo del preview y podía no verse). */}
             <div className="flex flex-col gap-2">
               {/* `disabled` solo mientras se publica: si faltan campos dejamos el
                   botón activo para que openPublishFlow explique QUÉ falta. */}
@@ -1092,6 +1118,20 @@ const AdvertiserPublish = () => {
                 Guardar como borrador es gratis.
               </p>
             </div>
+
+            <Card>
+              <CardHeader className="border-b">
+                <CardTitle className="text-sm uppercase tracking-widest text-secondary">Vista previa</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 bg-muted/30">
+                {/* La MISMA tarjeta que se ve publicada: insignias, marco dorado
+                    del destacado y contador de urgente idénticos. `pointer-events-none`
+                    la deja como muestra estática (sin navegar ni marcar favorito). */}
+                <div className="pointer-events-none max-w-[280px] mx-auto">
+                  <ListingCard listing={previewListing} layout="grid" />
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>
@@ -1150,27 +1190,12 @@ const AdvertiserPublish = () => {
                 <span className="font-extrabold text-primary">{formatSoles(total)}</span>
               </div>
             </div>
-            {verifiedName ? (
-              <div className="p-3 border bg-muted/30 space-y-1.5">
-                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Datos del comprobante</p>
-                <div className="flex justify-between gap-3">
-                  <span className="text-muted-foreground">Nombre</span>
-                  <span className="font-medium text-right break-words">{verifiedName}</span>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <span className="text-muted-foreground">{docKindLabel(personType === "juridica" ? "ruc" : "dni", docNumber)}</span>
-                  <span className="font-mono">{docNumber || "—"}</span>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <span className="text-muted-foreground">Tipo</span>
-                  <span className="font-medium">{personKindLabel(personType === "juridica" ? "ruc" : "dni", docNumber)}</span>
-                </div>
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                El comprobante se emitirá a nombre de <span className="font-semibold text-foreground">{session?.name || "tu cuenta"}</span>.
-              </p>
-            )}
+            {/* EFFE-066/090: publicar NO emite comprobante (solo descuenta
+                saldo). Antes aquí había un recuadro "Datos del comprobante" que
+                hacía creer que al publicar se emitía una boleta/factura. */}
+            <p className="text-xs text-muted-foreground">
+              Se descontará de tu saldo al publicar. <span className="font-semibold text-foreground">Publicar no emite comprobante</span>: la boleta o factura se emite al comprar créditos.
+            </p>
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancelar</Button>

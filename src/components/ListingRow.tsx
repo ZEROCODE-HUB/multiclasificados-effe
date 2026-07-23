@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { imgUrl } from "@/lib/imageUrl";
 import { Button } from "@/components/ui/button";
-import { Eye, MapPin, Calendar, MoreVertical, Edit, Pause, Play, Trash2, Rocket, Clock, Flame, EyeOff, Ban } from "lucide-react";
+import { Eye, MapPin, Calendar, MoreVertical, Edit, Pause, Play, Trash2, Rocket, RotateCw, Clock, Flame, EyeOff, Ban } from "lucide-react";
 import type { Listing } from "@/data/mockData";
 import { expiryInfo } from "@/lib/listings";
 import {
@@ -23,6 +23,8 @@ interface ListingRowProps {
   onTogglePause?: (listing: Listing) => void;
   /** Solo en borradores: cobra y activa el aviso ya guardado. */
   onPublish?: (listing: Listing) => void;
+  /** Solo en avisos vencidos: vuelve a cobrar y publicar (EFFE-036). */
+  onRepublish?: (listing: Listing) => void;
   /** Motivo de rechazo de moderación; si viene, se muestra un aviso. */
   rejectionReason?: string | null;
 }
@@ -42,8 +44,8 @@ const expiryStyles: Record<string, string> = {
   urgent: "text-destructive font-semibold",
 };
 
-export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEdit, onDelete, onTogglePause, onPublish, rejectionReason }: ListingRowProps) {
-  const hasActions = !!(onView || onEdit || onDelete || onTogglePause || onPublish);
+export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEdit, onDelete, onTogglePause, onPublish, onRepublish, rejectionReason }: ListingRowProps) {
+  const hasActions = !!(onView || onEdit || onDelete || onTogglePause || onPublish || onRepublish);
   // El contador solo tiene sentido en un aviso activo (los vencidos ya caducaron).
   const expiry = status === "Activo" ? expiryInfo(expiresAt ?? null) : null;
   return (
@@ -89,6 +91,11 @@ export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEd
               {onPublish && (
                 <DropdownMenuItem onSelect={() => onPublish(listing)}>
                   <Rocket size={14} className="mr-2" /> Publicar
+                </DropdownMenuItem>
+              )}
+              {onRepublish && (
+                <DropdownMenuItem onSelect={() => onRepublish(listing)}>
+                  <RotateCw size={14} className="mr-2" /> Republicar
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem onSelect={() => onEdit?.(listing)}>
@@ -151,6 +158,12 @@ export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEd
                 {onPublish && (
                   <Button size="sm" className="h-8 px-3 text-xs gap-1" onClick={() => onPublish(listing)}>
                     <Rocket size={13} /> Publicar
+                  </Button>
+                )}
+                {/* Solo vencidos: vuelve a cobrar y publicar (EFFE-036). */}
+                {onRepublish && (
+                  <Button size="sm" className="h-8 px-3 text-xs gap-1" onClick={() => onRepublish(listing)}>
+                    <RotateCw size={13} /> Republicar
                   </Button>
                 )}
                 <Button variant="outline" size="sm" className="h-8 px-3 text-xs gap-1" onClick={() => onEdit?.(listing)}>

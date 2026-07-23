@@ -257,6 +257,11 @@ const AdvertiserListings = () => {
                   // publicarlo lo saltaría la moderación.
                   ? { onPublish: () => setToPublish(listing) }
                   : {})}
+                {...(tab === "vencidos" && listing.status === "expired"
+                  // Solo los VENCIDOS se republican (EFFE-036). 'rejected'/'sold'
+                  // caen en esta pestaña pero no deben republicarse aquí.
+                  ? { onRepublish: () => setToPublish(listing) }
+                  : {})}
               />
             </div>
           ))}

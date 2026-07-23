@@ -42,6 +42,8 @@ interface Props {
 
 export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPublished }: Props) {
   const open = draft !== null;
+  // EFFE-036: el mismo diálogo publica un borrador o REPUBLICA un aviso vencido.
+  const isRepublish = draft?.status === "expired";
   const [settings, setSettings] = useState<PricingSettings>(() => loadSettings());
   const [promos, setPromos] = useState<Promotion[]>([]);
   const [balance, setBalance] = useState<number | null>(null);
@@ -112,7 +114,7 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
         return;
       }
       toast({
-        title: "¡Aviso publicado!",
+        title: isRepublish ? "¡Aviso republicado!" : "¡Aviso publicado!",
         description: `Ya está activo por ${duration} días.`,
       });
       onPublished();
@@ -148,7 +150,7 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
       <Dialog open={open && !verifyOpen && !buyOpen} onOpenChange={(o) => { if (!o) onClose(); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Publicar borrador</DialogTitle>
+            <DialogTitle>{isRepublish ? "Republicar aviso" : "Publicar borrador"}</DialogTitle>
             <DialogDescription>{draft?.title}</DialogDescription>
           </DialogHeader>
 
@@ -199,9 +201,9 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
             <Button variant="ghost" onClick={onClose} disabled={publishing}>Cancelar</Button>
             <Button onClick={onPublishClick} disabled={publishing || balance === null} className="gap-2">
               {publishing
-                ? <><Loader2 size={14} className="animate-spin" /> Publicando…</>
+                ? <><Loader2 size={14} className="animate-spin" /> {isRepublish ? "Republicando…" : "Publicando…"}</>
                 : enoughCredits
-                  ? <><ShieldCheck size={14} /> Publicar por {formatCredits(totalCredits)}</>
+                  ? <><ShieldCheck size={14} /> {isRepublish ? "Republicar" : "Publicar"} por {formatCredits(totalCredits)}</>
                   : <>Comprar saldo</>}
             </Button>
           </DialogFooter>

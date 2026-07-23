@@ -107,6 +107,35 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
     navigate("/");
   };
 
+  // EFFE-031: recuperación de contraseña de autoservicio. Antes el enlace
+  // "¿Olvidaste tu contraseña?" era un `href="#"` muerto. Ahora envía el correo
+  // de reseteo de Supabase al correo ya tecleado en el login; el enlace de ese
+  // correo abre /reset-password (pantalla que ya existe).
+  const [sendingReset, setSendingReset] = useState(false);
+  const handleForgotPassword = async () => {
+    if (sendingReset) return;
+    if (!EMAIL_RE.test(email)) {
+      toast.error("Escribe tu correo en el campo de arriba y vuelve a pulsar “¿Olvidaste tu contraseña?”.");
+      loginEmailRef.current?.focus();
+      return;
+    }
+    setSendingReset(true);
+    try {
+      // En web el enlace vuelve al mismo origen; en el APK apunta al sitio web
+      // publicado (el WebView corre sobre localhost, que no sirve de destino).
+      const redirectTo = Capacitor.isNativePlatform()
+        ? "https://multiclasificados-effe.vercel.app/reset-password"
+        : `${window.location.origin}/reset-password`;
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+      if (error) throw error;
+      toast.success("Te enviamos un correo para restablecer tu contraseña. Revisa tu bandeja (y la carpeta de spam).");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo enviar el correo. Intenta de nuevo.");
+    } finally {
+      setSendingReset(false);
+    }
+  };
+
   const handleLogin = async () => {
     if (!email || !password) {
       toast.error("Ingresa tu correo y contraseña.");
@@ -347,7 +376,14 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
                   <Checkbox />
                   Recordarme
                 </label>
-                <a href="#" className="text-sm text-secondary hover:underline">¿Olvidaste tu contraseña?</a>
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  disabled={sendingReset}
+                  className="text-sm text-secondary hover:underline disabled:opacity-60"
+                >
+                  {sendingReset ? "Enviando…" : "¿Olvidaste tu contraseña?"}
+                </button>
               </div>
               {showCaptcha && (
                 <div className="flex justify-center">
