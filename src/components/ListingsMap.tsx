@@ -114,7 +114,10 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
               key={l.id}
               position={[l.lat, l.lng]}
               icon={priceIcon(formatPrice(l.price, l.currency), active === l.id)}
-              eventHandlers={{ mouseover: () => onActive(l.id), click: () => onActive(l.id) }}
+              // EFFE-093: seleccionar SOLO al hacer click. Antes `mouseover`
+              // también activaba el pin, así que mover el ratón por el mapa iba
+              // seleccionando y haciendo pan a cada aviso que rozaba — molesto.
+              eventHandlers={{ click: () => onActive(l.id) }}
             >
               <Popup>
                 <Link to={hrefFor(l.id)} className="block w-52 no-underline">

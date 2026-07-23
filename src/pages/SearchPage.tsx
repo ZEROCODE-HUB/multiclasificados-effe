@@ -73,21 +73,44 @@ export default function SearchPage() {
   const [listings, setListings] = useState<Listing[]>([]);
   const [q, setQ] = useState<string>(params.get("q") || "");
   const [category, setCategory] = useState<string>(params.get("cat") || "");
-  const [priceMin, setPriceMin] = useState<string>("");
-  const [priceMax, setPriceMax] = useState<string>("");
+  const [priceMin, setPriceMin] = useState<string>(params.get("min") || "");
+  const [priceMax, setPriceMax] = useState<string>(params.get("max") || "");
   // Filtro de ubicación (el RPC no lo soporta: se aplica sobre los resultados).
-  const [location, setLocation] = useState<string>("");
+  const [location, setLocation] = useState<string>(params.get("loc") || "");
+  // Moneda (EFFE-050): "" = todas. El RPC search_listings ya filtra por p_currency.
+  const [currency, setCurrency] = useState<string>(params.get("cur") || "");
   const [sort, setSort] = useState<SortKey>((params.get("sort") as SortKey) || "recent");
   const [page, setPage] = useState(1);
 
-  // Sincroniza texto/categoría/orden/precio desde la URL (navbar, hero, búsquedas guardadas).
+  // Sincroniza los filtros DESDE la URL (navbar, hero, búsquedas guardadas, o el
+  // botón "atrás" que restaura una URL con filtros).
   useEffect(() => {
     setQ(params.get("q") || "");
     setCategory(params.get("cat") || "");
     setSort((params.get("sort") as SortKey) || "recent");
     setPriceMin(params.get("min") || "");
     setPriceMax(params.get("max") || "");
+    setLocation(params.get("loc") || "");
+    setCurrency(params.get("cur") || "");
   }, [params]);
+
+  // EFFE-051/092: refleja los filtros EN la URL (replace, para no ensuciar el
+  // historial en cada tecla) de modo que copiar el enlace y el botón "atrás"
+  // (p. ej. al volver de un aviso) conserven los filtros. `view` y `owner` que
+  // ya viven en la URL se preservan.
+  useEffect(() => {
+    const next = new URLSearchParams(params);
+    const put = (k: string, v: string) => { if (v) next.set(k, v); else next.delete(k); };
+    put("q", q);
+    put("cat", category);
+    put("min", priceMin);
+    put("max", priceMax);
+    put("loc", location);
+    put("cur", currency);
+    if (sort && sort !== "recent") next.set("sort", sort); else next.delete("sort");
+    if (next.toString() !== params.toString()) setParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, category, priceMin, priceMax, location, currency, sort]);
 
   // Guarda la búsqueda actual (REQ-04).
   const saveCurrentSearch = async () => {
@@ -156,6 +179,7 @@ export default function SearchPage() {
             category: category || undefined,
             priceMin: priceMin ? Number(priceMin) : undefined,
             priceMax: priceMax ? Number(priceMax) : undefined,
+            currency: currency || undefined,
             sort,
           });
       load.then((rows) => {
@@ -168,10 +192,10 @@ export default function SearchPage() {
       });
     }, owner ? 0 : 250);
     return () => clearTimeout(t);
-  }, [q, category, priceMin, priceMax, location, sort, owner]);
+  }, [q, category, priceMin, priceMax, location, currency, sort, owner]);
 
   // Al cambiar la búsqueda o los filtros, vuelve a la primera página.
-  useEffect(() => { setPage(1); }, [q, category, priceMin, priceMax, location, sort, owner]);
+  useEffect(() => { setPage(1); }, [q, category, priceMin, priceMax, location, currency, sort, owner]);
 
   // Porción visible de resultados según la página actual (clamp por si la lista
   // encogió tras filtrar y la página quedó fuera de rango). 20 por página en
@@ -295,6 +319,17 @@ export default function SearchPage() {
           <Input type="number" placeholder="Sin límite" className="mt-1.5 rounded-none"
             value={priceMax} onChange={(e) => setPriceMax(e.target.value)} />
         </div>
+      </div>
+      <div>
+        <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Moneda</label>
+        <Select value={currency || "all"} onValueChange={(v) => setCurrency(v === "all" ? "" : v)}>
+          <SelectTrigger className="mt-1.5 rounded-none"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas</SelectItem>
+            <SelectItem value="PEN">Soles (S/)</SelectItem>
+            <SelectItem value="USD">Dólares (US$)</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
       <div>
         <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Ubicación</label>

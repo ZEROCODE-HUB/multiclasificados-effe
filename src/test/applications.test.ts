@@ -16,6 +16,7 @@ const state: {
   inserted: Record<string, unknown> | null;
   removed: string[];
   updated: Record<string, unknown> | null;
+  ownerFilter: { col: string; val: unknown } | null;
 } = {
   user: { id: "u1" },
   listingOwner: "owner-x",
@@ -30,6 +31,7 @@ const state: {
   inserted: null,
   removed: [],
   updated: null,
+  ownerFilter: null,
 };
 
 vi.mock("@/lib/supabase", () => ({
@@ -54,10 +56,17 @@ vi.mock("@/lib/supabase", () => ({
             return Promise.resolve({ error: state.insertError });
           },
           select: () => ({
-            // fetchApplicationsForOwner: .select(...).order(...)
+            // fetchApplicationsForOwner: .select(...).eq("listings.owner_id", uid).order(...)
+            eq: (col: string, val: unknown) => {
+              state.ownerFilter = { col, val };
+              return {
+                order: async () => ({ data: state.ownerRows, error: null }),
+                // fetchMyApplication: .select(...).eq().eq().maybeSingle()
+                eq: () => ({ maybeSingle: async () => ({ data: null }) }),
+              };
+            },
+            // por compatibilidad si algún llamador usa .order() directo
             order: async () => ({ data: state.ownerRows, error: null }),
-            // fetchMyApplication: .select(...).eq().eq().maybeSingle()
-            eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null }) }) }),
           }),
           update: (patch: Record<string, unknown>) => {
             state.updated = patch;
@@ -113,6 +122,7 @@ beforeEach(() => {
   state.inserted = null;
   state.removed = [];
   state.updated = null;
+  state.ownerFilter = null;
 });
 
 describe("STATUS_LABEL — estados de seguimiento del candidato", () => {
@@ -208,6 +218,19 @@ describe("fetchApplicationsForOwner — postulaciones recibidas", () => {
       applicant_name: "Ana Pérez",
       status: "pending",
     });
+  });
+
+  // EFFE-038: sin este filtro, la RLS también devolvía las postulaciones que el
+  // propio usuario hizo como candidato (applicant_id = auth.uid()).
+  it("filtra solo por avisos propios (listings.owner_id = usuario)", async () => {
+    state.user = { id: "owner-9" };
+    await fetchApplicationsForOwner();
+    expect(state.ownerFilter).toEqual({ col: "listings.owner_id", val: "owner-9" });
+  });
+
+  it("sin sesión iniciada devuelve una lista vacía", async () => {
+    state.user = null;
+    expect(await fetchApplicationsForOwner()).toEqual([]);
   });
 });
 

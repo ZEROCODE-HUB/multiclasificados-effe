@@ -117,9 +117,20 @@ export interface OwnerApplication {
 // Postulaciones recibidas en los avisos del anunciante actual.
 export async function fetchApplicationsForOwner(): Promise<OwnerApplication[]> {
   try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return [];
+    // EFFE-038: filtrar SOLO las postulaciones a avisos PROPIOS. La RLS de
+    // job_applications deja ver además las que el propio usuario hizo como
+    // candidato (applicant_id = auth.uid()); sin este filtro, un anunciante que
+    // también postuló a algún empleo veía su propia postulación mezclada aquí,
+    // como si fuera un candidato a revisar. El inner join a `listings` + el
+    // filtro por owner_id acota a lo que de verdad es "recibido en mis avisos".
     const { data, error } = await supabase
       .from("job_applications")
-      .select("id, listing_id, applicant_id, message, cv_url, status, created_at, listings(title)")
+      .select("id, listing_id, applicant_id, message, cv_url, status, created_at, listings!inner(title, owner_id)")
+      .eq("listings.owner_id", user.id)
       .order("created_at", { ascending: false });
     if (error) throw error;
     const rows = data ?? [];

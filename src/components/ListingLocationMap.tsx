@@ -36,8 +36,14 @@ export function ListingLocationMap({ lat, lng, price, currency }: ListingLocatio
 
   return (
     <>
-      {/* Mapa estático (no arrastrable): el centro es siempre la ubicación. */}
+      {/* Mapa estático (no arrastrable): el centro es siempre la ubicación.
+          EFFE-096: `key={level}` fuerza a React a MONTAR un iframe nuevo en cada
+          zoom en vez de renavegar el existente. La carga inicial de un iframe
+          recién insertado es un "replacement" y NO agrega una entrada al
+          historial; renavegar el `src` de un iframe ya montado sí la agregaba,
+          por eso el botón "atrás" quedaba atrapado deshaciendo zoom por zoom. */}
       <iframe
+        key={level}
         title="Ubicación en el mapa"
         src={src}
         loading="lazy"
