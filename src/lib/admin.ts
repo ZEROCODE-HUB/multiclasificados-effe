@@ -108,6 +108,59 @@ export async function fetchGrowthSeries(range: GrowthRange = "6m"): Promise<Grow
   }));
 }
 
+// ------------------------------------------------------------- Transacciones de crédito
+export interface AdminCreditTx {
+  id: string;
+  user_id: string;
+  full_name: string;
+  email: string;
+  type: "purchase" | "spend";
+  credits: number;
+  description: string | null;
+  listing_title: string | null;
+  created_at: string;
+}
+
+// Tamaño de página del historial de transacciones (paginación en el servidor).
+export const CREDIT_TX_PAGE_SIZE = 20;
+
+// EFFE-054: historial de transacciones de crédito de TODOS los usuarios, con
+// búsqueda por usuario/correo, filtro de fechas y paginación. El RPC exige el
+// permiso 'Reportes'/'edit' (ver permissions.ts); sin ese permiso devuelve vacío.
+export async function fetchAdminCreditTransactions(opts: {
+  search?: string; from?: string; to?: string; page?: number;
+}): Promise<{ data: AdminCreditTx[]; total: number }> {
+  const page = Math.max(1, opts.page ?? 1);
+  try {
+    const { data, error } = await supabase.rpc("admin_credit_transactions", {
+      p_search: opts.search || null,
+      p_from: opts.from || null,
+      p_to: opts.to || null,
+      p_limit: CREDIT_TX_PAGE_SIZE,
+      p_offset: (page - 1) * CREDIT_TX_PAGE_SIZE,
+    });
+    if (error) throw error;
+    const rows = (data ?? []) as any[];
+    const total = rows.length ? Number(rows[0].total_count) || 0 : 0;
+    return {
+      data: rows.map((r): AdminCreditTx => ({
+        id: r.id,
+        user_id: r.user_id,
+        full_name: r.full_name ?? "—",
+        email: r.email ?? "",
+        type: r.type,
+        credits: Number(r.credits) || 0,
+        description: r.description ?? null,
+        listing_title: r.listing_title ?? null,
+        created_at: r.created_at,
+      })),
+      total,
+    };
+  } catch {
+    return { data: [], total: 0 };
+  }
+}
+
 // ------------------------------------------------------------------ Comprobantes
 // Boletas y facturas de TODOS los anunciantes (panel comercial admin/superadmin).
 // La RLS permite a staff leer todos los comprobantes; unimos hasta el aviso para
@@ -490,15 +543,6 @@ export async function deleteUser(userId: string) {
   if (error) throw error;
 }
 
-export async function fetchUserActivity(userId: string) {
-  if (!isUuid(userId)) return [];
-  try {
-    const { data, error } = await supabase.rpc("admin_user_activity", { p_user: userId });
-    if (error) throw error;
-    return (data as any[]) ?? [];
-  } catch { return []; }
-}
-
 // ------------------------------------------------------------------ Avisos
 export interface AdminListingRow {
   id: string; title: string; category_id: string; status: string; featured: boolean;
@@ -539,11 +583,6 @@ export async function setListingPublishedAt(listingId: string, publishedAtISO: s
   const { error } = await supabase.rpc("admin_set_listing_published", {
     p_listing: listingId, p_published_at: publishedAtISO,
   });
-  if (error) throw error;
-}
-
-export async function toggleFeatured(listingId: string, featured: boolean) {
-  const { error } = await supabase.rpc("admin_toggle_featured", { p_listing: listingId, p_featured: featured });
   if (error) throw error;
 }
 

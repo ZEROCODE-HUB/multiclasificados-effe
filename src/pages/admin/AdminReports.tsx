@@ -6,16 +6,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Download, FileSpreadsheet, FileText, Activity } from "lucide-react";
+import { Download, FileSpreadsheet, FileText, Activity, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
   PieChart, Pie, Cell,
 } from "recharts";
 import { toast } from "@/hooks/use-toast";
 import { useCategories } from "@/hooks/useCategories";
+import { usePermissions } from "@/hooks/usePermissions";
 import {
   fetchCategoryDistribution, fetchCategoryRevenue, fetchRegionDistribution,
-  fetchClaimsSummary, fetchGrowthSeries, type ClaimsSummary, type GrowthPoint,
+  fetchClaimsSummary, fetchGrowthSeries, fetchAdminCreditTransactions,
+  CREDIT_TX_PAGE_SIZE, type ClaimsSummary, type GrowthPoint, type AdminCreditTx,
 } from "@/lib/admin";
 import { exportRows } from "@/lib/exportReport";
 
@@ -110,6 +112,15 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
   const [claims, setClaims] = useState<ClaimsSummary>({ recibidos: 0, pendientes: 0, solucionados: 0, trend: [] });
   const [revenueSeries, setRevenueSeries] = useState<GrowthPoint[]>([]);
 
+  // Permisos: la pestaña "Transacciones" (dato financiero) exige el toggle
+  // 'Reportes'/'edit' (EFFE-054). El superadmin no está sujeto a la matriz.
+  const { can } = usePermissions(role === "admin");
+  const canTx = can("Reportes", "edit");
+  const [txSearch, setTxSearch] = useState("");
+  const [txPage, setTxPage] = useState(1);
+  const [tx, setTx] = useState<{ data: AdminCreditTx[]; total: number }>({ data: [], total: 0 });
+  const [txLoading, setTxLoading] = useState(false);
+
   // El rango de fechas filtra en el servidor (escalable); categoría/región filtran en el cliente.
   useEffect(() => {
     const range = { from: filters.from || null, to: filters.to || null };
@@ -123,6 +134,25 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
     // Pre-carga distribución por categoría (no usada directamente, pero deja el RPC "caliente").
     fetchCategoryDistribution().then(() => {});
   }, []);
+
+  // Historial de transacciones: se carga solo al abrir la pestaña y con permiso.
+  // Debounce de 300 ms para la búsqueda por usuario.
+  useEffect(() => {
+    if (activeTab !== "transacciones" || !canTx) return;
+    setTxLoading(true);
+    const t = setTimeout(() => {
+      fetchAdminCreditTransactions({
+        search: txSearch || undefined,
+        from: filters.from || undefined,
+        to: filters.to || undefined,
+        page: txPage,
+      }).then(setTx).finally(() => setTxLoading(false));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [activeTab, canTx, txSearch, filters.from, filters.to, txPage]);
+
+  // Al cambiar la búsqueda o las fechas, vuelve a la primera página.
+  useEffect(() => { setTxPage(1); }, [txSearch, filters.from, filters.to]);
 
   // Coincidencia de categoría robusta: acepta que el backend devuelva el NOMBRE
   // o el id/slug, sin distinguir mayúsculas/acentos de más.
@@ -158,6 +188,17 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
         { Indicador: "Solucionados", Valor: claims.solucionados },
         ...claimsTrend.map((t) => ({ Indicador: `Mes ${t.mes}`, Valor: `${t.recibidos} recibidos / ${t.solucionados} resueltos` })),
       ];
+    } else if (activeTab === "transacciones") {
+      title = "Transacciones de crédito";
+      rows = tx.data.map((r) => ({
+        Usuario: r.full_name,
+        Correo: r.email,
+        Tipo: r.type === "purchase" ? "Compra" : "Gasto",
+        Créditos: r.credits,
+        Descripción: r.description ?? "",
+        Aviso: r.listing_title ?? "",
+        Fecha: r.created_at.slice(0, 19).replace("T", " "),
+      }));
     } else {
       const cfg = SERIES_TABS.find((x) => x.value === activeTab);
       title = `Reporte de ${activeTab}`;
@@ -187,6 +228,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
               <TabsTrigger value="avisos">Avisos</TabsTrigger>
               <TabsTrigger value="usuarios">Usuarios</TabsTrigger>
               <TabsTrigger value="postulaciones">Postulaciones</TabsTrigger>
+              {canTx && <TabsTrigger value="transacciones">Transacciones</TabsTrigger>}
             </TabsList>
 
             {/* DASHBOARD EN TIEMPO REAL */}
@@ -327,6 +369,83 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
                 </div>
               </TabsContent>
             ))}
+
+            {/* Historial de transacciones de crédito (EFFE-054). Solo con el
+                permiso 'Reportes'/'edit' (dato financiero). */}
+            {canTx && (
+              <TabsContent value="transacciones" className="pt-4 space-y-4">
+                <ReportFilters filters={filters} setFilters={setFilters} regions={regionNames} onExport={exp} show={{ dates: true, catRegion: false }} />
+                <div className="flex items-center bg-muted/50 border border-border h-9 max-w-sm">
+                  <Search size={14} className="ml-3 text-muted-foreground shrink-0" />
+                  <input
+                    value={txSearch}
+                    onChange={(e) => setTxSearch(e.target.value)}
+                    placeholder="Buscar por usuario o correo…"
+                    className="flex-1 min-w-0 bg-transparent px-2 text-sm outline-none"
+                  />
+                </div>
+                <Card>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/30 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+                          <th className="px-4 py-2.5 font-semibold">Usuario</th>
+                          <th className="px-4 py-2.5 font-semibold">Tipo</th>
+                          <th className="px-4 py-2.5 font-semibold text-right">Créditos</th>
+                          <th className="px-4 py-2.5 font-semibold">Descripción</th>
+                          <th className="px-4 py-2.5 font-semibold whitespace-nowrap">Fecha</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {txLoading ? (
+                          <tr><td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">Cargando…</td></tr>
+                        ) : tx.data.length === 0 ? (
+                          <tr><td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">No hay transacciones con estos filtros.</td></tr>
+                        ) : (
+                          tx.data.map((r) => (
+                            <tr key={r.id} className="hover:bg-muted/30">
+                              <td className="px-4 py-2.5">
+                                <p className="font-medium text-foreground">{r.full_name}</p>
+                                <p className="text-[11px] text-muted-foreground">{r.email}</p>
+                              </td>
+                              <td className="px-4 py-2.5">
+                                <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${r.type === "purchase" ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"}`}>
+                                  {r.type === "purchase" ? "Compra" : "Gasto"}
+                                </span>
+                              </td>
+                              <td className={`px-4 py-2.5 text-right font-bold tabular-nums ${r.credits >= 0 ? "text-success" : "text-destructive"}`}>
+                                {r.credits >= 0 ? "+" : ""}{r.credits.toLocaleString()}
+                              </td>
+                              <td className="px-4 py-2.5 text-muted-foreground max-w-[280px] truncate" title={r.description ?? undefined}>
+                                {r.description ?? (r.listing_title ? `Aviso: ${r.listing_title}` : "—")}
+                              </td>
+                              <td className="px-4 py-2.5 whitespace-nowrap text-muted-foreground">
+                                {new Date(r.created_at).toLocaleString("es-PE", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+                {tx.total > CREDIT_TX_PAGE_SIZE && (
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <p className="text-xs text-muted-foreground">
+                      {tx.total.toLocaleString()} transacciones · página {txPage} de {Math.max(1, Math.ceil(tx.total / CREDIT_TX_PAGE_SIZE))}
+                    </p>
+                    <div className="flex gap-1.5">
+                      <Button variant="outline" size="sm" className="gap-1" disabled={txPage <= 1} onClick={() => setTxPage((p) => Math.max(1, p - 1))}>
+                        <ChevronLeft size={14} /> Anterior
+                      </Button>
+                      <Button variant="outline" size="sm" className="gap-1" disabled={txPage >= Math.ceil(tx.total / CREDIT_TX_PAGE_SIZE)} onClick={() => setTxPage((p) => p + 1)}>
+                        Siguiente <ChevronRight size={14} />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </TabsContent>
+            )}
           </Tabs>
         </CardContent>
       </Card>

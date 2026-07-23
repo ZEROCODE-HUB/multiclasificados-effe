@@ -17,6 +17,9 @@ vi.mock("@/lib/admin", () => ({
   fetchRegionDistribution: vi.fn().mockResolvedValue([]),
   fetchClaimsSummary: vi.fn().mockResolvedValue({ recibidos: 0, pendientes: 0, solucionados: 0, trend: [] }),
   fetchGrowthSeries: vi.fn().mockResolvedValue([]),
+  fetchAdminCreditTransactions: vi.fn().mockResolvedValue({ data: [], total: 0 }),
+  CREDIT_TX_PAGE_SIZE: 20,
+  getMyPermissions: vi.fn().mockResolvedValue({}),
 }));
 vi.mock("@/hooks/useCategories", () => ({ useCategories: () => [] }));
 vi.mock("@/hooks/use-toast", () => ({ toast: vi.fn() }));
