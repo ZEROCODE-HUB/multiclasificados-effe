@@ -15,11 +15,20 @@ import { toast } from "@/hooks/use-toast";
 import { useCategories } from "@/hooks/useCategories";
 import {
   fetchCategoryDistribution, fetchCategoryRevenue, fetchRegionDistribution,
-  fetchClaimsSummary, fetchGrowthSeries, type ClaimsSummary,
+  fetchClaimsSummary, fetchGrowthSeries, type ClaimsSummary, type GrowthPoint,
 } from "@/lib/admin";
 import { exportRows } from "@/lib/exportReport";
 
 const COLORS = ["hsl(24 95% 53%)", "hsl(220 56% 30%)", "hsl(160 64% 40%)", "hsl(280 65% 55%)", "hsl(40 90% 50%)", "hsl(200 70% 50%)"];
+
+// Cada pestaña de reporte por tipo grafica SU métrica de la serie de crecimiento
+// (EFFE-044/059/060). Antes las 4 mostraban ingresos+usuarios (el mismo gráfico).
+const SERIES_TABS: { value: string; dataKey: keyof GrowthPoint; barLabel: string; color: string }[] = [
+  { value: "pagos", dataKey: "ingresos", barLabel: "Ingresos (S/)", color: "hsl(24 95% 53%)" },
+  { value: "avisos", dataKey: "avisos", barLabel: "Avisos creados", color: "hsl(220 56% 30%)" },
+  { value: "usuarios", dataKey: "usuarios", barLabel: "Usuarios nuevos", color: "hsl(160 64% 40%)" },
+  { value: "postulaciones", dataKey: "postulaciones", barLabel: "Postulaciones", color: "hsl(280 65% 55%)" },
+];
 
 interface Filters { from: string; to: string; cat: string; region: string }
 
@@ -99,7 +108,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
   const [allCategory, setAllCategory] = useState<{ cat: string; avisos: number; monto: number }[]>([]);
   const [allRegion, setAllRegion] = useState<{ reg: string; avisos: number; monto: number }[]>([]);
   const [claims, setClaims] = useState<ClaimsSummary>({ recibidos: 0, pendientes: 0, solucionados: 0, trend: [] });
-  const [revenueSeries, setRevenueSeries] = useState<{ mes: string; ingresos: number; usuarios: number }[]>([]);
+  const [revenueSeries, setRevenueSeries] = useState<GrowthPoint[]>([]);
 
   // El rango de fechas filtra en el servidor (escalable); categoría/región filtran en el cliente.
   useEffect(() => {
@@ -150,8 +159,9 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
         ...claimsTrend.map((t) => ({ Indicador: `Mes ${t.mes}`, Valor: `${t.recibidos} recibidos / ${t.solucionados} resueltos` })),
       ];
     } else {
+      const cfg = SERIES_TABS.find((x) => x.value === activeTab);
       title = `Reporte de ${activeTab}`;
-      rows = revenueSeries.map((r) => ({ Mes: r.mes, "Ingresos S/": r.ingresos, "Usuarios nuevos": r.usuarios }));
+      rows = revenueSeries.map((r) => ({ Mes: r.mes, [cfg?.barLabel ?? "Valor"]: cfg ? Number(r[cfg.dataKey]) : 0 }));
     }
     try {
       exportRows(format, `reporte-${activeTab}`, `${title}${stamp}`, rows);
@@ -293,12 +303,12 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
               </Card>
             </TabsContent>
 
-            {/* Resto de tabs filtrables/exportables */}
-            {["pagos", "avisos", "usuarios", "postulaciones"].map((tab) => (
-              <TabsContent value={tab} key={tab} className="pt-4 space-y-5">
+            {/* Un reporte por tipo, cada uno con SU métrica real (EFFE-044/059/060). */}
+            {SERIES_TABS.map((t) => (
+              <TabsContent value={t.value} key={t.value} className="pt-4 space-y-5">
                 <ReportFilters filters={filters} setFilters={setFilters} regions={regionNames} onExport={exp} show={{ dates: false, catRegion: false }} />
                 <Card>
-                  <CardHeader><CardTitle className="text-sm capitalize">Reporte de {tab}</CardTitle></CardHeader>
+                  <CardHeader><CardTitle className="text-sm">{t.barLabel} por período</CardTitle></CardHeader>
                   <CardContent className="h-72">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={revenueSeries}>
@@ -307,8 +317,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
                         <YAxis fontSize={12} />
                         <Tooltip />
                         <Legend />
-                        <Bar dataKey="ingresos" fill="hsl(24 95% 53%)" radius={[6, 6, 0, 0]} />
-                        <Bar dataKey="usuarios" fill="hsl(220 56% 30%)" radius={[6, 6, 0, 0]} />
+                        <Bar dataKey={t.dataKey} name={t.barLabel} fill={t.color} radius={[6, 6, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </CardContent>

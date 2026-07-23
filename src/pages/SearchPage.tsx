@@ -82,6 +82,25 @@ export default function SearchPage() {
   const [sort, setSort] = useState<SortKey>((params.get("sort") as SortKey) || "recent");
   const [page, setPage] = useState(1);
 
+  // Cerca de mí (EFFE-033): centro por geolocalización del navegador + radio en km.
+  // No se persiste en la URL: las coordenadas son específicas del dispositivo.
+  const [geo, setGeo] = useState<{ lat: number; lng: number } | null>(null);
+  const [radiusKm, setRadiusKm] = useState<number>(10);
+  const [geoLoading, setGeoLoading] = useState(false);
+
+  const useMyLocation = () => {
+    if (!("geolocation" in navigator)) {
+      toast({ title: "Ubicación no disponible", description: "Tu navegador no permite geolocalización." });
+      return;
+    }
+    setGeoLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { setGeo({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setGeoLoading(false); },
+      () => { setGeoLoading(false); toast({ title: "No se pudo obtener tu ubicación", description: "Revisa los permisos de ubicación del navegador.", variant: "destructive" }); },
+      { enableHighAccuracy: false, timeout: 8000 },
+    );
+  };
+
   // Sincroniza los filtros DESDE la URL (navbar, hero, búsquedas guardadas, o el
   // botón "atrás" que restaura una URL con filtros).
   useEffect(() => {
@@ -180,6 +199,9 @@ export default function SearchPage() {
             priceMin: priceMin ? Number(priceMin) : undefined,
             priceMax: priceMax ? Number(priceMax) : undefined,
             currency: currency || undefined,
+            lat: geo?.lat,
+            lng: geo?.lng,
+            radiusKm: geo ? radiusKm : undefined,
             sort,
           });
       load.then((rows) => {
@@ -192,10 +214,10 @@ export default function SearchPage() {
       });
     }, owner ? 0 : 250);
     return () => clearTimeout(t);
-  }, [q, category, priceMin, priceMax, location, currency, sort, owner]);
+  }, [q, category, priceMin, priceMax, location, currency, sort, owner, geo, radiusKm]);
 
   // Al cambiar la búsqueda o los filtros, vuelve a la primera página.
-  useEffect(() => { setPage(1); }, [q, category, priceMin, priceMax, location, currency, sort, owner]);
+  useEffect(() => { setPage(1); }, [q, category, priceMin, priceMax, location, currency, sort, owner, geo, radiusKm]);
 
   // Porción visible de resultados según la página actual (clamp por si la lista
   // encogió tras filtrar y la página quedó fuera de rango). 20 por página en
@@ -335,6 +357,30 @@ export default function SearchPage() {
         <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Ubicación</label>
         <Input placeholder="Ej: Lima, Miraflores" className="mt-1.5 rounded-none"
           value={location} onChange={(e) => setLocation(e.target.value)} />
+      </div>
+      <div>
+        <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Cerca de mí</label>
+        {geo ? (
+          <div className="mt-1.5 space-y-2">
+            <Select value={String(radiusKm)} onValueChange={(v) => setRadiusKm(Number(v))}>
+              <SelectTrigger className="rounded-none"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="5">5 km a la redonda</SelectItem>
+                <SelectItem value="10">10 km a la redonda</SelectItem>
+                <SelectItem value="25">25 km a la redonda</SelectItem>
+                <SelectItem value="50">50 km a la redonda</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-muted-foreground">Ordenado por cercanía.</span>
+              <button onClick={() => setGeo(null)} className="text-xs font-semibold text-secondary hover:underline">Quitar</button>
+            </div>
+          </div>
+        ) : (
+          <Button variant="outline" size="sm" className="mt-1.5 w-full rounded-none gap-2" onClick={useMyLocation} disabled={geoLoading}>
+            <MapPin size={14} /> {geoLoading ? "Ubicando…" : "Usar mi ubicación"}
+          </Button>
+        )}
       </div>
       <div>
         <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Ordenar por</label>

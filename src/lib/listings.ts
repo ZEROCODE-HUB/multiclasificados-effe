@@ -68,6 +68,11 @@ export interface SearchFilters {
   priceMax?: number;
   currency?: string;
   sort?: SortKey;
+  // Búsqueda por cercanía (EFFE-033): centro (lat/lng) + radio en km. Cuando los
+  // tres vienen, el RPC filtra por distancia (Haversine) y ordena por cercanía.
+  lat?: number;
+  lng?: number;
+  radiusKm?: number;
 }
 
 // Lista de avisos para home / destacados.
@@ -167,6 +172,9 @@ export async function fetchListingDocumentUrl(id: string): Promise<string | null
 // Buscador con filtros combinados (usa el RPC search_listings).
 export async function searchListings(f: SearchFilters): Promise<Listing[]> {
   try {
+    // EFFE-033: si hay centro (lat/lng) + radio, el RPC filtra por distancia y
+    // se ordena por cercanía; sin centro, el orden es el elegido por el usuario.
+    const nearby = f.lat != null && f.lng != null && !!f.radiusKm;
     const { data, error } = await supabase.rpc("search_listings", {
       p_query: f.q || null,
       p_category: f.category || null,
@@ -174,7 +182,10 @@ export async function searchListings(f: SearchFilters): Promise<Listing[]> {
       p_price_min: f.priceMin ?? null,
       p_price_max: f.priceMax ?? null,
       p_currency: f.currency || null,
-      p_sort: f.sort || "recent",
+      p_lat: nearby ? f.lat : null,
+      p_lng: nearby ? f.lng : null,
+      p_radius_km: nearby ? f.radiusKm : null,
+      p_sort: nearby ? "distance" : (f.sort || "recent"),
       p_limit: 48,
       p_offset: 0,
     });
