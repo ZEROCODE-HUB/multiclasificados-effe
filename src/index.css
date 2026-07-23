@@ -1,4 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&display=swap');
+/* La fuente Montserrat se carga desde index.html con un <link> NO bloqueante
+   (preload + swap). Antes venía por @import aquí, que bloquea el render: el
+   navegador tenía que bajar este CSS y RECIÉN pedir la fuente, retrasando el
+   primer pintado (era la causa del LCP alto en móvil). EFFE-009/019/017. */
 
 @tailwind base;
 @tailwind components;
@@ -131,14 +134,26 @@
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
   }
+  /* EFFE-016: el patrón de puntos se anima con `transform` (compositado por GPU)
+     en un pseudo-elemento, en vez de animar `background-position` (que repinta en
+     cada frame y causaba micro-tirones). El ::before se extiende 220px por fuera
+     para que al desplazarse un tile completo (10×22px) no aparezcan bordes. */
   .bg-dot-pattern {
+    position: relative;
+    overflow: hidden;
+  }
+  .bg-dot-pattern::before {
+    content: "";
+    position: absolute;
+    inset: -220px;
     background-image: radial-gradient(rgba(255,255,255,0.10) 1px, transparent 1px);
     background-size: 22px 22px;
     animation: dot-drift 40s linear infinite;
+    will-change: transform;
   }
   @keyframes dot-drift {
-    from { background-position: 0 0; }
-    to   { background-position: 220px 220px; }
+    from { transform: translate3d(0, 0, 0); }
+    to   { transform: translate3d(220px, 220px, 0); }
   }
   .hero-search-focus:focus-within {
     box-shadow: 0 0 0 4px rgba(255,255,255,0.18), 0 16px 40px -12px rgba(0,0,0,0.45);

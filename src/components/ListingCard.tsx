@@ -3,7 +3,7 @@ import { MapPin, Heart, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import type { Listing } from "@/data/mockData";
 import { useSession } from "@/hooks/useSession";
@@ -25,13 +25,10 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
 
   // Solo los usuarios con sesión real pueden ver el detalle.
   const isAuthed = !!session?.supabase;
-  const goToDetail = () => {
-    if (!isAuthed) {
-      navigate(`/auth?redirect=/aviso/${listing.id}`);
-      return;
-    }
-    navigate(`/aviso/${listing.id}`);
-  };
+  // Destino del aviso. Si no hay sesión, se pasa por el login conservando el
+  // redirect. Se usa tanto en el enlace real de la card (EFFE-014) como en el CTA.
+  const detailUrl = isAuthed ? `/aviso/${listing.id}` : `/auth?redirect=/aviso/${listing.id}`;
+  const goToDetail = () => navigate(detailUrl);
 
   const handleFav = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -104,8 +101,10 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
   const featured = !!listing.featured;
 
   if (layout === "list") {
+    // EFFE-014: enlace real (<a>). Este layout no tiene botones anidados (las
+    // insignias son <span>), así que la card entera puede ser el enlace.
     return (
-      <div role="link" tabIndex={0} onClick={goToDetail} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && goToDetail()} className={`flex gap-4 p-3 hover:shadow-lg transition-all cursor-pointer group ${featured ? "bg-amber-50/50 border-2 border-amber-400 hover:border-amber-500" : "bg-card border border-border hover:border-secondary/40"}`}>
+      <Link to={detailUrl} aria-label={listing.title} className={`no-underline text-inherit flex gap-4 p-3 hover:shadow-lg transition-all cursor-pointer group ${featured ? "bg-amber-50/50 border-2 border-amber-400 hover:border-amber-500" : "bg-card border border-border hover:border-secondary/40"}`}>
         <div className="relative w-40 flex-shrink-0 overflow-hidden bg-muted" style={{ aspectRatio: "4 / 3" }}>
           {/* La miniatura se muestra a 160 px: pedimos ese tamaño, no el original. */}
           <img src={imgUrl(listing.imageUrl, 200)} srcSet={imgSrcSet(listing.imageUrl, 200)} sizes="160px" alt={listing.title} className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.05]" loading="lazy" decoding="async" />
@@ -126,13 +125,34 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
             <p className="text-sm text-secondary font-semibold mt-2 group-hover:underline">Ver detalle</p>
           )}
         </div>
-      </div>
+      </Link>
     );
   }
 
 
   return (
-    <div role="link" tabIndex={0} onClick={goToDetail} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && goToDetail()} className={`group cursor-pointer flex flex-col overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5 ${featured ? "bg-amber-50/50 border-2 border-amber-400 ring-1 ring-amber-300/60 hover:border-amber-500" : "bg-card border border-border/70 hover:border-secondary/40"}`}>
+    <div className={`group relative cursor-pointer flex flex-col overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5 ${featured ? "bg-amber-50/50 border-2 border-amber-400 ring-1 ring-amber-300/60 hover:border-amber-500" : "bg-card border border-border/70 hover:border-secondary/40"}`}>
+      {/* EFFE-014: enlace real que cubre toda la card (stretched link). Los
+          controles (favorito, insignias con tooltip, CTA) van con z-10 por encima
+          y como HERMANOS del enlace, para no anidar botones dentro de un <a>. */}
+      <Link to={detailUrl} aria-label={listing.title} className="absolute inset-0 z-[1]" />
+
+      {/* Insignias, "Verificado" y favorito: overlays por ENCIMA del enlace. Como
+          hijos del wrapper (no del contenedor de la imagen) para no quedar
+          atrapados debajo del enlace por el stacking context de la imagen. */}
+      <div className="absolute top-3 left-3 z-10 flex flex-col gap-1.5">
+        {badgeChips}
+      </div>
+      <span className="absolute top-3 right-12 z-10 inline-flex items-center gap-1 px-2.5 py-1 bg-white/95 backdrop-blur-sm text-primary text-[10px] font-bold uppercase tracking-wider shadow-sm">
+        <ShieldCheck size={10} /> Verificado
+      </span>
+      <button
+        onClick={handleFav}
+        className="absolute top-3 right-3 z-10 w-8 h-8 bg-white/95 backdrop-blur-sm flex items-center justify-center hover:bg-white hover:scale-110 transition-all shadow-sm"
+        aria-label="Guardar en favoritos"
+      >
+        <Heart size={15} className={fav ? "text-secondary fill-secondary" : "text-primary"} />
+      </button>
 
       {/* Image — taller, near-square for a premium presence */}
       <div className="relative overflow-hidden bg-muted" style={{ aspectRatio: "1 / 1" }}>
@@ -145,23 +165,6 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
           decoding="async"
           className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.05]"
         />
-        {/* Insignias — iconos apilados por la izquierda (nombre en el tooltip).
-            En columna para no crecer hacia el badge "Verificado" de la derecha. */}
-        <div className="absolute top-3 left-3 flex flex-col gap-1.5">
-          {badgeChips}
-        </div>
-        <span className="absolute top-3 right-12 inline-flex items-center gap-1 px-2.5 py-1 bg-white/95 backdrop-blur-sm text-primary text-[10px] font-bold uppercase tracking-wider shadow-sm">
-          <ShieldCheck size={10} /> Verificado
-        </span>
-        {/* Favorite */}
-        <button
-          onClick={handleFav}
-          className="absolute top-3 right-3 w-8 h-8 bg-white/95 backdrop-blur-sm flex items-center justify-center hover:bg-white hover:scale-110 transition-all shadow-sm"
-          aria-label="Guardar en favoritos"
-        >
-          <Heart size={15} className={fav ? "text-secondary fill-secondary" : "text-primary"} />
-        </button>
-
       </div>
 
       {/* Content — generous spacing */}
@@ -195,7 +198,7 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
           variant="outline"
           size="sm"
           onClick={(e) => { e.stopPropagation(); goToDetail(); }}
-          className="w-full mt-1 font-semibold border-border hover:border-primary hover:bg-primary hover:text-primary-foreground transition-all rounded-none"
+          className="relative z-10 w-full mt-1 font-semibold border-border hover:border-primary hover:bg-primary hover:text-primary-foreground transition-all rounded-none"
         >
           Ver detalle
         </Button>

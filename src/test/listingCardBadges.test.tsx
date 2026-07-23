@@ -51,13 +51,15 @@ describe("ListingCard — insignias de adicionales", () => {
   });
 
   // El documento pide para Destacado un "marco dorado" (además de la insignia).
+  // El marco vive en el wrapper de la card; el enlace real (EFFE-014) es un
+  // overlay aparte, así que se consulta el wrapper (container.firstChild), no el link.
   it("el aviso Destacado lleva marco dorado", () => {
-    renderCard({ featured: true });
-    expect(screen.getByRole("link").className).toContain("amber");
+    const { container } = renderCard({ featured: true });
+    expect((container.firstChild as HTMLElement).className).toContain("amber");
   });
 
   it("un aviso sin Destacado no lleva marco dorado", () => {
-    renderCard({ urgent: true });
-    expect(screen.getByRole("link").className).not.toContain("amber");
+    const { container } = renderCard({ urgent: true });
+    expect((container.firstChild as HTMLElement).className).not.toContain("amber");
   });
 });
