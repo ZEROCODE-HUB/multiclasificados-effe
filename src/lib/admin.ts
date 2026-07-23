@@ -72,19 +72,40 @@ export const GROWTH_RANGES: { value: GrowthRange; label: string }[] = [
   { value: "all", label: "Histórico" },
 ];
 
-export async function fetchGrowthSeries(range: GrowthRange = "6m") {
+// Un punto de la serie de crecimiento. `avisos`/`postulaciones` se agregaron
+// para los reportes por tipo del admin (EFFE-044/059/060).
+export interface GrowthPoint {
+  mes: string;
+  ingresos: number;
+  usuarios: number;
+  avisos: number;
+  postulaciones: number;
+}
+
+export async function fetchGrowthSeries(range: GrowthRange = "6m"): Promise<GrowthPoint[]> {
   try {
     const { data, error } = await supabase.rpc("admin_growth_series", { p_range: range });
     if (error) throw error;
     if (data?.length) return (data as any[]).map((r) => ({
-      mes: r.mes, ingresos: Number(r.ingresos) || 0, usuarios: Number(r.usuarios) || 0,
+      mes: r.mes,
+      ingresos: Number(r.ingresos) || 0,
+      usuarios: Number(r.usuarios) || 0,
+      avisos: Number(r.avisos) || 0,
+      postulaciones: Number(r.postulaciones) || 0,
     }));
   } catch { /* fallback */ }
   // Con sesión de staff: sin datos reales → serie vacía, nunca la demo.
-  if (await isAuthed()) return [] as typeof mockSeries;
+  if (await isAuthed()) return [];
   // Demo (sin sesión): la serie de ejemplo son 6 meses fijos y no reacciona al
-  // rango; el filtro solo tiene efecto real contra la base.
-  return mockSeries;
+  // rango; el filtro solo tiene efecto real contra la base. La demo no trae
+  // avisos/postulaciones → se completan en 0.
+  return mockSeries.map((r: { mes: string; ingresos: number; usuarios: number }) => ({
+    mes: r.mes,
+    ingresos: Number(r.ingresos) || 0,
+    usuarios: Number(r.usuarios) || 0,
+    avisos: 0,
+    postulaciones: 0,
+  }));
 }
 
 // ------------------------------------------------------------------ Comprobantes
