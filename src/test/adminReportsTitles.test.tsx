@@ -25,14 +25,17 @@ vi.mock("@/lib/exportReport", () => ({ exportRows: vi.fn() }));
 import AdminReports from "@/pages/admin/AdminReports";
 
 describe("AdminReports — títulos de gráficos sin 'gratuitos'", () => {
-  it("muestra 'Avisos por categoría' y 'Avisos por región'", () => {
+  // `findByText` espera a que se resuelvan los fetch* asíncronos (dentro de act),
+  // así no quedan advertencias de "update not wrapped in act(...)".
+  it("muestra 'Avisos por categoría' y 'Avisos por región'", async () => {
     render(<AdminReports role="superadmin" />);
-    expect(screen.getByText("Avisos por categoría")).toBeTruthy();
-    expect(screen.getByText("Avisos por región")).toBeTruthy();
+    expect(await screen.findByText("Avisos por categoría")).toBeTruthy();
+    expect(await screen.findByText("Avisos por región")).toBeTruthy();
   });
 
-  it("no muestra ningún título con la palabra 'gratuitos'", () => {
+  it("no muestra ningún título con la palabra 'gratuitos'", async () => {
     render(<AdminReports role="superadmin" />);
+    await screen.findByText("Avisos por categoría"); // espera el render estable
     expect(screen.queryByText(/gratuit/i)).toBeNull();
   });
 });
