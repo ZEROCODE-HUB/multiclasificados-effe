@@ -16,10 +16,14 @@ export interface TablePDF {
   subtitle?: string;
   headers: string[];
   rows: Row[];
+  /** Apaisado: intercambia ancho/alto para tablas anchas (más columnas caben
+   *  sin truncarse con "…"). Por defecto retrato. */
+  landscape?: boolean;
 }
 
-const PAGE_W = 595; // A4 en puntos (72 dpi)
-const PAGE_H = 842;
+// A4 en puntos (72 dpi). Retrato = 595×842; apaisado = 842×595.
+const A4_SHORT = 595;
+const A4_LONG = 842;
 const MARGIN = 40;
 const FONT_SIZE = 9;
 const ROW_H = 18;
@@ -106,8 +110,8 @@ function paginate(rows: Row[], firstTop: number, restTop: number): Row[][] {
   return pages;
 }
 
-function drawTable(ops: string[], headers: string[], rows: Row[], widths: number[], top: number) {
-  const tableW = PAGE_W - MARGIN * 2;
+function drawTable(ops: string[], headers: string[], rows: Row[], widths: number[], top: number, pageW: number) {
+  const tableW = pageW - MARGIN * 2;
   let y = top;
 
   // Cabecera con fondo gris muy claro.
@@ -152,24 +156,26 @@ function drawTable(ops: string[], headers: string[], rows: Row[], widths: number
  * Arma el PDF completo. Devuelve los bytes; quien llama decide qué hacer con ellos
  * (descargarlos, guardarlos en disco en los tests).
  */
-export function renderTablePDF({ title, subtitle, headers, rows }: TablePDF): Uint8Array {
+export function renderTablePDF({ title, subtitle, headers, rows, landscape }: TablePDF): Uint8Array {
+  const pageW = landscape ? A4_LONG : A4_SHORT;
+  const pageH = landscape ? A4_SHORT : A4_LONG;
   const cols = headers.length ? headers : ["Sin datos"];
   const data = rows.length ? rows : [{ "Sin datos": "No hay información para el filtro elegido" }];
-  const widths = columnWidths(cols, data, PAGE_W - MARGIN * 2);
+  const widths = columnWidths(cols, data, pageW - MARGIN * 2);
 
-  const firstTop = PAGE_H - MARGIN - (subtitle ? 46 : 32);
-  const restTop = PAGE_H - MARGIN;
+  const firstTop = pageH - MARGIN - (subtitle ? 46 : 32);
+  const restTop = pageH - MARGIN;
   const pages = paginate(data, firstTop, restTop);
 
   const contents = pages.map((pageRows, p) => {
     const ops: string[] = [];
     if (p === 0) {
-      ops.push(`BT /F2 15 Tf 0.07 0.09 0.15 rg 1 0 0 1 ${MARGIN} ${PAGE_H - MARGIN - 12} Tm (${pdfText(title)}) Tj ET`);
+      ops.push(`BT /F2 15 Tf 0.07 0.09 0.15 rg 1 0 0 1 ${MARGIN} ${pageH - MARGIN - 12} Tm (${pdfText(title)}) Tj ET`);
       if (subtitle) {
-        ops.push(`BT /F1 9 Tf 0.42 0.45 0.50 rg 1 0 0 1 ${MARGIN} ${PAGE_H - MARGIN - 28} Tm (${pdfText(subtitle)}) Tj ET`);
+        ops.push(`BT /F1 9 Tf 0.42 0.45 0.50 rg 1 0 0 1 ${MARGIN} ${pageH - MARGIN - 28} Tm (${pdfText(subtitle)}) Tj ET`);
       }
     }
-    drawTable(ops, cols, pageRows, widths, p === 0 ? firstTop : restTop);
+    drawTable(ops, cols, pageRows, widths, p === 0 ? firstTop : restTop, pageW);
     const pie = `Página ${p + 1} de ${pages.length}`;
     ops.push(`BT /F1 8 Tf 0.61 0.64 0.69 rg 1 0 0 1 ${MARGIN} ${FOOTER_Y} Tm (${pdfText(pie)}) Tj ET`);
     return ops.join("\n");
@@ -185,7 +191,7 @@ export function renderTablePDF({ title, subtitle, headers, rows }: TablePDF): Ui
   ];
   contents.forEach((stream, i) => {
     objects.push(
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] ` +
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] ` +
         `/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${pageIds[i] + 1} 0 R >>`,
     );
     objects.push(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);

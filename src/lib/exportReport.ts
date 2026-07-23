@@ -67,19 +67,21 @@ export function exportExcel(filename: string, rows: Row[], title = "Reporte") {
   descargar(new Blob(["﻿" + html], { type: "application/vnd.ms-excel" }), `${filename}.xls`);
 }
 
-export function exportPDF(filename: string, title: string, rows: Row[]) {
+export function exportPDF(filename: string, title: string, rows: Row[], landscape = false) {
   const bytes = renderTablePDF({
     title: `eFFe Multiclasificados — ${title}`,
     subtitle: `Generado el ${new Date().toLocaleString("es-PE")}`,
     headers: rows.length ? Object.keys(rows[0]) : [],
     rows,
+    landscape,
   });
   descargar(new Blob([bytes], { type: "application/pdf" }), `${filename}.pdf`);
 }
 
-// Despacha según el formato elegido en los botones de la UI.
-export function exportRows(format: string, filename: string, title: string, rows: Row[]) {
+// Despacha según el formato elegido en los botones de la UI. `landscape` solo
+// afecta al PDF (tablas anchas como transacciones se generan apaisadas).
+export function exportRows(format: string, filename: string, title: string, rows: Row[], opts?: { landscape?: boolean }) {
   if (format === "csv") exportCSV(filename, rows);
   else if (format === "xlsx") exportExcel(filename, rows, title);
-  else exportPDF(filename, title, rows);
+  else exportPDF(filename, title, rows, opts?.landscape);
 }

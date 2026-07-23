@@ -20,13 +20,18 @@ import {
   CREDIT_TX_PAGE_SIZE, type ClaimsSummary, type GrowthPoint, type AdminCreditTx,
 } from "@/lib/admin";
 import { exportRows } from "@/lib/exportReport";
+import { formatCredits } from "@/lib/pricing";
 
 const COLORS = ["hsl(24 95% 53%)", "hsl(220 56% 30%)", "hsl(160 64% 40%)", "hsl(280 65% 55%)", "hsl(40 90% 50%)", "hsl(200 70% 50%)"];
 
+// Formato de dinero para tooltips/valores de los reportes: siempre con "S/".
+const soles = (v: number | string) => `S/ ${Number(v).toLocaleString("es-PE")}`;
+
 // Cada pestaña de reporte por tipo grafica SU métrica de la serie de crecimiento
 // (EFFE-044/059/060). Antes las 4 mostraban ingresos+usuarios (el mismo gráfico).
-const SERIES_TABS: { value: string; dataKey: keyof GrowthPoint; barLabel: string; color: string }[] = [
-  { value: "pagos", dataKey: "ingresos", barLabel: "Ingresos (S/)", color: "hsl(24 95% 53%)" },
+// `money` marca las que son dinero (se muestran con "S/" en el tooltip).
+const SERIES_TABS: { value: string; dataKey: keyof GrowthPoint; barLabel: string; color: string; money?: boolean }[] = [
+  { value: "pagos", dataKey: "ingresos", barLabel: "Ingresos (S/)", color: "hsl(24 95% 53%)", money: true },
   { value: "avisos", dataKey: "avisos", barLabel: "Avisos creados", color: "hsl(220 56% 30%)" },
   { value: "usuarios", dataKey: "usuarios", barLabel: "Usuarios nuevos", color: "hsl(160 64% 40%)" },
   { value: "postulaciones", dataKey: "postulaciones", barLabel: "Postulaciones", color: "hsl(280 65% 55%)" },
@@ -117,6 +122,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
   const { can } = usePermissions(role === "admin");
   const canTx = can("Reportes", "edit");
   const [txSearch, setTxSearch] = useState("");
+  const [txType, setTxType] = useState<"all" | "purchase" | "spend">("all");
   const [txPage, setTxPage] = useState(1);
   const [tx, setTx] = useState<{ data: AdminCreditTx[]; total: number }>({ data: [], total: 0 });
   const [txLoading, setTxLoading] = useState(false);
@@ -143,16 +149,17 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
     const t = setTimeout(() => {
       fetchAdminCreditTransactions({
         search: txSearch || undefined,
+        type: txType === "all" ? undefined : txType,
         from: filters.from || undefined,
         to: filters.to || undefined,
         page: txPage,
       }).then(setTx).finally(() => setTxLoading(false));
     }, 300);
     return () => clearTimeout(t);
-  }, [activeTab, canTx, txSearch, filters.from, filters.to, txPage]);
+  }, [activeTab, canTx, txSearch, txType, filters.from, filters.to, txPage]);
 
-  // Al cambiar la búsqueda o las fechas, vuelve a la primera página.
-  useEffect(() => { setTxPage(1); }, [txSearch, filters.from, filters.to]);
+  // Al cambiar la búsqueda, el tipo o las fechas, vuelve a la primera página.
+  useEffect(() => { setTxPage(1); }, [txSearch, txType, filters.from, filters.to]);
 
   // Coincidencia de categoría robusta: acepta que el backend devuelva el NOMBRE
   // o el id/slug, sin distinguir mayúsculas/acentos de más.
@@ -194,9 +201,8 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
         Usuario: r.full_name,
         Correo: r.email,
         Tipo: r.type === "purchase" ? "Compra" : "Gasto",
-        Créditos: r.credits,
-        Descripción: r.description ?? "",
-        Aviso: r.listing_title ?? "",
+        "Monto (S/)": `${r.credits >= 0 ? "+" : "−"}${formatCredits(Math.abs(r.credits))}`,
+        Detalle: r.description ?? (r.listing_title ? `Aviso: ${r.listing_title}` : ""),
         Fecha: r.created_at.slice(0, 19).replace("T", " "),
       }));
     } else {
@@ -205,7 +211,8 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
       rows = revenueSeries.map((r) => ({ Mes: r.mes, [cfg?.barLabel ?? "Valor"]: cfg ? Number(r[cfg.dataKey]) : 0 }));
     }
     try {
-      exportRows(format, `reporte-${activeTab}`, `${title}${stamp}`, rows);
+      // Las transacciones tienen muchas columnas → PDF apaisado (no se truncan).
+      exportRows(format, `reporte-${activeTab}`, `${title}${stamp}`, rows, { landscape: activeTab === "transacciones" });
     } catch {
       toast({ title: "No se pudo exportar el reporte", variant: "destructive" });
       return;
@@ -270,7 +277,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 14% 90%)" />
                         <XAxis dataKey="cat" fontSize={11} />
                         <YAxis fontSize={11} />
-                        <Tooltip />
+                        <Tooltip formatter={(value, name) => (name === "S/ cobrado" ? [soles(value as number), name] : [value, name])} />
                         <Legend />
                         <Bar dataKey="avisos" fill="hsl(24 95% 53%)" radius={[4, 4, 0, 0]} />
                         <Bar dataKey="monto" fill="hsl(220 56% 30%)" radius={[4, 4, 0, 0]} name="S/ cobrado" />
@@ -308,7 +315,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 14% 90%)" />
                         <XAxis type="number" fontSize={11} />
                         <YAxis dataKey="reg" type="category" fontSize={11} width={80} />
-                        <Tooltip />
+                        <Tooltip formatter={(value, name) => (name === "S/ cobrado" ? [soles(value as number), name] : [value, name])} />
                         <Legend />
                         <Bar dataKey="avisos" fill="hsl(24 95% 53%)" radius={[0, 4, 4, 0]} />
                         <Bar dataKey="monto" fill="hsl(220 56% 30%)" radius={[0, 4, 4, 0]} name="S/ cobrado" />
@@ -357,7 +364,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 14% 90%)" />
                         <XAxis dataKey="mes" fontSize={12} />
                         <YAxis fontSize={12} />
-                        <Tooltip />
+                        <Tooltip formatter={t.money ? ((value) => soles(value as number)) : undefined} />
                         <Legend />
                         <Bar dataKey={t.dataKey} name={t.barLabel} fill={t.color} radius={[6, 6, 0, 0]} />
                       </BarChart>
@@ -375,14 +382,24 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
             {canTx && (
               <TabsContent value="transacciones" className="pt-4 space-y-4">
                 <ReportFilters filters={filters} setFilters={setFilters} regions={regionNames} onExport={exp} show={{ dates: true, catRegion: false }} />
-                <div className="flex items-center bg-muted/50 border border-border h-9 max-w-sm">
-                  <Search size={14} className="ml-3 text-muted-foreground shrink-0" />
-                  <input
-                    value={txSearch}
-                    onChange={(e) => setTxSearch(e.target.value)}
-                    placeholder="Buscar por usuario o correo…"
-                    className="flex-1 min-w-0 bg-transparent px-2 text-sm outline-none"
-                  />
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center bg-muted/50 border border-border h-9 flex-1 min-w-[180px] max-w-sm">
+                    <Search size={14} className="ml-3 text-muted-foreground shrink-0" />
+                    <input
+                      value={txSearch}
+                      onChange={(e) => setTxSearch(e.target.value)}
+                      placeholder="Buscar por usuario o correo…"
+                      className="flex-1 min-w-0 bg-transparent px-2 text-sm outline-none"
+                    />
+                  </div>
+                  <Select value={txType} onValueChange={(v) => setTxType(v as "all" | "purchase" | "spend")}>
+                    <SelectTrigger className="h-9 w-40"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos los tipos</SelectItem>
+                      <SelectItem value="purchase">Compras</SelectItem>
+                      <SelectItem value="spend">Gastos</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <Card>
                   <div className="overflow-x-auto">
@@ -391,7 +408,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
                         <tr className="border-b bg-muted/30 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
                           <th className="px-4 py-2.5 font-semibold">Usuario</th>
                           <th className="px-4 py-2.5 font-semibold">Tipo</th>
-                          <th className="px-4 py-2.5 font-semibold text-right">Créditos</th>
+                          <th className="px-4 py-2.5 font-semibold text-right whitespace-nowrap">Monto (S/)</th>
                           <th className="px-4 py-2.5 font-semibold">Descripción</th>
                           <th className="px-4 py-2.5 font-semibold whitespace-nowrap">Fecha</th>
                         </tr>
@@ -413,8 +430,8 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
                                   {r.type === "purchase" ? "Compra" : "Gasto"}
                                 </span>
                               </td>
-                              <td className={`px-4 py-2.5 text-right font-bold tabular-nums ${r.credits >= 0 ? "text-success" : "text-destructive"}`}>
-                                {r.credits >= 0 ? "+" : ""}{r.credits.toLocaleString()}
+                              <td className={`px-4 py-2.5 text-right font-bold tabular-nums whitespace-nowrap ${r.credits >= 0 ? "text-success" : "text-destructive"}`}>
+                                {r.credits >= 0 ? "+" : "−"}{formatCredits(Math.abs(r.credits))}
                               </td>
                               <td className="px-4 py-2.5 text-muted-foreground max-w-[280px] truncate" title={r.description ?? undefined}>
                                 {r.description ?? (r.listing_title ? `Aviso: ${r.listing_title}` : "—")}

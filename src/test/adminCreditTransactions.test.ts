@@ -18,17 +18,17 @@ import { fetchAdminCreditTransactions, CREDIT_TX_PAGE_SIZE } from "@/lib/admin";
 beforeEach(() => { state.args = null; state.data = []; });
 
 describe("fetchAdminCreditTransactions (EFFE-054)", () => {
-  it("envía search/from/to y calcula el offset por página", async () => {
-    await fetchAdminCreditTransactions({ search: "ana", from: "2026-07-01", to: "2026-07-31", page: 3 });
+  it("envía search/tipo/from/to y calcula el offset por página", async () => {
+    await fetchAdminCreditTransactions({ search: "ana", type: "spend", from: "2026-07-01", to: "2026-07-31", page: 3 });
     expect(state.args).toMatchObject({
-      p_search: "ana", p_from: "2026-07-01", p_to: "2026-07-31",
+      p_search: "ana", p_type: "spend", p_from: "2026-07-01", p_to: "2026-07-31",
       p_limit: CREDIT_TX_PAGE_SIZE, p_offset: (3 - 1) * CREDIT_TX_PAGE_SIZE,
     });
   });
 
   it("valores vacíos viajan como null y offset 0", async () => {
     await fetchAdminCreditTransactions({});
-    expect(state.args).toMatchObject({ p_search: null, p_from: null, p_to: null, p_offset: 0 });
+    expect(state.args).toMatchObject({ p_search: null, p_type: null, p_from: null, p_to: null, p_offset: 0 });
   });
 
   it("mapea filas y lee total_count de la primera fila", async () => {

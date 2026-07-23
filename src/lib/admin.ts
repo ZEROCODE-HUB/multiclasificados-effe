@@ -128,12 +128,13 @@ export const CREDIT_TX_PAGE_SIZE = 20;
 // búsqueda por usuario/correo, filtro de fechas y paginación. El RPC exige el
 // permiso 'Reportes'/'edit' (ver permissions.ts); sin ese permiso devuelve vacío.
 export async function fetchAdminCreditTransactions(opts: {
-  search?: string; from?: string; to?: string; page?: number;
+  search?: string; type?: "purchase" | "spend"; from?: string; to?: string; page?: number;
 }): Promise<{ data: AdminCreditTx[]; total: number }> {
   const page = Math.max(1, opts.page ?? 1);
   try {
     const { data, error } = await supabase.rpc("admin_credit_transactions", {
       p_search: opts.search || null,
+      p_type: opts.type || null,
       p_from: opts.from || null,
       p_to: opts.to || null,
       p_limit: CREDIT_TX_PAGE_SIZE,
