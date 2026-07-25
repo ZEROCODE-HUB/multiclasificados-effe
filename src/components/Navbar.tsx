@@ -25,15 +25,16 @@ import { CreditsBalance } from "@/components/CreditsBalance";
 
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [query, setQuery] = useState("");
+  const location = useLocation();
+  // El buscador del header refleja la búsqueda activa de la URL (?q=) al entrar,
+  // p. ej. en /buscar. En desktop es el buscador principal (arriba al centro);
+  // en /buscar el cuerpo ya no muestra otro (solo en móvil), así que no hay doble
+  // buscador (IT2-034).
+  const [query, setQuery] = useState(() => new URLSearchParams(location.search).get("q") ?? "");
   const categories = useCategories();
   const navigate = useNavigate();
-  const location = useLocation();
   const session = useSession();
   const unread = useUnreadMessages();
-  // En /buscar la propia página ya tiene su buscador en el cuerpo; ocultamos el
-  // del header para no mostrar dos barras de búsqueda a la vez (IT2-034).
-  const onSearchPage = location.pathname === "/buscar";
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,7 +118,7 @@ export function Navbar() {
 
         <form
           onSubmit={submit}
-          className={`${onSearchPage ? "hidden" : "hidden md:flex"} flex-1 min-w-0 max-w-xl items-center bg-muted/50 border border-border rounded-none overflow-hidden focus-within:ring-2 focus-within:ring-secondary/30 focus-within:border-secondary/40 focus-within:bg-card transition-all h-11`}
+          className="hidden md:flex flex-1 min-w-0 max-w-xl items-center bg-muted/50 border border-border rounded-none overflow-hidden focus-within:ring-2 focus-within:ring-secondary/30 focus-within:border-secondary/40 focus-within:bg-card transition-all h-11"
         >
           <Search size={16} className="ml-4 text-muted-foreground shrink-0" />
           <input

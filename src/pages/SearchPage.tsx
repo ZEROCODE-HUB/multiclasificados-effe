@@ -283,7 +283,7 @@ export default function SearchPage() {
   const FilterBar = useMemo(
     () => (
       <div className="border-b border-border bg-card">
-        <div className="container mx-auto px-4 md:px-6 py-3 space-y-2 md:space-y-0">
+        <div className="container mx-auto px-4 md:px-6 py-2 space-y-2 md:space-y-0">
           {/* Top row: filtros + toggle (siempre visibles, sin scroll) */}
           <div className="flex items-center gap-3 md:hidden">
             <Button
@@ -439,10 +439,12 @@ export default function SearchPage() {
     <div className={`${view === "map" ? "min-h-screen lg:h-screen" : "min-h-screen"} flex flex-col bg-background`}>
       <Navbar />
 
-      {/* Búsqueda en vivo (filtra mientras escribes) */}
-      <div className="border-b border-border bg-card">
-        <div className="container mx-auto px-4 md:px-6 py-3">
-          <div className="flex items-center bg-muted/50 border border-border h-11 max-w-2xl focus-within:border-secondary/40 focus-within:bg-card transition-colors">
+      {/* Búsqueda en vivo SOLO en móvil (filtra mientras escribes). En desktop el
+          buscador vive arriba al centro, en el Navbar, para no duplicarlo y ganar
+          espacio vertical para más avisos. */}
+      <div className="md:hidden border-b border-border bg-card">
+        <div className="container mx-auto px-4 py-2">
+          <div className="flex items-center bg-muted/50 border border-border h-10 focus-within:border-secondary/40 focus-within:bg-card transition-colors">
             <Search size={16} className="ml-3 text-muted-foreground shrink-0" />
             <input
               value={q}
@@ -487,15 +489,15 @@ export default function SearchPage() {
       )}
 
       {view === "list" ? (
-        <div className="container mx-auto px-4 md:px-6 pt-8 pb-28 lg:pb-8 flex-1">
-          <div className="flex items-baseline justify-between mb-6">
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] font-bold text-secondary">Resultados</p>
-              <h1 className="text-2xl md:text-3xl font-extrabold text-foreground mt-1">
-                {listings.length} avisos disponibles
-              </h1>
-            </div>
-            <div className="hidden md:flex gap-1 border border-border p-0.5">
+        <div className="container mx-auto px-4 md:px-6 pt-4 pb-28 lg:pb-8 flex-1">
+          <div className="flex items-center justify-between gap-3 mb-4">
+            {/* "Resultados" + conteo en una sola línea (más compacto). */}
+            <h1 className="text-base md:text-lg font-extrabold text-foreground flex items-baseline gap-2 min-w-0">
+              <span className="text-[11px] uppercase tracking-[0.18em] font-bold text-secondary shrink-0">Resultados</span>
+              <span className="text-muted-foreground/50">·</span>
+              <span className="truncate">{listings.length} avisos disponibles</span>
+            </h1>
+            <div className="hidden md:flex gap-1 border border-border p-0.5 shrink-0">
               <Button
                 variant={layout === "grid" ? "default" : "ghost"}
                 size="icon"
@@ -517,8 +519,8 @@ export default function SearchPage() {
             </div>
           </div>
 
-          <div className="flex gap-6">
-            <aside className="hidden lg:block w-72 flex-shrink-0">
+          <div className="flex gap-5">
+            <aside className="hidden lg:block w-64 flex-shrink-0">
               {FiltersPanel}
             </aside>
 
@@ -532,8 +534,8 @@ export default function SearchPage() {
                   <div
                     className={
                       layout === "grid"
-                        ? "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-5"
-                        : "space-y-4"
+                        ? "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6 gap-3"
+                        : "space-y-3"
                     }
                   >
                     {pageListings.map((listing) => (
