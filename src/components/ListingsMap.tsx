@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { imgUrl } from "@/lib/imageUrl";
+import { formatCompactPrice } from "@/lib/pricing";
 import { MapContainer, TileLayer, Marker, Popup, useMap, AttributionControl } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
 import L from "leaflet";
@@ -12,8 +13,8 @@ import type { Listing } from "@/data/mockData";
 // Centro por defecto: Lima Metropolitana.
 const LIMA_CENTER: [number, number] = [-12.0464, -77.0428];
 
-const formatPrice = (price: number, currency: string) =>
-  currency === "USD" ? `US$ ${(price / 1000).toFixed(0)}K` : `S/ ${price.toLocaleString()}`;
+// Precio compacto para el pin del mapa (ver formatCompactPrice en pricing.ts).
+const formatPrice = formatCompactPrice;
 
 // Un aviso con coordenadas válidas (lat/lng no nulos).
 type GeoListing = Listing & { lat: number; lng: number };

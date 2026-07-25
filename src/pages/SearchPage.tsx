@@ -439,10 +439,12 @@ export default function SearchPage() {
     <div className={`${view === "map" ? "min-h-screen lg:h-screen" : "min-h-screen"} flex flex-col bg-background`}>
       <Navbar />
 
-      {/* Búsqueda en vivo SOLO en móvil (filtra mientras escribes). En desktop el
-          buscador vive arriba al centro, en el Navbar, para no duplicarlo y ganar
-          espacio vertical para más avisos. */}
-      <div className="md:hidden border-b border-border bg-card">
+      {/* Búsqueda en vivo (filtra mientras escribes) en móvil, tablet y laptop
+          chico (< xl). En pantallas grandes (xl+) el buscador vive arriba al
+          centro, en el Navbar, donde hay espacio de sobra; por debajo de xl el
+          Navbar se satura y el buscador se perdía, así que lo bajamos aquí. Así
+          nunca hay dos buscadores a la vez. */}
+      <div className="xl:hidden border-b border-border bg-card">
         <div className="container mx-auto px-4 py-2">
           <div className="flex items-center bg-muted/50 border border-border h-10 focus-within:border-secondary/40 focus-within:bg-card transition-colors">
             <Search size={16} className="ml-3 text-muted-foreground shrink-0" />

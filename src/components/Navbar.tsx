@@ -118,7 +118,7 @@ export function Navbar() {
 
         <form
           onSubmit={submit}
-          className="hidden md:flex flex-1 min-w-0 max-w-xl items-center bg-muted/50 border border-border rounded-none overflow-hidden focus-within:ring-2 focus-within:ring-secondary/30 focus-within:border-secondary/40 focus-within:bg-card transition-all h-11"
+          className="hidden xl:flex flex-1 min-w-0 max-w-xl items-center bg-muted/50 border border-border rounded-none overflow-hidden focus-within:ring-2 focus-within:ring-secondary/30 focus-within:border-secondary/40 focus-within:bg-card transition-all h-11"
         >
           <Search size={16} className="ml-4 text-muted-foreground shrink-0" />
           <input

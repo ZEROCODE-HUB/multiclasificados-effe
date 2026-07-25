@@ -221,6 +221,17 @@ export function formatCredits(v: number) {
   return `S/ ${cifra}`;
 }
 
+// Precio COMPACTO para espacios chicos (p. ej. los pines del mapa). Abrevia solo
+// montos grandes (K/M) y muestra completos los chicos. Antes se dividía siempre
+// entre 1000 con "K", así que "US$ 2" se veía como "US$ 0K".
+export function formatCompactPrice(price: number, currency: string): string {
+  const sym = currency === "USD" ? "US$" : "S/";
+  const n = Number.isFinite(price) ? price : 0;
+  if (n >= 1_000_000) return `${sym} ${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 10_000) return `${sym} ${Math.round(n / 1000)}K`;
+  return `${sym} ${n.toLocaleString("es-PE")}`;
+}
+
 // === Helpers para reportes/cierre de venta/boletas (persistidos en localStorage) ===
 const REPORTS_KEY = "effe:reports";
 const SOLD_KEY = "effe:sold";
