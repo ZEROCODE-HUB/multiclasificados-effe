@@ -136,9 +136,9 @@ export function Navbar() {
         <div className="hidden md:flex items-center gap-1 ml-auto shrink-0">
           {isUser && (
             <>
-              <Link to="/dashboard/buscador/favoritos" className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Favoritos">
-                <Heart size={18} />
-              </Link>
+              {/* Favoritos ya no va como ícono suelto: libera espacio para el
+                  buscador. Sigue accesible desde el menú "Mi Cuenta" y en la
+                  barra inferior móvil. */}
               <NotificationsBell />
               <Link
                 to={session?.role === "buscador" ? "/dashboard/buscador/mensajes" : "/dashboard/anunciante/mensajes"}

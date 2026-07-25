@@ -82,6 +82,14 @@ const Index = () => {
   const session = useSession();
   const hasBottomNav = !!session && (session.role === "anunciante" || session.role === "buscador");
 
+  // CTA de "registro" del home según sesión: sin sesión invita a crear cuenta;
+  // ya logueado, "Crear cuenta gratis"/"Empezar gratis" no tiene sentido, así que
+  // un usuario normal va a publicar y el staff a su panel.
+  const isUser = hasBottomNav; // anunciante/buscador logueado
+  const loggedCta = isUser
+    ? { to: "/dashboard/anunciante/publicar", label: "Publicar tu aviso" }
+    : { to: `/dashboard/${session?.role ?? ""}`, label: "Ir a mi panel" };
+
   // Avisos reales desde Supabase (vacío hasta que existan avisos publicados).
   const [listings, setListings] = useState<Listing[]>([]);
   const [platform, setPlatform] = useState<PlatformStats | null>(null);
@@ -423,9 +431,9 @@ const Index = () => {
             ))}
           </div>
           <div className="text-center mt-10">
-            <Link to="/auth?tab=register">
+            <Link to={session ? loggedCta.to : "/auth?tab=register"}>
               <Button variant="hero" size="lg" className="gap-2">
-                Crear cuenta gratis <ArrowRight size={16} />
+                {session ? loggedCta.label : "Crear cuenta gratis"} <ArrowRight size={16} />
               </Button>
             </Link>
           </div>
@@ -488,9 +496,9 @@ const Index = () => {
               Únete a miles de empresas y particulares que confían en eFFe Multiclasificados.
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <Link to="/auth?tab=register">
+              <Link to={session ? loggedCta.to : "/auth?tab=register"}>
                 <Button variant="hero" size="lg" className="w-full sm:w-auto gap-2">
-                  Empezar gratis <ArrowRight size={16} />
+                  {session ? loggedCta.label : "Empezar gratis"} <ArrowRight size={16} />
                 </Button>
               </Link>
               <Link to="/buscar">
