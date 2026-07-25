@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/auth";
+import { appVersionLabel } from "@/lib/version";
 
 // Cierra la sesión real (Supabase + estado local) y vuelve al login de STAFF
 // (/auth/staff). Es un área exclusiva de staff, así que el destino es fijo; /auth
@@ -159,6 +160,8 @@ export function AdminLayout({ children, role, title, breadcrumb, can }: Props) {
           >
             <LogOut size={14} /> Cerrar sesión
           </Button>
+          {/* Versión del deploy (se sube en cada despliegue). Ver src/lib/version.ts. */}
+          <p className="mt-3 text-center text-[10px] text-sidebar-foreground/40">{appVersionLabel()}</p>
         </div>
       </aside>
       </div>
@@ -351,6 +354,8 @@ function AdminHamburger({ role, menu }: { role: AdminRole; menu: MenuItem[] }) {
           >
             <LogOut size={18} /> Cerrar sesión
           </button>
+          {/* Versión del deploy (se sube en cada despliegue). */}
+          <p className="mt-2 text-center text-[10px] text-sidebar-foreground/40">{appVersionLabel()}</p>
         </div>
       </SheetContent>
     </Sheet>

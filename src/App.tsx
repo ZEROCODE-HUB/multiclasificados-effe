@@ -31,6 +31,7 @@ const AdvertiserApplications = lazy(() => import("./pages/advertiser/AdvertiserA
 const AdvertiserStats = lazy(() => import("./pages/advertiser/AdvertiserStats.tsx"));
 const SeekerFavorites = lazy(() => import("./pages/seeker/SeekerFavorites.tsx"));
 const SeekerSearches = lazy(() => import("./pages/seeker/SeekerSearches.tsx"));
+const SeekerApplications = lazy(() => import("./pages/SeekerApplications.tsx"));
 const MessagesPage = lazy(() => import("./pages/shared/MessagesPage.tsx"));
 const SettingsPage = lazy(() => import("./pages/shared/SettingsPage.tsx"));
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard.tsx"));
@@ -101,6 +102,7 @@ const App = () => (
             <Route path="/dashboard/buscador/buscar" element={<Navigate to="/buscar" replace />} />
             <Route path="/dashboard/buscador/favoritos" element={<SeekerFavorites />} />
             <Route path="/dashboard/buscador/busquedas" element={<SeekerSearches />} />
+            <Route path="/dashboard/buscador/postulaciones" element={<SeekerApplications />} />
             <Route path="/dashboard/buscador/mensajes" element={<MessagesPage role="buscador" />} />
             <Route path="/dashboard/buscador/alertas" element={<Navigate to="/dashboard/buscador" replace />} />
             <Route path="/dashboard/buscador/configuracion" element={<SettingsPage role="buscador" />} />

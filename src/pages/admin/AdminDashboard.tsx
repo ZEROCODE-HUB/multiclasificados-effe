@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { AdminRole } from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +30,7 @@ function fullDate(at: string): string {
 }
 
 const AdminDashboard = ({ role }: Props) => {
+  const navigate = useNavigate();
   const [catFilter, setCatFilter] = useState<string>("all");
   const [rangeFilter, setRangeFilter] = useState<GrowthRange>("6m");
   const [stats, setStats] = useState<AdminStats | null>(null);
@@ -91,7 +93,14 @@ const AdminDashboard = ({ role }: Props) => {
               Monitorea la salud de la plataforma en tiempo real.
             </p>
           </div>
-          <Button variant="hero" size="lg" className="gap-2 self-start sm:self-auto">
+          {/* Lleva a la página de Reportes (donde se exporta a PDF/Excel).
+              Antes el botón no tenía handler y no hacía nada (IT2-040). */}
+          <Button
+            variant="hero"
+            size="lg"
+            className="gap-2 self-start sm:self-auto"
+            onClick={() => navigate(`/dashboard/${role}/reportes`)}
+          >
             <ArrowUpRight size={18} /> Generar reporte
           </Button>
         </div>

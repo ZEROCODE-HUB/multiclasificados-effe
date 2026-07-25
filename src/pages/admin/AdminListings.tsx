@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, Eye, ChevronLeft, ChevronRight, MapPin, Calendar, Tag, User, Ban, RotateCcw, Flag, CalendarClock } from "lucide-react";
+import { Search, Eye, ChevronLeft, ChevronRight, MapPin, Calendar, Tag, User, Ban, RotateCcw, Flag, CalendarClock, ExternalLink } from "lucide-react";
 import { AdminListingStatus } from "@/data/adminMockData";
 import { toast } from "@/hooks/use-toast";
 import { disableListing, loadDisabled } from "@/lib/pricing";
@@ -304,6 +304,19 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
                               <Button size="icon" variant="ghost" title="Ver detalle" onClick={() => setDetail(l)}>
                                 <Eye size={16} />
                               </Button>
+                              {/* Abre el aviso PÚBLICO (/aviso/:id) en otra pestaña.
+                                  Antes solo existía el preview interno (IT2-041).
+                                  Solo para avisos reales (UUID), no los de demo. */}
+                              {isUuid(l.id) && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  title="Ver aviso público"
+                                  onClick={() => window.open(`/aviso/${l.id}`, "_blank", "noopener")}
+                                >
+                                  <ExternalLink size={16} />
+                                </Button>
+                              )}
                               {isSuperadmin && isUuid(l.id) && (
                                 <Button
                                   size="icon"

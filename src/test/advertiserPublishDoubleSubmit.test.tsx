@@ -70,7 +70,9 @@ vi.mock("@/components/DashboardLayout", () => ({
 const navigate = vi.fn();
 vi.mock("react-router-dom", async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>);
-  return { ...actual, useNavigate: () => navigate };
+  // Stub de Link: los tests no montan un <Router>, así que el <Link> real (de un
+  // hijo del wizard) reventaba al leer el contexto de router. Con un <a> basta.
+  return { ...actual, useNavigate: () => navigate, Link: ({ children, to, ...rest }: any) => <a href={typeof to === "string" ? to : undefined} {...rest}>{children}</a> };
 });
 
 vi.mock("@/hooks/useSession", () => ({

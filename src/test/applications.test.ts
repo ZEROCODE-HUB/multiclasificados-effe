@@ -99,6 +99,7 @@ vi.mock("@/lib/supabase", () => ({
 import {
   applyToListing,
   fetchApplicationsForOwner,
+  fetchMyApplications,
   getCvSignedUrl,
   updateApplicationStatus,
   STATUS_LABEL,
@@ -231,6 +232,29 @@ describe("fetchApplicationsForOwner — postulaciones recibidas", () => {
   it("sin sesión iniciada devuelve una lista vacía", async () => {
     state.user = null;
     expect(await fetchApplicationsForOwner()).toEqual([]);
+  });
+});
+
+describe("fetchMyApplications — postulaciones del candidato (IT2-038)", () => {
+  it("filtra por applicant_id del usuario y mapea el título del aviso", async () => {
+    state.user = { id: "cand-1" };
+    state.ownerRows = [
+      { id: "a1", listing_id: "L1", status: "interview", created_at: "2026-02-01", listings: { title: "Vacante QA" } },
+    ];
+    const rows = await fetchMyApplications();
+    expect(state.ownerFilter).toEqual({ col: "applicant_id", val: "cand-1" });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: "a1",
+      listing_id: "L1",
+      status: "interview",
+      listing_title: "Vacante QA",
+    });
+  });
+
+  it("sin sesión iniciada devuelve una lista vacía", async () => {
+    state.user = null;
+    expect(await fetchMyApplications()).toEqual([]);
   });
 });
 

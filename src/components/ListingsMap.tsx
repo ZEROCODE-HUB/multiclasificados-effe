@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { imgUrl } from "@/lib/imageUrl";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap, AttributionControl } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -94,10 +94,16 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
         zoom={12}
         scrollWheelZoom
         className="w-full h-full z-0"
+        // Desactivamos el control de atribución por defecto (traía el prefijo
+        // "Leaflet | Reporta un problema / Haz donación" que ensuciaba la esquina,
+        // IT2-029) y lo reemplazamos abajo por uno mínimo, `prefix={false}`.
+        attributionControl={false}
         // El contenedor padre ya tiene bg-muted mientras cargan los tiles.
       >
+        {/* Solo el crédito de OSM (la licencia lo exige), sin el prefijo de Leaflet. */}
+        <AttributionControl prefix={false} />
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          attribution='&copy; OpenStreetMap'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <MapController points={points} active={active} />

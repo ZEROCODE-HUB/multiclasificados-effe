@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Search, Menu, X, Heart, MessageSquare, PlusCircle, ChevronDown,
@@ -28,8 +28,12 @@ export function Navbar() {
   const [query, setQuery] = useState("");
   const categories = useCategories();
   const navigate = useNavigate();
+  const location = useLocation();
   const session = useSession();
   const unread = useUnreadMessages();
+  // En /buscar la propia página ya tiene su buscador en el cuerpo; ocultamos el
+  // del header para no mostrar dos barras de búsqueda a la vez (IT2-034).
+  const onSearchPage = location.pathname === "/buscar";
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,6 +62,7 @@ export function Navbar() {
         { label: "Postulaciones", icon: Users, to: "/dashboard/anunciante/postulaciones" },
         { label: "Favoritos", icon: Heart, to: "/dashboard/buscador/favoritos" },
         { label: "Búsquedas guardadas", icon: Star, to: "/dashboard/buscador/busquedas" },
+        { label: "Mis postulaciones", icon: ClipboardList, to: "/dashboard/buscador/postulaciones" },
         { label: "Panel y estadísticas", icon: BarChart3, to: "/dashboard/anunciante/estadisticas" },
         { label: "Mis comprobantes", icon: CreditCard, to: "/dashboard/anunciante/boletas" },
         { label: "Configuración", icon: Settings, to: "/dashboard/anunciante/configuracion" },
@@ -112,7 +117,7 @@ export function Navbar() {
 
         <form
           onSubmit={submit}
-          className="hidden md:flex flex-1 min-w-0 max-w-xl items-center bg-muted/50 border border-border rounded-none overflow-hidden focus-within:ring-2 focus-within:ring-secondary/30 focus-within:border-secondary/40 focus-within:bg-card transition-all h-11"
+          className={`${onSearchPage ? "hidden" : "hidden md:flex"} flex-1 min-w-0 max-w-xl items-center bg-muted/50 border border-border rounded-none overflow-hidden focus-within:ring-2 focus-within:ring-secondary/30 focus-within:border-secondary/40 focus-within:bg-card transition-all h-11`}
         >
           <Search size={16} className="ml-4 text-muted-foreground shrink-0" />
           <input

@@ -149,6 +149,23 @@ const AdvertiserApplications = () => {
           </p>
         </div>
 
+        {/* Leyenda de estados: el tester no tenía claro qué significaba cada
+            etapa ni si el candidato se enteraba (IT2-036). Cada cambio notifica
+            al postulante; "Aceptada" no cierra el aviso ni contrata por sí solo. */}
+        <details className="rounded-lg border border-border bg-muted/30 text-sm">
+          <summary className="cursor-pointer select-none px-4 py-3 font-semibold text-foreground">
+            ¿Qué significa cada estado?
+          </summary>
+          <div className="px-4 pb-4 pt-0 space-y-1.5 text-muted-foreground">
+            <p><span className="font-semibold text-foreground">Recibido:</span> la postulación llegó y aún no la revisas.</p>
+            <p><span className="font-semibold text-foreground">En revisión:</span> estás evaluando su CV.</p>
+            <p><span className="font-semibold text-foreground">En entrevista:</span> avanzó a la etapa de entrevista.</p>
+            <p><span className="font-semibold text-foreground">Aceptada:</span> el candidato pasó tu proceso. <em>No contrata ni cierra el aviso automáticamente</em>; el contacto y la contratación siguen fuera de la plataforma.</p>
+            <p><span className="font-semibold text-foreground">Rechazada:</span> descartaste la postulación.</p>
+            <p className="pt-1 text-xs">En cada cambio, el postulante recibe una notificación con el nuevo estado.</p>
+          </div>
+        </details>
+
         <Tabs defaultValue="todas">
           <div className="-mx-4 sm:mx-0 px-4 sm:px-0 overflow-x-auto">
             <TabsList className="w-max">

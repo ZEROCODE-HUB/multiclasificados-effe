@@ -104,7 +104,8 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
   // demo previa y lleva al inicio. El acceso real es con el formulario de arriba.
   const exploreAsGuest = () => {
     import("@/hooks/useSession").then(({ clearSession }) => clearSession());
-    navigate("/");
+    // "Explorar avisos" lleva al buscador, no a la home (IT2-043).
+    navigate("/buscar");
   };
 
   // EFFE-031: recuperación de contraseña de autoservicio. Antes el enlace
@@ -205,6 +206,13 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
     // Contraseña: obligatoria, mínimo 8, y debe coincidir con la confirmación.
     if (!regPassword || regPassword.length < 8) {
       toast.error("La contraseña debe tener al menos 8 caracteres.");
+      return;
+    }
+    // Máximo 72 bytes: bcrypt (Supabase Auth) trunca en ese punto, así que una
+    // contraseña más larga se guardaría cortada y luego el login sería
+    // inconsistente. Avisamos en vez de dejar que se trunque en silencio (IT2-039).
+    if (regPassword.length > 72) {
+      toast.error("La contraseña no puede superar los 72 caracteres.");
       return;
     }
     if (regPassword !== regPasswordConfirm) {
@@ -455,11 +463,13 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
               <div>
                 <Label htmlFor="regPassword">Contraseña *</Label>
                 <Input id="regPassword" type="password" autoComplete="new-password" readOnly={fieldsLocked} placeholder="Mínimo 8 caracteres" className="mt-1"
+                  minLength={8} maxLength={72}
                   value={regPassword} onChange={(e) => setRegPassword(e.target.value)} />
               </div>
               <div>
                 <Label htmlFor="regPasswordConfirm">Confirmar contraseña *</Label>
                 <Input id="regPasswordConfirm" type="password" autoComplete="new-password" readOnly={fieldsLocked} placeholder="Repite tu contraseña" className="mt-1"
+                  minLength={8} maxLength={72}
                   value={regPasswordConfirm} onChange={(e) => setRegPasswordConfirm(e.target.value)} />
                 <p className="text-xs text-destructive mt-1 min-h-[1rem]">
                   {regPasswordConfirm.length > 0 && regPassword !== regPasswordConfirm ? "Las contraseñas no coinciden." : ""}

@@ -162,6 +162,42 @@ export async function fetchApplicationsForOwner(): Promise<OwnerApplication[]> {
   }
 }
 
+export interface MyApplication {
+  id: string;
+  listing_id: string;
+  status: ApplicationStatus;
+  created_at: string;
+  listing_title: string;
+}
+
+// Postulaciones que el usuario ACTUAL hizo como CANDIDATO (lado buscador,
+// IT2-038). La RLS de job_applications permite ver las propias
+// (applicant_id = auth.uid()). Se unen a `listings` para el título y el enlace
+// al aviso. Ordenadas de la más reciente a la más antigua.
+export async function fetchMyApplications(): Promise<MyApplication[]> {
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return [];
+    const { data, error } = await supabase
+      .from("job_applications")
+      .select("id, listing_id, status, created_at, listings!inner(title)")
+      .eq("applicant_id", user.id)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map((r: any) => ({
+      id: r.id,
+      listing_id: r.listing_id,
+      status: r.status,
+      created_at: r.created_at,
+      listing_title: r.listings?.title ?? "Aviso",
+    }));
+  } catch {
+    return [];
+  }
+}
+
 // Genera un enlace firmado (temporal) para descargar/ver el CV del postulante.
 // Requiere que el usuario sea el dueño del aviso (o el propio postulante/staff).
 export async function getCvSignedUrl(cvUrl: string): Promise<string | null> {

@@ -58,14 +58,18 @@ const AdminCommunications = ({ role }: { role: AdminRole }) => {
   const [copyStaff, setCopyStaff] = useState(false);
   const [sendingMass, setSendingMass] = useState(false);
 
-  // Conteo REAL de destinatarios para la audiencia elegida.
+  // Conteo REAL de destinatarios para la audiencia elegida. `countError`
+  // distingue "no se pudo calcular" de "calculando…" y de "0 destinatarios",
+  // que antes se confundían todos en `null` (IT2-023).
   const [count, setCount] = useState<number | null>(null);
+  const [countError, setCountError] = useState(false);
   useEffect(() => {
     let alive = true;
     setCount(null);
+    setCountError(false);
     fetchAudienceCount(audience)
       .then((n) => { if (alive) setCount(n); })
-      .catch(() => { if (alive) setCount(null); });
+      .catch(() => { if (alive) { setCount(null); setCountError(true); } });
     return () => { alive = false; };
   }, [audience]);
 
@@ -193,13 +197,23 @@ const AdminCommunications = ({ role }: { role: AdminRole }) => {
                   <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                     <Badge variant="outline" className="gap-1">
                       <Users size={12} />
-                      {count === null ? "calculando…" : `${count.toLocaleString()} destinatarios`}
+                      {countError
+                        ? "no se pudo calcular"
+                        : count === null
+                          ? "calculando…"
+                          : `${count.toLocaleString()} destinatarios`}
                     </Badge>
                     <Badge variant="outline" className="gap-1"><Bell size={12} /> Notificación in-app + Push</Badge>
                     {massEmail && <Badge variant="outline" className="gap-1"><Mail size={12} /> Email</Badge>}
                     {copyStaff && <Badge variant="outline" className="text-secondary border-secondary/40">CC: equipo interno</Badge>}
                   </div>
-                  <Button className="w-full md:w-auto" onClick={sendMasivo} disabled={sendingMass || count === 0 || !canSend}>
+                  {/* Aviso explícito cuando la audiencia no tiene a nadie (IT2-023). */}
+                  {count === 0 && !countError && (
+                    <p className="text-xs text-muted-foreground">
+                      Esta audiencia no tiene destinatarios; no hay a quién enviar.
+                    </p>
+                  )}
+                  <Button className="w-full md:w-auto" onClick={sendMasivo} disabled={sendingMass || count === 0 || countError || count === null || !canSend}>
                     {sendingMass && <Loader2 size={14} className="mr-2 animate-spin" />}
                     Enviar a {count === null ? "…" : count.toLocaleString()}
                   </Button>

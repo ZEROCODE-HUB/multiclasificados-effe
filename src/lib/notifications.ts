@@ -101,7 +101,8 @@ export function notificationText(n: AppNotification): string {
       return (p.preview as string) ? `Nuevo mensaje: "${p.preview}"` : "Tienes un nuevo mensaje";
     case "application_status": {
       const map: Record<string, string> = {
-        pending: "Pendiente", reviewed: "En revisión", accepted: "Aceptada", rejected: "Rechazada",
+        pending: "Pendiente", reviewed: "En revisión", interview: "En entrevista",
+        accepted: "Aceptada", rejected: "Rechazada",
       };
       const st = map[(p.status as string)] ?? (p.status as string);
       return `Tu postulación cambió a: ${st}`;

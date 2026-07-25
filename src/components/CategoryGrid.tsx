@@ -53,7 +53,12 @@ export function CategoryGrid() {
                 width={300}
                 height={225}
                 alt={cat.name}
-                loading="lazy"
+                // Las primeras tarjetas están above-the-fold: una de ellas es el
+                // elemento LCP en móvil. Cargarlas eager + con prioridad evita el
+                // retraso de descarga que penalizaba el LCP (IT2-010). El resto va
+                // lazy para no competir por ancho de banda.
+                loading={i < 4 ? "eager" : "lazy"}
+                fetchPriority={i < 4 ? "high" : "auto"}
                 decoding="async"
                 className="absolute inset-0 w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700 group-hover:scale-[1.08]"
               />
@@ -75,7 +80,10 @@ export function CategoryGrid() {
                 <cat.icon size={14} className="text-secondary" />
                 <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-secondary">Categoría</span>
               </div>
-              <h3 className="text-lg md:text-xl font-extrabold tracking-tight leading-tight">{cat.name}</h3>
+              {/* min-height a 2 líneas para que los títulos cortos ("Empleos") y
+                  largos ("Salud, Belleza y Moda") queden alineados entre tarjetas
+                  vecinas (IT2-033). */}
+              <h3 className="text-lg md:text-xl font-extrabold tracking-tight leading-tight line-clamp-2 min-h-[2.8rem] md:min-h-[3.1rem] flex items-end">{cat.name}</h3>
               <p className="text-[11px] text-primary-foreground/70 mt-1">{(counts[cat.id] ?? 0).toLocaleString()} avisos activos</p>
             </div>
           </div>

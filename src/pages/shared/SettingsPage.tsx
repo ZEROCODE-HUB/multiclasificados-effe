@@ -17,6 +17,7 @@ import {
 import { normalizeDocNumber } from "@/lib/verifyDoc";
 import { deleteMyAccount } from "@/lib/account";
 import { TermsDialog } from "@/components/LegalTerms";
+import { appVersionLabel } from "@/lib/version";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
@@ -35,7 +36,9 @@ function AppVersion() {
           const info = await App.getInfo();
           if (active) setV(`v${info.version} (build ${info.build})`);
         } else if (active) {
-          setV(`Web · ${import.meta.env.MODE}`);
+          // En web mostramos la versión del deploy (se sube en cada despliegue),
+          // con la fecha de forma sutil. Ver src/lib/version.ts.
+          setV(appVersionLabel());
         }
       } catch {
         if (active) setV("—");

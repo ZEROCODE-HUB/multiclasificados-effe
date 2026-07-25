@@ -228,7 +228,28 @@ export default function SearchPage() {
   const pageListings = listings.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const goToPage = (p: number) => setPage(Math.min(totalPages, Math.max(1, p)));
 
+  // Los filtros se aplican EN VIVO (el useEffect de arriba reacciona a cada
+  // cambio). Este botón solo cierra el panel en móvil; por eso se llama "Ver
+  // resultados" y no "Aplicar filtros", que hacía creer que sin pulsarlo no se
+  // filtraba (IT2-025).
   const applyFilters = () => setShowFilters(false);
+
+  // Hay algún filtro activo (para mostrar "Limpiar filtros", IT2-026).
+  const hasActiveFilters = !!(
+    q || category || priceMin || priceMax || location || currency || geo || (sort && sort !== "recent")
+  );
+  // Resetea TODOS los filtros de una vez. El efecto de URL (arriba) los limpia
+  // también del enlace al vaciarse el estado.
+  const clearFilters = () => {
+    setQ("");
+    setCategory("");
+    setPriceMin("");
+    setPriceMax("");
+    setLocation("");
+    setCurrency("");
+    setSort("recent");
+    setGeo(null);
+  };
 
   const switchView = (v: ViewMode) => {
     setView(v);
@@ -276,8 +297,11 @@ export default function SearchPage() {
             <div className="ml-auto">{ViewToggle}</div>
           </div>
 
-          {/* Categories row (scrollable) + en desktop, todo en una sola línea */}
-          <div className="flex items-center gap-3 overflow-x-auto no-scrollbar">
+          {/* Fila de categorías. El botón "Filtros" (tablet) y el toggle Lista/Mapa
+              van FUERA del contenedor con scroll horizontal para que no se oculten
+              tras el scroll cuando las categorías llenan el ancho en desktop
+              (IT2-028). Solo las categorías scrollean (flex-1 min-w-0). */}
+          <div className="flex items-center gap-3">
             {/* Solo en tablet (md–lg): en lg+ el panel ya vive en la barra lateral.
                 Sin el `lg:hidden`, en desktop este botón abría el Sheet (cuyo
                 contenido es `lg:hidden`) y solo se veía el overlay → pantalla negra. */}
@@ -289,20 +313,22 @@ export default function SearchPage() {
             >
               <SlidersHorizontal size={14} /> Filtros
             </Button>
-            {categories.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => setCategory((prev) => (prev === c.id ? "" : c.id))}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border rounded-full transition-colors shrink-0 ${
-                  category === c.id
-                    ? "border-secondary text-secondary"
-                    : "border-border hover:border-secondary hover:text-secondary"
-                }`}
-              >
-                <c.icon size={12} /> {c.name}
-              </button>
-            ))}
-            <div className="ml-auto hidden md:block">{ViewToggle}</div>
+            <div className="flex items-center gap-3 overflow-x-auto no-scrollbar flex-1 min-w-0">
+              {categories.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => setCategory((prev) => (prev === c.id ? "" : c.id))}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border rounded-full transition-colors shrink-0 ${
+                    category === c.id
+                      ? "border-secondary text-secondary"
+                      : "border-border hover:border-secondary hover:text-secondary"
+                  }`}
+                >
+                  <c.icon size={12} /> {c.name}
+                </button>
+              ))}
+            </div>
+            <div className="hidden md:block shrink-0">{ViewToggle}</div>
           </div>
         </div>
       </div>
@@ -394,7 +420,15 @@ export default function SearchPage() {
           </SelectContent>
         </Select>
       </div>
-      <Button className="w-full rounded-none" size="sm" onClick={applyFilters}>Aplicar filtros</Button>
+      {/* "Limpiar filtros": resetea todo de una vez. Solo aparece si hay algo
+          que limpiar (IT2-026). */}
+      {hasActiveFilters && (
+        <Button variant="ghost" className="w-full rounded-none gap-2 text-muted-foreground" size="sm" onClick={clearFilters}>
+          <X size={14} /> Limpiar filtros
+        </Button>
+      )}
+      {/* Solo cierra el panel en móvil (los filtros ya están aplicados en vivo). */}
+      <Button className="w-full rounded-none lg:hidden" size="sm" onClick={applyFilters}>Ver resultados</Button>
       <Button variant="outline" className="w-full rounded-none gap-2" size="sm" onClick={saveCurrentSearch}>
         <Bookmark size={14} /> Guardar búsqueda
       </Button>

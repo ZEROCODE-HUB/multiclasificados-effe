@@ -12,9 +12,11 @@ import { fetchListings } from "@/lib/listings";
 import { fetchPlatformStats, type PlatformStats } from "@/lib/stats";
 import { useSession } from "@/hooks/useSession";
 import { useEffect, useMemo, useState } from "react";
-// WebP 1600×900 (191 KiB) en vez del JPG 1920×1080 (378 KiB). El .jpg original
-// se conserva en el repo como fuente para reconvertir, pero ya no se empaqueta.
-import heroBg from "@/assets/hero-bg.webp";
+// WebP 1600×900 (191 KiB) en vez del JPG 1920×1080 (378 KiB). Se sirve desde
+// /public (ruta estable `/hero-bg.webp`) en lugar de un import hasheado, para
+// poder precargarlo desde el <head> del index.html y que sea el LCP descubrible
+// antes de ejecutar el bundle (IT2-008). El .jpg original queda como fuente.
+const heroBg = "/hero-bg.webp";
 import { ArrowRight, BadgeCheck, Gem, Headset, Star, TrendingUp, CheckCircle2, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -125,8 +127,11 @@ const Index = () => {
         <img
           src={heroBg}
           alt="Marketplace profesional EFFE Multiclasificados"
+          width={1600}
+          height={900}
           className="absolute inset-0 w-full h-full object-cover opacity-80"
           fetchPriority="high"
+          loading="eager"
         />
         <div className="absolute inset-0 bg-gradient-to-b from-blue-900/45 via-blue-800/40 to-blue-950/80" />
         <div className="absolute inset-0 bg-gradient-to-r from-blue-950/60 via-blue-800/30 to-transparent" />
@@ -378,7 +383,10 @@ const Index = () => {
           <p className="text-center text-[10px] uppercase tracking-[0.3em] font-bold text-muted-foreground mb-6">
             Empresas que confían en nosotros
           </p>
-          <div className="flex flex-wrap justify-center items-center gap-x-12 gap-y-4 opacity-60">
+          {/* Sin `opacity-60` en el contenedor: combinado con `text-primary/70`
+              el texto quedaba en ~2.44:1, por debajo del 4.5:1 de WCAG AA
+              (IT2-002). A opacidad plena, `text-primary/70` da ~5.1:1. */}
+          <div className="flex flex-wrap justify-center items-center gap-x-12 gap-y-4">
             {["FERREYROS", "VOLVO", "RIMAC", "BCP", "INTERBANK", "ENTEL", "BACKUS"].map((b) => (
               <span key={b} className="font-black text-base md:text-lg tracking-widest text-primary/70">
                 {b}
@@ -389,7 +397,7 @@ const Index = () => {
       </section>
 
       {/* How it works (oculto en móvil para un look más app) */}
-      <section className="hidden md:block gradient-hero text-primary-foreground py-16 md:py-24">
+      <section id="como-funciona" className="hidden md:block gradient-hero text-primary-foreground py-16 md:py-24 scroll-mt-20">
         <div className="container mx-auto px-4">
           <div className="text-center max-w-2xl mx-auto mb-12">
             <p className="text-xs uppercase tracking-widest font-bold text-secondary mb-2">Cómo funciona</p>
@@ -525,8 +533,8 @@ const Index = () => {
             <div>
               <h2 className="font-semibold mb-5 uppercase text-secondary" style={{ fontSize: "13px", letterSpacing: "0.08em" }}>Empresa</h2>
               <ul className="space-y-3 text-sm text-primary-foreground/70">
-                <li><a href="#" className="hover:text-secondary transition-colors">Acerca de</a></li>
-                <li><a href="#" className="hover:text-secondary transition-colors">Contacto</a></li>
+                <li><a href="#como-funciona" className="hover:text-secondary transition-colors">Acerca de</a></li>
+                <li><a href="mailto:info@effemulticlasificados.pe" className="hover:text-secondary transition-colors">Contacto</a></li>
                 <li><button type="button" onClick={() => setTermsOpen(true)} className="hover:text-secondary transition-colors text-left">Términos y condiciones</button></li>
                 <li><button type="button" onClick={() => setTermsOpen(true)} className="hover:text-secondary transition-colors text-left">Política de privacidad</button></li>
               </ul>

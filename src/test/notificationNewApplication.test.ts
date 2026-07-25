@@ -28,3 +28,26 @@ describe("notificación new_application", () => {
       .toBe("/dashboard/anunciante/postulaciones");
   });
 });
+
+// IT2-036: el cambio de estado de una postulación debe traducirse a español;
+// antes 'interview' se mostraba crudo ("cambió a: interview").
+describe("notificación application_status", () => {
+  const st = (status: string): AppNotification => ({
+    id: "n2",
+    type: "application_status",
+    title: "Tu postulación cambió de estado",
+    payload: { listing_id: "L1", status },
+    read_at: null,
+    created_at: "2026-07-21T00:00:00Z",
+  });
+
+  it("traduce 'interview' a 'En entrevista'", () => {
+    expect(notificationText(st("interview"))).toBe("Tu postulación cambió a: En entrevista");
+  });
+
+  it("traduce el resto de estados", () => {
+    expect(notificationText(st("reviewed"))).toBe("Tu postulación cambió a: En revisión");
+    expect(notificationText(st("accepted"))).toBe("Tu postulación cambió a: Aceptada");
+    expect(notificationText(st("rejected"))).toBe("Tu postulación cambió a: Rechazada");
+  });
+});

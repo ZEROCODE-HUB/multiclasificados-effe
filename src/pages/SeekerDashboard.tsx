@@ -3,7 +3,7 @@ import { imgUrl } from "@/lib/imageUrl";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Heart, Search, MessageSquare, Bell, Clock, MapPin, Star, ArrowRight } from "lucide-react";
+import { Heart, Search, MessageSquare, Bell, Clock, MapPin, Star, ArrowRight, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { useSession } from "@/hooks/useSession";
@@ -12,6 +12,7 @@ import { useFavorites } from "@/hooks/useFavorites";
 import { fetchListingsByIds } from "@/lib/listings";
 import { type Listing } from "@/data/mockData";
 import { fetchSavedSearches, criteriaLabel, criteriaToSearchUrl, type SavedSearch } from "@/lib/savedSearches";
+import { fetchMyApplications, STATUS_LABEL, type MyApplication } from "@/lib/applications";
 
 const SeekerDashboard = () => {
   const session = useSession();
@@ -19,10 +20,12 @@ const SeekerDashboard = () => {
   const { ids } = useFavorites();
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
   const [favItems, setFavItems] = useState<Listing[]>([]);
+  const [myApps, setMyApps] = useState<MyApplication[]>([]);
 
-  // Datos reales del usuario (búsquedas guardadas + favoritos).
+  // Datos reales del usuario (búsquedas guardadas + favoritos + postulaciones).
   useEffect(() => {
     fetchSavedSearches().then(setSavedSearches);
+    fetchMyApplications().then(setMyApps);
   }, []);
   useEffect(() => {
     fetchListingsByIds([...ids]).then(setFavItems);
@@ -31,8 +34,10 @@ const SeekerDashboard = () => {
   const firstName = (session?.name || "").split(" ")[0] || "buscador";
   const alerts = savedSearches.filter((s) => s.alert_enabled);
 
-  // Contadores reales.
+  // Contadores reales. "Mis postulaciones" cuenta las que YO hice como candidato
+  // (antes no había ninguna métrica de postulaciones para el buscador, IT2-037).
   const stats = [
+    { label: "Mis postulaciones", value: myApps.length, icon: ClipboardList, text: "text-primary", bg: "bg-primary/10" },
     { label: "Favoritos", value: ids.size, icon: Heart, text: "text-rose-600", bg: "bg-rose-500/10" },
     { label: "Búsquedas guardadas", value: savedSearches.length, icon: Search, text: "text-primary", bg: "bg-primary/10" },
     { label: "Mensajes", value: unread, icon: MessageSquare, text: "text-secondary", bg: "bg-secondary/10" },
@@ -55,7 +60,7 @@ const SeekerDashboard = () => {
         </div>
 
         {/* Stats - colorful */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4">
           {stats.map((stat) => (
             <Card
               key={stat.label}
@@ -106,6 +111,48 @@ const SeekerDashboard = () => {
                     <p className="text-xs text-muted-foreground">{s.criteria.category || "Todas las categorías"}</p>
                   </div>
                   {s.alert_enabled && <Badge variant="outline" className="flex-shrink-0 text-[10px]">Alerta</Badge>}
+                </Link>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Mis postulaciones (lado candidato). Antes el buscador no tenía dónde
+            ver a qué empleos postuló ni su estado (IT2-038). */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <ClipboardList size={18} className="text-primary" /> Mis postulaciones
+            </CardTitle>
+            {myApps.length > 0 && (
+              <Link to="/dashboard/buscador/postulaciones">
+                <Button variant="ghost" size="sm" className="text-secondary gap-1 text-xs">
+                  Ver todas <ArrowRight size={14} />
+                </Button>
+              </Link>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {myApps.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                Aún no has postulado a ningún empleo.{" "}
+                <Link to="/buscar?cat=empleos" className="text-secondary font-semibold hover:underline">Explora ofertas de trabajo</Link>.
+              </p>
+            ) : (
+              myApps.slice(0, 3).map((a) => (
+                <Link
+                  key={a.id}
+                  to={`/aviso/${a.listing_id}`}
+                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors cursor-pointer"
+                >
+                  <ClipboardList size={16} className="text-muted-foreground flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{a.listing_title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Postulaste el {new Date(a.created_at).toLocaleDateString("es-PE", { day: "2-digit", month: "short", year: "numeric" })}
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="flex-shrink-0 text-[10px]">{STATUS_LABEL[a.status]}</Badge>
                 </Link>
               ))
             )}

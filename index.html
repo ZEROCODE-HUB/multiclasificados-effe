@@ -22,11 +22,17 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="preconnect" href="https://prhbgniwymaaevnisyov.supabase.co" />
     <link rel="preconnect" href="https://images.unsplash.com" />
+    <!-- Preload del hero (LCP en desktop). Va con `media` porque el hero es
+         `hidden md:flex`: en móvil no se muestra y no queremos gastar la
+         descarga. Así la imagen es descubrible en el HTML inicial (IT2-008). -->
+    <link rel="preload" as="image" href="/hero-bg.webp" media="(min-width: 768px)" fetchpriority="high" />
     <!-- Fuente Montserrat SIN bloquear el render (EFFE-009/019/017): se carga como
-         preload y se promueve a stylesheet al terminar; con display=swap el texto
-         pinta de inmediato en la fuente de respaldo y luego cambia. Antes entraba
-         por un @import en el CSS, que sí bloqueaba el primer pintado. -->
-    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'" />
+         preload y main.tsx la promueve a stylesheet al arrancar. Antes usaba un
+         `onload` inline, pero eso es un manejador de eventos en línea que la CSP
+         con `script-src` (sin unsafe-inline) bloquea (IT2-003); por eso ahora la
+         promoción se hace desde el bundle (script de 'self'). Con display=swap el
+         texto pinta de inmediato en la fuente de respaldo y luego cambia. -->
+    <link id="montserrat-font" rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&display=swap" />
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&display=swap" /></noscript>
     <title>eFFe Multiclasificados | Avisos Clasificados en Perú</title>
     <meta name="description" content="Plataforma líder de avisos clasificados en Perú. Publica y encuentra inmuebles, vehículos, empleos, servicios y más.">

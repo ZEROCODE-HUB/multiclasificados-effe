@@ -32,7 +32,9 @@ vi.mock("@/lib/supabase", () => ({
 vi.mock("@/components/DashboardLayout", () => ({ DashboardLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
 vi.mock("react-router-dom", async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>);
-  return { ...actual, useNavigate: () => vi.fn() };
+  // Stub de Link: los tests no montan un <Router>, así que el <Link> real (de un
+  // hijo del wizard) reventaba al leer el contexto de router. Con un <a> basta.
+  return { ...actual, useNavigate: () => vi.fn(), Link: ({ children, to, ...rest }: any) => <a href={typeof to === "string" ? to : undefined} {...rest}>{children}</a> };
 });
 vi.mock("@/hooks/useSession", () => ({ useSession: () => ({ role: "anunciante", name: "T", supabase: true }) }));
 vi.mock("@/hooks/use-toast", () => ({ toast: vi.fn() }));

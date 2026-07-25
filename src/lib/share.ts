@@ -20,11 +20,23 @@ function shareMessage(title: string, url: string): string {
 }
 
 // Abre una URL saliendo de la app (WhatsApp, navegador…). En el APK usa el
-// navegador nativo de Capacitor; en web abre una pestaña nueva.
+// navegador nativo de Capacitor; en web abre una pestaña nueva EN ESCRITORIO,
+// pero en móvil navega en la misma pestaña: al abrir `wa.me` en una pestaña
+// nueva, el intent lanza la app de WhatsApp y la pestaña recién abierta queda
+// huérfana en `about:blank` (IT2-030). Navegando en la actual, el usuario
+// vuelve con "atrás" y no queda ninguna pestaña en blanco.
 async function openExternal(url: string): Promise<void> {
   if (Capacitor.isNativePlatform()) {
     const { Browser } = await import("@capacitor/browser");
     await Browser.open({ url });
+    return;
+  }
+  const isTouch =
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(pointer: coarse)").matches;
+  if (isTouch) {
+    window.location.href = url;
   } else {
     window.open(url, "_blank", "noopener,noreferrer");
   }

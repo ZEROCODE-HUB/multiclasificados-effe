@@ -79,9 +79,13 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
           <Tooltip key={label}>
             <TooltipTrigger asChild>
               <span
+                // role="img": el chip es un icono cuyo significado lo da el
+                // aria-label; sin un rol válido, un <span aria-label> dispara el
+                // fallo de accesibilidad de Lighthouse (IT2-001).
+                role="img"
                 aria-label={showCount ? `${label} · quedan ${urgent!.short}` : label}
                 onClick={(e) => e.stopPropagation()}
-                className={`h-7 flex items-center justify-center gap-1 shadow-md ${showCount ? "px-1.5 w-auto" : "w-7"} ${cls}`}
+                className={`h-7 shrink-0 flex items-center justify-center gap-1 shadow-md ${showCount ? "px-1.5 w-auto" : "w-7"} ${cls}`}
               >
                 <Icon size={14} />
                 {showCount && (
@@ -140,7 +144,10 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
       {/* Insignias, "Verificado" y favorito: overlays por ENCIMA del enlace. Como
           hijos del wrapper (no del contenedor de la imagen) para no quedar
           atrapados debajo del enlace por el stacking context de la imagen. */}
-      <div className="absolute top-3 left-3 z-10 flex flex-col gap-1.5">
+      {/* items-start + w-fit: los chips (de anchos distintos cuando "Urgente"
+          muestra el contador) quedan alineados por su borde izquierdo en vez de
+          descuadrados (IT2-031). */}
+      <div className="absolute top-3 left-3 z-10 flex flex-col items-start gap-1.5 w-fit">
         {badgeChips}
       </div>
       <span className="absolute top-3 right-12 z-10 inline-flex items-center gap-1 px-2.5 py-1 bg-white/95 backdrop-blur-sm text-primary text-[10px] font-bold uppercase tracking-wider shadow-sm">

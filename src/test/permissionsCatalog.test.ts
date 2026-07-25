@@ -44,8 +44,10 @@ describe("catálogo de permisos", () => {
     }
   });
 
-  it("solo Reportes y Auditoría son de lectura pura (sin edit)", () => {
-    expect(actionsFor("Reportes").map((a) => a.key)).toEqual(["view"]);
+  it("solo Auditoría es de lectura pura (sin edit); Reportes suma 'Ver transacciones'", () => {
+    // EFFE-054: Reportes dejó de ser view-only al agregar el toggle
+    // "Ver transacciones" (edit) para el historial de crédito.
+    expect(actionsFor("Reportes").map((a) => a.key)).toEqual(["view", "edit"]);
     expect(actionsFor("Auditoría y logs").map((a) => a.key)).toEqual(["view"]);
   });
 
@@ -64,13 +66,15 @@ describe("catálogo de permisos", () => {
   it("capabilitiesFor solo cuenta acciones DECLARADAS y activadas", () => {
     const rows = {
       "Gestión de avisos": { can_view: true, can_edit: true, can_approve: false, can_delete: false },
-      // Reportes es de acceso (solo view): aunque la fila traiga can_edit=true, no cuenta.
+      // Reportes ahora declara view ("Ver") + edit ("Ver transacciones"): con
+      // can_edit=true cuentan las dos (antes edit era fantasma y no contaba).
       "Reportes": { can_view: true, can_edit: true, can_approve: false, can_delete: false },
     };
     const caps = capabilitiesFor(rows);
     expect(caps).toContainEqual({ module: "Gestión de avisos", action: "Acceder" });
     expect(caps).toContainEqual({ module: "Gestión de avisos", action: "Moderar" });
     expect(caps).toContainEqual({ module: "Reportes", action: "Ver" });
-    expect(caps.filter((c) => c.module === "Reportes")).toHaveLength(1);
+    expect(caps).toContainEqual({ module: "Reportes", action: "Ver transacciones" });
+    expect(caps.filter((c) => c.module === "Reportes")).toHaveLength(2);
   });
 });

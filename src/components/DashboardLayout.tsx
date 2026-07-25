@@ -22,6 +22,7 @@ const titlesByPath: Record<string, string> = {
   "/dashboard/buscador": "Panel y estadísticas",
   "/dashboard/buscador/favoritos": "Favoritos",
   "/dashboard/buscador/busquedas": "Búsquedas guardadas",
+  "/dashboard/buscador/postulaciones": "Mis postulaciones",
   "/dashboard/buscador/mensajes": "Mensajes",
   "/dashboard/buscador/configuracion": "Configuración",
 };
