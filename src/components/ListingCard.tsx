@@ -161,8 +161,9 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
         <Heart size={15} className={fav ? "text-secondary fill-secondary" : "text-primary"} />
       </button>
 
-      {/* Image — taller, near-square for a premium presence */}
-      <div className="relative overflow-hidden bg-muted" style={{ aspectRatio: "1 / 1" }}>
+      {/* Image — 4:3 (más baja que el cuadrado anterior) para tarjetas más
+          compactas y ver más avisos por pantalla. */}
+      <div className="relative overflow-hidden bg-muted" style={{ aspectRatio: "4 / 3" }}>
         <img
           src={imgUrl(listing.imageUrl, 400)}
           srcSet={imgSrcSet(listing.imageUrl, 400)}
@@ -174,10 +175,10 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
         />
       </div>
 
-      {/* Content — generous spacing */}
-      <div className="flex flex-col gap-3 p-5">
+      {/* Content — espaciado compacto (gap/padding reducidos) para ganar densidad */}
+      <div className="flex flex-col gap-1.5 p-3">
         <span className="text-[10px] uppercase tracking-[0.18em] font-bold text-secondary">{listing.category}</span>
-        <h3 className="font-semibold text-foreground text-[15px] leading-snug line-clamp-2 group-hover:text-primary transition-colors min-h-[2.5rem]">
+        <h3 className="font-semibold text-foreground text-sm leading-snug line-clamp-2 group-hover:text-primary transition-colors min-h-[2.25rem]">
           {listing.title}
         </h3>
 
@@ -190,7 +191,7 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
 
             {/* Price */}
             <div className="flex items-baseline gap-2">
-              <p className="text-xl font-extrabold text-primary tracking-tight">{formatPrice(listing.price, listing.currency)}</p>
+              <p className="text-lg font-extrabold text-primary tracking-tight">{formatPrice(listing.price, listing.currency)}</p>
             </div>
           </>
         ) : (
@@ -205,7 +206,7 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
           variant="outline"
           size="sm"
           onClick={(e) => { e.stopPropagation(); goToDetail(); }}
-          className="relative z-10 w-full mt-1 font-semibold border-border hover:border-primary hover:bg-primary hover:text-primary-foreground transition-all rounded-none"
+          className="relative z-10 w-full mt-0.5 h-8 text-xs font-semibold border-border hover:border-primary hover:bg-primary hover:text-primary-foreground transition-all rounded-none"
         >
           Ver detalle
         </Button>
