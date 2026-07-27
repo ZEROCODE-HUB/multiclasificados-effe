@@ -66,6 +66,10 @@
         <div class="spin"></div>
       </div>
     </div>
+    <!-- Watchdog de arranque: si el bundle no ejecuta en unos segundos, muestra un
+         aviso legible en vez del splash pegado. Script externo de 'self' (cumple
+         la CSP) e independiente del bundle. Ver public/boot-watchdog.js -->
+    <script defer src="/boot-watchdog.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
