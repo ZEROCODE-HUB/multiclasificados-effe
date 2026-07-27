@@ -114,4 +114,25 @@ describe("AdminCommunications — envíos reales", () => {
     fireEvent.click(checks[0]);
     await waitFor(() => expect(copyStaff).toBeDisabled());
   });
+
+  it("el contador del masivo suma al equipo interno cuando se activa la copia", async () => {
+    // Base (buscador) = 59; con staff (all) = 72.
+    fetchAudienceCount.mockImplementation((aud: string) => Promise.resolve(aud === "all" ? 72 : 59));
+    render(<AdminCommunications role="superadmin" />);
+    await screen.findByText("Centro de mensajes");
+    const masivoTab = screen.getByRole("tab", { name: /Masivo/i });
+    fireEvent.mouseDown(masivoTab);
+    fireEvent.focus(masivoTab);
+    fireEvent.click(masivoTab);
+    await screen.findByPlaceholderText("Título de la campaña");
+
+    // Sin copia: solo la base.
+    expect(await screen.findByRole("button", { name: /Enviar a 59/i })).toBeTruthy();
+
+    // Activar correo y luego la copia → el contador incluye al staff.
+    const checks = screen.getAllByRole("checkbox");
+    fireEvent.click(checks[0]); // correo
+    fireEvent.click(checks[1]); // copia al equipo interno
+    await waitFor(() => expect(screen.getByRole("button", { name: /Enviar a 72/i })).toBeTruthy());
+  });
 });

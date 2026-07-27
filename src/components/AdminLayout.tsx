@@ -12,6 +12,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { PERM_MODULES, MODULE_BY_SUB } from "@/lib/permissions";
+import { NotificationsBell } from "@/components/NotificationsBell";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -187,6 +188,7 @@ export function AdminLayout({ children, role, title, breadcrumb, can }: Props) {
             <p className="text-[10px] uppercase tracking-wider text-secondary font-bold leading-none">{isSuper ? "Super Admin" : "Admin"}</p>
           </div>
           <div className="ml-auto flex items-center gap-2 lg:gap-4">
+            <NotificationsBell />
             <span className="hidden md:inline text-sm text-muted-foreground truncate max-w-[220px]" title={displayEmail}>{displayEmail}</span>
             <div className={cn(
               "w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shadow-sm",

@@ -63,17 +63,24 @@ const AdminCommunications = ({ role }: { role: AdminRole }) => {
   // Conteo REAL de destinatarios para la audiencia elegida. `countError`
   // distingue "no se pudo calcular" de "calculando…" y de "0 destinatarios",
   // que antes se confundían todos en `null` (IT2-023).
-  const [count, setCount] = useState<number | null>(null);
+  // Se piden DOS conteos: la base (todos los usuarios) y el total incluyendo al
+  // equipo interno. Como todo perfil es "buscador" (no-staff) o staff, la
+  // audiencia 'all' equivale exactamente a "usuarios ∪ staff" — el mismo conjunto
+  // que arma admin_broadcast cuando se activa la copia. Así el contador coincide
+  // con el envío real sin necesidad de un RPC extra.
+  const [baseCount, setBaseCount] = useState<number | null>(null);
+  const [withStaffCount, setWithStaffCount] = useState<number | null>(null);
   const [countError, setCountError] = useState(false);
   useEffect(() => {
     let alive = true;
-    setCount(null);
-    setCountError(false);
-    fetchAudienceCount(BROADCAST_AUDIENCE)
-      .then((n) => { if (alive) setCount(n); })
-      .catch(() => { if (alive) { setCount(null); setCountError(true); } });
+    setBaseCount(null); setWithStaffCount(null); setCountError(false);
+    Promise.all([fetchAudienceCount(BROADCAST_AUDIENCE), fetchAudienceCount("all")])
+      .then(([base, all]) => { if (alive) { setBaseCount(base); setWithStaffCount(all); } })
+      .catch(() => { if (alive) setCountError(true); });
     return () => { alive = false; };
   }, []);
+  // Destinatarios efectivos: con la copia activada se suma al equipo interno.
+  const count = copyStaff ? withStaffCount : baseCount;
 
   // Búsqueda de destinatario (individual) con debounce. No busca si ya hay uno
   // seleccionado o si el texto es demasiado corto (< 2 caracteres).
