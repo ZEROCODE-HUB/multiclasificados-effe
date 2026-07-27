@@ -12,7 +12,7 @@ import { usePagination, TablePagination } from "@/components/TablePagination";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Save, Calculator, RotateCcw, Plus, Pencil, Trash2, Tag, Percent, Wallet, Loader2 } from "lucide-react";
+import { Save, Calculator, RotateCcw, Plus, Pencil, Trash2, Tag, Percent, Loader2 } from "lucide-react";
 import {
   DEFAULT_SETTINGS,
   PricingSettings,
@@ -20,12 +20,7 @@ import {
   loadSettings,
   saveSettings,
   formatSoles,
-  CREDIT_MULTIPLIER,
 } from "@/lib/pricing";
-import {
-  getCreditPackages, upsertCreditPackage, deleteCreditPackage, getAllCreditPackages,
-  type CreditPackage,
-} from "@/lib/credits";
 import {
   fetchPromotions, upsertPromotion, deletePromotion, type Promotion,
 } from "@/lib/promotions";
@@ -79,15 +74,6 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
   // % como texto para permitir el campo vacío (vacío = 0).
   const [discountText, setDiscountText] = useState("");
 
-  // Paquetes de créditos
-  const [packages, setPackages] = useState<CreditPackage[]>([]);
-  const [pkgLoading, setPkgLoading] = useState(true);
-  const [pkgDialog, setPkgDialog] = useState<{ open: boolean; editing: CreditPackage | null }>({ open: false, editing: null });
-  const [pkgForm, setPkgForm] = useState<Partial<CreditPackage>>({
-    name: "", credits_amount: 50, price_soles: 45, is_active: true, sort_order: 0,
-  });
-  const [pkgSaving, setPkgSaving] = useState(false);
-
   const matrix = buildMatrix(s);
   const matrixPager = usePagination(matrix, 10, matrix.length);
 
@@ -118,11 +104,6 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
         }
         setSettingsLoading(false);
       });
-  }, []);
-
-  // Cargar paquetes de créditos
-  useEffect(() => {
-    getAllCreditPackages().then((pkgs) => { setPackages(pkgs); setPkgLoading(false); });
   }, []);
 
   // Cargar promociones desde la base de datos
@@ -180,45 +161,6 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
     setQtyDiscounts(QUANTITY_ROWS.map((n) => (n === 1 ? "0" : String(DEFAULT_SETTINGS.descPorAviso * 100))));
     saveSettings(DEFAULT_SETTINGS);
     toast({ title: "Restablecido a valores por defecto" });
-  };
-
-  // ===== Paquetes de créditos helpers =====
-  const openNewPkg = () => {
-    setPkgForm({ name: "", credits_amount: 50, price_soles: 45, is_active: true, sort_order: packages.length });
-    setPkgDialog({ open: true, editing: null });
-  };
-  const openEditPkg = (pkg: CreditPackage) => {
-    setPkgForm({ ...pkg });
-    setPkgDialog({ open: true, editing: pkg });
-  };
-  const savePkg = async () => {
-    if (!pkgForm.name?.trim()) {
-      toast({ title: "Ingresa el nombre del paquete", variant: "destructive" }); return;
-    }
-    setPkgSaving(true);
-    try {
-      const saved = await upsertCreditPackage(pkgForm as CreditPackage);
-      if (pkgDialog.editing) {
-        setPackages((p) => p.map((x) => (x.id === saved.id ? saved : x)));
-      } else {
-        setPackages((p) => [...p, saved]);
-      }
-      setPkgDialog({ open: false, editing: null });
-      toast({ title: pkgDialog.editing ? "Paquete actualizado" : "Paquete creado", description: saved.name });
-    } catch (e) {
-      toast({ title: "Error", description: e instanceof Error ? e.message : "No se pudo guardar.", variant: "destructive" });
-    } finally {
-      setPkgSaving(false);
-    }
-  };
-  const handleDeletePkg = async (id: string) => {
-    try {
-      await deleteCreditPackage(id);
-      setPackages((p) => p.filter((x) => x.id !== id));
-      toast({ title: "Paquete eliminado" });
-    } catch (e) {
-      toast({ title: "Error al eliminar", description: e instanceof Error ? e.message : "", variant: "destructive" });
-    }
   };
 
   // ===== Promociones helpers =====
@@ -292,7 +234,6 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
           <TabsTrigger value="adicionales">Precios de adicionales</TabsTrigger>
           <TabsTrigger value="ofertas">Promociones</TabsTrigger>
           <TabsTrigger value="matriz">Matriz de precios</TabsTrigger>
-          <TabsTrigger value="creditos">Paquetes de saldo</TabsTrigger>
         </TabsList>
 
         {/* ===== Parámetros de descuento ===== */}
@@ -651,164 +592,6 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
               <TablePagination {...matrixPager} noun="filas" />
             </CardContent>
           </Card>
-        </TabsContent>
-
-        {/* ===== Paquetes de créditos ===== */}
-        <TabsContent value="creditos" className="pt-4 space-y-4">
-          <Card>
-            <CardHeader className="border-b flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Wallet size={16} className="text-secondary" /> Paquetes de saldo
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  Los usuarios compran saldo (en soles) y lo gastan al publicar.
-                </CardDescription>
-              </div>
-              {canEdit && (
-                <Button size="sm" className="gap-2" onClick={openNewPkg}><Plus size={14} /> Nuevo paquete</Button>
-              )}
-            </CardHeader>
-            <CardContent className="pt-5">
-              {pkgLoading ? (
-                <div className="flex justify-center py-8">
-                  <Loader2 size={20} className="animate-spin text-muted-foreground" />
-                </div>
-              ) : packages.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">
-                  No hay paquetes configurados. Crea uno con el botón "Nuevo paquete".
-                </p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Nombre</TableHead>
-                        <TableHead>Saldo (S/)</TableHead>
-                        <TableHead>Precio (S/)</TableHead>
-                        <TableHead>Orden</TableHead>
-                        <TableHead>Estado</TableHead>
-                        <TableHead className="text-right">Acciones</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {packages.map((pkg) => (
-                        <TableRow key={pkg.id}>
-                          <TableCell className="font-semibold">{pkg.name}</TableCell>
-                          <TableCell className="font-bold text-secondary">{pkg.credits_amount}</TableCell>
-                          <TableCell>{formatSoles(pkg.price_soles)}</TableCell>
-                          <TableCell>{pkg.sort_order}</TableCell>
-                          <TableCell>
-                            <Badge variant={pkg.is_active ? "default" : "outline"}>
-                              {pkg.is_active ? "Activo" : "Inactivo"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {canEdit ? (
-                              <>
-                                <Button size="icon" variant="ghost" onClick={() => openEditPkg(pkg)}><Pencil size={14} /></Button>
-                                <Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDeletePkg(pkg.id)}><Trash2 size={14} /></Button>
-                              </>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">—</span>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Dialog crear/editar paquete */}
-          <Dialog open={pkgDialog.open} onOpenChange={(o) => setPkgDialog((p) => ({ ...p, open: o }))}>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>{pkgDialog.editing ? "Editar paquete" : "Nuevo paquete de saldo"}</DialogTitle>
-                <DialogDescription>El saldo se acredita automáticamente al completarse el pago.</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label>Nombre del paquete</Label>
-                  <Input
-                    value={pkgForm.name ?? ""}
-                    onChange={(e) => setPkgForm({ ...pkgForm, name: e.target.value })}
-                    placeholder="Ej. Pro — S/ 229"
-                    className="mt-1"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label>Saldo (S/)</Label>
-                    <Input
-                      type="number"
-                      step="1"
-                      min={1}
-                      value={pkgForm.credits_amount ?? ""}
-                      onChange={(e) => setPkgForm({ ...pkgForm, credits_amount: parseFloat(e.target.value) || 0 })}
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label>Precio en S/</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min={0.01}
-                      value={pkgForm.price_soles ?? ""}
-                      onChange={(e) => setPkgForm({ ...pkgForm, price_soles: parseFloat(e.target.value) || 0 })}
-                      className="mt-1"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label>Orden de visualización</Label>
-                    <Input
-                      type="number"
-                      step="1"
-                      min={0}
-                      value={pkgForm.sort_order ?? 0}
-                      onChange={(e) => setPkgForm({ ...pkgForm, sort_order: parseInt(e.target.value) || 0 })}
-                      className="mt-1"
-                    />
-                  </div>
-                  <div className="flex flex-col justify-end">
-                    <label className="flex items-center gap-2 cursor-pointer pb-1">
-                      <Checkbox
-                        checked={pkgForm.is_active ?? true}
-                        onCheckedChange={(v) => setPkgForm({ ...pkgForm, is_active: !!v })}
-                      />
-                      <span className="text-sm">Activo (visible en tienda)</span>
-                    </label>
-                  </div>
-                </div>
-                {(pkgForm.credits_amount ?? 0) > 0 && (pkgForm.price_soles ?? 0) > 0 && (() => {
-                  const cr = pkgForm.credits_amount ?? 0;
-                  const soles = pkgForm.price_soles ?? 0;
-                  // Valor nominal en soles del paquete: 1 crédito = 1 sol.
-                  const face = cr / CREDIT_MULTIPLIER;
-                  const disc = face > soles ? Math.round(((face - soles) / face) * 100) : 0;
-                  return (
-                    <p className="text-xs text-muted-foreground border p-2 bg-muted/30">
-                      Valor nominal: <span className="font-semibold text-foreground">{formatSoles(face)}</span>
-                      {disc > 0 && (
-                        <span className="text-success ml-2">({disc}% de descuento sobre el nominal)</span>
-                      )}
-                    </p>
-                  );
-                })()}
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setPkgDialog({ open: false, editing: null })}>Cancelar</Button>
-                <Button onClick={savePkg} disabled={pkgSaving} className="gap-2">
-                  {pkgSaving ? <><Loader2 size={14} className="animate-spin" /> Guardando…</> : <><Save size={14} /> Guardar</>}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
         </TabsContent>
       </Tabs>
     </>

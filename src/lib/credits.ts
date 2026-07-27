@@ -7,15 +7,6 @@
 // (settle_paid_order). Este módulo solo LEE saldos/movimientos y GASTA créditos.
 import { supabase } from "@/lib/supabase";
 
-export interface CreditPackage {
-  id: string;
-  name: string;
-  credits_amount: number;
-  price_soles: number;
-  sort_order: number;
-  is_active: boolean;
-}
-
 export interface CreditTransaction {
   id: string;
   type: "purchase" | "spend";
@@ -61,17 +52,6 @@ export async function getCreditTransactions(): Promise<CreditTransaction[]> {
   return (data ?? []) as CreditTransaction[];
 }
 
-// ─── Paquetes disponibles ──────────────────────────────────────────────────
-
-export async function getCreditPackages(): Promise<CreditPackage[]> {
-  const { data } = await supabase
-    .from("credit_packages")
-    .select("*")
-    .eq("is_active", true)
-    .order("sort_order", { ascending: true });
-  return (data ?? []) as CreditPackage[];
-}
-
 // ─── Gasto de créditos al publicar ────────────────────────────────────────
 
 export async function spendCredits(
@@ -92,29 +72,3 @@ export async function spendCredits(
   return Boolean(data);
 }
 
-// ─── CRUD de paquetes (admin) ──────────────────────────────────────────────
-
-export async function upsertCreditPackage(
-  pkg: Partial<CreditPackage> & Pick<CreditPackage, "name" | "credits_amount" | "price_soles">,
-): Promise<CreditPackage> {
-  const { data, error } = await supabase
-    .from("credit_packages")
-    .upsert(pkg)
-    .select()
-    .single();
-  if (error) throw new Error(error.message);
-  return data as CreditPackage;
-}
-
-export async function deleteCreditPackage(id: string): Promise<void> {
-  const { error } = await supabase.from("credit_packages").delete().eq("id", id);
-  if (error) throw new Error(error.message);
-}
-
-export async function getAllCreditPackages(): Promise<CreditPackage[]> {
-  const { data } = await supabase
-    .from("credit_packages")
-    .select("*")
-    .order("sort_order", { ascending: true });
-  return (data ?? []) as CreditPackage[];
-}
