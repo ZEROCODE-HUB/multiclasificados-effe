@@ -6,13 +6,15 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Send, Megaphone, Users, Target, Mail, Bell, Loader2 } from "lucide-react";
+import { Send, Megaphone, Users, Mail, Bell, Loader2, X } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
-import { fetchAudienceCount, sendIndividualMessage, broadcastMessage, fetchCommStats, type CommStats } from "@/lib/admin";
+import {
+  fetchAudienceCount, sendIndividualMessage, broadcastMessage, fetchCommStats,
+  fetchAdminUsers, type CommStats, type AdminUser,
+} from "@/lib/admin";
 
 const timeAgo = (iso: string) => {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000;
@@ -22,14 +24,11 @@ const timeAgo = (iso: string) => {
   return `hace ${Math.floor(diff / 86400)} d`;
 };
 
-// Audiencias REALES respaldadas por la BD (profiles / user_roles). No se ofrecen
-// segmentos por región/interés porque el perfil de usuario aún no guarda esos
-// datos; añadirlos requeriría derivar la audiencia de saved_searches (pendiente).
-const AUDIENCES = [
-  { value: "all", label: "Todos los usuarios" },
-  { value: "anunciante", label: "Solo anunciantes" },
-  { value: "buscador", label: "Solo buscadores" },
-];
+// El envío masivo va SIEMPRE a todos los usuarios reales. Ya no hay selector de
+// audiencia: el rol "anunciante" quedó vacío (nadie lo tiene) y todo usuario
+// no-staff tiene el rol "buscador", así que 'buscador' == "todos los usuarios"
+// y además excluye al equipo interno (que se añade aparte con "copia al staff").
+const BROADCAST_AUDIENCE = "buscador";
 
 const AdminCommunications = ({ role }: { role: AdminRole }) => {
   // Enviar exige el permiso 'Comunicaciones' · Enviar (edit). El servidor lo
@@ -43,15 +42,18 @@ const AdminCommunications = ({ role }: { role: AdminRole }) => {
   const loadStats = () => fetchCommStats().then(setStats).catch(() => setStats(null));
   useEffect(() => { loadStats(); }, []);
 
-  // Individual
-  const [individualTo, setIndividualTo] = useState("");
+  // Individual — buscador de usuario (por nombre/apellido/correo) + selección.
+  const [userQuery, setUserQuery] = useState("");
+  const [userResults, setUserResults] = useState<AdminUser[]>([]);
+  const [searchingUsers, setSearchingUsers] = useState(false);
+  const [showUserResults, setShowUserResults] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<{ id: string; full_name: string; email: string } | null>(null);
   const [indSubject, setIndSubject] = useState("");
   const [indBody, setIndBody] = useState("");
   const [indEmail, setIndEmail] = useState(false);
   const [sendingInd, setSendingInd] = useState(false);
 
   // Masivo
-  const [audience, setAudience] = useState("all");
   const [massSubject, setMassSubject] = useState("");
   const [massBody, setMassBody] = useState("");
   const [massEmail, setMassEmail] = useState(false);
@@ -67,26 +69,50 @@ const AdminCommunications = ({ role }: { role: AdminRole }) => {
     let alive = true;
     setCount(null);
     setCountError(false);
-    fetchAudienceCount(audience)
+    fetchAudienceCount(BROADCAST_AUDIENCE)
       .then((n) => { if (alive) setCount(n); })
       .catch(() => { if (alive) { setCount(null); setCountError(true); } });
     return () => { alive = false; };
-  }, [audience]);
+  }, []);
+
+  // Búsqueda de destinatario (individual) con debounce. No busca si ya hay uno
+  // seleccionado o si el texto es demasiado corto (< 2 caracteres).
+  useEffect(() => {
+    const q = userQuery.trim();
+    if (selectedUser) return;
+    if (q.length < 2) { setUserResults([]); setSearchingUsers(false); return; }
+    let alive = true;
+    setSearchingUsers(true);
+    const t = setTimeout(() => {
+      fetchAdminUsers({ search: q })
+        .then(({ data }) => { if (alive) { setUserResults(data.slice(0, 8)); setShowUserResults(true); } })
+        .catch(() => { if (alive) setUserResults([]); })
+        .finally(() => { if (alive) setSearchingUsers(false); });
+    }, 250);
+    return () => { alive = false; clearTimeout(t); };
+  }, [userQuery, selectedUser]);
+
+  const clearSelectedUser = () => {
+    setSelectedUser(null);
+    setUserQuery("");
+    setUserResults([]);
+    setShowUserResults(false);
+  };
 
   const sendIndividual = async () => {
-    if (!individualTo.trim()) { toast({ title: "Falta el destinatario", variant: "destructive" }); return; }
+    if (!selectedUser) { toast({ title: "Selecciona un destinatario", description: "Búscalo por nombre, apellido o correo.", variant: "destructive" }); return; }
     if (!indSubject.trim() || !indBody.trim()) {
       toast({ title: "Asunto y mensaje son obligatorios", variant: "destructive" }); return;
     }
     setSendingInd(true);
     try {
-      const { sent, recipient } = await sendIndividualMessage(individualTo.trim(), indSubject.trim(), indBody.trim(), indEmail);
+      const { sent, recipient } = await sendIndividualMessage(selectedUser.id, indSubject.trim(), indBody.trim(), indEmail);
       if (sent === 0) {
-        toast({ title: "No se encontró al destinatario", description: "Revisa el correo o nombre.", variant: "destructive" });
+        toast({ title: "No se encontró al destinatario", description: "El usuario ya no existe.", variant: "destructive" });
         return;
       }
       toast({ title: "Mensaje enviado", description: `${recipient}${indEmail ? " · in-app + email" : " · in-app"}` });
-      setIndividualTo(""); setIndSubject(""); setIndBody(""); setIndEmail(false);
+      clearSelectedUser(); setIndSubject(""); setIndBody(""); setIndEmail(false);
       loadStats();
     } catch (e: any) {
       toast({ title: "No se pudo enviar", description: e?.message ?? "Error", variant: "destructive" });
@@ -101,7 +127,7 @@ const AdminCommunications = ({ role }: { role: AdminRole }) => {
     }
     setSendingMass(true);
     try {
-      const n = await broadcastMessage(audience, massSubject.trim(), massBody.trim(), massEmail, copyStaff);
+      const n = await broadcastMessage(BROADCAST_AUDIENCE, massSubject.trim(), massBody.trim(), massEmail, copyStaff);
       toast({ title: "Envío realizado", description: `${n.toLocaleString()} destinatarios${massEmail ? " · in-app + email" : " · in-app"}` });
       setMassSubject(""); setMassBody("");
       loadStats();
@@ -136,14 +162,54 @@ const AdminCommunications = ({ role }: { role: AdminRole }) => {
                 <TabsContent value="individual" className="space-y-4 pt-4">
                   <div>
                     <Label>Destinatario</Label>
-                    <Input
-                      value={individualTo}
-                      onChange={(e) => setIndividualTo(e.target.value)}
-                      placeholder="Correo o nombre del destinatario..."
-                      className="mt-1"
-                    />
+                    {selectedUser ? (
+                      <div className="mt-1 flex items-center justify-between gap-2 rounded-md border bg-muted/40 px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">{selectedUser.full_name || "(sin nombre)"}</p>
+                          <p className="text-xs text-muted-foreground truncate">{selectedUser.email}</p>
+                        </div>
+                        <Button type="button" variant="ghost" size="sm" className="gap-1 shrink-0" onClick={clearSelectedUser}>
+                          <X size={14} /> Cambiar
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="relative mt-1">
+                        <Input
+                          value={userQuery}
+                          onChange={(e) => setUserQuery(e.target.value)}
+                          onFocus={() => { if (userResults.length) setShowUserResults(true); }}
+                          onBlur={() => setTimeout(() => setShowUserResults(false), 150)}
+                          placeholder="Busca por nombre, apellido o correo..."
+                          autoComplete="off"
+                        />
+                        {showUserResults && userQuery.trim().length >= 2 && (
+                          <div className="absolute z-40 mt-1 w-full max-h-64 overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-md">
+                            {searchingUsers ? (
+                              <p className="flex items-center gap-2 px-3 py-2.5 text-xs text-muted-foreground">
+                                <Loader2 size={12} className="animate-spin" /> Buscando…
+                              </p>
+                            ) : userResults.length === 0 ? (
+                              <p className="px-3 py-2.5 text-xs text-muted-foreground">Sin coincidencias.</p>
+                            ) : (
+                              userResults.map((u) => (
+                                <button
+                                  key={u.id}
+                                  type="button"
+                                  className="block w-full border-b px-3 py-2 text-left transition-colors last:border-0 hover:bg-muted"
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => { setSelectedUser({ id: u.id, full_name: u.full_name, email: u.email }); setShowUserResults(false); }}
+                                >
+                                  <p className="text-sm font-medium text-foreground truncate">{u.full_name || "(sin nombre)"}</p>
+                                  <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <p className="text-[11px] text-muted-foreground mt-1">
-                      Se busca por correo exacto o por nombre. Recibe la notificación in-app y push.
+                      Busca y selecciona un usuario por nombre, apellido o correo. Recibe la notificación in-app y push.
                     </p>
                   </div>
                   <div>
@@ -167,16 +233,6 @@ const AdminCommunications = ({ role }: { role: AdminRole }) => {
                 {/* -------------------------------------------------- Masivo */}
                 <TabsContent value="masivo" className="space-y-4 pt-4">
                   <div>
-                    <Label className="flex items-center gap-1.5"><Target size={12} /> Audiencia</Label>
-                    <Select value={audience} onValueChange={setAudience}>
-                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {AUDIENCES.map((a) => <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
                     <Label>Asunto</Label>
                     <Input value={massSubject} onChange={(e) => setMassSubject(e.target.value)} placeholder="Título de la campaña" className="mt-1" />
                   </div>
@@ -186,12 +242,29 @@ const AdminCommunications = ({ role }: { role: AdminRole }) => {
                   </div>
 
                   <label className="flex items-center gap-2 text-sm cursor-pointer">
-                    <Checkbox checked={massEmail} onCheckedChange={(v) => setMassEmail(!!v)} />
+                    <Checkbox
+                      checked={massEmail}
+                      onCheckedChange={(v) => { const on = !!v; setMassEmail(on); if (!on) setCopyStaff(false); }}
+                    />
                     <Mail size={14} /> <span>Enviar también por correo electrónico</span>
                   </label>
-                  <label className="flex items-start gap-2 text-sm cursor-pointer">
-                    <Checkbox checked={copyStaff} onCheckedChange={(v) => setCopyStaff(!!v)} className="mt-0.5" />
-                    <span>Incluir en copia a Administradores y Superadministradores</span>
+                  {/* La copia al equipo interno es un concepto de correo: solo se
+                      habilita cuando se envía también por email. */}
+                  <label className={`flex items-start gap-2 text-sm ${massEmail ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}>
+                    <Checkbox
+                      checked={copyStaff}
+                      disabled={!massEmail}
+                      onCheckedChange={(v) => setCopyStaff(!!v)}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      Incluir en copia a Administradores y Superadministradores
+                      {!massEmail && (
+                        <span className="block text-[11px] text-muted-foreground">
+                          Disponible solo si envías también por correo electrónico.
+                        </span>
+                      )}
+                    </span>
                   </label>
 
                   <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
