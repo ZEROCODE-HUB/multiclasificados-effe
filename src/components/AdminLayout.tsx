@@ -8,7 +8,6 @@ import {
   ShieldCheck,
   Menu,
   LogOut,
-  Bell,
   ChevronRight,
   type LucideIcon,
 } from "lucide-react";
@@ -188,10 +187,6 @@ export function AdminLayout({ children, role, title, breadcrumb, can }: Props) {
             <p className="text-[10px] uppercase tracking-wider text-secondary font-bold leading-none">{isSuper ? "Super Admin" : "Admin"}</p>
           </div>
           <div className="ml-auto flex items-center gap-2 lg:gap-4">
-            <button className="hidden md:flex w-9 h-9 items-center justify-center rounded-full hover:bg-muted transition-colors text-muted-foreground relative">
-              <Bell size={18} />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-secondary rounded-full" />
-            </button>
             <span className="hidden md:inline text-sm text-muted-foreground truncate max-w-[220px]" title={displayEmail}>{displayEmail}</span>
             <div className={cn(
               "w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shadow-sm",
