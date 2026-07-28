@@ -4,6 +4,8 @@ import {
   REQUIRED_ENV,
   computeEnvDiagnostics,
   validateSupabaseConfig,
+  cleanEnvValue,
+  normalizeSupabaseUrl,
   probeSupabase,
 } from "@/lib/bootDiagnostics";
 
@@ -32,6 +34,39 @@ describe("computeEnvDiagnostics", () => {
   });
 });
 
+describe("cleanEnvValue", () => {
+  it("recorta espacios", () => {
+    expect(cleanEnvValue("  hola  ")).toBe("hola");
+  });
+  it("quita comillas dobles envolventes (error de CI)", () => {
+    expect(cleanEnvValue('"https://x.supabase.co"')).toBe("https://x.supabase.co");
+  });
+  it("quita comillas simples envolventes", () => {
+    expect(cleanEnvValue("'anon-key'")).toBe("anon-key");
+  });
+  it("no toca comillas internas", () => {
+    expect(cleanEnvValue('ab"cd')).toBe('ab"cd');
+  });
+  it("no-string → cadena vacía", () => {
+    expect(cleanEnvValue(undefined)).toBe("");
+  });
+});
+
+describe("normalizeSupabaseUrl", () => {
+  it("antepone https:// si falta el esquema", () => {
+    expect(normalizeSupabaseUrl("x.supabase.co")).toBe("https://x.supabase.co");
+  });
+  it("quita comillas y normaliza", () => {
+    expect(normalizeSupabaseUrl('"x.supabase.co"')).toBe("https://x.supabase.co");
+  });
+  it("respeta una URL ya válida (y quita la barra final)", () => {
+    expect(normalizeSupabaseUrl("https://x.supabase.co/")).toBe("https://x.supabase.co");
+  });
+  it("vacío → vacío", () => {
+    expect(normalizeSupabaseUrl("")).toBe("");
+  });
+});
+
 describe("validateSupabaseConfig", () => {
   it("URL válida + clave → null", () => {
     expect(validateSupabaseConfig("https://x.supabase.co", "anon")).toBeNull();
@@ -42,8 +77,11 @@ describe("validateSupabaseConfig", () => {
   it("clave vacía → mensaje de clave", () => {
     expect(validateSupabaseConfig("https://x.supabase.co", "")).toMatch(/ANON_KEY/);
   });
-  it("URL sin http(s) → mensaje de URL inválida", () => {
-    expect(validateSupabaseConfig("x.supabase.co", "anon")).toMatch(/http/i);
+  it("URL sin http(s) ahora se normaliza y es válida", () => {
+    expect(validateSupabaseConfig("x.supabase.co", "anon")).toBeNull();
+  });
+  it("URL con comillas envolventes se limpia y es válida", () => {
+    expect(validateSupabaseConfig('"https://x.supabase.co"', '"anon"')).toBeNull();
   });
 });
 

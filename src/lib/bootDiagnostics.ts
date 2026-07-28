@@ -36,18 +36,47 @@ export function computeEnvDiagnostics(env: EnvLike = defaultEnv): EnvDiagnostics
   return { ok: missing.length === 0, missing, present };
 }
 
+// Limpia un valor de env: recorta espacios y QUITA un par de comillas
+// envolventes. Es un error clásico al pegar valores en paneles de CI (Codemagic,
+// Vercel): el valor queda como `"https://..."` con las comillas literales
+// incrustadas en el build, y todo lo que dependa de él se rompe en silencio.
+export function cleanEnvValue(raw: unknown): string {
+  let v = typeof raw === "string" ? raw.trim() : "";
+  if (v.length >= 2) {
+    const first = v[0];
+    const last = v[v.length - 1];
+    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+      v = v.slice(1, -1).trim();
+    }
+  }
+  return v;
+}
+
+// Normaliza la URL de Supabase para que sea utilizable aunque venga "sucia":
+// quita comillas/espacios y antepone `https://` si falta el esquema (otro error
+// típico: cargar `proyecto.supabase.co` sin el `https://`). Sin esquema,
+// supabase-js la rechaza y la app no arranca.
+export function normalizeSupabaseUrl(raw: unknown): string {
+  let v = cleanEnvValue(raw);
+  if (!v) return "";
+  if (!/^https?:\/\//i.test(v)) v = `https://${v}`;
+  return v.replace(/\/+$/, "");
+}
+
 // Valida la URL/clave de Supabase con las MISMAS reglas que exige
-// `@supabase/supabase-js` al crear el cliente (no vacías + http/https). Devuelve
-// un mensaje legible si algo está mal, o `null` si la config es válida. Lo usa
+// `@supabase/supabase-js` al crear el cliente (no vacías + http/https), pero
+// sobre el valor YA NORMALIZADO (comillas quitadas, esquema añadido). Devuelve un
+// mensaje legible si algo está mal, o `null` si la config es válida. Lo usa
 // `supabase.ts` para no lanzar en tiempo de import.
 export function validateSupabaseConfig(
   url: string | undefined,
   anonKey: string | undefined,
 ): string | null {
-  const u = (url ?? "").trim();
-  const k = (anonKey ?? "").trim();
-  if (!u) return "Falta VITE_SUPABASE_URL.";
+  const rawU = cleanEnvValue(url);
+  const k = cleanEnvValue(anonKey);
+  if (!rawU) return "Falta VITE_SUPABASE_URL.";
   if (!k) return "Falta VITE_SUPABASE_ANON_KEY.";
+  const u = normalizeSupabaseUrl(url);
   if (!/^https?:\/\//i.test(u)) return "VITE_SUPABASE_URL no es una URL http(s) válida.";
   return null;
 }

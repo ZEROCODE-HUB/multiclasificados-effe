@@ -1,9 +1,15 @@
 import { createClient } from "@supabase/supabase-js";
 import { Capacitor } from "@capacitor/core";
-import { validateSupabaseConfig } from "@/lib/bootDiagnostics";
+import { validateSupabaseConfig, normalizeSupabaseUrl, cleanEnvValue } from "@/lib/bootDiagnostics";
 
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const rawUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const rawAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+
+// Normalizamos los valores del build antes de usarlos: quitamos comillas
+// envolventes y añadimos `https://` si falta (errores clásicos al pegar en
+// Codemagic/Vercel). Así el cliente recibe una URL/clave limpias.
+export const supabaseUrl = normalizeSupabaseUrl(rawUrl);
+const anonKey = cleanEnvValue(rawAnonKey);
 
 // Si la config falta o es inválida, `createClient` de supabase-js 2.x LANZA en
 // tiempo de import ("supabaseUrl is required."), lo que abortaría todo el bundle
@@ -11,15 +17,15 @@ const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 // exponemos el error y creamos el cliente con un placeholder VÁLIDO para no
 // romper el import: `main.tsx` lee este flag y muestra una pantalla de
 // diagnóstico legible (ver BootError / bootDiagnostics).
-export const supabaseConfigError: string | null = validateSupabaseConfig(url, anonKey);
+export const supabaseConfigError: string | null = validateSupabaseConfig(rawUrl, rawAnonKey);
 
 if (supabaseConfigError) {
   console.warn(`[supabase] ${supabaseConfigError} El login/datos reales no funcionarán.`);
 }
 
 export const supabase = createClient(
-  supabaseConfigError ? "https://sin-configurar.invalid" : url!,
-  supabaseConfigError ? "anon-key-placeholder" : anonKey!,
+  supabaseConfigError ? "https://sin-configurar.invalid" : supabaseUrl,
+  supabaseConfigError ? "anon-key-placeholder" : anonKey,
   {
     auth: {
       persistSession: true,

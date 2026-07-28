@@ -20,7 +20,7 @@ describe("BootError", () => {
     expect(screen.getByText("VITE_SUPABASE_URL")).toBeTruthy();
     expect(screen.getByText("VITE_SUPABASE_ANON_KEY")).toBeTruthy();
     // Versión actual y plataforma.
-    expect(screen.getByText(/v3\.8/)).toBeTruthy();
+    expect(screen.getByText(/v3\.9/)).toBeTruthy();
     expect(screen.getByText("ios")).toBeTruthy();
     // Botón de reintento.
     expect(screen.getByRole("button", { name: /Reintentar/i })).toBeTruthy();
@@ -29,6 +29,13 @@ describe("BootError", () => {
   it("marca window.__EFFE_BOOTED__ para silenciar el watchdog", () => {
     render(<BootError variant="config" />);
     expect((window as unknown as { __EFFE_BOOTED__?: boolean }).__EFFE_BOOTED__).toBe(true);
+  });
+
+  it("variant=config: muestra el motivo específico cuando se pasa detail", () => {
+    render(<BootError variant="config" detail="VITE_SUPABASE_URL no es una URL http(s) válida." />);
+    expect(screen.getByText(/no es una URL http\(s\) válida/)).toBeTruthy();
+    // También reporta el valor recibido (aquí vacío, porque en tests no hay env).
+    expect(screen.getByText(/Valor recibido para VITE_SUPABASE_URL/)).toBeTruthy();
   });
 
   it("variant=crash: muestra el mensaje del error", () => {

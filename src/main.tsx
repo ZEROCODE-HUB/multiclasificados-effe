@@ -23,7 +23,7 @@ const root = createRoot(document.getElementById("root")!);
 if (supabaseConfigError) {
   // Sin conexión configurada la app no puede operar: mostramos el diagnóstico en
   // vez de una app a medias. No arrancamos lo nativo (depende del cliente real).
-  root.render(<BootError variant="config" />);
+  root.render(<BootError variant="config" detail={supabaseConfigError} />);
 } else {
   initNative();
   root.render(

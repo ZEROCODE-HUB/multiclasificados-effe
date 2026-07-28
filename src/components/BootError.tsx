@@ -4,6 +4,7 @@ import { appVersionLabel } from "@/lib/version";
 import {
   REQUIRED_ENV,
   computeEnvDiagnostics,
+  normalizeSupabaseUrl,
   probeSupabase,
   type ProbeResult,
 } from "@/lib/bootDiagnostics";
@@ -101,9 +102,12 @@ const PROBE_LABEL: Record<ProbeResult, string> = {
 export function BootError({
   variant,
   error,
+  detail,
 }: {
   variant: "config" | "crash";
   error?: unknown;
+  /** Motivo específico (p. ej. supabaseConfigError) para el variant "config". */
+  detail?: string | null;
 }) {
   const env = computeEnvDiagnostics();
   const [probe, setProbe] = useState<ProbeResult | "checking">("checking");
@@ -113,7 +117,7 @@ export function BootError({
     (window as unknown as { __EFFE_BOOTED__?: boolean }).__EFFE_BOOTED__ = true;
 
     let vigente = true;
-    const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+    const url = normalizeSupabaseUrl(import.meta.env.VITE_SUPABASE_URL);
     probeSupabase(url).then((r) => vigente && setProbe(r));
     return () => {
       vigente = false;
@@ -121,6 +125,9 @@ export function BootError({
   }, []);
 
   const platform = Capacitor.getPlatform();
+  // La URL del proyecto es PÚBLICA (ya está en el <link preconnect> de index.html),
+  // así que mostrar el valor recibido ayuda a depurar sin exponer secretos.
+  const rawUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 
   return (
     <div style={S.wrap} role="alert">
@@ -152,6 +159,13 @@ export function BootError({
             );
           })}
         </div>
+
+        {variant === "config" && detail && (
+          <div style={S.errBox}>
+            {detail}
+            {"\n"}Valor recibido para VITE_SUPABASE_URL: {rawUrl ? `«${rawUrl}»` : "(vacío)"}
+          </div>
+        )}
 
         {variant === "crash" && error != null && (
           <div style={S.errBox}>{errorMessage(error)}</div>
