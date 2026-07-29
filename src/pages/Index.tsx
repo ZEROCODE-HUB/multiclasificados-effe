@@ -21,6 +21,16 @@ import { ArrowRight, BadgeCheck, Gem, Headset, Star, TrendingUp, CheckCircle2, S
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
+// Rejilla de avisos de la portada. Antes iba por columnas fijas (2 → 4 → 5…) y
+// las tarjetas salían mucho más anchas que en Explorar, que reparte en más
+// columnas y además cede espacio a la barra de filtros: a 1536 px medían ~350 px
+// aquí frente a ~180 px allí. Con `auto-fill` el ancho manda sobre el número de
+// columnas, así que la tarjeta mide lo mismo en las dos pantallas.
+// `auto-fill` y NO `auto-fit`: con pocos avisos, auto-fit los estiraría a lo
+// ancho y volveríamos al problema.
+const LISTING_GRID =
+  "grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-x-4 gap-y-8";
+
 const benefits = [
   {
     icon: BadgeCheck,
@@ -96,7 +106,9 @@ const Index = () => {
   // Términos/Privacidad del footer: abren el documento legal (antes eran href="#").
   const [termsOpen, setTermsOpen] = useState(false);
   useEffect(() => {
-    fetchListings({ limit: 8 }).then(setListings);
+    // 16 porque la portada tiene DOS rejillas: con 8 ambas mostraban los mismos
+    // avisos (la de abajo era la misma lista al revés). Se reparten 8 y 8.
+    fetchListings({ limit: 16 }).then(setListings);
     fetchPlatformStats().then(setPlatform);
   }, []);
 
@@ -296,7 +308,7 @@ const Index = () => {
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 3xl:grid-cols-5 4xl:grid-cols-6 5xl:grid-cols-8 gap-x-6 gap-y-10">
+          <div className={LISTING_GRID}>
             {listings.slice(0, 8).map((listing) => (
               <ListingCard key={listing.id} listing={listing} />
             ))}
@@ -372,13 +384,15 @@ const Index = () => {
             Ver más recientes →
           </Link>
         </div>
-        {listings.length === 0 ? (
+        {/* La tanda siguiente, no la misma de arriba al revés: con menos de 9
+            avisos publicados esta sección aún no tiene nada propio que mostrar. */}
+        {listings.length <= 8 ? (
           <div className="border border-dashed border-border py-16 text-center">
-            <p className="text-muted-foreground">Aún no hay avisos recientes.</p>
+            <p className="text-muted-foreground">Aún no hay más avisos recientes.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 3xl:grid-cols-5 4xl:grid-cols-6 5xl:grid-cols-8 gap-x-6 gap-y-10">
-            {[...listings].slice(0, 4).reverse().map((listing) => (
+          <div className={LISTING_GRID}>
+            {listings.slice(8, 16).map((listing) => (
               <ListingCard key={`new-${listing.id}`} listing={listing} />
             ))}
           </div>
