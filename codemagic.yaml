@@ -12,16 +12,25 @@ workflows:
         certificates:
           - Apple Distribution Certificate
       node: 22
+      # Las VITE_* se definen en Codemagic → Environment variables y llegan solas
+      # al entorno del build. Aquí NO se redefinen.
+      #
+      # Antes estaban listadas como `VITE_SUPABASE_ANON_KEY: $VITE_SUPABASE_ANON_KEY`
+      # y ESA era la causa del IPA roto: los valores de `vars` son literales, sin
+      # expansión de shell, así que el build recibía la cadena "$VITE_SUPABASE_ANON_KEY"
+      # (23 caracteres) PISANDO la clave real. El servidor respondía 401 "Invalid API
+      # key" a todo, y de ahí la app que arrancaba pero no dejaba iniciar sesión ni
+      # mostraba avisos. La URL corría la misma suerte: "https://$VITE_SUPABASE_URL".
+      #
+      # Si las variables están dentro de un GRUPO en Codemagic, hay que importarlo
+      # aquí o llegarán vacías (el paso "Verificar variables del build" lo dirá):
+      #   groups:
+      #     - nombre-del-grupo
+      #
+      # VITE_PUBLIC_SITE_URL es imprescindible: sin ella el pago Izipay y los
+      # enlaces de compartir se rompen en iOS (ver PLAN-IMPLEMENTACION.md).
       vars:
         XCODE_SCHEME: App
-        # Definir los VALORES en Codemagic → Environment variables (marcadas como
-        # secure). VITE_PUBLIC_SITE_URL es imprescindible: sin ella el pago Izipay
-        # y los enlaces de compartir se rompen en iOS (ver PLAN-IMPLEMENTACION.md).
-        VITE_SUPABASE_URL: $VITE_SUPABASE_URL
-        VITE_SUPABASE_ANON_KEY: $VITE_SUPABASE_ANON_KEY
-        VITE_PUBLIC_SITE_URL: $VITE_PUBLIC_SITE_URL
-        VITE_IZIPAY_PUBLIC_KEY: $VITE_IZIPAY_PUBLIC_KEY
-        VITE_HCAPTCHA_SITE_KEY: $VITE_HCAPTCHA_SITE_KEY
     scripts:
       - name: Install dependencies
         # @capacitor/ios ya está en package.json → lo instala `npm ci`.
