@@ -176,6 +176,11 @@ export async function uploadMyAvatar(file: File): Promise<string> {
 // admin que llega desde una ruta de usuario (p. ej.
 // /auth/staff?redirect=/dashboard/buscador) aterrizaría en el panel de usuario.
 export function landingPath(session: Session | null, redirect?: string | null): string {
+  // El `redirect` viene del querystring: solo se acepta como ruta interna. Un
+  // "//otro-sitio" o un "https://…" convertiría el login en un trampolín hacia
+  // una web ajena (redirección abierta), típico gancho de phishing.
+  if (redirect && !/^\/(?!\/|\\)/.test(redirect)) redirect = null;
+
   if (session && isStaffRole(session.role)) {
     // Moderador y soporte no tienen panel propio: operan el de administración,
     // recortado por la Matriz de permisos. `/dashboard/moderador` no existe.

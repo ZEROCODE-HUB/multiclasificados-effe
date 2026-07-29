@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { imgUrl, imgSrcSet } from "@/lib/imageUrl";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ListingCard } from "@/components/ListingCard";
-import { ListingsMap } from "@/components/ListingsMap";
 import { Navbar } from "@/components/Navbar";
 import { type Listing } from "@/data/mockData";
 import { useCategories } from "@/hooks/useCategories";
@@ -29,6 +28,14 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+
+// El mapa se carga solo al abrir la vista "Mapa". Con el import estático,
+// leaflet (199 KB de JS + 16 KB de CSS bloqueante) entraba en el bundle inicial
+// de TODA la app —incluida la portada, que no tiene mapa— porque esta página se
+// importa sin lazy en App.tsx (IT3-004/007).
+const ListingsMap = lazy(() =>
+  import("@/components/ListingsMap").then((m) => ({ default: m.ListingsMap })),
+);
 
 type ViewMode = "list" | "map";
 type Layout = "grid" | "list";
@@ -313,7 +320,11 @@ export default function SearchPage() {
             >
               <SlidersHorizontal size={14} /> Filtros
             </Button>
-            <div className="flex items-center gap-3 overflow-x-auto no-scrollbar flex-1 min-w-0">
+            {/* El degradado del borde derecho avisa de que la lista sigue: con
+                `no-scrollbar` no hay ninguna otra pista de que se puede deslizar
+                (IT3-014). `pointer-events-none` para no comerse los clics. */}
+            <div className="relative flex-1 min-w-0">
+            <div className="flex items-center gap-3 overflow-x-auto no-scrollbar">
               {categories.map((c) => (
                 <button
                   key={c.id}
@@ -327,6 +338,8 @@ export default function SearchPage() {
                   <c.icon size={12} /> {c.name}
                 </button>
               ))}
+            </div>
+              <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-card to-transparent" />
             </div>
             <div className="hidden md:block shrink-0">{ViewToggle}</div>
           </div>
@@ -598,12 +611,22 @@ export default function SearchPage() {
         <div className="flex-1 flex flex-col lg:grid lg:grid-cols-[480px_1fr] lg:min-h-0">
           {/* Map - full width on top in mobile, right column on desktop */}
           <div className="relative bg-muted overflow-hidden h-[45vh] lg:h-auto lg:order-2 shrink-0">
-            <ListingsMap
-              listings={listings}
-              active={active}
-              onActive={setActive}
-              hrefFor={(id) => (session?.supabase ? `/aviso/${id}` : `/auth?redirect=/aviso/${id}`)}
-            />
+            {/* El Suspense va pegado al mapa: si envolviera también la lista,
+                la columna de resultados se remontaría al cambiar de vista. */}
+            <Suspense
+              fallback={
+                <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">
+                  Cargando mapa…
+                </div>
+              }
+            >
+              <ListingsMap
+                listings={listings}
+                active={active}
+                onActive={setActive}
+                hrefFor={(id) => (session?.supabase ? `/aviso/${id}` : `/auth?redirect=/aviso/${id}`)}
+              />
+            </Suspense>
           </div>
 
           {/* List - below map on mobile (la página hace scroll), columna izquierda con scroll propio en escritorio */}

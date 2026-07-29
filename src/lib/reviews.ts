@@ -45,6 +45,30 @@ export async function fetchSellerInfo(
   }
 }
 
+export interface AdvertiserStats {
+  activeListings: number;
+  memberSince: string | null;
+}
+
+// Cifras de la ficha "Publicado por". Va aparte de `fetchSellerInfo` a propósito:
+// si esto falla, el rating y el botón "Ver todos sus avisos" deben seguir vivos.
+// El RPC (0078) es la única vía para la fecha de alta: `profiles` no es legible
+// por otros usuarios.
+export async function fetchAdvertiserStats(ownerId: string): Promise<AdvertiserStats | null> {
+  try {
+    const { data, error } = await supabase.rpc("advertiser_public_stats", { p_owner: ownerId });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) return null;
+    return {
+      activeListings: Number(row.active_listings) || 0,
+      memberSince: (row.member_since as string | null) ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export interface ReviewEligibility {
   hasAccepted: boolean;
   alreadyReviewed: boolean;

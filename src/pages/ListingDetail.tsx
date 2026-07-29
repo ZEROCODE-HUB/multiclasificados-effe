@@ -52,7 +52,7 @@ import { useSession } from "@/hooks/useSession";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 import { ListingLocationMap } from "@/components/ListingLocationMap";
-import { fetchSellerInfo, fetchReviews } from "@/lib/reviews";
+import { fetchSellerInfo, fetchReviews, fetchAdvertiserStats, type AdvertiserStats } from "@/lib/reviews";
 import { applyToListing, fetchMyApplication, STATUS_LABEL, type ApplicationStatus } from "@/lib/applications";
 import { Checkbox } from "@/components/ui/checkbox";
 import { loadSold, markSold } from "@/lib/pricing";
@@ -68,6 +68,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/lib/supabase";
 import { getOrCreateConversation, sendMessage, hasConversationWithSeller } from "@/lib/messaging";
 
+
+// Antigüedad de la cuenta del anunciante en formato corto para la ficha.
+// Menos de un mes se muestra como "Nuevo" (es lo que decía antes el literal).
+function membershipLabel(iso: string | null): string {
+  if (!iso) return "Nuevo";
+  const t = new Date(iso).getTime();
+  if (!t) return "Nuevo";
+  const months = Math.floor((Date.now() - t) / (1000 * 60 * 60 * 24 * 30.44));
+  if (months < 1) return "Nuevo";
+  if (months < 12) return `${months} ${months === 1 ? "mes" : "meses"}`;
+  const years = Math.floor(months / 12);
+  return `${years} ${years === 1 ? "año" : "años"}`;
+}
 
 export default function ListingDetail() {
   const { id } = useParams();
@@ -100,6 +113,7 @@ export default function ListingDetail() {
 
   // Reseñas (rating real del vendedor) + postulación del usuario
   const [sellerRating, setSellerRating] = useState(0);
+  const [sellerStats, setSellerStats] = useState<AdvertiserStats | null>(null);
   const [reviewCount, setReviewCount] = useState(0);
   const [myApp, setMyApp] = useState<ApplicationStatus | null>(null);
   const [applyOpen, setApplyOpen] = useState(false);
@@ -151,6 +165,9 @@ export default function ListingDetail() {
       if (!info) return;
       setSellerRating(info.rating);
       setOwnerId(info.ownerId);
+      // Cifras de la ficha del anunciante. Encadenado aquí porque necesita el
+      // ownerId; si falla, la tarjeta muestra "—" y el resto sigue igual.
+      fetchAdvertiserStats(info.ownerId).then(setSellerStats);
     });
     fetchReviews(id).then((rs) => setReviewCount(rs.length));
   };
@@ -781,16 +798,22 @@ export default function ListingDetail() {
                 </p>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2 pt-2">
-              <div className="text-center py-2 bg-muted/40 border border-border">
-                <p className="text-base font-extrabold text-primary">0</p>
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Avisos</p>
+            {/* En un aviso confidencial estas cifras identifican al anunciante
+                igual que el enlace de abajo, así que también se ocultan. */}
+            {!confidential && (
+              <div className="grid grid-cols-2 gap-2 pt-2">
+                <div className="text-center py-2 bg-muted/40 border border-border">
+                  {/* "—" mientras carga o si falla: un 0 en un anunciante con
+                      avisos es peor que no decir nada (IT3-013). */}
+                  <p className="text-base font-extrabold text-primary">{sellerStats ? sellerStats.activeListings : "—"}</p>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Avisos</p>
+                </div>
+                <div className="text-center py-2 bg-muted/40 border border-border">
+                  <p className="text-base font-extrabold text-primary">{sellerStats ? membershipLabel(sellerStats.memberSince) : "—"}</p>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Antigüedad</p>
+                </div>
               </div>
-              <div className="text-center py-2 bg-muted/40 border border-border">
-                <p className="text-base font-extrabold text-primary">Nuevo</p>
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">Antigüedad</p>
-              </div>
-            </div>
+            )}
             {/* En avisos confidenciales no se enlaza a los demás avisos del
                 anunciante: delataría su identidad. */}
             {!confidential && (

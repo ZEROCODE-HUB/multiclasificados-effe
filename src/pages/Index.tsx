@@ -534,17 +534,17 @@ const Index = () => {
               <ul className="space-y-3 text-sm text-primary-foreground/70">
                 <li><Link to="/buscar" className="hover:text-secondary transition-colors">Explorar avisos</Link></li>
                 <li><Link to="/dashboard/anunciante/publicar" className="hover:text-secondary transition-colors">Publicar aviso</Link></li>
-                <li><Link to="/auth" className="hover:text-secondary transition-colors">Planes Pro</Link></li>
                 <li><Link to="/auth" className="hover:text-secondary transition-colors">Iniciar sesión</Link></li>
               </ul>
             </div>
             <div>
               <h2 className="font-semibold mb-5 uppercase text-secondary" style={{ fontSize: "13px", letterSpacing: "0.08em" }}>Empresa</h2>
+              {/* "Acerca de" (ancla a esta misma página), "Contacto" (abría el
+                  gestor de correo; los datos ya están en la columna de al lado) y
+                  "Planes Pro" (llevaba al login) se quitaron en IT3-010. Los dos
+                  enlaces legales abrían el MISMO diálogo, así que queda uno. */}
               <ul className="space-y-3 text-sm text-primary-foreground/70">
-                <li><a href="#como-funciona" className="hover:text-secondary transition-colors">Acerca de</a></li>
-                <li><a href="mailto:info@effemulticlasificados.pe" className="hover:text-secondary transition-colors">Contacto</a></li>
                 <li><button type="button" onClick={() => setTermsOpen(true)} className="hover:text-secondary transition-colors text-left">Términos y condiciones</button></li>
-                <li><button type="button" onClick={() => setTermsOpen(true)} className="hover:text-secondary transition-colors text-left">Política de privacidad</button></li>
               </ul>
             </div>
             <div>

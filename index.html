@@ -27,12 +27,15 @@
          descarga. Así la imagen es descubrible en el HTML inicial (IT2-008). -->
     <link rel="preload" as="image" href="/hero-bg.webp" media="(min-width: 768px)" fetchpriority="high" />
     <!-- Fuente Montserrat SIN bloquear el render (EFFE-009/019/017): se carga como
-         preload y main.tsx la promueve a stylesheet al arrancar. Antes usaba un
-         `onload` inline, pero eso es un manejador de eventos en línea que la CSP
-         con `script-src` (sin unsafe-inline) bloquea (IT2-003); por eso ahora la
-         promoción se hace desde el bundle (script de 'self'). Con display=swap el
-         texto pinta de inmediato en la fuente de respaldo y luego cambia. -->
+         preload y se promueve a stylesheet. Antes usaba un `onload` inline, pero
+         eso es un manejador de eventos en línea que la CSP con `script-src` (sin
+         unsafe-inline) bloquea (IT2-003). La promoción la hace font-boot.js: un
+         script externo de 'self' de <1 KB, en vez de esperar a que se descargue y
+         ejecute el bundle entero, que retrasaba la petición de la fuente hasta
+         después del JS (IT3-008). Con display=swap el texto pinta de inmediato en
+         la fuente de respaldo y luego cambia. -->
     <link id="montserrat-font" rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&display=swap" />
+    <script defer src="/font-boot.js"></script>
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&display=swap" /></noscript>
     <title>eFFe Multiclasificados | Avisos Clasificados en Perú</title>
     <meta name="description" content="Plataforma líder de avisos clasificados en Perú. Publica y encuentra inmuebles, vehículos, empleos, servicios y más.">

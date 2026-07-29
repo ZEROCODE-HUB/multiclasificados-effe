@@ -26,6 +26,7 @@ import {
 import { createAndPublishListing, saveListingDraft } from "@/lib/publish";
 import { urgenteAllowedFor, URGENTE_MAX_DAYS } from "@/lib/listingBadges";
 import { ListingCard } from "@/components/ListingCard";
+import { InfoHint } from "@/components/InfoHint";
 import { FALLBACK_IMG } from "@/lib/listings";
 import type { Listing } from "@/data/mockData";
 import { type PersonType } from "@/components/VerifyIdentityDialog";
@@ -46,12 +47,19 @@ const MAX_EXTRA_IMAGES = 3;
 
 // Extras del paquete (cantidad numérica por cada uno)
 type ExtraKey = "img500" | "pdf500" | "urgente" | "destacado" | "confidencial";
-const EXTRA_DEFS: Array<{ key: ExtraKey; label: string; sub?: string; icon: typeof Sparkles }> = [
-  { key: "img500", label: "Imagen adicional", sub: "hasta 500 KB · hasta 3", icon: ImagePlus },
-  { key: "pdf500", label: "PDF adjunto por aviso", sub: "hasta 500 KB", icon: FileText },
-  { key: "urgente", label: "Marcar como Urgente", icon: Flame },
-  { key: "destacado", label: "Marcar como Destacado", icon: Star },
-  { key: "confidencial", label: "Marcar como Confidencial", icon: EyeOff },
+// `sub` es la restricción, siempre visible; `help` es la explicación que sale al
+// pulsar la ⓘ. Antes urgente/destacado/confidencial no decían qué hacían (IT3-018).
+const EXTRA_DEFS: Array<{ key: ExtraKey; label: string; sub?: string; help: string; icon: typeof Sparkles }> = [
+  { key: "img500", label: "Imagen adicional", sub: "hasta 500 KB · hasta 3", icon: ImagePlus,
+    help: "Suma fotos a la galería del aviso, además de la portada que ya viene incluida. Cada archivo puede pesar hasta 500 KB." },
+  { key: "pdf500", label: "PDF adjunto por aviso", sub: "hasta 500 KB", icon: FileText,
+    help: "Adjunta un documento descargable (ficha técnica, plano, catálogo…) que quien vea el aviso podrá abrir." },
+  { key: "urgente", label: "Marcar como Urgente", icon: Flame,
+    help: `Muestra una insignia con la cuenta atrás para transmitir prisa. Solo está disponible en avisos de hasta ${URGENTE_MAX_DAYS} días.` },
+  { key: "destacado", label: "Marcar como Destacado", icon: Star,
+    help: "Tu aviso aparece primero en los resultados de búsqueda y en la portada, por encima de los avisos normales." },
+  { key: "confidencial", label: "Marcar como Confidencial", icon: EyeOff,
+    help: "Oculta tu nombre y tus datos en el aviso: los interesados solo pueden contactarte por el chat de la plataforma." },
 ];
 
 type ExtrasCount = Partial<Record<ExtraKey, number>>;
@@ -205,10 +213,13 @@ const AdvertiserPublish = () => {
       // escribiendo `{"verified":true}` en el borrador de localStorage.
       if (d.personType) setPersonType(d.personType);
       if (d.docNumber) setDocNumber(d.docNumber);
-      // Al volver del login se retoma la publicación por el cuadro de identidad,
-      // no publicando directamente: el documento aún está sin verificar.
+      // Al volver del login se retoma la publicación por el cuadro de confirmar,
+      // no publicando directamente. Antes esto llamaba a `setVerifyOpen`, que
+      // dejó de existir al quitarse el modal de verificación: la llamada vivía
+      // dentro de un setTimeout, así que el try/catch no la atrapaba y el
+      // usuario volvía del login sin que se retomara nada.
       if (d.resumeAtSummary && session) {
-        setTimeout(() => setVerifyOpen(true), 200);
+        setTimeout(() => setConfirmOpen(true), 200);
       }
       localStorage.removeItem(DRAFT_KEY);
     } catch { /* noop */ }
@@ -228,7 +239,12 @@ const AdvertiserPublish = () => {
   // Costo EN CRÉDITOS (enteros). El dinero (soles) va en `total`/`baseTotal`.
   const baseCredits = solesToCredits(baseTotal);
   const totalCredits = solesToCredits(total);
-  const balanceCredits = Math.round(creditBalance);
+  // Saldo TAL CUAL, sin redondear: con Math.round un saldo de 16.60 se mostraba
+  // "S/ 17" aquí y "S/ 16.60" en la barra superior (IT3-016), y como redondeaba
+  // hacia arriba, la comprobación de "¿me alcanza?" daba verde con hasta 0,49
+  // menos de lo necesario y el fallo salía recién al cobrar. `formatCredits` ya
+  // se encarga de mostrarlo con 2 decimales solo cuando los tiene.
+  const balanceCredits = creditBalance;
   // Para la vista previa del aviso individual
   const basePrice = priceForDuration(1, duration, settings);
 
@@ -952,14 +968,17 @@ const AdvertiserPublish = () => {
                     </p>
                   )}
                   <div className="space-y-2">
-                    {visibleExtras.map(({ key, label, sub, icon: Icon }) => {
+                    {visibleExtras.map(({ key, label, sub, help, icon: Icon }) => {
                       const count = extras[key] ?? 0;
                       const unit = settings.extras[key as keyof ExtraPrices] ?? 0;
                       return (
                         <div key={key} className={`flex items-center gap-3 p-3 border transition-all ${count > 0 ? "border-secondary bg-secondary/5" : "border-border"}`}>
                           <Icon size={16} className="text-secondary" />
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-foreground leading-tight">{label}</p>
+                            <p className="text-sm font-semibold text-foreground leading-tight flex items-center gap-1.5">
+                              {label}
+                              <InfoHint label={`Qué incluye: ${label}`}>{help}</InfoHint>
+                            </p>
                             {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
                           </div>
                           <span className="text-xs font-bold text-muted-foreground hidden sm:inline">{formatSoles(unit)} c/u</span>
@@ -1071,17 +1090,23 @@ const AdvertiserPublish = () => {
                     Falta {formatCredits(totalCredits - balanceCredits)}. Cómpralo al publicar.
                   </p>
                 )}
+                {/* El desglose completo (una línea por duración) ocupaba media
+                    tarjeta y empujaba "Publicar aviso" fuera de vista. Ahora va
+                    tras la ⓘ, que abre al pasar el ratón y al tocar (IT3-019). */}
                 {!creditLoading && (
-                  <div className="border-t pt-3 space-y-1">
+                  <div className="border-t pt-3 flex items-center gap-1.5">
                     <p className="text-[11px] uppercase tracking-wider font-bold text-muted-foreground">
                       Con tu saldo puedes publicar
                     </p>
-                    {avisosBreakdown(balanceCredits, settings).map(({ dias, count }) => (
-                      <p key={dias} className="text-[11px] text-muted-foreground">
-                        <span className="font-bold text-secondary">~{count} avisos</span> de {dias} días
-                      </p>
-                    ))}
-                    <p className="text-[10px] text-muted-foreground pt-1">Sin adicionales; los extras suman al costo.</p>
+                    <InfoHint label="Cuántos avisos puedes publicar con tu saldo">
+                      <p className="font-semibold mb-1.5">Con {formatCredits(balanceCredits)} puedes publicar</p>
+                      {avisosBreakdown(balanceCredits, settings).map(({ dias, count }) => (
+                        <p key={dias} className="text-muted-foreground">
+                          <span className="font-bold text-secondary">~{count} avisos</span> de {dias} días
+                        </p>
+                      ))}
+                      <p className="text-muted-foreground pt-1.5">Sin adicionales; los extras suman al costo.</p>
+                    </InfoHint>
                   </div>
                 )}
               </CardContent>

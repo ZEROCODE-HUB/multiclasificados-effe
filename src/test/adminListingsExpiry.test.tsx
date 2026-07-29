@@ -33,6 +33,7 @@ vi.mock("@/lib/admin", () => ({
   fetchAdminListings: (...a: unknown[]) => fetchAdminListings(...a),
   fetchReports: async () => ({ data: [], real: true }),
   setListingStatus: async () => {},
+  resolveReport: async () => {},
   setListingPublishedAt: (...a: unknown[]) => setListingPublishedAt(...a),
   fetchAdminListing: async () => null,
 }));

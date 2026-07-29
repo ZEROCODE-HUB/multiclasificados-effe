@@ -45,6 +45,11 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get("redirect");
+  // Se llegó aquí por intentar abrir el detalle de un aviso sin sesión. Hay que
+  // explicarlo: sin el aviso, el usuario pulsaba "Explorar avisos", volvía al
+  // buscador, abría otro aviso y caía otra vez en el login (IT3-012).
+  // `startsWith("/aviso/")` y no `includes`: una URL externa no debe activarlo.
+  const cameFromListing = !!redirectTo && redirectTo.startsWith("/aviso/");
 
   // Estado de formularios
   const [email, setEmail] = useState("");
@@ -104,6 +109,13 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
   // demo previa y lleva al inicio. El acceso real es con el formulario de arriba.
   const exploreAsGuest = () => {
     import("@/hooks/useSession").then(({ clearSession }) => clearSession());
+    // Si veníamos de un aviso, volver al buscador repetía el ciclo
+    // buscador → aviso → login (IT3-012): mejor deshacer el paso. La guarda del
+    // índice de historial evita salir de la app cuando se llegó por URL pegada.
+    if (cameFromListing && (window.history.state?.idx ?? 0) > 0) {
+      navigate(-1);
+      return;
+    }
     // "Explorar avisos" lleva al buscador, no a la home (IT2-043).
     navigate("/buscar");
   };
@@ -277,6 +289,8 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
   );
 
   const [showPassword, setShowPassword] = useState(false);
+  // Los dos campos del registro se muestran/ocultan juntos.
+  const [showRegPasswords, setShowRegPasswords] = useState(false);
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row">
@@ -334,6 +348,14 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
             <BrandMark size="lg" asLink={false} />
           </Link>
 
+          {/* Por qué se pide la cuenta: sin este aviso el usuario no entiende
+              qué pasó al pulsar un aviso y acaba dando vueltas (IT3-012). */}
+          {cameFromListing && !isStaff && (
+            <p className="mb-5 rounded-lg border border-secondary/40 bg-secondary/10 px-4 py-3 text-sm text-foreground">
+              Para ver el detalle de un aviso necesitas una cuenta. Crearla es gratis y toma un minuto.
+            </p>
+          )}
+
           {/* Tab toggle — oculto en el login de staff (solo iniciar sesión). */}
           {!isStaff && (
             <div className="flex bg-muted rounded-lg p-1 mb-6">
@@ -366,7 +388,12 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
               <div>
                 <Label htmlFor="password">Contraseña</Label>
                 <div className="relative mt-1">
-                  <Input id="password" type={showPassword ? "text" : "password"} autoComplete="new-password" readOnly={fieldsLocked} placeholder="••••••••"
+                  {/* `pr-10` para que el texto no pase por debajo del ojo, y
+                      maxLength 72 = límite real de bcrypt, el mismo que ya usa el
+                      registro (IT3-015). El autorrelleno en equipos compartidos lo
+                      sigue frenando `readOnly` hasta el primer foco. */}
+                  <Input id="password" type={showPassword ? "text" : "password"} autoComplete="current-password" readOnly={fieldsLocked} placeholder="••••••••"
+                    className="pr-10" maxLength={72}
                     value={password} onChange={(e) => setPassword(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") handleLogin(); }} />
                   <button
@@ -460,15 +487,27 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
                   {phone.length > 0 && phone.length !== 9 ? "El número debe tener exactamente 9 dígitos." : ""}
                 </p>
               </div>
+              {/* Un solo interruptor para los dos campos: se están comparando,
+                  así que revelar uno sin el otro no ayuda (IT3-015). */}
               <div>
                 <Label htmlFor="regPassword">Contraseña *</Label>
-                <Input id="regPassword" type="password" autoComplete="new-password" readOnly={fieldsLocked} placeholder="Mínimo 8 caracteres" className="mt-1"
-                  minLength={8} maxLength={72}
-                  value={regPassword} onChange={(e) => setRegPassword(e.target.value)} />
+                <div className="relative mt-1">
+                  <Input id="regPassword" type={showRegPasswords ? "text" : "password"} autoComplete="new-password" readOnly={fieldsLocked} placeholder="Mínimo 8 caracteres"
+                    className="pr-10" minLength={8} maxLength={72}
+                    value={regPassword} onChange={(e) => setRegPassword(e.target.value)} />
+                  <button
+                    type="button"
+                    aria-label={showRegPasswords ? "Ocultar contraseñas" : "Mostrar contraseñas"}
+                    onClick={() => setShowRegPasswords(!showRegPasswords)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  >
+                    {showRegPasswords ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
               <div>
                 <Label htmlFor="regPasswordConfirm">Confirmar contraseña *</Label>
-                <Input id="regPasswordConfirm" type="password" autoComplete="new-password" readOnly={fieldsLocked} placeholder="Repite tu contraseña" className="mt-1"
+                <Input id="regPasswordConfirm" type={showRegPasswords ? "text" : "password"} autoComplete="new-password" readOnly={fieldsLocked} placeholder="Repite tu contraseña" className="mt-1"
                   minLength={8} maxLength={72}
                   value={regPasswordConfirm} onChange={(e) => setRegPasswordConfirm(e.target.value)} />
                 <p className="text-xs text-destructive mt-1 min-h-[1rem]">

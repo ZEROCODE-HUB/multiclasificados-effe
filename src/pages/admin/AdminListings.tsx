@@ -17,7 +17,7 @@ import { Search, Eye, ChevronLeft, ChevronRight, MapPin, Calendar, Tag, User, Ba
 import { AdminListingStatus } from "@/data/adminMockData";
 import { toast } from "@/hooks/use-toast";
 import { disableListing, loadDisabled } from "@/lib/pricing";
-import { fetchAdminListings, setListingStatus, setListingPublishedAt, fetchReports, type AdminListingRow, type AdminReport } from "@/lib/admin";
+import { fetchAdminListings, setListingStatus, setListingPublishedAt, fetchReports, resolveReport, type AdminListingRow, type AdminReport } from "@/lib/admin";
 import { usePermissions } from "@/hooks/usePermissions";
 import { fetchListingImages } from "@/lib/listings";
 import { ListingPreviewDialog } from "@/components/ListingPreviewDialog";
@@ -95,7 +95,9 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
   const [filter, setFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
   const [detail, setDetail] = useState<Listing | null>(null);
-  const [disableTarget, setDisableTarget] = useState<{ id: string; title: string; advertiser: string } | null>(null);
+  // `reportId` solo viene cuando se deshabilita desde la pestaña "Reportados":
+  // en ese caso, además de bajar el aviso, se cierra la denuncia (IT3-020).
+  const [disableTarget, setDisableTarget] = useState<{ id: string; title: string; advertiser: string; reportId?: string } | null>(null);
   const [disableReason, setDisableReason] = useState("");
   const [reports, setReports] = useState<AdminReport[]>([]);
   // Filtro por estado de la pestaña "Reportados". Los resueltos NO se ocultan
@@ -151,7 +153,22 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
     try {
       if (isUuid(disableTarget.id)) {
         await setListingStatus(disableTarget.id, "rejected", reason);
-        await load();
+        // Deshabilitar desde "Reportados" cierra la denuncia en la BD. Antes el
+        // "resuelto" era solo visual (se deducía del estado del aviso), así que
+        // volvía a "pendiente" al rehabilitarlo (IT3-020). El id se comprueba
+        // porque `fetchReports` cae a datos de ejemplo si el RPC falla.
+        if (disableTarget.reportId && isUuid(disableTarget.reportId)) {
+          try {
+            await resolveReport(disableTarget.reportId, "remove", reason);
+          } catch (e: any) {
+            toast({
+              title: "Aviso deshabilitado, pero la denuncia sigue abierta",
+              description: e?.message ?? "Vuelve a intentarlo desde la pestaña Reportados.",
+              variant: "destructive",
+            });
+          }
+        }
+        await Promise.all([load(), loadReportedListings()]);
       } else {
         // Dato mock (sin backend): conserva el comportamiento local.
         disableListing(disableTarget.id, reason);
@@ -179,8 +196,10 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
       return;
     }
     try {
+      // Rehabilitar NO reabre la denuncia: una vez revisada queda resuelta, y su
+      // historial no debe depender de si el aviso vuelve a estar visible.
       await setListingStatus(l.id, "active");
-      await load();
+      await Promise.all([load(), loadReportedListings()]);
       toast({ title: "Aviso habilitado", description: `"${l.title}" vuelve a estar visible.` });
     } catch (e: any) {
       toast({ title: "No se pudo habilitar", description: e?.message ?? "Error", variant: "destructive" });
@@ -480,9 +499,9 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
                             )}
                             {isDisabled ? (
                               <Badge variant="outline" className="bg-destructive/15 text-destructive border-destructive/30">Deshabilitado</Badge>
-                            ) : canModerate && (
+                            ) : canModerate && r.status !== "resolved" && (
                               <Button size="sm" variant="outline" className="text-destructive gap-1"
-                                onClick={() => setDisableTarget({ id: r.listing_id ?? "", title: r.listing_title ?? "Aviso", advertiser: r.reported ?? "Anunciante" })}>
+                                onClick={() => setDisableTarget({ id: r.listing_id ?? "", title: r.listing_title ?? "Aviso", advertiser: r.reported ?? "Anunciante", reportId: r.id })}>
                                 <Ban size={14} /> Deshabilitar
                               </Button>
                             )}

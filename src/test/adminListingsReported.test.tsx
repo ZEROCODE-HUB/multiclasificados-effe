@@ -39,6 +39,7 @@ vi.mock("@/lib/admin", () => ({
   fetchAdminListings: async () => ({ data: [], real: true }),
   fetchReports: async () => ({ data: [REPORTE], real: true }),
   setListingStatus: async () => {},
+  resolveReport: async () => {},
   fetchAdminListing: (...a: unknown[]) => fetchAdminListing(...a),
 }));
 vi.mock("@/lib/pricing", () => ({ disableListing: async () => {}, loadDisabled: () => ({}) }));
