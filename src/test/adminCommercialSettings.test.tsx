@@ -32,9 +32,11 @@ vi.mock("@/lib/admin", () => ({
   updateCategory: async () => {},
   deleteCategory: async () => {},
   reorderCategories: async () => {},
+  uploadCategoryImage: async () => "",
 }));
 vi.mock("@/lib/categories", () => ({
   CATEGORY_ICON_NAMES: [], iconFor: () => () => null, invalidateCategories: async () => {},
+  CATEGORY_PHOTO_POOL: ["https://images.unsplash.com/photo-1?w=800"],
 }));
 vi.mock("@/hooks/use-toast", () => ({ toast: () => {}, useToast: () => ({ toast: () => {} }) }));
 

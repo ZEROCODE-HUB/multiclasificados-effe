@@ -47,3 +47,41 @@ export function imgSrcSet(url: string | null | undefined, width: number, quality
   if (!transformable) return undefined;
   return `${imgUrl(url, width, quality)} ${width}w, ${imgUrl(url, width * 2, quality)} ${width * 2}w`;
 }
+
+/**
+ * Variante RECORTADA a una proporción fija (4:3 por defecto), para huecos que
+ * pintan con `object-cover` — las tarjetas de categoría de la portada.
+ *
+ * `imgUrl` pide una caja cuadrada con `resize=contain`: sirve para miniaturas de
+ * proporción desconocida, pero en un hueco 4:3 baja píxeles que el navegador va
+ * a recortar igual, y con una foto vertical entrega menos ancho real del que
+ * ocupa la tarjeta. Aquí se le pide al servidor el recorte ya hecho.
+ */
+export function imgUrlCover(
+  url: string | null | undefined, width: number, ratio = 0.75, quality = 70,
+): string {
+  if (!url) return "";
+  const height = Math.round(width * ratio);
+  // Siempre sin querystring previa: una URL con sufijo (?t=…) generaría dos `?`.
+  const [base] = url.split("?");
+
+  if (url.includes("images.unsplash.com")) {
+    return `${base}?w=${width}&h=${height}&fit=crop&auto=format&q=${quality}`;
+  }
+  if (!url.includes(PUBLIC_SEG)) return url; // URL externa: se devuelve intacta
+  return `${base.replace(PUBLIC_SEG, RENDER_SEG)}?width=${width}&height=${height}&resize=cover&quality=${quality}`;
+}
+
+/**
+ * `srcset` recortado con varios escalones de ancho. A diferencia de `imgSrcSet`
+ * (que da w y 2w), acepta la lista completa: la portada usa 300/400/600/800,
+ * afinados para no descargar casi el doble de lo necesario en pantallas normales.
+ */
+export function imgSrcSetCover(
+  url: string | null | undefined, widths: number[], ratio = 0.75, quality = 70,
+): string | undefined {
+  if (!url) return undefined;
+  const transformable = url.includes(PUBLIC_SEG) || url.includes("images.unsplash.com");
+  if (!transformable) return undefined;
+  return widths.map((w) => `${imgUrlCover(url, w, ratio, quality)} ${w}w`).join(", ");
+}

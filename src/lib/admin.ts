@@ -10,6 +10,7 @@ import {
   recentActivity as mockActivity,
 } from "@/data/adminMockData";
 import { loadInvoices } from "@/lib/pricing";
+import { compressImage } from "@/lib/compressImage";
 import {
   auditActionLabel, auditEntityDescription, auditEntityLabel, auditEntityName,
   type EntityNames,
@@ -257,7 +258,20 @@ export interface AdminCategory {
   id: string; name: string; icon: string; sort_order: number; active: boolean;
   // Si es false, el formulario de publicar oculta el campo "Condición".
   condition_enabled: boolean;
+  // Foto de portada. null = la portada usa una de reserva (CATEGORY_PHOTO_POOL).
+  image_url: string | null;
   count: number;
+}
+
+const CATEGORY_BUCKET = "category-images";
+const CATEGORY_PUBLIC_SEG = `/storage/v1/object/public/${CATEGORY_BUCKET}/`;
+
+/** Ruta dentro del bucket a partir de la URL pública; null si no es nuestra. */
+function categoryImagePath(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const i = url.indexOf(CATEGORY_PUBLIC_SEG);
+  if (i < 0) return null; // seeds de Unsplash u otra URL externa
+  return decodeURIComponent(url.slice(i + CATEGORY_PUBLIC_SEG.length).split("?")[0]);
 }
 
 // Categorías reales (tabla categories) + nº de avisos por categoría.
@@ -265,7 +279,7 @@ export async function fetchCategories(): Promise<{ data: AdminCategory[]; real: 
   try {
     const { data: cats, error } = await supabase
       .from("categories")
-      .select("id, name, icon, sort_order, active, condition_enabled")
+      .select("id, name, icon, sort_order, active, condition_enabled, image_url")
       .order("sort_order", { ascending: true });
     if (error) throw error;
     if (cats && (cats.length || (await isAuthed()))) {
@@ -275,6 +289,7 @@ export async function fetchCategories(): Promise<{ data: AdminCategory[]; real: 
       const rows: AdminCategory[] = (cats as any[]).map((c) => ({
         id: c.id, name: c.name, icon: c.icon, sort_order: c.sort_order, active: c.active,
         condition_enabled: c.condition_enabled !== false,
+        image_url: c.image_url ?? null,
         count: counts[c.id] ?? 0,
       }));
       return { data: rows, real: true };
@@ -282,12 +297,12 @@ export async function fetchCategories(): Promise<{ data: AdminCategory[]; real: 
   } catch { /* fallback */ }
   // Modo demo (sin sesión): set base de categorías con icono como texto.
   const fallback: AdminCategory[] = [
-    { id: "inmuebles", name: "Inmuebles", icon: "Home", sort_order: 0, active: true, condition_enabled: true, count: 0 },
-    { id: "vehiculos", name: "Vehículos", icon: "Car", sort_order: 1, active: true, condition_enabled: true, count: 0 },
-    { id: "empleos", name: "Empleos", icon: "Briefcase", sort_order: 2, active: true, condition_enabled: false, count: 0 },
-    { id: "tecnologia", name: "Tecnología", icon: "Smartphone", sort_order: 3, active: true, condition_enabled: true, count: 0 },
-    { id: "productos", name: "Productos", icon: "Package", sort_order: 4, active: true, condition_enabled: true, count: 0 },
-    { id: "servicios", name: "Servicios", icon: "Wrench", sort_order: 5, active: true, condition_enabled: false, count: 0 },
+    { id: "inmuebles", name: "Inmuebles", icon: "Home", sort_order: 0, active: true, condition_enabled: true, image_url: null, count: 0 },
+    { id: "vehiculos", name: "Vehículos", icon: "Car", sort_order: 1, active: true, condition_enabled: true, image_url: null, count: 0 },
+    { id: "empleos", name: "Empleos", icon: "Briefcase", sort_order: 2, active: true, condition_enabled: false, image_url: null, count: 0 },
+    { id: "tecnologia", name: "Tecnología", icon: "Smartphone", sort_order: 3, active: true, condition_enabled: true, image_url: null, count: 0 },
+    { id: "productos", name: "Productos", icon: "Package", sort_order: 4, active: true, condition_enabled: true, image_url: null, count: 0 },
+    { id: "servicios", name: "Servicios", icon: "Wrench", sort_order: 5, active: true, condition_enabled: false, image_url: null, count: 0 },
   ];
   return { data: fallback, real: false };
 }
@@ -299,23 +314,60 @@ export function slugify(name: string): string {
     .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
-export async function createCategory(input: { name: string; icon: string; sort_order: number; condition_enabled?: boolean }) {
+export async function createCategory(input: { name: string; icon: string; sort_order: number; condition_enabled?: boolean; image_url?: string | null }) {
   const id = slugify(input.name);
   if (!id) throw new Error("Nombre de categoría inválido.");
   const { error } = await supabase.from("categories").insert({
     id, name: input.name.trim(), icon: input.icon || "Tag", sort_order: input.sort_order, active: true,
     condition_enabled: input.condition_enabled ?? true,
+    image_url: input.image_url ?? null,
   });
   if (error) throw error;
   return id;
 }
 
-export async function updateCategory(id: string, patch: { name?: string; icon?: string; active?: boolean; condition_enabled?: boolean }) {
+export async function updateCategory(id: string, patch: { name?: string; icon?: string; active?: boolean; condition_enabled?: boolean; image_url?: string | null }) {
   const { error } = await supabase.from("categories").update(patch).eq("id", id);
   if (error) throw error;
 }
 
+/**
+ * Sube la foto de portada de una categoría al bucket público `category-images`
+ * y devuelve su URL pública. La RLS (0077) deja escribir a quien tenga
+ * 'Configuración comercial' · Editar, el mismo permiso que rige la tabla.
+ *
+ * El nombre lleva timestamp, como `replaceMainListingPhoto`: con un nombre fijo
+ * el CDN seguiría sirviendo la foto anterior hasta 30 días, y el truco del `?t=`
+ * no vale aquí porque la URL se reescribe luego a /render/image/ y quedaría con
+ * dos `?`. La imagen anterior se borra en cuanto la nueva está arriba.
+ */
+export async function uploadCategoryImage(
+  categoryId: string, file: File, previousUrl?: string | null,
+): Promise<string> {
+  const compressed = await compressImage(file); // WebP, lado mayor 1600px
+  const ext = (compressed.type.split("/")[1] || "webp").replace(/[^a-z0-9]/g, "") || "webp";
+  const path = `${categoryId}/cover-${Date.now()}.${ext}`;
+
+  const { error } = await supabase.storage.from(CATEGORY_BUCKET).upload(path, compressed, {
+    upsert: true, cacheControl: "2592000", contentType: compressed.type || undefined,
+  });
+  if (error) throw error;
+
+  const old = categoryImagePath(previousUrl);
+  if (old && old !== path) {
+    try { await supabase.storage.from(CATEGORY_BUCKET).remove([old]); } catch { /* un huérfano no rompe nada */ }
+  }
+
+  const { data: pub } = supabase.storage.from(CATEGORY_BUCKET).getPublicUrl(path);
+  return pub.publicUrl; // sin `?t=`: el nombre ya es único
+}
+
 export async function deleteCategory(id: string) {
+  // Las fotos de la categoría se van con ella; si falla, manda el borrado.
+  try {
+    const { data } = await supabase.storage.from(CATEGORY_BUCKET).list(id);
+    if (data?.length) await supabase.storage.from(CATEGORY_BUCKET).remove(data.map((o) => `${id}/${o.name}`));
+  } catch { /* huérfanos tolerables */ }
   const { error } = await supabase.from("categories").delete().eq("id", id);
   if (error) throw error;
 }

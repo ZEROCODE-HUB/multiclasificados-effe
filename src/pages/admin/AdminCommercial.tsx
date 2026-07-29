@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AdminRole } from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -13,7 +13,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Trash2, FileText, SlidersHorizontal, Save, GripVertical, Eye } from "lucide-react";
+import { Plus, Pencil, Trash2, FileText, SlidersHorizontal, Save, GripVertical, Eye, Upload } from "lucide-react";
 import { InvoiceDetailDialog } from "@/components/InvoiceDetailDialog";
 import { personKindLabel } from "@/lib/identity";
 import {
@@ -31,18 +31,27 @@ import { toast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
 import { cn } from "@/lib/utils";
 import { formatSoles } from "@/lib/pricing";
-import { CATEGORY_ICON_NAMES as ICON_OPTIONS, iconFor, invalidateCategories } from "@/lib/categories";
+import { CATEGORY_ICON_NAMES as ICON_OPTIONS, CATEGORY_PHOTO_POOL, iconFor, invalidateCategories } from "@/lib/categories";
+import { imgUrlCover } from "@/lib/imageUrl";
 import {
   fetchSettings, setSetting, fetchAllInvoices,
   fetchCategories, createCategory, updateCategory, deleteCategory, reorderCategories,
+  uploadCategoryImage,
   type AdminInvoice, type AdminCategory,
 } from "@/lib/admin";
+
+// Foto que se ve en la tarjeta nº `index` cuando la categoría no tiene una
+// propia: la misma de reserva que pinta la portada, para que el panel enseñe
+// exactamente lo que verá el visitante.
+const photoFor = (imageUrl: string | null, index: number) =>
+  imageUrl || CATEGORY_PHOTO_POOL[index % CATEGORY_PHOTO_POOL.length];
 
 // Tarjeta arrastrable. El asa (grip) es el único punto de agarre para que los
 // botones de editar/eliminar sigan siendo clicables y la página pueda scrollear
 // con el dedo en móvil.
-function SortableCategoryCard({ cat, disabled, canEdit, onEdit, onDelete }: {
+function SortableCategoryCard({ cat, index, disabled, canEdit, onEdit, onDelete }: {
   cat: AdminCategory;
+  index: number;
   disabled: boolean;
   canEdit: boolean;
   onEdit: (c: AdminCategory) => void;
@@ -61,6 +70,21 @@ function SortableCategoryCard({ cat, disabled, canEdit, onEdit, onDelete }: {
         isDragging ? "relative z-10 shadow-lg opacity-90" : "card-lift",
       )}
     >
+      {/* Misma foto y mismo recorte que la tarjeta de la portada. */}
+      <div className="relative aspect-[4/3] -m-4 mb-3 overflow-hidden border-b bg-muted">
+        <img
+          src={imgUrlCover(photoFor(cat.image_url, index), 300)}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        {!cat.image_url && (
+          <span className="absolute bottom-2 left-2 rounded bg-background/85 px-2 py-0.5 text-[10px] text-muted-foreground">
+            Foto de reserva
+          </span>
+        )}
+      </div>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           {!disabled && (
@@ -131,6 +155,42 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
   const [catIcon, setCatIcon] = useState("Tag");
   const [catConditionEnabled, setCatConditionEnabled] = useState(true);
   const [savingCat, setSavingCat] = useState(false);
+  // Imagen de portada: `catImage` es la ya guardada (null = quitar / sin foto),
+  // `catFile` la que está pendiente de subir y `catPreview` su vista local.
+  const [catImage, setCatImage] = useState<string | null>(null);
+  const [catFile, setCatFile] = useState<File | null>(null);
+  const [catPreview, setCatPreview] = useState<string | null>(null);
+  const catFileRef = useRef<HTMLInputElement>(null);
+
+  // El objectURL de la vista previa hay que revocarlo o se filtra el blob.
+  useEffect(() => () => { if (catPreview) URL.revokeObjectURL(catPreview); }, [catPreview]);
+
+  const clearCatFile = () => {
+    setCatFile(null);
+    setCatPreview(null); // el useEffect de arriba revoca el anterior
+  };
+
+  const onPickCatImage = (file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Archivo no válido", description: "Selecciona una imagen (JPG, PNG o WebP).", variant: "destructive" });
+      return;
+    }
+    // 8 MB es el tope ANTES de comprimir: compressImage la deja en 200-400 KB,
+    // muy por debajo del límite de 5 MB del bucket.
+    if (file.size > 8 * 1024 * 1024) {
+      toast({ title: "Imagen muy pesada", description: "La foto no debe superar 8 MB.", variant: "destructive" });
+      return;
+    }
+    setCatFile(file);
+    setCatPreview(URL.createObjectURL(file));
+  };
+
+  // Posición que ocupará la categoría en la portada: decide qué foto de reserva
+  // se enseña en el diálogo cuando todavía no tiene una propia.
+  const catDialogIndex = catDialog.editing
+    ? Math.max(0, cats.findIndex((c) => c.id === catDialog.editing!.id))
+    : cats.length;
 
   const loadCats = () => {
     setCatsLoading(true);
@@ -167,19 +227,52 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
     setSavingOrder(false);
   };
 
-  const openNewCat = () => { setCatName(""); setCatIcon("Tag"); setCatConditionEnabled(true); setCatDialog({ open: true, editing: null }); };
-  const openEditCat = (c: AdminCategory) => { setCatName(c.name); setCatIcon(c.icon); setCatConditionEnabled(c.condition_enabled); setCatDialog({ open: true, editing: c }); };
+  const openNewCat = () => {
+    setCatName(""); setCatIcon("Tag"); setCatConditionEnabled(true);
+    setCatImage(null); clearCatFile();
+    setCatDialog({ open: true, editing: null });
+  };
+  const openEditCat = (c: AdminCategory) => {
+    setCatName(c.name); setCatIcon(c.icon); setCatConditionEnabled(c.condition_enabled);
+    setCatImage(c.image_url); clearCatFile();
+    setCatDialog({ open: true, editing: c });
+  };
 
   const saveCat = async () => {
     if (!catName.trim()) return;
     setSavingCat(true);
     try {
       if (catDialog.editing) {
-        await updateCategory(catDialog.editing.id, { name: catName.trim(), icon: catIcon, condition_enabled: catConditionEnabled });
+        const prev = catDialog.editing.image_url;
+        // Solo se manda `image_url` si hubo cambio: foto nueva, o "Quitar".
+        let image_url: string | null | undefined;
+        if (catFile) image_url = await uploadCategoryImage(catDialog.editing.id, catFile, prev);
+        else if (catImage === null && prev) image_url = null;
+        await updateCategory(catDialog.editing.id, {
+          name: catName.trim(), icon: catIcon, condition_enabled: catConditionEnabled,
+          ...(image_url !== undefined ? { image_url } : {}),
+        });
         toast({ title: "Categoría actualizada", description: catName.trim() });
       } else {
         // `sort_order` es 1-based (como el seed): la nueva va al final.
-        await createCategory({ name: catName.trim(), icon: catIcon, sort_order: cats.length + 1, condition_enabled: catConditionEnabled });
+        // La foto se sube DESPUÉS de crear: el id sale de slugify(nombre) y el
+        // nombre puede cambiar antes de pulsar Crear; subirla antes dejaría
+        // archivos con slugs que nunca existieron.
+        const id = await createCategory({ name: catName.trim(), icon: catIcon, sort_order: cats.length + 1, condition_enabled: catConditionEnabled });
+        if (catFile) {
+          try {
+            const url = await uploadCategoryImage(id, catFile);
+            await updateCategory(id, { image_url: url });
+          } catch (e: any) {
+            // La categoría ya está creada: no se revierte, solo se avisa. Hasta
+            // que suban una foto, la portada usará una de reserva.
+            toast({
+              title: "Categoría creada, pero sin imagen",
+              description: e?.message ?? "No se pudo subir la foto. Vuelve a intentarlo desde Editar.",
+              variant: "destructive",
+            });
+          }
+        }
         toast({ title: "Categoría creada", description: catName.trim() });
       }
       setCatDialog({ open: false, editing: null });
@@ -315,10 +408,11 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
                 <SortableContext items={cats.map((c) => c.id)} strategy={rectSortingStrategy}>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                    {cats.map((c) => (
+                    {cats.map((c, i) => (
                       <SortableCategoryCard
                         key={c.id}
                         cat={c}
+                        index={i}
                         disabled={!canReorder}
                         canEdit={canEdit}
                         onEdit={openEditCat}
@@ -336,13 +430,52 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
               <DialogHeader>
                 <DialogTitle>{catDialog.editing ? "Editar categoría" : "Nueva categoría"}</DialogTitle>
                 <DialogDescription>
-                  {catDialog.editing ? "Modifica el nombre de la categoría." : "Crea una nueva categoría para clasificar avisos."}
+                  {catDialog.editing ? "Modifica el nombre, la foto de portada o el icono." : "Crea una nueva categoría para clasificar avisos."}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label>Nombre</Label>
                   <Input value={catName} onChange={(e) => setCatName(e.target.value)} placeholder="Ej. Maquinaria pesada" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Imagen de portada</Label>
+                  <div className="relative aspect-[4/3] w-full overflow-hidden rounded-lg border bg-muted">
+                    <img
+                      src={catPreview ?? imgUrlCover(photoFor(catImage, catDialogIndex), 400)}
+                      alt=""
+                      className="absolute inset-0 w-full h-full object-cover"
+                    />
+                    {!catImage && !catPreview && (
+                      <span className="absolute bottom-2 left-2 rounded bg-background/85 px-2 py-0.5 text-[10px] text-muted-foreground">
+                        Foto de reserva
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" size="sm" className="gap-1.5"
+                      onClick={() => catFileRef.current?.click()} disabled={savingCat}>
+                      <Upload size={14} /> {catImage || catPreview ? "Cambiar imagen" : "Subir imagen"}
+                    </Button>
+                    {(catImage || catPreview) && (
+                      <Button type="button" variant="ghost" size="sm" className="text-destructive" disabled={savingCat}
+                        onClick={() => { clearCatFile(); setCatImage(null); }}>
+                        Quitar
+                      </Button>
+                    )}
+                  </div>
+                  <input
+                    ref={catFileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    // Se limpia el value para que volver a elegir el mismo archivo dispare el change.
+                    onChange={(e) => { onPickCatImage(e.target.files?.[0]); e.target.value = ""; }}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Es la foto que se ve en la pantalla de inicio. Usa una imagen horizontal (4:3), mínimo 800×600.
+                    Se recorta y se comprime automáticamente.
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label>Icono</Label>
@@ -380,7 +513,7 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
               <DialogFooter>
                 <Button variant="outline" onClick={() => setCatDialog({ open: false, editing: null })}>Cancelar</Button>
                 <Button onClick={saveCat} disabled={savingCat || !catName.trim()}>
-                  {savingCat ? "Guardando..." : catDialog.editing ? "Guardar" : "Crear"}
+                  {savingCat ? (catFile ? "Subiendo imagen…" : "Guardando...") : catDialog.editing ? "Guardar" : "Crear"}
                 </Button>
               </DialogFooter>
             </DialogContent>
