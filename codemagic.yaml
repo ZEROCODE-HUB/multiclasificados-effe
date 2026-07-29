@@ -26,6 +26,30 @@ workflows:
       - name: Install dependencies
         # @capacitor/ios ya está en package.json → lo instala `npm ci`.
         script: npm ci
+      - name: Verificar variables del build
+        # Un IPA compilado sin estas variables ARRANCA pero no sirve para nada:
+        # no deja iniciar sesión ni muestra avisos. Antes eso solo se descubría
+        # instalando el build en un iPhone. Aquí el build falla de inmediato.
+        # Si esto se dispara: Codemagic → Environment variables. Si las variables
+        # están en un GRUPO, hay que declararlo en `environment.groups`, o llegan
+        # vacías al script pese a estar creadas.
+        script: |
+          faltan=""
+          for v in VITE_SUPABASE_URL VITE_SUPABASE_ANON_KEY VITE_PUBLIC_SITE_URL; do
+            eval "valor=\$$v"
+            [ -z "$valor" ] && faltan="$faltan $v"
+          done
+          if [ -n "$faltan" ]; then
+            echo "ERROR: faltan variables de entorno del build:$faltan"
+            exit 1
+          fi
+          # La clave anónima es un JWT (eyJ…) o una clave publicable (sb_publishable_…).
+          # Un valor más corto casi siempre es un pegado incompleto.
+          case "$VITE_SUPABASE_ANON_KEY" in
+            eyJ*|sb_publishable_*) ;;
+            *) echo "ERROR: VITE_SUPABASE_ANON_KEY no parece una clave de Supabase (¿copiada a medias?)."; exit 1 ;;
+          esac
+          echo "Variables del build OK. Proyecto: $VITE_SUPABASE_URL"
       - name: Build React app
         script: npm run build
       - name: Add iOS platform

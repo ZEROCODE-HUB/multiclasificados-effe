@@ -5,6 +5,7 @@ import { render, screen } from "@testing-library/react";
 vi.mock("@capacitor/core", () => ({ Capacitor: { getPlatform: () => "ios" } }));
 
 import { BootError } from "@/components/BootError";
+import { APP_VERSION } from "@/lib/version";
 
 beforeEach(() => {
   (window as unknown as { __EFFE_BOOTED__?: boolean }).__EFFE_BOOTED__ = false;
@@ -19,8 +20,9 @@ describe("BootError", () => {
     // → ambas aparecen como faltantes).
     expect(screen.getByText("VITE_SUPABASE_URL")).toBeTruthy();
     expect(screen.getByText("VITE_SUPABASE_ANON_KEY")).toBeTruthy();
-    // Versión actual y plataforma.
-    expect(screen.getByText(/v3\.9/)).toBeTruthy();
+    // Versión actual y plataforma. Se compara contra la constante: fijar el
+    // número a mano obligaba a tocar este test en cada despliegue.
+    expect(screen.getByText(new RegExp(`v${APP_VERSION.replace(".", "\\.")}`))).toBeTruthy();
     expect(screen.getByText("ios")).toBeTruthy();
     // Botón de reintento.
     expect(screen.getByRole("button", { name: /Reintentar/i })).toBeTruthy();

@@ -5,6 +5,7 @@ import { initNative } from "./lib/nativeInit";
 import { supabaseConfigError } from "@/lib/supabase";
 import { BootError } from "@/components/BootError";
 import { BootErrorBoundary } from "@/components/BootErrorBoundary";
+import { ConnectionGate } from "@/components/ConnectionGate";
 
 // Promueve el preload de la fuente Montserrat a stylesheet. Antes esto se hacía
 // con un `onload` inline en el <link> del index.html, pero un manejador en línea
@@ -28,7 +29,12 @@ if (supabaseConfigError) {
   initNative();
   root.render(
     <BootErrorBoundary>
-      <App />
+      {/* Las variables pueden tener buena forma y aun así no servir (URL de otro
+          proyecto, clave caducada). Sin esto la app arrancaba entera y fallaba
+          en silencio: ni login ni avisos ni un mensaje. */}
+      <ConnectionGate>
+        <App />
+      </ConnectionGate>
     </BootErrorBoundary>,
   );
 }

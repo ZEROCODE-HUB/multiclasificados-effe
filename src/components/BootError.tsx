@@ -3,9 +3,11 @@ import { Capacitor } from "@capacitor/core";
 import { appVersionLabel } from "@/lib/version";
 import {
   REQUIRED_ENV,
+  OPTIONAL_ENV,
   computeEnvDiagnostics,
   normalizeSupabaseUrl,
   probeSupabase,
+  type HealthResult,
   type ProbeResult,
 } from "@/lib/bootDiagnostics";
 
@@ -99,18 +101,44 @@ const PROBE_LABEL: Record<ProbeResult, string> = {
   skipped: "no evaluada (URL ausente)",
 };
 
+// Qué decirle a quien mira la pantalla, según lo que falló al conectar.
+const HEALTH_COPY: Record<string, { titulo: string; explicacion: string }> = {
+  offline: {
+    titulo: "Sin conexión a internet",
+    explicacion: "El dispositivo no tiene red. Conéctate y pulsa Reintentar.",
+  },
+  unreachable: {
+    titulo: "No se puede contactar con el servidor",
+    explicacion:
+      "La dirección del proyecto no responde. Suele ser una VITE_SUPABASE_URL equivocada en el build, o la red del dispositivo bloqueando la conexión.",
+  },
+  "invalid-key": {
+    titulo: "La clave de conexión fue rechazada",
+    explicacion:
+      "El proyecto responde, pero no acepta VITE_SUPABASE_ANON_KEY. Suele estar copiada a medias, caducada o ser la de otro proyecto. Este build no puede iniciar sesión ni mostrar avisos.",
+  },
+  "server-error": {
+    titulo: "El servidor respondió con un error",
+    explicacion: "El proyecto está respondiendo mal. Si persiste, revisa el estado del proyecto en Supabase.",
+  },
+};
+
 export function BootError({
   variant,
   error,
   detail,
+  health,
 }: {
-  variant: "config" | "crash";
+  variant: "config" | "crash" | "connection";
   error?: unknown;
   /** Motivo específico (p. ej. supabaseConfigError) para el variant "config". */
   detail?: string | null;
+  /** Resultado del chequeo de conexión, para el variant "connection". */
+  health?: HealthResult;
 }) {
   const env = computeEnvDiagnostics();
   const [probe, setProbe] = useState<ProbeResult | "checking">("checking");
+  const copy = health ? HEALTH_COPY[health.status] : undefined;
 
   useEffect(() => {
     // React está vivo y ya mostramos el diagnóstico: silencia el watchdog externo.
@@ -128,6 +156,12 @@ export function BootError({
   // La URL del proyecto es PÚBLICA (ya está en el <link preconnect> de index.html),
   // así que mostrar el valor recibido ayuda a depurar sin exponer secretos.
   const rawUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  // De la clave solo se enseña el inicio y su longitud: basta para ver si vino
+  // truncada o si es la de otro proyecto, sin dejarla escrita en pantalla.
+  const rawKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY ?? "").trim();
+  const keyHint = rawKey
+    ? `${rawKey.slice(0, 12)}… (${rawKey.length} caracteres)`
+    : "(vacía)";
 
   return (
     <div style={S.wrap} role="alert">
@@ -135,11 +169,13 @@ export function BootError({
         eFFe <span style={{ color: "#f97316" }}>Multiclasificados</span>
       </div>
       <div style={S.card}>
-        <h1 style={S.h1}>No se pudo iniciar la app</h1>
+        <h1 style={S.h1}>{copy ? copy.titulo : "No se pudo iniciar la app"}</h1>
         <p style={S.p}>
-          {variant === "config"
-            ? "Falta configuración de conexión. Revisa las variables del build."
-            : "Ocurrió un error durante el arranque. Detalles abajo."}
+          {copy
+            ? copy.explicacion
+            : variant === "config"
+              ? "Falta configuración de conexión. Revisa las variables del build."
+              : "Ocurrió un error durante el arranque. Detalles abajo."}
         </p>
 
         {/* Checklist de variables de entorno requeridas */}
@@ -158,12 +194,37 @@ export function BootError({
               </div>
             );
           })}
+          {/* No bloquean el arranque, pero si faltan varias es señal de que el
+              build salió sin su configuración (el caso del IPA de TestFlight). */}
+          {OPTIONAL_ENV.map((key) => {
+            const present = !!String(import.meta.env[key] ?? "").trim();
+            return (
+              <div key={key} style={{ ...S.row, opacity: 0.75 }}>
+                <span style={{ color: present ? "#16a34a" : "#b45309", fontWeight: 700 }}>
+                  {present ? "✓" : "!"}
+                </span>
+                <span style={S.code}>{key}</span>
+                <span style={{ color: present ? "#16a34a" : "#b45309" }}>
+                  {present ? "presente" : "ausente (opcional)"}
+                </span>
+              </div>
+            );
+          })}
         </div>
 
         {variant === "config" && detail && (
           <div style={S.errBox}>
             {detail}
             {"\n"}Valor recibido para VITE_SUPABASE_URL: {rawUrl ? `«${rawUrl}»` : "(vacío)"}
+          </div>
+        )}
+
+        {variant === "connection" && health && (
+          <div style={S.errBox}>
+            {health.detail ?? "Sin detalle del servidor."}
+            {health.httpStatus ? `\nRespuesta HTTP: ${health.httpStatus}` : ""}
+            {"\n"}URL usada: {normalizeSupabaseUrl(rawUrl) || "(vacía)"}
+            {"\n"}Clave anónima: {keyHint}
           </div>
         )}
 
