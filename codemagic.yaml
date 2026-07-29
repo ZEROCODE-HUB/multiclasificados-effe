@@ -34,22 +34,59 @@ workflows:
         # están en un GRUPO, hay que declararlo en `environment.groups`, o llegan
         # vacías al script pese a estar creadas.
         script: |
+          # Limpia igual que `cleanEnvValue` en el front: espacios, retornos de
+          # carro y un par de comillas envolventes. Sin esto, una clave pegada
+          # como "eyJ..." (con comillas) tumbaba el build aunque la app sí
+          # funciona, porque en tiempo de ejecución esas comillas se ignoran.
+          limpiar() {
+            printf '%s' "$1" | tr -d '\r' \
+              | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
+                    -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/"
+          }
+
           faltan=""
           for v in VITE_SUPABASE_URL VITE_SUPABASE_ANON_KEY VITE_PUBLIC_SITE_URL; do
             eval "valor=\$$v"
-            [ -z "$valor" ] && faltan="$faltan $v"
+            [ -z "$(limpiar "$valor")" ] && faltan="$faltan $v"
           done
           if [ -n "$faltan" ]; then
             echo "ERROR: faltan variables de entorno del build:$faltan"
+            echo "Revisa Codemagic > Environment variables. Si están dentro de un GRUPO,"
+            echo "hay que declararlo en environment.groups o llegan vacias al script."
             exit 1
           fi
-          # La clave anónima es un JWT (eyJ…) o una clave publicable (sb_publishable_…).
-          # Un valor más corto casi siempre es un pegado incompleto.
-          case "$VITE_SUPABASE_ANON_KEY" in
-            eyJ*|sb_publishable_*) ;;
-            *) echo "ERROR: VITE_SUPABASE_ANON_KEY no parece una clave de Supabase (¿copiada a medias?)."; exit 1 ;;
+
+          KEY="$(limpiar "$VITE_SUPABASE_ANON_KEY")"
+          if [ "$KEY" != "$VITE_SUPABASE_ANON_KEY" ]; then
+            echo "AVISO: VITE_SUPABASE_ANON_KEY llegaba con comillas o espacios."
+            echo "La app los ignora, pero conviene limpiar el valor en Codemagic."
+          fi
+
+          clave_mala() {
+            echo "ERROR: VITE_SUPABASE_ANON_KEY no es la clave anonima del proyecto ($1)."
+            echo "  Longitud recibida : ${#KEY} caracteres"
+            echo "  Empieza por       : $(printf '%s' "$KEY" | cut -c1-10)"
+            echo "  Se espera         : eyJ... (JWT, 208 caracteres) o sb_publishable_... (46)"
+            echo "  NO sirven: el token de cuenta (sbp_...), la service_role ni sb_secret_..."
+            echo "  Se copia de Supabase > Project Settings > API Keys > anon / publishable."
+            exit 1
+          }
+
+          # La clave anónima es un JWT (eyJ…, tres partes separadas por punto) o
+          # una clave publicable (sb_publishable_…). Se comprueba también el largo:
+          # con solo el prefijo, un pegado a medias pasaba por bueno.
+          case "$KEY" in
+            eyJ*)
+              puntos=$(printf '%s' "$KEY" | tr -cd '.' | wc -c | tr -d ' ')
+              [ "${#KEY}" -lt 100 ] && clave_mala "demasiado corta para un JWT"
+              [ "$puntos" -ne 2 ] && clave_mala "a un JWT le faltan partes"
+              ;;
+            sb_publishable_*)
+              [ "${#KEY}" -lt 30 ] && clave_mala "demasiado corta"
+              ;;
+            *) clave_mala "prefijo desconocido" ;;
           esac
-          echo "Variables del build OK. Proyecto: $VITE_SUPABASE_URL"
+          echo "Variables del build OK. Proyecto: $(limpiar "$VITE_SUPABASE_URL")"
       - name: Build React app
         script: npm run build
       - name: Add iOS platform
