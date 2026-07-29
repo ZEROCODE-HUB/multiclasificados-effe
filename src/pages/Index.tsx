@@ -11,6 +11,7 @@ import { type Listing } from "@/data/mockData";
 import { fetchListings } from "@/lib/listings";
 import { fetchPlatformStats, type PlatformStats } from "@/lib/stats";
 import { useSession } from "@/hooks/useSession";
+import { useFittingCount } from "@/hooks/useFittingCount";
 import { useEffect, useMemo, useState } from "react";
 // WebP 1600×900 (191 KiB) en vez del JPG 1920×1080 (378 KiB). Se sirve desde
 // /public (ruta estable `/hero-bg.webp`) en lugar de un import hasheado, para
@@ -28,8 +29,21 @@ import { Button } from "@/components/ui/button";
 // columnas, así que la tarjeta mide lo mismo en las dos pantallas.
 // `auto-fill` y NO `auto-fit`: con pocos avisos, auto-fit los estiraría a lo
 // ancho y volveríamos al problema.
+//
+// Los dos números van en constantes porque `useFittingCount` tiene que hacer la
+// MISMA cuenta que el CSS para decidir cuántos avisos se muestran: si se cambia
+// el ancho mínimo aquí y no allí, aparecería una segunda fila a medias.
+const CARD_MIN_WIDTH = 230;
+const CARD_GAP = 16; // gap-x-4
 const LISTING_GRID =
-  "grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-x-4 gap-y-8";
+  "grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-x-4";
+
+// Cuántos avisos pide la portada. Son dos secciones que se reparten la lista
+// para no enseñar los mismos avisos dos veces, y cada una llena una fila: en un
+// monitor de 2560 px caben 10 por fila, así que 20 cubre las dos.
+const HOME_LISTINGS = 20;
+// Los que se suponen por fila hasta poder medir el ancho de verdad.
+const FALLBACK_COLS = 8;
 
 const benefits = [
   {
@@ -102,13 +116,21 @@ const Index = () => {
 
   // Avisos reales desde Supabase (vacío hasta que existan avisos publicados).
   const [listings, setListings] = useState<Listing[]>([]);
+  // Cada sección enseña UNA fila: los avisos que entren en el ancho disponible.
+  // Así no queda nunca una última fila a medias.
+  const semana = useFittingCount(CARD_MIN_WIDTH, CARD_GAP, FALLBACK_COLS);
+  const nuevos = useFittingCount(CARD_MIN_WIDTH, CARD_GAP, FALLBACK_COLS);
+  // La segunda sección arranca donde termina la primera: si arrancara en un
+  // índice fijo, en pantallas anchas (donde la primera fila se lleva más avisos)
+  // las dos secciones volverían a repetir avisos.
+  const nuevosDesde = semana.count;
   const [platform, setPlatform] = useState<PlatformStats | null>(null);
   // Términos/Privacidad del footer: abren el documento legal (antes eran href="#").
   const [termsOpen, setTermsOpen] = useState(false);
   useEffect(() => {
     // 16 porque la portada tiene DOS rejillas: con 8 ambas mostraban los mismos
     // avisos (la de abajo era la misma lista al revés). Se reparten 8 y 8.
-    fetchListings({ limit: 16 }).then(setListings);
+    fetchListings({ limit: HOME_LISTINGS }).then(setListings);
     fetchPlatformStats().then(setPlatform);
   }, []);
 
@@ -308,8 +330,8 @@ const Index = () => {
             </Link>
           </div>
         ) : (
-          <div className={LISTING_GRID}>
-            {listings.slice(0, 8).map((listing) => (
+          <div ref={semana.ref} className={LISTING_GRID}>
+            {listings.slice(0, semana.count).map((listing) => (
               <ListingCard key={listing.id} listing={listing} />
             ))}
           </div>
@@ -386,13 +408,13 @@ const Index = () => {
         </div>
         {/* La tanda siguiente, no la misma de arriba al revés: con menos de 9
             avisos publicados esta sección aún no tiene nada propio que mostrar. */}
-        {listings.length <= 8 ? (
+        {listings.length <= nuevosDesde ? (
           <div className="border border-dashed border-border py-16 text-center">
             <p className="text-muted-foreground">Aún no hay más avisos recientes.</p>
           </div>
         ) : (
-          <div className={LISTING_GRID}>
-            {listings.slice(8, 16).map((listing) => (
+          <div ref={nuevos.ref} className={LISTING_GRID}>
+            {listings.slice(nuevosDesde, nuevosDesde + nuevos.count).map((listing) => (
               <ListingCard key={`new-${listing.id}`} listing={listing} />
             ))}
           </div>
