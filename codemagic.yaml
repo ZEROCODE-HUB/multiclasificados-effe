@@ -12,8 +12,13 @@ workflows:
         certificates:
           - Apple Distribution Certificate
       node: 22
-      # Las VITE_* se definen en Codemagic → Environment variables y llegan solas
-      # al entorno del build. Aquí NO se redefinen.
+      # Las VITE_* viven en Codemagic → Environment variables, dentro del grupo
+      # "multiclasificados-effe". Un grupo NO se aplica solo: si no se declara
+      # aquí en `groups`, sus variables no llegan al build y el IPA sale sin
+      # configuración (arranca, pero sin login ni avisos). Sus valores NO se
+      # repiten en `vars`: ver el porqué abajo.
+      groups:
+        - multiclasificados-effe
       #
       # Antes estaban listadas como `VITE_SUPABASE_ANON_KEY: $VITE_SUPABASE_ANON_KEY`
       # y ESA era la causa del IPA roto: los valores de `vars` son literales, sin
@@ -21,11 +26,6 @@ workflows:
       # (23 caracteres) PISANDO la clave real. El servidor respondía 401 "Invalid API
       # key" a todo, y de ahí la app que arrancaba pero no dejaba iniciar sesión ni
       # mostraba avisos. La URL corría la misma suerte: "https://$VITE_SUPABASE_URL".
-      #
-      # Si las variables están dentro de un GRUPO en Codemagic, hay que importarlo
-      # aquí o llegarán vacías (el paso "Verificar variables del build" lo dirá):
-      #   groups:
-      #     - nombre-del-grupo
       #
       # VITE_PUBLIC_SITE_URL es imprescindible: sin ella el pago Izipay y los
       # enlaces de compartir se rompen en iOS (ver PLAN-IMPLEMENTACION.md).
@@ -39,9 +39,9 @@ workflows:
         # Un IPA compilado sin estas variables ARRANCA pero no sirve para nada:
         # no deja iniciar sesión ni muestra avisos. Antes eso solo se descubría
         # instalando el build en un iPhone. Aquí el build falla de inmediato.
-        # Si esto se dispara: Codemagic → Environment variables. Si las variables
-        # están en un GRUPO, hay que declararlo en `environment.groups`, o llegan
-        # vacías al script pese a estar creadas.
+        # Si esto se dispara: Codemagic → Environment variables, grupo
+        # "multiclasificados-effe" (el mismo nombre que hay en `environment.groups`;
+        # si no coinciden, las variables llegan vacías pese a estar creadas).
         script: |
           # Limpia igual que `cleanEnvValue` en el front: espacios, retornos de
           # carro y un par de comillas envolventes. Sin esto, una clave pegada
@@ -60,8 +60,9 @@ workflows:
           done
           if [ -n "$faltan" ]; then
             echo "ERROR: faltan variables de entorno del build:$faltan"
-            echo "Revisa Codemagic > Environment variables. Si están dentro de un GRUPO,"
-            echo "hay que declararlo en environment.groups o llegan vacias al script."
+            echo "Revisa Codemagic > Environment variables, grupo 'multiclasificados-effe'."
+            echo "El nombre del grupo debe coincidir EXACTO con environment.groups de este"
+            echo "archivo; si no, el grupo no se importa y las variables llegan vacias."
             exit 1
           fi
 
