@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+// CategoryGrid navega con <Link> (y no <a href>) para no recargar la app dentro
+// del WebView, así que necesita un router alrededor.
+import { MemoryRouter } from "react-router-dom";
 
 // El orden que define el staff arrastrando las tarjetas vive en
 // `categories.sort_order`. Estos tests fijan las dos mitades del contrato:
@@ -101,7 +104,7 @@ describe("reorderCategories — persistencia del arrastre", () => {
 
 describe("impacto global — la portada respeta el orden del panel", () => {
   it("CategoryGrid pinta las categorías en el orden guardado por el staff", async () => {
-    render(<CategoryGrid />);
+    render(<MemoryRouter><CategoryGrid /></MemoryRouter>);
     await waitFor(() => {
       expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(DB_ROWS.length);
     });

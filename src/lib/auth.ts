@@ -1,7 +1,7 @@
 // Capa de autenticación real (Supabase) que alimenta el contrato existente
 // de useSession ({ role, name, initials }) para NO romper el diseño actual.
 import { supabase } from "@/lib/supabase";
-import { savePushToken } from "@/lib/push";
+import { savePushToken, requestPushPermission } from "@/lib/push";
 import { clearSession, getSession, isStaffRole, setSessionData, type Session, type SessionRole } from "@/hooks/useSession";
 
 // Prioridad de rol cuando un usuario tiene varios (para elegir el panel destino).
@@ -274,7 +274,8 @@ export async function signInWithPassword(
     //    la cuenta que acabamos de rechazar y le llegarían aquí SUS push;
     //  - después de syncSession(), o un usuario baneado registraría su
     //    dispositivo justo antes de que lo echemos, y seguiría recibiendo push.
-    if (checksRole) savePushToken();
+    // Y con ella el permiso de notificaciones, que ya no se pide en el arranque.
+    if (checksRole) { savePushToken(); requestPushPermission(); }
 
     return session;
   } finally {

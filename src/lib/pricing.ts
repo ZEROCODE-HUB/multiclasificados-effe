@@ -273,6 +273,20 @@ export function markSold(listingId: string, who: "buyer" | "seller", name: strin
   localStorage.setItem(SOLD_KEY, JSON.stringify(all));
   window.dispatchEvent(new Event("effe:sold-updated"));
 }
+// Retira la marca de una de las dos partes. Sin esto la casilla "Marcar venta
+// concretada" era de un solo sentido: se podía marcar pero nunca desmarcar.
+export function unmarkSold(listingId: string, who: "buyer" | "seller") {
+  const all = loadSold();
+  const prev = all[listingId];
+  if (!prev) return;
+  const next = { ...prev, date: new Date().toISOString() };
+  delete next[who];
+  // Si ya no queda ninguna de las dos partes, se borra la entrada entera.
+  if (!next.buyer && !next.seller) delete all[listingId];
+  else all[listingId] = next;
+  localStorage.setItem(SOLD_KEY, JSON.stringify(all));
+  window.dispatchEvent(new Event("effe:sold-updated"));
+}
 
 export interface Invoice {
   id: string;

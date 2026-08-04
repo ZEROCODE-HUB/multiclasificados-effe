@@ -36,6 +36,12 @@ const build = async ({ entry = "main.tsx", stubs = STUBS, stubbed }: HarnessOpts
     jsx: "automatic",
     absWorkingDir: ROOT,
     write: false,
+    // Con un componente que importa CSS hay más de una salida, y esbuild exige
+    // outdir para nombrarlas. No se escribe nada en disco (write: false).
+    outdir: path.join(ROOT, ".harness-out"),
+    // El CSS de Leaflet referencia sus PNG de marcador: van embebidos, así la
+    // página sigue siendo autocontenida.
+    loader: { ".png": "dataurl", ".svg": "dataurl" },
     define: { "process.env.NODE_ENV": '"production"' },
     plugins: [
       {
@@ -60,9 +66,21 @@ const build = async ({ entry = "main.tsx", stubs = STUBS, stubbed }: HarnessOpts
     "-i", path.join(SRC, "index.css"), "-o", cssFile, "--minify",
   ], { cwd: ROOT, stdio: "pipe" });
 
-  return `<style>${fs.readFileSync(cssFile, "utf8")}</style>`
+  // Un componente puede importar su propio CSS (el mapa trae el de Leaflet):
+  // esbuild lo emite como archivo aparte, así que hay que buscar el JS por
+  // extensión en vez de dar por hecho que es el primero.
+  const js = bundle.outputFiles.find((f) => f.path.endsWith(".js"))!.text;
+  const bundledCss = bundle.outputFiles
+    .filter((f) => f.path.endsWith(".css"))
+    .map((f) => f.text)
+    .join("\n");
+
+  // El CSS del componente va PRIMERO: el de la app debe poder pisarlo (la regla
+  // .map-pan-y le gana al touch-action de Leaflet).
+  return `<style>${bundledCss}</style>`
+    + `<style>${fs.readFileSync(cssFile, "utf8")}</style>`
     + `<div id="root"></div>`
-    + `<script>${bundle.outputFiles[0].text}</script>`;
+    + `<script>${js}</script>`;
 };
 
 /** Cacheado por proceso y por entrada: cada worker compila cada harness una vez. */

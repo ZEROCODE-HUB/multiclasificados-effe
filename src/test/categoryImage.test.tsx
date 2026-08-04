@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+// CategoryGrid navega con <Link> (y no <a href>) para no recargar la app dentro
+// del WebView, así que necesita un router alrededor.
+import { MemoryRouter } from "react-router-dom";
 
 // La foto de cada categoría dejó de estar hardcodeada en CategoryGrid: ahora la
 // sube el staff y vive en `categories.image_url`. Estos tests fijan el contrato:
@@ -87,7 +90,7 @@ describe("CategoryGrid — ninguna tarjeta se queda sin foto", () => {
       ],
       error: null,
     };
-    render(<CategoryGrid />);
+    render(<MemoryRouter><CategoryGrid /></MemoryRouter>);
     await waitFor(() => {
       expect(screen.getAllByRole("img")).toHaveLength(2);
     });
@@ -100,7 +103,7 @@ describe("CategoryGrid — ninguna tarjeta se queda sin foto", () => {
 
   it("una imagen del bucket se pide recortada y sin doble '?'", async () => {
     selectResult = { data: [{ id: "inmuebles", name: "Inmuebles", icon: "Home", image_url: SUPA_URL }], error: null };
-    render(<CategoryGrid />);
+    render(<MemoryRouter><CategoryGrid /></MemoryRouter>);
     const img = await screen.findByAltText("Inmuebles");
     const src = img.getAttribute("src")!;
     expect(src).toContain("/storage/v1/render/image/public/");

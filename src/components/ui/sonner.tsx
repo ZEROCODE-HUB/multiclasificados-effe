@@ -10,6 +10,10 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme="light"
       className="toaster group"
+      // Sonner se ancla abajo a la derecha: en móvil hay que dejar libre el nav
+      // inferior y el home indicator, o el aviso sale por debajo de la barra
+      // (MOB-04). En escritorio --nav-bottom vale 0 y queda el margen normal.
+      offset="calc(1rem + var(--nav-bottom))"
       toastOptions={{
         classNames: {
           toast:

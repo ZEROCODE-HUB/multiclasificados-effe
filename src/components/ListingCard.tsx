@@ -147,7 +147,10 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
       {/* items-start + w-fit: los chips (de anchos distintos cuando "Urgente"
           muestra el contador) quedan alineados por su borde izquierdo en vez de
           descuadrados (IT2-031). */}
-      <div className="absolute top-3 left-3 z-10 flex flex-col items-start gap-1.5 w-fit">
+      {/* max-w: reserva el hueco de "Verificado" + el corazón, que van fijos a
+          la derecha. Sin él, con 3 o más insignias el bloque izquierdo crecía
+          hasta encimarse con ellos. */}
+      <div className="absolute top-3 left-3 z-10 flex flex-col items-start gap-1.5 w-fit max-w-[calc(100%-8.5rem)]">
         {badgeChips}
       </div>
       <span className="absolute top-3 right-12 z-10 inline-flex items-center gap-1 px-2.5 py-1 bg-white/95 backdrop-blur-sm text-primary text-[10px] font-bold uppercase tracking-wider shadow-sm">
@@ -155,7 +158,10 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
       </span>
       <button
         onClick={handleFav}
-        className="absolute top-3 right-3 z-10 w-8 h-8 bg-white/95 backdrop-blur-sm flex items-center justify-center hover:bg-white hover:scale-110 transition-all shadow-sm"
+        /* El cuadro sigue midiendo 32px, pero el pseudo-elemento amplía la zona
+           sensible a los 44px que piden las guías de iOS y Android, sin cambiar
+           el diseño de la tarjeta. */
+        className="absolute top-3 right-3 z-10 w-8 h-8 bg-white/95 backdrop-blur-sm flex items-center justify-center hover:bg-white hover:scale-110 transition-all shadow-sm before:absolute before:-inset-1.5 before:content-['']"
         aria-label="Guardar en favoritos"
       >
         <Heart size={15} className={fav ? "text-secondary fill-secondary" : "text-primary"} />
@@ -175,8 +181,11 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
         />
       </div>
 
-      {/* Content — espaciado compacto (gap/padding reducidos) para ganar densidad */}
-      <div className="flex flex-col gap-1.5 p-3">
+      {/* Content — espaciado compacto (gap/padding reducidos) para ganar densidad.
+          flex-1 + min-w-0: en WebKit los nodos de texto con line-clamp variaban
+          de alto y descuadraban precios e insignias entre tarjetas vecinas; con
+          esto el bloque ocupa el alto sobrante y el CTA queda siempre al ras. */}
+      <div className="flex flex-col gap-1.5 p-3 flex-1 min-w-0">
         <span className="text-[10px] uppercase tracking-[0.18em] font-bold text-secondary">{listing.category}</span>
         <h3 className="font-semibold text-foreground text-sm leading-snug line-clamp-2 group-hover:text-primary transition-colors min-h-[2.25rem]">
           {listing.title}
@@ -206,7 +215,7 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
           variant="outline"
           size="sm"
           onClick={(e) => { e.stopPropagation(); goToDetail(); }}
-          className="relative z-10 w-full mt-0.5 h-8 text-xs font-semibold border-border hover:border-primary hover:bg-primary hover:text-primary-foreground transition-all rounded-none"
+          className="relative z-10 w-full mt-auto h-8 text-xs font-semibold border-border hover:border-primary hover:bg-primary hover:text-primary-foreground transition-all rounded-none"
         >
           Ver detalle
         </Button>

@@ -18,6 +18,11 @@ import { fetchAppVersionInfo } from "@/lib/appVersion";
 
 export async function initOta(): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
+  // En iOS no hay OTA: la directriz 2.5.2 de la App Store prohíbe descargar y
+  // ejecutar código, y en la primera revisión no conviene discutirlo. El plugin
+  // además se saca del build de iOS en codemagic.yaml, así que aquí solo
+  // evitamos pedir su chunk. Android mantiene la OTA intacta.
+  if (Capacitor.getPlatform() === "ios") return;
   let updater: typeof import("@capgo/capacitor-updater").CapacitorUpdater | undefined;
   try {
     ({ CapacitorUpdater: updater } = await import("@capgo/capacitor-updater"));

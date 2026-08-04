@@ -1,5 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Minus } from "lucide-react";
+import { MapContainer, TileLayer, Marker, AttributionControl, useMap } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 
 interface ListingLocationMapProps {
   lat: number;
@@ -12,53 +15,84 @@ interface ListingLocationMapProps {
 const formatPrice = (price: number, currency: string) =>
   currency === "USD" ? `US$ ${price.toLocaleString()}` : `S/ ${price.toLocaleString()}`;
 
-// Niveles de zoom = radio del encuadre en grados (más chico = más cerca).
-const SPANS = [0.003, 0.006, 0.012, 0.025, 0.05, 0.1];
-const DEFAULT_LEVEL = 3; // 0.025 ≈ ciudad
+const DEFAULT_ZOOM = 15; // ≈ barrio: se reconoce la manzana sin dar la puerta exacta.
 
-// Mapa de ubicación del aviso. Se incrusta OpenStreetMap vía iframe (su propio
-// documento) para evitar el problema de compositing que impide pintar los tiles
-// de Leaflet en el layout del detalle. El iframe NO es arrastrable, así el
-// centro es siempre la ubicación del aviso y el pin de precio queda fijo. El
-// zoom lo maneja este componente cambiando el encuadre alrededor del mismo
-// punto (botones +/−), por lo que la ubicación se mantiene fija al hacer zoom.
+// Pin de precio anclado a la coordenada (mismo divIcon que ListingsMap). El
+// wrapper se desplaza -50%/-100% para que la puntita caiga justo en el punto.
+function priceIcon(label: string): L.DivIcon {
+  return L.divIcon({
+    className: "!bg-transparent !border-0",
+    html:
+      `<div class="flex flex-col items-center" style="transform:translate(-50%,-100%)">` +
+      `<span class="inline-flex items-center whitespace-nowrap rounded-full bg-secondary px-2.5 py-1 text-[11px] font-bold text-secondary-foreground shadow-lg ring-2 ring-secondary/20">${label}</span>` +
+      `<span class="-mt-0.5 h-2 w-2 rotate-45 bg-secondary"></span>` +
+      `</div>`,
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  });
+}
+
+// Expone la instancia del mapa al padre (para los botones +/−) y corrige el
+// tamaño tras montar: el contenedor tiene alto fijo por CSS y sin esto Leaflet
+// a veces calcula el viewport antes de que el layout se asiente y deja tiles
+// grises.
+function MapBridge({ onReady }: { onReady: (map: L.Map) => void }) {
+  const map = useMap();
+  useEffect(() => {
+    map.invalidateSize();
+    onReady(map);
+  }, [map, onReady]);
+  return null;
+}
+
+// Mapa de ubicación del aviso.
+//
+// Antes era un <iframe> del embed de OpenStreetMap con `pointer-events-none`:
+// el pin de precio se dibujaba fijo en el centro de la caja, así que había que
+// impedir que el mapa se moviera para que no se despegara de la ubicación. En
+// iOS ese iframe además atrapaba el toque y la página no scrolleaba (MOB-10).
+//
+// Con Leaflet el pin es un Marker real anclado a la coordenada, así que el mapa
+// puede moverse libremente. La convivencia con el scroll de la página se
+// resuelve por `touch-action` (clase .map-pan-y en index.css):
+//   · un dedo en vertical  → scrollea la página;
+//   · un dedo en horizontal → desplaza el mapa;
+//   · dos dedos            → mueven el mapa y hacen zoom (TouchZoom de Leaflet
+//                            hace pan y zoom a la vez).
+// En escritorio se arrastra con el ratón; la rueda NO hace zoom (robaba el
+// scroll de la página), para eso están los botones +/−.
 export function ListingLocationMap({ lat, lng, price, currency }: ListingLocationMapProps) {
-  const [level, setLevel] = useState(DEFAULT_LEVEL);
-  const span = SPANS[level];
-
-  const bbox = [lng - span, lat - span, lng + span, lat + span]
-    .map((n) => n.toFixed(6))
-    .join("%2C");
-  const src = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik`;
-
-  const zoomIn = () => setLevel((l) => Math.max(0, l - 1));
-  const zoomOut = () => setLevel((l) => Math.min(SPANS.length - 1, l + 1));
+  const [map, setMap] = useState<L.Map | null>(null);
+  const center: [number, number] = [lat, lng];
 
   return (
-    <>
-      {/* Mapa estático (no arrastrable): el centro es siempre la ubicación.
-          EFFE-096: `key={level}` fuerza a React a MONTAR un iframe nuevo en cada
-          zoom en vez de renavegar el existente. La carga inicial de un iframe
-          recién insertado es un "replacement" y NO agrega una entrada al
-          historial; renavegar el `src` de un iframe ya montado sí la agregaba,
-          por eso el botón "atrás" quedaba atrapado deshaciendo zoom por zoom. */}
-      <iframe
-        key={level}
-        title="Ubicación en el mapa"
-        src={src}
-        loading="lazy"
-        tabIndex={-1}
-        className="pointer-events-none absolute inset-0 w-full h-full border-0 select-none"
-        referrerPolicy="no-referrer-when-downgrade"
-      />
+    <div className="map-pan-y absolute inset-0">
+      <MapContainer
+        center={center}
+        zoom={DEFAULT_ZOOM}
+        scrollWheelZoom={false}
+        zoomControl={false}
+        className="w-full h-full z-0"
+        // Igual que en ListingsMap: sin el prefijo "Leaflet | Reporta un
+        // problema", solo el crédito que exige la licencia de OSM (IT2-029).
+        attributionControl={false}
+      >
+        <AttributionControl prefix={false} />
+        <TileLayer
+          attribution="&copy; OpenStreetMap"
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <Marker position={center} icon={priceIcon(formatPrice(price, currency))} />
+        <MapBridge onReady={setMap} />
+      </MapContainer>
 
-      {/* Controles de zoom propios (cubren los del iframe, que quedan inertes). */}
+      {/* Controles de zoom propios (reemplazan a los de Leaflet, desactivados
+          arriba con zoomControl={false}) para mantener el estilo de la app. */}
       <div className="absolute right-2 top-2 z-[600] flex flex-col overflow-hidden rounded-md border border-border bg-card shadow-md">
         <button
           type="button"
           aria-label="Acercar"
-          onClick={zoomIn}
-          disabled={level === 0}
+          onClick={() => map?.zoomIn()}
           className="flex h-8 w-8 items-center justify-center text-foreground hover:bg-muted disabled:opacity-40"
         >
           <Plus size={16} />
@@ -67,21 +101,20 @@ export function ListingLocationMap({ lat, lng, price, currency }: ListingLocatio
         <button
           type="button"
           aria-label="Alejar"
-          onClick={zoomOut}
-          disabled={level === SPANS.length - 1}
+          onClick={() => map?.zoomOut()}
           className="flex h-8 w-8 items-center justify-center text-foreground hover:bg-muted disabled:opacity-40"
         >
           <Minus size={16} />
         </button>
       </div>
 
-      {/* Pin de precio (naranja), fijo en el centro = ubicación del aviso. */}
-      <div className="pointer-events-none absolute left-1/2 top-1/2 z-[500] flex -translate-x-1/2 -translate-y-full flex-col items-center">
-        <span className="inline-flex items-center whitespace-nowrap rounded-full bg-secondary px-2.5 py-1 text-[11px] font-bold text-secondary-foreground shadow-lg ring-2 ring-secondary/20">
-          {formatPrice(price, currency)}
+      {/* Solo en pantallas táctiles: sin esta pista, mover el mapa con un dedo
+          parece roto (lo que ocurre es que la página está scrolleando). */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[600] flex justify-center pb-6 [@media(hover:hover)]:hidden">
+        <span className="rounded-full bg-primary/85 px-3 py-1 text-[11px] font-semibold text-primary-foreground shadow-lg backdrop-blur-sm">
+          Usa dos dedos para mover el mapa
         </span>
-        <span className="-mt-0.5 h-2 w-2 rotate-45 bg-secondary" />
       </div>
-    </>
+    </div>
   );
 }

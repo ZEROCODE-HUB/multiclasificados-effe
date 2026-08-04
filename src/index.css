@@ -19,6 +19,27 @@
   .pr-safe { padding-right: env(safe-area-inset-right); }
 }
 
+/* ALTO REAL de las dos barras fijas, inset incluido. Las utilidades de arriba
+   solo dan el padding; lo que no había era un valor usable en `top`, `bottom` o
+   `height`, así que el contenido que se posiciona CONTRA las barras usaba
+   números fijos (top-16, bottom-16, pb-24) y en un iPhone con notch quedaba
+   desfasado justo el alto del inset: el input del chat tapado y los toasts
+   debajo de la Dynamic Island (MOB-01/04/05).
+   Al cambiar el alto de una barra hay que actualizar su variable aquí:
+     · header      → Navbar.tsx (h-16 md:h-[76px] + pt-safe)
+     · nav inferior → MobileBottomNav.tsx (h-16 + pb-safe) */
+:root {
+  --nav-top: calc(4rem + env(safe-area-inset-top));
+  --nav-bottom: calc(4rem + env(safe-area-inset-bottom));
+}
+@media (min-width: 768px) {
+  :root { --nav-top: calc(4.75rem + env(safe-area-inset-top)); }
+}
+@media (min-width: 1024px) {
+  /* El nav inferior es `lg:hidden`: a partir de aquí solo queda el inset. */
+  :root { --nav-bottom: env(safe-area-inset-bottom); }
+}
+
 @layer base {
   :root {
     /* La plataforma es SOLO tema claro. Sin esto, un navegador con el sistema en
@@ -177,4 +198,18 @@
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
+}
+
+/* Mapa que convive con el scroll de la página (ficha del aviso, MOB-10).
+   Leaflet fija `touch-action: none` en cuanto el arrastre y el zoom táctil
+   están activos, y entonces el dedo queda atrapado por el mapa: la página no
+   se movía. Con `pan-y` el navegador se queda el desplazamiento vertical y le
+   entrega a Leaflet el resto: arrastre horizontal con un dedo, y pan + zoom
+   con dos. Va fuera de @layer para ganarle en especificidad al CSS de Leaflet,
+   que se importa desde el propio componente. */
+.map-pan-y .leaflet-container,
+.map-pan-y .leaflet-container.leaflet-touch-drag,
+.map-pan-y .leaflet-container.leaflet-touch-zoom,
+.map-pan-y .leaflet-container.leaflet-touch-drag.leaflet-touch-zoom {
+  touch-action: pan-y;
 }

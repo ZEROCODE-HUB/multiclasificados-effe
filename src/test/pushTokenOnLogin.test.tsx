@@ -59,7 +59,7 @@ vi.mock("@/hooks/useSession", async (orig) => {
 vi.mock("sonner", () => ({ toast: { error: () => {} } }));
 
 const savePushToken = vi.fn();
-vi.mock("@/lib/push", () => ({ savePushToken: () => savePushToken() }));
+vi.mock("@/lib/push", () => ({ savePushToken: () => savePushToken(), requestPushPermission: () => {} }));
 
 import { SupabaseAuthBridge } from "@/components/SupabaseAuthBridge";
 import { signInWithPassword } from "@/lib/auth";

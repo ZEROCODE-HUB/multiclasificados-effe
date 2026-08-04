@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { syncSession, AccountBlockedError, isBlockingStaffLogin } from "@/lib/auth";
 import { clearSession, getSession } from "@/hooks/useSession";
-import { savePushToken } from "@/lib/push";
+import { savePushToken, requestPushPermission } from "@/lib/push";
 
 // Sincroniza y, si la cuenta está bloqueada, avisa (syncSession ya cerró sesión).
 function safeSync() {
@@ -44,6 +44,10 @@ export function SupabaseAuthBridge() {
         safeSync();
         // Asocia el token de push del dispositivo a este usuario (en el APK).
         savePushToken();
+        // Y recién ahora se pide el permiso de notificaciones: con sesión
+        // iniciada la petición tiene contexto (antes salía en el arranque en
+        // frío, sin que el usuario hubiera hecho nada).
+        requestPushPermission();
       } else if (event === "SIGNED_OUT") {
         // Limpiamos SOLO en un cierre REAL. Un session=null de otros eventos
         // (INITIAL_SESSION sin sesión, o un auto-refresh transitorio que falla y

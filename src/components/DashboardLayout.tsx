@@ -43,7 +43,7 @@ export function DashboardLayout({ children, fullHeight = false }: DashboardLayou
       </div>
 
       <main
-        className={`flex-1 px-3 sm:px-6 lg:px-8 py-4 md:py-6 lg:py-8 pb-24 lg:pb-12 ${
+        className={`flex-1 px-3 sm:px-6 lg:px-8 py-4 md:py-6 lg:py-8 pb-[calc(var(--nav-bottom)+2rem)] lg:pb-12 ${
           fullHeight ? "lg:flex lg:flex-col lg:min-h-0" : ""
         }`}
       >

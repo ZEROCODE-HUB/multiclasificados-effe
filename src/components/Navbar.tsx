@@ -255,7 +255,9 @@ export function Navbar() {
         {!isAdmin && (
           <Link
             to="/dashboard/anunciante/publicar"
-            className={`md:hidden p-2 text-foreground ${isUser ? "" : "ml-auto"}`}
+            /* min-w/min-h 44px: es el mínimo que piden iOS HIG y Material; con
+               solo p-2 el objetivo quedaba en ~38px. */
+            className={`md:hidden p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-foreground ${isUser ? "" : "ml-auto"}`}
             aria-label="Publicar"
           >
             <PlusCircle size={22} />
@@ -264,7 +266,7 @@ export function Navbar() {
         <button
           onClick={() => setMobileOpen(!mobileOpen)}
           /* Sin el botón "Publicar" (staff), la hamburguesa asume su `ml-auto`. */
-          className={`md:hidden p-2 text-foreground ${isAdmin ? "ml-auto" : ""}`}
+          className={`md:hidden p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-foreground ${isAdmin ? "ml-auto" : ""}`}
           aria-label="Menú"
         >
           {mobileOpen ? <X size={24} /> : <Menu size={24} />}

@@ -99,6 +99,17 @@ workflows:
           echo "Variables del build OK. Proyecto: $(limpiar "$VITE_SUPABASE_URL")"
       - name: Build React app
         script: npm run build
+      - name: Excluir OTA (Capgo) del build de iOS
+        # Apple prohíbe descargar y ejecutar código (directriz 2.5.2) y sus
+        # escáneres marcan el plugin aunque esté inerte (autoUpdate: false). Se
+        # quita ANTES de `cap add ios` para que no entre en el Podfile, pero
+        # DESPUÉS de `npm run build`: Vite necesita resolver el import dinámico
+        # de lib/ota.ts, que en iOS ni siquiera llega a ejecutarse.
+        # Android conserva la OTA (su workflow no pasa por aquí).
+        script: |
+          npm pkg delete dependencies.@capgo/capacitor-updater
+          rm -rf node_modules/@capgo/capacitor-updater
+          echo "Capgo Updater excluido del proyecto iOS."
       - name: Add iOS platform
         script: npx cap add ios
       - name: Sync Capacitor

@@ -630,7 +630,7 @@ export default function SearchPage() {
           </div>
 
           {/* List - below map on mobile (la página hace scroll), columna izquierda con scroll propio en escritorio */}
-          <div className="lg:flex-1 lg:overflow-y-auto lg:border-r border-border bg-background lg:order-1 lg:min-h-0 pb-24 lg:pb-0">
+          <div className="lg:flex-1 lg:overflow-y-auto lg:border-r border-border bg-background lg:order-1 lg:min-h-0 pb-[calc(var(--nav-bottom)+2rem)] lg:pb-0">
             <div className="px-4 lg:px-5 py-3 lg:py-4 border-b border-border lg:sticky lg:top-0 bg-background/95 backdrop-blur z-10">
               <p className="text-[10px] lg:text-xs uppercase tracking-[0.2em] font-bold text-secondary">Resultados</p>
               <h1 className="text-base lg:text-lg font-bold text-foreground mt-0.5 lg:mt-1">

@@ -1,5 +1,6 @@
 import { ArrowUpRight } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { fetchCategoryCounts } from "@/lib/stats";
 import { useCategories } from "@/hooks/useCategories";
 import { categoryPhoto } from "@/lib/categories";
@@ -33,9 +34,11 @@ export function CategoryGrid() {
         // propia, `categoryPhoto` devuelve una de reserva (nunca queda vacía).
         const photo = categoryPhoto(cat, i);
         return (
-        <a
+        // <Link> y no <a href>: dentro del WebView de Capacitor un enlace normal
+        // recarga la app entera (pantalla en blanco y estado perdido).
+        <Link
           key={cat.id}
-          href={`/buscar?cat=${cat.id}`}
+          to={`/buscar?cat=${cat.id}`}
           className="group relative bg-card hover:bg-card transition-colors cursor-pointer overflow-hidden"
         >
           <div className="relative aspect-[4/3] overflow-hidden">
@@ -56,24 +59,29 @@ export function CategoryGrid() {
               className="absolute inset-0 w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700 group-hover:scale-[1.08]"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-primary/95 via-primary/30 to-transparent" />
-            {/* Hover arrow */}
-            <div className="absolute top-3 right-3 w-8 h-8 rounded-full bg-secondary text-secondary-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all duration-300">
+            {/* Flecha de hover: solo donde hay puntero real. En una pantalla
+                táctil el :hover se queda "pegado" al arrastrar el dedo por la
+                portada y aparecía una flechita fantasma sobre las tarjetas. */}
+            <div className="hidden [@media(hover:hover)]:flex absolute top-3 right-3 w-8 h-8 rounded-full bg-secondary text-secondary-foreground items-center justify-center opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all duration-300">
               <ArrowUpRight size={14} />
             </div>
-            {/* Footer info */}
+            {/* Footer info. El rótulo "Categoría" con su icono se quitó: era
+                obvio por contexto y le robaba sitio al nombre. */}
             <div className="absolute bottom-0 left-0 right-0 p-4 text-primary-foreground">
-              <div className="flex items-center gap-2 mb-1">
-                <cat.icon size={14} className="text-secondary" />
-                <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-secondary">Categoría</span>
+              {/* La caja de altura fija va en el DIV y el recorte en el H3: el
+                  `line-clamp` no puede convivir con `flex` en el mismo elemento
+                  (usa display:-webkit-box y el flex lo pisa), y por eso los
+                  nombres largos ("Insumos, Materias Primas y Materiales") se
+                  salían de la tarjeta en vez de cortarse con puntos suspensivos.
+                  El min-height mantiene alineados los títulos de una y dos
+                  líneas entre tarjetas vecinas (IT2-033). */}
+              <div className="flex items-end min-h-[2.8rem] md:min-h-[3.1rem]">
+                <h3 className="text-lg md:text-xl font-extrabold tracking-tight leading-tight line-clamp-2">{cat.name}</h3>
               </div>
-              {/* min-height a 2 líneas para que los títulos cortos ("Empleos") y
-                  largos ("Salud, Belleza y Moda") queden alineados entre tarjetas
-                  vecinas (IT2-033). */}
-              <h3 className="text-lg md:text-xl font-extrabold tracking-tight leading-tight line-clamp-2 min-h-[2.8rem] md:min-h-[3.1rem] flex items-end">{cat.name}</h3>
               <p className="text-[11px] text-primary-foreground/70 mt-1">{(counts[cat.id] ?? 0).toLocaleString()} avisos activos</p>
             </div>
           </div>
-        </a>
+        </Link>
         );
       })}
     </div>

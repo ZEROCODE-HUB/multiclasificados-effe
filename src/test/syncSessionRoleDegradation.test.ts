@@ -27,7 +27,7 @@ vi.mock("@/lib/supabase", () => ({
     from: (t: string) => query(t),
   },
 }));
-vi.mock("@/lib/push", () => ({ savePushToken: () => {} }));
+vi.mock("@/lib/push", () => ({ savePushToken: () => {}, requestPushPermission: () => {} }));
 
 const setSessionData = vi.fn((s: unknown) => s);
 let prevSession: unknown = null;

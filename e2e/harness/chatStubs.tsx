@@ -36,6 +36,7 @@ export const getCurrentUserId = async () => "me";
 // --- @/lib/pricing
 export const loadSold = () => ({});
 export const markSold = () => {};
+export const unmarkSold = () => {};
 
 // --- @/lib/reports
 export const reportUser = async () => {};
@@ -67,3 +68,4 @@ export const CreditsBalance = () => null;
 
 // --- @/lib/auth
 export const signOut = async () => {};
+export const logoutPath = () => "/";

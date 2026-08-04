@@ -7,7 +7,7 @@ import type { Session, SessionRole } from "@/hooks/useSession";
 // la home como usuario. Solo aplica a "/": otras rutas públicas siguen abiertas.
 
 vi.mock("@/lib/supabase", () => ({ supabase: { auth: {}, from: () => ({}) } }));
-vi.mock("@/lib/push", () => ({ savePushToken: () => {} }));
+vi.mock("@/lib/push", () => ({ savePushToken: () => {}, requestPushPermission: () => {} }));
 
 const { sessionRef } = vi.hoisted(() => ({ sessionRef: { current: null as Session | null } }));
 vi.mock("@/hooks/useSession", async (orig) => {

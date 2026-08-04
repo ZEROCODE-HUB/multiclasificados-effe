@@ -32,7 +32,7 @@ vi.mock("@/hooks/useSession", async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>);
   return { ...actual, clearSession: () => clearSession(), getSession: () => state.local, setSessionData: (s: unknown) => s };
 });
-vi.mock("@/lib/push", () => ({ savePushToken: () => {} }));
+vi.mock("@/lib/push", () => ({ savePushToken: () => {}, requestPushPermission: () => {} }));
 vi.mock("sonner", () => ({ toast: { error: () => {} } }));
 
 import { SupabaseAuthBridge } from "@/components/SupabaseAuthBridge";

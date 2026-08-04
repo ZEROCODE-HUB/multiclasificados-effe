@@ -15,7 +15,7 @@ import {
   Wallet, Loader2, Percent, Save,
 } from "lucide-react";
 import { useCategories } from "@/hooks/useCategories";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSession } from "@/hooks/useSession";
 import { toast } from "@/hooks/use-toast";
@@ -297,8 +297,26 @@ const AdvertiserPublish = () => {
   // cantidad de avisos (aquí siempre 1: un aviso por publicación).
   const maxForExtra = (key: ExtraKey) => (key === "img500" ? MAX_EXTRA_IMAGES : quantity);
 
+  // Los adicionales se activan desde el paso 05 (abajo del todo), pero los
+  // campos que habilitan —el PDF y las imágenes extra— viven en el paso 02
+  // (arriba). Al aparecer, el documento crece POR ENCIMA del dedo y todo salta.
+  // Chrome lo compensaría solo con scroll anchoring, pero WebKit no lo
+  // implementa, así que se hace a mano: se anota el alto antes del cambio y,
+  // ya pintado el campo nuevo, se corrige el scroll por la diferencia. El botón
+  // queda justo donde estaba.
+  const scrollAnchor = useRef<{ height: number; y: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const anchor = scrollAnchor.current;
+    if (!anchor) return;
+    scrollAnchor.current = null;
+    const delta = document.documentElement.scrollHeight - anchor.height;
+    if (delta !== 0) window.scrollTo({ top: anchor.y + delta });
+  }, [extras]);
+
   const setExtraCount = (key: ExtraKey, count: number) => {
     const v = Math.max(0, Math.min(maxForExtra(key), count));
+    scrollAnchor.current = { height: document.documentElement.scrollHeight, y: window.scrollY };
     setExtras((e) => ({ ...e, [key]: v }));
   };
 
@@ -657,9 +675,14 @@ const AdvertiserPublish = () => {
             {/* Step 1: Basics */}
             <Card>
               <CardHeader className="border-b">
-                <div className="flex items-center gap-3">
-                  <span className="w-8 h-8 bg-primary text-primary-foreground text-xs font-extrabold flex items-center justify-center">01</span>
-                  <div>
+                {/* items-start + shrink-0 + min-w-0: sin ellos el cuadro del
+                    número se estrechaba cuando el título no cabía (deja de ser
+                    cuadrado) y quedaba a media altura entre título y
+                    descripción, así que los cinco pasos se veían de distinto
+                    tamaño y desalineados entre sí. */}
+                <div className="flex items-start gap-3">
+                  <span className="w-8 h-8 shrink-0 aspect-square bg-primary text-primary-foreground text-xs font-extrabold flex items-center justify-center">01</span>
+                  <div className="flex-1 min-w-0">
                     <CardTitle className="text-base flex items-center gap-2"><Tag size={16} className="text-secondary" /> Categoría y título</CardTitle>
                     <CardDescription className="text-xs">Clasifica tu aviso para que llegue al público correcto.</CardDescription>
                   </div>
@@ -692,9 +715,9 @@ const AdvertiserPublish = () => {
             {/* Step 2: Photos — 2 slots por aviso */}
             <Card>
               <CardHeader className="border-b">
-                <div className="flex items-center gap-3">
-                  <span className="w-8 h-8 bg-primary text-primary-foreground text-xs font-extrabold flex items-center justify-center">02</span>
-                  <div>
+                <div className="flex items-start gap-3">
+                  <span className="w-8 h-8 shrink-0 aspect-square bg-primary text-primary-foreground text-xs font-extrabold flex items-center justify-center">02</span>
+                  <div className="flex-1 min-w-0">
                     <CardTitle className="text-base flex items-center gap-2"><Camera size={16} className="text-secondary" /> Imágenes del aviso</CardTitle>
                     <CardDescription className="text-xs">La imagen principal va incluida. Con el adicional “Imagen adicional” puedes sumar hasta 3 imágenes más (4 en total).</CardDescription>
                   </div>
@@ -845,9 +868,9 @@ const AdvertiserPublish = () => {
             {/* Step 3: Description */}
             <Card>
               <CardHeader className="border-b">
-                <div className="flex items-center gap-3">
-                  <span className="w-8 h-8 bg-primary text-primary-foreground text-xs font-extrabold flex items-center justify-center">03</span>
-                  <div>
+                <div className="flex items-start gap-3">
+                  <span className="w-8 h-8 shrink-0 aspect-square bg-primary text-primary-foreground text-xs font-extrabold flex items-center justify-center">03</span>
+                  <div className="flex-1 min-w-0">
                     <CardTitle className="text-base flex items-center gap-2"><FileText size={16} className="text-secondary" /> Descripción</CardTitle>
                   </div>
                 </div>
@@ -867,9 +890,9 @@ const AdvertiserPublish = () => {
             {/* Step 4: Price & location */}
             <Card>
               <CardHeader className="border-b">
-                <div className="flex items-center gap-3">
-                  <span className="w-8 h-8 bg-primary text-primary-foreground text-xs font-extrabold flex items-center justify-center">04</span>
-                  <div>
+                <div className="flex items-start gap-3">
+                  <span className="w-8 h-8 shrink-0 aspect-square bg-primary text-primary-foreground text-xs font-extrabold flex items-center justify-center">04</span>
+                  <div className="flex-1 min-w-0">
                     <CardTitle className="text-base flex items-center gap-2"><MapPin size={16} className="text-secondary" /> Precio y ubicación</CardTitle>
                   </div>
                 </div>
@@ -921,9 +944,9 @@ const AdvertiserPublish = () => {
             {/* Step 5: Paquete (cantidad + duración + adicionales) */}
             <Card>
               <CardHeader className="border-b">
-                <div className="flex items-center gap-3">
-                  <span className="w-8 h-8 bg-primary text-primary-foreground text-xs font-extrabold flex items-center justify-center">05</span>
-                  <div>
+                <div className="flex items-start gap-3">
+                  <span className="w-8 h-8 shrink-0 aspect-square bg-primary text-primary-foreground text-xs font-extrabold flex items-center justify-center">05</span>
+                  <div className="flex-1 min-w-0">
                     <CardTitle className="text-base flex items-center gap-2"><Package size={16} className="text-secondary" /> Duración y adicionales</CardTitle>
                     <CardDescription className="text-xs">Elige cuántos días durará tu aviso y qué extras quieres. El precio se calcula al instante.</CardDescription>
                   </div>

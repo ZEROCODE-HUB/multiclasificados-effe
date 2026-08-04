@@ -55,7 +55,7 @@ import { ListingLocationMap } from "@/components/ListingLocationMap";
 import { fetchSellerInfo, fetchReviews, fetchAdvertiserStats, type AdvertiserStats } from "@/lib/reviews";
 import { applyToListing, fetchMyApplication, STATUS_LABEL, type ApplicationStatus } from "@/lib/applications";
 import { Checkbox } from "@/components/ui/checkbox";
-import { loadSold, markSold } from "@/lib/pricing";
+import { loadSold, markSold, unmarkSold } from "@/lib/pricing";
 import { reportListing, reportUser, LISTING_REPORT_REASONS, USER_REPORT_REASONS } from "@/lib/reports";
 import { shareListingWhatsApp, copyListingLink, shareListingSystem, canSystemShare } from "@/lib/share";
 import {
@@ -315,7 +315,15 @@ export default function ListingDetail() {
     }
   };
 
+  // Alterna en los dos sentidos (igual que la casilla del chat): marcarlo por
+  // error no puede dejar el aviso como vendido para siempre.
   const toggleSold = (who: "buyer" | "seller") => {
+    if (soldState?.[who]) {
+      unmarkSold(listing.id, who);
+      setSoldState(loadSold()[listing.id]);
+      toast({ title: "Se retiró la marca de venta concretada" });
+      return;
+    }
     markSold(listing.id, who, session?.name || (who === "buyer" ? "Comprador" : "Vendedor"));
     setSoldState(loadSold()[listing.id]);
     toast({ title: "Marcado como venta concretada", description: who === "buyer" ? "Comprador confirmado." : "Vendedor confirmado." });
@@ -505,19 +513,26 @@ export default function ListingDetail() {
                   decoding="async"
                   className="absolute inset-0 w-full h-full object-contain"
                 />
-                <div className="absolute top-4 left-4 flex flex-wrap gap-1.5 max-w-[70%]">
-                  {listingBadges(listing).map(({ key, label, icon: Icon, cls }) => (
-                    <span key={label} className={`inline-flex items-center gap-1 px-3 py-1.5 ${cls} text-[10px] font-bold uppercase tracking-wider shadow-md`}>
-                      <Icon size={11} /> {label}
-                      {key === "urgent" && urgent && !urgent.expired && (
-                        <span className="tabular-nums">· {urgent.short}</span>
-                      )}
-                    </span>
-                  ))}
+                {/* Una sola fila para TODAS las insignias. Antes las de la
+                    izquierda crecían con `max-w-[70%]` y "Verificado eFFe"
+                    estaba clavada aparte a la derecha: con 3 o más adicionales
+                    se encimaban. Ahora comparten contenedor y se reparten el
+                    ancho. */}
+                <div className="absolute top-4 inset-x-4 flex flex-wrap items-start justify-between gap-1.5">
+                  <div className="flex flex-wrap items-start gap-1.5 min-w-0">
+                    {listingBadges(listing).map(({ key, label, icon: Icon, cls }) => (
+                      <span key={label} className={`inline-flex items-center gap-1 px-3 py-1.5 ${cls} text-[10px] font-bold uppercase tracking-wider shadow-md`}>
+                        <Icon size={11} /> {label}
+                        {key === "urgent" && urgent && !urgent.expired && (
+                          <span className="tabular-nums">· {urgent.short}</span>
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                  <span className="inline-flex shrink-0 items-center gap-1 px-3 py-1.5 bg-white/95 backdrop-blur-sm text-primary text-[10px] font-bold uppercase tracking-wider shadow-sm">
+                    <ShieldCheck size={11} /> Verificado eFFe
+                  </span>
                 </div>
-                <span className="absolute top-4 right-4 inline-flex items-center gap-1 px-3 py-1.5 bg-white/95 backdrop-blur-sm text-primary text-[10px] font-bold uppercase tracking-wider shadow-sm">
-                  <ShieldCheck size={11} /> Verificado eFFe
-                </span>
                 <div className="absolute bottom-4 right-4 px-3 py-1 bg-black/60 text-white text-xs font-semibold rounded-full">
                   {activeImg + 1} / {gallery.length}
                 </div>
@@ -567,7 +582,9 @@ export default function ListingDetail() {
               <Button
                 variant="outline"
                 size="sm"
-                className="gap-2 rounded-full"
+                /* min-w fijo: "Guardado" es más largo que "Guardar" y al pulsar
+                   crecía lo justo para que la botonera saltara a dos líneas. */
+                className="gap-2 rounded-full min-w-[116px]"
                 onClick={() =>
                   requireAuthOrRun(async () => {
                     const res = await toggle(listing.id);
@@ -677,12 +694,12 @@ export default function ListingDetail() {
           <section>
             <h2 className="text-xs uppercase tracking-[0.2em] font-bold text-secondary mb-3">Ubicación</h2>
             <h3 className="text-2xl font-bold text-foreground mb-6">{listing.location}</h3>
-            {/* isolate + translateZ(0): fuerzan a este contenedor a ser su propia
-                capa de composición aislada, para que el recorte overflow-hidden
-                "atrape" al pin de precio y a los controles de zoom (overlays
-                absolutos sobre el iframe) y no se escapen al hacer scroll en
-                WebView/GPU (se veían pegados arriba en móvil y web). */}
-            <div className="relative h-72 md:h-96 bg-muted overflow-hidden border border-border isolate [transform:translateZ(0)]">
+            {/* Antes llevaba `isolate [transform:translateZ(0)]` para que el
+                recorte atrapara los overlays absolutos que iban sobre el iframe
+                de OSM. Con Leaflet el pin es un Marker dentro del mapa, así que
+                sobran; y forzar una capa de composición propia era, muy
+                probablemente, lo que impedía pintar los tiles aquí. */}
+            <div className="relative h-72 md:h-96 bg-muted overflow-hidden border border-border">
               {typeof listing.lat === "number" && typeof listing.lng === "number" ? (
                 <ListingLocationMap lat={listing.lat} lng={listing.lng} price={listing.price} currency={listing.currency} />
               ) : (

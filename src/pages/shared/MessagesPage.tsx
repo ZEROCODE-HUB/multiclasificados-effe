@@ -15,7 +15,7 @@ import { ArrowLeft, Send, Search, CheckCircle2, Check, CheckCheck, Flag, Loader2
 import { toast } from "@/hooks/use-toast";
 import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 import { reportUser, USER_REPORT_REASONS } from "@/lib/reports";
-import { loadSold, markSold } from "@/lib/pricing";
+import { loadSold, markSold, unmarkSold } from "@/lib/pricing";
 import {
   fetchConversations, fetchMessages, sendMessage, markDelivered, markRead,
   subscribeToMessages, subscribeToConversations, unsubscribe, getCurrentUserId,
@@ -195,8 +195,16 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
     }
   };
 
+  // La casilla alterna en los dos sentidos: marcar por error y no poder
+  // deshacerlo dejaba el aviso como vendido para siempre.
   const toggleSold = () => {
     if (!selected) return;
+    if (selfMarked) {
+      unmarkSold(selected.listing_id, role_side);
+      setSold(loadSold());
+      toast({ title: "Se retiró la marca de venta concretada" });
+      return;
+    }
     markSold(selected.listing_id, role_side, role_side === "buyer" ? "Comprador" : selected.counterpart_name);
     setSold(loadSold());
     toast({ title: "Venta marcada como concretada" });
@@ -209,10 +217,13 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
       <div className="-mx-3 sm:-mx-6 lg:mx-0 lg:flex lg:flex-col lg:flex-1 lg:min-h-0">
         {/* El título "Mensajes" ya lo pinta la cabecera de DashboardLayout. */}
 
-        {/* Móvil: contenedor fijo entre el navbar superior (64px) y el inferior (64px),
-            a pantalla completa de lado a lado. Desktop (lg): ocupa el alto libre que le
-            cede el layout (`fullHeight`) y scrollea por dentro, nunca la página. */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 lg:gap-4 fixed inset-x-0 top-16 md:top-[76px] bottom-16 z-30 lg:static lg:inset-auto lg:top-auto lg:bottom-auto lg:z-auto lg:flex-1 lg:min-h-0">
+        {/* Móvil: contenedor fijo entre el navbar superior y el inferior, a pantalla
+            completa de lado a lado. Las medidas salen de --nav-top/--nav-bottom
+            (index.css), que incluyen el safe-area del dispositivo: con los 64px
+            fijos de antes, en iPhone con notch el input quedaba tapado por la
+            barra inferior (MOB-01). Desktop (lg): ocupa el alto libre que le cede
+            el layout (`fullHeight`) y scrollea por dentro, nunca la página. */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 lg:gap-4 fixed inset-x-0 top-[var(--nav-top)] bottom-[var(--nav-bottom)] z-30 lg:static lg:inset-auto lg:top-auto lg:bottom-auto lg:z-auto lg:flex-1 lg:min-h-0">
           {/* Lista de conversaciones */}
           <Card className={`lg:col-span-1 overflow-hidden rounded-none border-x-0 lg:rounded-xl lg:border-x h-full lg:h-auto ${selected ? "hidden lg:flex lg:flex-col" : "flex flex-col"}`}>
             <CardHeader className="pb-3">

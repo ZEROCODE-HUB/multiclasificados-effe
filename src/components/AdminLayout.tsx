@@ -200,7 +200,7 @@ export function AdminLayout({ children, role, title, breadcrumb, can }: Props) {
           </div>
         </header>
 
-        <main className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 lg:px-8 py-5 lg:py-8 pb-24 lg:pb-8 bg-background">
+        <main className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 lg:px-8 py-5 lg:py-8 pb-[calc(var(--nav-bottom)+2rem)] lg:pb-8 bg-background">
           <div className="w-full space-y-5 md:space-y-6 animate-fade-in">
             <div className="hidden lg:block">
               <h1 className="text-2xl xl:text-3xl font-extrabold text-foreground tracking-tight">{title}</h1>
@@ -282,7 +282,7 @@ function AdminBottomNav({ role, can }: { role: AdminRole; can?: Can }) {
             >
               {active && <span className="absolute top-0 h-1 w-12 bg-secondary rounded-b-full" />}
               <item.icon size={active ? 22 : 20} strokeWidth={active ? 2.5 : 2} />
-              <span className="truncate max-w-[64px]">{item.title}</span>
+              <span className="max-w-full px-0.5 text-[9.5px] leading-tight text-center">{item.title}</span>
             </Link>
           );
         })}

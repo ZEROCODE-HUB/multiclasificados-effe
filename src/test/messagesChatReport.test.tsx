@@ -39,7 +39,7 @@ vi.mock("@/lib/reports", () => ({
   USER_REPORT_REASONS: ["Posible estafador", "Spam o mensajes no deseados"],
 }));
 
-vi.mock("@/lib/pricing", () => ({ loadSold: () => ({}), markSold: vi.fn() }));
+vi.mock("@/lib/pricing", () => ({ loadSold: () => ({}), markSold: vi.fn(), unmarkSold: vi.fn() }));
 
 // Captura las props con las que la página monta su layout: el arreglo del
 // scroll en escritorio depende de que pida `fullHeight`.

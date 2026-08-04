@@ -14,7 +14,11 @@ const ToastViewport = React.forwardRef<
   <ToastPrimitives.Viewport
     ref={ref}
     className={cn(
-      "fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]",
+      // En móvil el viewport se ancla arriba: sin el inset superior los avisos
+      // salían debajo del notch / Dynamic Island (MOB-04). Desde `sm` se ancla
+      // abajo a la derecha y hay que librar el nav inferior; en `lg` ese nav ya
+      // no existe (--nav-bottom queda en el inset solo).
+      "fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 pt-[calc(1rem+env(safe-area-inset-top))] sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col sm:pb-[calc(1rem+var(--nav-bottom))] lg:pb-4 md:max-w-[420px]",
       className,
     )}
     {...props}

@@ -36,7 +36,7 @@ vi.mock("@/lib/supabase", () => ({
 }));
 
 const savePushToken = vi.fn();
-vi.mock("@/lib/push", () => ({ savePushToken: () => savePushToken() }));
+vi.mock("@/lib/push", () => ({ savePushToken: () => savePushToken(), requestPushPermission: () => {} }));
 
 const setSessionData = vi.fn((s: unknown) => s);
 const clearSession = vi.fn();

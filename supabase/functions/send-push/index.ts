@@ -32,6 +32,29 @@ function bodyFor(type: string, payload: Record<string, unknown>): string {
   }
 }
 
+// Ruta interna a la que debe llevar el toque de la notificación. La app la lee
+// en `data.route` (push.ts) y navega ahí; sin ella se abría siempre el inicio y
+// el usuario tenía que buscar a mano el chat o el aviso del aviso recibido.
+// `roles` solo se consulta para los mensajes (ver más abajo): el chat vive en
+// dos rutas distintas según el panel del destinatario.
+function routeFor(record: Record<string, unknown>, roles: string[]): string | null {
+  const p = (record.payload ?? {}) as Record<string, unknown>;
+  const listingRoute = p.listing_id ? `/aviso/${p.listing_id}` : null;
+
+  switch (record.type) {
+    case "new_message":
+      return roles.includes("anunciante")
+        ? "/dashboard/anunciante/mensajes"
+        : "/dashboard/buscador/mensajes";
+    case "saved_search_match":
+      return "/dashboard/buscador/busquedas";
+    case "application_status":
+      return "/dashboard/buscador/postulaciones";
+    default:
+      return listingRoute;
+  }
+}
+
 // --- OAuth2: obtiene un access token a partir de la cuenta de servicio ---
 function b64url(data: Uint8Array | string): string {
   const bytes = typeof data === "string" ? new TextEncoder().encode(data) : data;
@@ -103,6 +126,12 @@ Deno.serve(async (req) => {
     const accessToken = await getAccessToken();
     const title = record.title || "eFFe Clasificados";
     const body = bodyFor(record.type, record.payload || {});
+    let roles: string[] = [];
+    if (record.type === "new_message") {
+      const { data } = await admin.from("user_roles").select("role").eq("user_id", record.user_id);
+      roles = (data ?? []).map((r: { role: string }) => r.role);
+    }
+    const route = routeFor(record, roles);
 
     let sent = 0;
     for (const { token } of tokens) {
@@ -118,7 +147,12 @@ Deno.serve(async (req) => {
             message: {
               token,
               notification: { title, body },
-              data: { type: String(record.type ?? ""), payload: JSON.stringify(record.payload ?? {}) },
+              data: {
+                type: String(record.type ?? ""),
+                payload: JSON.stringify(record.payload ?? {}),
+                // La app navega aquí al tocar la notificación (push.ts).
+                ...(route ? { route } : {}),
+              },
               android: { priority: "HIGH" },
             },
           }),

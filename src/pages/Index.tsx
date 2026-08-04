@@ -147,7 +147,7 @@ const Index = () => {
   );
 
   return (
-    <div className={`min-h-screen bg-background ${hasBottomNav ? "pb-24 lg:pb-0" : ""}`}>
+    <div className={`min-h-screen bg-background ${hasBottomNav ? "pb-[calc(var(--nav-bottom)+2rem)] lg:pb-0" : ""}`}>
       {/* Header — distinct white bar above hero */}
       <Navbar />
 

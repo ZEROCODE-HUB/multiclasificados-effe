@@ -80,7 +80,10 @@ export function MobileBottomNav() {
                   </span>
                 )}
               </div>
-              <span className="truncate max-w-[60px]">{item.title}</span>
+              {/* Sin truncado ni ancho fijo: en 375px (iPhone SE) "Favoritos"
+                  salía como "Favori...". Con el tipo un punto más chico entra
+                  entero en las cinco columnas. */}
+              <span className="max-w-full px-0.5 text-[9.5px] leading-tight text-center">{item.title}</span>
             </Link>
           );
         })}
