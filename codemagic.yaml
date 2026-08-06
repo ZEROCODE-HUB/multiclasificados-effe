@@ -134,6 +134,15 @@ workflows:
           # getCurrentPosition se queda colgado para siempre, sin éxito ni error:
           # el botón se quedaba en "Ubicando…" indefinidamente (MOB-08).
           /usr/libexec/PlistBuddy -c "Add :NSLocationWhenInUseUsageDescription string 'Usamos tu ubicación para mostrarte los avisos más cercanos a ti.'" "$PLIST" || true
+          # No hacen falta más: la app no graba audio ni vídeo (los selectores de
+          # archivo solo aceptan image/* y application/pdf) y no usa contactos,
+          # calendario, micrófono ni Face ID. Pedir permisos que no se usan es
+          # motivo de rechazo, así que no se añaden "por si acaso".
+          #
+          # Declaración de cifrado: la app solo usa HTTPS/TLS estándar, que está
+          # exento. Sin esta clave, App Store Connect PREGUNTA en cada subida y
+          # deja la build bloqueada hasta responder a mano.
+          /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" "$PLIST" || true
           # Firebase (push iOS): copia el plist si está versionado en el repo.
           if [ -f ios-config/GoogleService-Info.plist ]; then
             cp ios-config/GoogleService-Info.plist ios/App/App/GoogleService-Info.plist
@@ -148,6 +157,59 @@ workflows:
           else
             echo "AVISO: falta assets/icon.png (1024x1024); la app saldría con el ícono placeholder de Capacitor."
           fi
+      - name: Verificar la configuración nativa de iOS
+        # Los `PlistBuddy ... || true` de arriba NO fallan si algo sale mal: son
+        # `Add`, que da error cuando la clave ya existe (caso normal y correcto).
+        # El precio es que un fallo real pasaría desapercibido y saldría un IPA
+        # con un permiso ausente — que en iOS no da error, simplemente deja la
+        # función colgada (fue lo que pasó con la ubicación, MOB-08).
+        #
+        # Por eso se comprueba el RESULTADO en vez de confiar en los comandos: si
+        # falta algo, el build se cae aquí y no hay que leer ningún log para
+        # enterarse. Si el build termina, la configuración está puesta.
+        script: |
+          PLIST=ios/App/App/Info.plist
+          faltan=""
+          leer() { /usr/libexec/PlistBuddy -c "Print :$1" "$PLIST" 2>/dev/null; }
+
+          for clave in NSCameraUsageDescription NSPhotoLibraryUsageDescription NSLocationWhenInUseUsageDescription; do
+            valor=$(leer "$clave")
+            # Apple rechaza los textos vacíos o de relleno: han de explicar el uso.
+            if [ -z "$valor" ] || [ ${#valor} -lt 15 ]; then
+              faltan="$faltan\n  · $clave (valor: '${valor:-ninguno}')"
+            else
+              echo "OK  $clave — $valor"
+            fi
+          done
+
+          esquema=$(leer "CFBundleURLTypes:0:CFBundleURLSchemes:0")
+          if [ "$esquema" != "com.effe.multiclasificados" ]; then
+            faltan="$faltan\n  · CFBundleURLSchemes (sin esto el login con Google se queda colgado al volver)"
+          else
+            echo "OK  URL scheme del OAuth — $esquema"
+          fi
+
+          if [ -n "$faltan" ]; then
+            printf "\nERROR: la configuración nativa quedó incompleta:%b\n" "$faltan"
+            echo "El IPA compilaría igual, pero esas funciones fallarían en silencio en el iPhone."
+            exit 1
+          fi
+
+          # El push es la única pieza que puede faltar sin romper el build, porque
+          # depende de un archivo que se descarga de la consola de Firebase y hoy
+          # no está en el repo. Queda MUY visible al final del resumen.
+          if [ -f ios/App/App/GoogleService-Info.plist ]; then
+            echo "OK  Firebase (push) configurado."
+          else
+            echo ""
+            echo "############################################################"
+            echo "# ATENCIÓN: este IPA NO recibirá notificaciones push.       #"
+            echo "# Falta ios-config/GoogleService-Info.plist en el repo.     #"
+            echo "# Todo lo demás del build funciona con normalidad.          #"
+            echo "############################################################"
+          fi
+          echo ""
+          echo "Configuración nativa de iOS verificada."
       - name: Increment build number
         script: |
           cd ios/App
