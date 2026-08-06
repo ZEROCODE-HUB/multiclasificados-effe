@@ -19,9 +19,25 @@ async function loadShare() {
   return import("@/lib/share");
 }
 
+// `location.assign` (el salto al esquema whatsapp://) y la visibilidad de la
+// pestaña, ambos simulados: jsdom no navega ni cambia de app.
+const assignSpy = vi.fn();
+let visibility: DocumentVisibilityState = "visible";
+
 beforeEach(() => {
   isNative.mockReturnValue(false);
   browserOpen.mockClear();
+  assignSpy.mockClear();
+  visibility = "visible";
+  Object.defineProperty(window, "location", {
+    value: { ...window.location, assign: assignSpy },
+    writable: true,
+    configurable: true,
+  });
+  Object.defineProperty(document, "visibilityState", {
+    get: () => visibility,
+    configurable: true,
+  });
 });
 
 afterEach(() => {
@@ -51,16 +67,52 @@ describe("share — WhatsApp", () => {
     expect(browserOpen).not.toHaveBeenCalled();
   });
 
-  it("en el APK abre WhatsApp con el navegador nativo (no window.open)", async () => {
+  // MOB-07: en el APK, abrir wa.me dentro del navegador embebido perdía el texto
+  // por el camino y WhatsApp se abría vacío. Ahora va por el esquema nativo.
+  it("en el APK salta a WhatsApp por su esquema propio, con el mensaje", async () => {
     isNative.mockReturnValue(true);
     const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
     const { shareListingWhatsApp } = await loadShare();
 
     await shareListingWhatsApp("Auto usado", "42");
 
+    const expectedText = encodeURIComponent(`Auto usado\n${BASE}/aviso/42`);
+    expect(assignSpy).toHaveBeenCalledWith(`whatsapp://send?text=${expectedText}`);
+    // El navegador embebido ya no interviene en el camino normal.
+    expect(browserOpen).not.toHaveBeenCalled();
+    expect(openSpy).not.toHaveBeenCalled();
+  });
+
+  it("si WhatsApp no abre (la app sigue a la vista), cae a wa.me como respaldo", async () => {
+    vi.useFakeTimers();
+    isNative.mockReturnValue(true);
+    const { shareListingWhatsApp } = await loadShare();
+
+    await shareListingWhatsApp("Auto usado", "42");
+    expect(browserOpen).not.toHaveBeenCalled();
+
+    // Pasa el plazo sin que la app se haya ido a segundo plano.
+    await vi.advanceTimersByTimeAsync(1500);
+
     expect(browserOpen).toHaveBeenCalledTimes(1);
     expect(browserOpen.mock.calls[0][0].url).toContain("https://wa.me/?text=");
-    expect(openSpy).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it("si WhatsApp sí abrió (la app pasó a segundo plano), no abre nada más", async () => {
+    vi.useFakeTimers();
+    isNative.mockReturnValue(true);
+    const { shareListingWhatsApp } = await loadShare();
+
+    await shareListingWhatsApp("Auto usado", "42");
+
+    // El sistema pasó a WhatsApp: la nuestra deja de estar visible.
+    visibility = "hidden";
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(1500);
+
+    expect(browserOpen).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 });
 

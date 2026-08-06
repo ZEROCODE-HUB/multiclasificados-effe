@@ -53,7 +53,7 @@ export function ListingPreviewDialog({ listingId, reason, fallbackTitle, onClose
 
   return (
     <Dialog open={!!listingId} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-base pr-6">{aviso?.title ?? fallbackTitle ?? "Aviso denunciado"}</DialogTitle>
           <DialogDescription className="text-xs">

@@ -3,7 +3,32 @@ import * as React from "react";
 import type { ToastActionElement, ToastProps } from "@/components/ui/toast";
 
 const TOAST_LIMIT = 1;
-const TOAST_REMOVE_DELAY = 1000000;
+
+// Cuánto tarda en retirarse del DOM DESPUÉS de cerrarse: solo tiene que cubrir
+// la animación de salida. Venía en 1.000.000 ms (~16 min) tal cual de la
+// plantilla de shadcn/ui, pensada para toasts que no se cierran solos.
+const TOAST_REMOVE_DELAY = 1000;
+
+// Cuánto queda visible antes de cerrarse solo. Se puede pisar por llamada con
+// `toast({ duration })`.
+export const TOAST_DURATION = 5000;
+
+// Temporizadores de autocierre, uno por toast.
+//
+// Radix ya trae su propio `duration`, pero PAUSA la cuenta cuando la ventana
+// pierde el foco y solo la reanuda con el evento `focus`. Dentro del WebView de
+// iOS ese `focus` puede no llegar nunca, así que el toast se quedaba fijo en
+// pantalla hasta que el usuario lo cerraba a mano (MOB-01). Este temporizador es
+// nuestro y no depende del foco.
+const autoDismissTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+const clearAutoDismiss = (toastId: string) => {
+  const t = autoDismissTimers.get(toastId);
+  if (t) {
+    clearTimeout(t);
+    autoDismissTimers.delete(toastId);
+  }
+};
 
 type ToasterToast = ToastProps & {
   id: string;
@@ -142,7 +167,10 @@ function toast({ ...props }: Toast) {
       type: "UPDATE_TOAST",
       toast: { ...props, id },
     });
-  const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id });
+  const dismiss = () => {
+    clearAutoDismiss(id);
+    dispatch({ type: "DISMISS_TOAST", toastId: id });
+  };
 
   dispatch({
     type: "ADD_TOAST",
@@ -155,6 +183,13 @@ function toast({ ...props }: Toast) {
       },
     },
   });
+
+  // Autocierre propio (ver TOAST_DURATION). `duration: Infinity` lo desactiva
+  // para los avisos que deban quedarse hasta que el usuario los cierre.
+  const duration = props.duration ?? TOAST_DURATION;
+  if (Number.isFinite(duration)) {
+    autoDismissTimers.set(id, setTimeout(dismiss, duration));
+  }
 
   return {
     id: id,

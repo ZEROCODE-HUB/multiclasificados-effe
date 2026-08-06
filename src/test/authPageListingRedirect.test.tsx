@@ -31,6 +31,7 @@ const renderAt = (entries: string[], index = entries.length - 1) =>
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/buscar" element={<p>PANTALLA BUSCAR</p>} />
         <Route path="/favoritos" element={<p>PANTALLA ANTERIOR</p>} />
+        <Route path="/" element={<p>PANTALLA INICIO</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -83,12 +84,37 @@ describe("AuthPage — llegada desde un aviso", () => {
   });
 });
 
+// MOB-11: en la app no hay barra de navegador, y salir del login dependía del
+// gesto de deslizar desde el borde izquierdo — invisible, y ausente en Android.
+describe("AuthPage — botón de volver", () => {
+  it("está visible en la pantalla de acceso", () => {
+    renderAt(["/auth"]);
+    expect(screen.getByRole("button", { name: /volver/i })).toBeTruthy();
+  });
+
+  it("retrocede a la pantalla anterior", async () => {
+    conHistorial(1);
+    renderAt(["/favoritos", "/auth"], 1);
+    fireEvent.click(screen.getByRole("button", { name: /volver/i }));
+    await waitFor(() => expect(screen.getByText("PANTALLA ANTERIOR")).toBeTruthy());
+  });
+
+  it("si el login fue la primera pantalla, lleva al inicio en vez de salir de la app", async () => {
+    conHistorial(0);
+    renderAt(["/auth"]);
+    fireEvent.click(screen.getByRole("button", { name: /volver/i }));
+    await waitFor(() => expect(screen.getByText("PANTALLA INICIO")).toBeTruthy());
+  });
+});
+
 describe("AuthPage — campo de contraseña", () => {
-  it("el login limita la longitud, deja hueco al ojo y usa el autocompletado correcto", () => {
+  it("el login limita la longitud, deja hueco al ojo y frena el autorrelleno", () => {
     renderAt(["/auth"]);
     const pwd = screen.getByPlaceholderText("••••••••");
     expect(pwd).toHaveAttribute("maxlength", "72");
-    expect(pwd).toHaveAttribute("autocomplete", "current-password");
+    // "off" y no "current-password": el equipo puede ser compartido y no debe
+    // ofrecerse la contraseña guardada de otra persona (ver authPageCleanFields).
+    expect(pwd).toHaveAttribute("autocomplete", "off");
     expect(pwd.className).toContain("pr-10");
   });
 

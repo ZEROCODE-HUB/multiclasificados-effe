@@ -32,13 +32,20 @@ const seekerPrimary: Item[] = [
 
 /** Bottom nav for logged-in seeker/advertiser. Hidden on /auth and for guests/admins. */
 export function MobileBottomNav() {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const session = useSession();
   const unread = useUnreadMessages();
 
   if (!session) return null;
   if (session.role !== "anunciante" && session.role !== "buscador") return null;
   if (pathname.startsWith("/auth")) return null;
+  // Dentro de una conversación abierta la barra desaparece (MOB-02). Con el
+  // teclado abierto en iOS el WebView se encoge, pero estos 5 iconos seguían
+  // reservando sus 4rem justo encima del teclado: la barra de escribir quedaba
+  // flotando con un hueco debajo en vez de acoplarse al teclado como en
+  // WhatsApp. La conversación abierta se sabe por la URL (?c=<id>), que es lo
+  // que escribe MessagesPage al entrar en un chat.
+  if (/\/mensajes\/?$/.test(pathname) && new URLSearchParams(search).has("c")) return null;
 
   const primary = session.role === "anunciante" ? advertiserPrimary : seekerPrimary;
 

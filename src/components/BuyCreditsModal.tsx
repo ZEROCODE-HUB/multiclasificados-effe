@@ -240,7 +240,7 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent
-        className="sm:max-w-lg max-h-[90vh] overflow-y-auto"
+        className="sm:max-w-lg overflow-y-auto"
         style={kbPad ? { paddingBottom: kbPad + 24 } : undefined}
       >
         <DialogHeader>

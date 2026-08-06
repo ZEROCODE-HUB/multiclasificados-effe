@@ -130,7 +130,7 @@ export function VerifyIdentityDialog({
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onOpenChange(false); }}>
       <DialogContent
-        className="sm:max-w-md max-h-[90vh] overflow-y-auto"
+        className="sm:max-w-md overflow-y-auto"
         style={kbPad ? { paddingBottom: kbPad + 24 } : undefined}
       >
         <DialogHeader>

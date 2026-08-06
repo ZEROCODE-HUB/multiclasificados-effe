@@ -129,6 +129,11 @@ workflows:
           # Textos de permiso (obligatorios en iOS para el selector de fotos al publicar).
           /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'Usamos la cámara para que adjuntes fotos a tus avisos.'" "$PLIST" || true
           /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string 'Accedemos a tus fotos para adjuntar imágenes a tus avisos.'" "$PLIST" || true
+          # Ubicación: la usa "Usar mi ubicación" de los filtros (navigator.geolocation
+          # dentro del WebView). SIN esta clave iOS no puede ni pedir el permiso y
+          # getCurrentPosition se queda colgado para siempre, sin éxito ni error:
+          # el botón se quedaba en "Ubicando…" indefinidamente (MOB-08).
+          /usr/libexec/PlistBuddy -c "Add :NSLocationWhenInUseUsageDescription string 'Usamos tu ubicación para mostrarte los avisos más cercanos a ti.'" "$PLIST" || true
           # Firebase (push iOS): copia el plist si está versionado en el repo.
           if [ -f ios-config/GoogleService-Info.plist ]; then
             cp ios-config/GoogleService-Info.plist ios/App/App/GoogleService-Info.plist

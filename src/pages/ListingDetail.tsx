@@ -58,6 +58,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { loadSold, markSold, unmarkSold } from "@/lib/pricing";
 import { reportListing, reportUser, LISTING_REPORT_REASONS, USER_REPORT_REASONS } from "@/lib/reports";
 import { shareListingWhatsApp, copyListingLink, shareListingSystem, canSystemShare } from "@/lib/share";
+import { ACTION_ROW, ACTION_BTN, ACTION_BTN_SAVE } from "@/pages/listingActions.styles";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -578,13 +579,14 @@ export default function ListingDetail() {
                 </span>
               )}
             </div>
-            <div className="flex flex-wrap gap-2 pt-2">
+            {/* Tres columnas iguales en móvil para que la fila no salte a dos
+                líneas al marcar favorito (MOB-03). Las clases están en
+                listingActions.styles.ts, que es lo que mide la prueba de layout. */}
+            <div className={ACTION_ROW}>
               <Button
                 variant="outline"
                 size="sm"
-                /* min-w fijo: "Guardado" es más largo que "Guardar" y al pulsar
-                   crecía lo justo para que la botonera saltara a dos líneas. */
-                className="gap-2 rounded-full min-w-[116px]"
+                className={ACTION_BTN_SAVE}
                 onClick={() =>
                   requireAuthOrRun(async () => {
                     const res = await toggle(listing.id);
@@ -600,7 +602,7 @@ export default function ListingDetail() {
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-2 rounded-full"><Share2 size={14} /> Compartir</Button>
+                  <Button variant="outline" size="sm" className={ACTION_BTN}><Share2 size={14} /> Compartir</Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-52">
                   <DropdownMenuItem
@@ -632,7 +634,7 @@ export default function ListingDetail() {
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button variant="outline" size="sm" className="gap-2 rounded-full" onClick={() => requireAuthOrRun(() => setReportOpen(true))}>
+              <Button variant="outline" size="sm" className={ACTION_BTN} onClick={() => requireAuthOrRun(() => setReportOpen(true))}>
                 <Flag size={14} /> Reportar
               </Button>
             </div>
@@ -916,7 +918,7 @@ export default function ListingDetail() {
       {/* Message dialog */}
       <Dialog open={messageOpen} onOpenChange={setMessageOpen}>
         <DialogContent
-          className="sm:max-w-lg max-h-[90vh] overflow-y-auto"
+          className="sm:max-w-lg overflow-y-auto"
           onFocusCapture={scrollFocusedIntoView}
           style={kbPad ? { paddingBottom: kbPad + 24 } : undefined}
         >
@@ -989,7 +991,7 @@ export default function ListingDetail() {
       {/* Postulación dialog */}
       <Dialog open={applyOpen} onOpenChange={(o) => (o ? setApplyOpen(true) : closeApply())}>
         <DialogContent
-          className="sm:max-w-md max-h-[90vh] overflow-y-auto"
+          className="sm:max-w-md overflow-y-auto"
           onFocusCapture={scrollFocusedIntoView}
           style={kbPad ? { paddingBottom: kbPad + 24 } : undefined}
         >
@@ -1055,7 +1057,7 @@ export default function ListingDetail() {
       {/* Report dialog */}
       <Dialog open={reportOpen} onOpenChange={setReportOpen}>
         <DialogContent
-          className="sm:max-w-md max-h-[90vh] overflow-y-auto"
+          className="sm:max-w-md overflow-y-auto"
           onFocusCapture={scrollFocusedIntoView}
           style={kbPad ? { paddingBottom: kbPad + 24 } : undefined}
         >
@@ -1092,7 +1094,7 @@ export default function ListingDetail() {
       {/* Reportar usuario (REQ-10) */}
       <Dialog open={userReportOpen} onOpenChange={setUserReportOpen}>
         <DialogContent
-          className="sm:max-w-md max-h-[90vh] overflow-y-auto"
+          className="sm:max-w-md overflow-y-auto"
           onFocusCapture={scrollFocusedIntoView}
           style={kbPad ? { paddingBottom: kbPad + 24 } : undefined}
         >

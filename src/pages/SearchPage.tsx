@@ -101,9 +101,30 @@ export default function SearchPage() {
       return;
     }
     setGeoLoading(true);
+    // Corte propio además del `timeout` de la API (MOB-08): en el WebView de iOS
+    // getCurrentPosition puede no llamar NUNCA a ninguno de los dos callbacks
+    // —ni el de error— cuando el permiso no se puede conceder, y el botón se
+    // quedaba en "Ubicando…" para siempre. `resuelto` evita que el corte pise
+    // una respuesta que ya llegó.
+    let resuelto = false;
+    const corte = window.setTimeout(() => {
+      if (resuelto) return;
+      resuelto = true;
+      setGeoLoading(false);
+      toast({
+        title: "No se pudo obtener tu ubicación",
+        description: "Revisa que la app tenga permiso de ubicación y vuelve a intentarlo.",
+        variant: "destructive",
+      });
+    }, 10000);
+    const cerrar = () => { resuelto = true; window.clearTimeout(corte); setGeoLoading(false); };
     navigator.geolocation.getCurrentPosition(
-      (pos) => { setGeo({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setGeoLoading(false); },
-      () => { setGeoLoading(false); toast({ title: "No se pudo obtener tu ubicación", description: "Revisa los permisos de ubicación del navegador.", variant: "destructive" }); },
+      (pos) => { if (resuelto) return; cerrar(); setGeo({ lat: pos.coords.latitude, lng: pos.coords.longitude }); },
+      () => {
+        if (resuelto) return;
+        cerrar();
+        toast({ title: "No se pudo obtener tu ubicación", description: "Revisa los permisos de ubicación del navegador.", variant: "destructive" });
+      },
       { enableHighAccuracy: false, timeout: 8000 },
     );
   };

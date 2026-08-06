@@ -546,7 +546,7 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
       {/* Confirmación de borrado: exige escribir la palabra clave. */}
       <Dialog open={deleteOpen} onOpenChange={(o) => !deleting && setDeleteOpen(o)}>
         <DialogContent
-          className="sm:max-w-md max-h-[90vh] overflow-y-auto"
+          className="sm:max-w-md overflow-y-auto"
           style={kbPad ? { paddingBottom: kbPad + 24 } : undefined}
         >
           <DialogHeader>

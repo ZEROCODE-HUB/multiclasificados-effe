@@ -39,8 +39,17 @@ const DialogContent = React.forwardRef<
         // dvh y no vh: con Keyboard resize:'native' (capacitor.config.ts) el
         // WebView se encoge al abrir el teclado en iOS, y `vh` se queda con la
         // altura de pantalla completa — los campos de abajo del modal quedaban
-        // fuera de alcance. `dvh` sí sigue al viewport real (MOB-07).
-        "fixed left-[50%] top-[50%] z-50 grid w-[calc(100%-2rem)] max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
+        // fuera de alcance. `dvh` sí sigue al viewport real (MOB-07 iter.4).
+        //
+        // Centrado DENTRO del área segura, no del viewport (MOB-05 iter.5): un
+        // modal alto se centraba respecto a la pantalla física y su borde
+        // superior terminaba debajo del notch / Dynamic Island — la zona de
+        // arriba quedaba tapada y sin poder tocarse, así que no se podía ni
+        // cerrar. Restando los dos insets al alto máximo Y desplazando el centro
+        // media diferencia entre ellos, el borde superior cae siempre a
+        // `safe-top + 1rem` y el inferior a `safe-bottom + 1rem`. En Android y
+        // web los insets valen 0 y el resultado es idéntico al de siempre.
+        "fixed left-[50%] top-[calc(50%+(var(--safe-top)-var(--safe-bottom))/2)] z-50 grid w-[calc(100%-2rem)] max-w-lg max-h-[calc(100dvh-2rem-var(--safe-top)-var(--safe-bottom))] overflow-y-auto translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
         className,
       )}
       {...props}

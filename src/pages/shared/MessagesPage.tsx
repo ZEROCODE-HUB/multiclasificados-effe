@@ -221,9 +221,16 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
             completa de lado a lado. Las medidas salen de --nav-top/--nav-bottom
             (index.css), que incluyen el safe-area del dispositivo: con los 64px
             fijos de antes, en iPhone con notch el input quedaba tapado por la
-            barra inferior (MOB-01). Desktop (lg): ocupa el alto libre que le cede
-            el layout (`fullHeight`) y scrollea por dentro, nunca la página. */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 lg:gap-4 fixed inset-x-0 top-[var(--nav-top)] bottom-[var(--nav-bottom)] z-30 lg:static lg:inset-auto lg:top-auto lg:bottom-auto lg:z-auto lg:flex-1 lg:min-h-0">
+            barra inferior (MOB-01). Con una conversación abierta la barra
+            inferior se oculta (MobileBottomNav, MOB-02) y el chat baja hasta el
+            borde: así la barra de escribir se acopla directamente al teclado.
+            Desktop (lg): ocupa el alto libre que le cede el layout
+            (`fullHeight`) y scrollea por dentro, nunca la página. */}
+        <div
+          className={`grid grid-cols-1 lg:grid-cols-3 gap-0 lg:gap-4 fixed inset-x-0 top-[var(--nav-top)] z-30 lg:static lg:inset-auto lg:top-auto lg:bottom-auto lg:z-auto lg:flex-1 lg:min-h-0 ${
+            selectedId ? "bottom-[var(--safe-bottom)]" : "bottom-[var(--nav-bottom)]"
+          }`}
+        >
           {/* Lista de conversaciones */}
           <Card className={`lg:col-span-1 overflow-hidden rounded-none border-x-0 lg:rounded-xl lg:border-x h-full lg:h-auto ${selected ? "hidden lg:flex lg:flex-col" : "flex flex-col"}`}>
             <CardHeader className="pb-3">
@@ -384,7 +391,7 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
       {/* Reportar al otro participante del chat (REQ-10). */}
       <Dialog open={reportOpen} onOpenChange={setReportOpen}>
         <DialogContent
-          className="sm:max-w-md max-h-[90vh] overflow-y-auto"
+          className="sm:max-w-md overflow-y-auto"
           onFocusCapture={scrollFocusedIntoView}
           style={kbPad ? { paddingBottom: kbPad + 24 } : undefined}
         >

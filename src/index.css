@@ -19,6 +19,15 @@
   .pr-safe { padding-right: env(safe-area-inset-right); }
 }
 
+/* Insets del dispositivo como variables. Son EXACTAMENTE `env(safe-area-inset-*)`
+   (0 en Android y web); existen para poder simularlos en las pruebas de layout,
+   donde `env()` siempre vale 0 y no hay forma de forzarlo desde el navegador.
+   Usar estas variables, no `env()` directo, en todo cálculo de posición. */
+:root {
+  --safe-top: env(safe-area-inset-top);
+  --safe-bottom: env(safe-area-inset-bottom);
+}
+
 /* ALTO REAL de las dos barras fijas, inset incluido. Las utilidades de arriba
    solo dan el padding; lo que no había era un valor usable en `top`, `bottom` o
    `height`, así que el contenido que se posiciona CONTRA las barras usaba
@@ -29,15 +38,15 @@
      · header      → Navbar.tsx (h-16 md:h-[76px] + pt-safe)
      · nav inferior → MobileBottomNav.tsx (h-16 + pb-safe) */
 :root {
-  --nav-top: calc(4rem + env(safe-area-inset-top));
-  --nav-bottom: calc(4rem + env(safe-area-inset-bottom));
+  --nav-top: calc(4rem + var(--safe-top));
+  --nav-bottom: calc(4rem + var(--safe-bottom));
 }
 @media (min-width: 768px) {
-  :root { --nav-top: calc(4.75rem + env(safe-area-inset-top)); }
+  :root { --nav-top: calc(4.75rem + var(--safe-top)); }
 }
 @media (min-width: 1024px) {
   /* El nav inferior es `lg:hidden`: a partir de aquí solo queda el inset. */
-  :root { --nav-bottom: env(safe-area-inset-bottom); }
+  :root { --nav-bottom: var(--safe-bottom); }
 }
 
 @layer base {

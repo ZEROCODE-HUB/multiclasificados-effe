@@ -114,6 +114,12 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
           maxClusterRadius={45}
           showCoverageOnHover={false}
           spiderfyOnMaxZoom
+          // A partir de este zoom no se vuelve a agrupar (MOB-09). Antes, tras
+          // abrir un grupo de avisos cercanos, cualquier zoom recalculaba los
+          // clusters y los pines se volvían a juntar: la separación es un estado
+          // transitorio de la librería, no una posición fija. Con el mapa ya muy
+          // acercado el usuario quiere ver los avisos uno a uno.
+          disableClusteringAtZoom={17}
           chunkedLoading
         >
           {points.map((l) => (

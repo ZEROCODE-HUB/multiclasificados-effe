@@ -4,8 +4,14 @@ import { MemoryRouter } from "react-router-dom";
 
 // Dispositivo compartido: tras cerrar sesión / registrarse, los campos de acceso
 // deben quedar limpios para el siguiente usuario, y el navegador no debe poder
-// autocompletar la contraseña guardada de otra persona (campos en solo-lectura
-// hasta el primer foco).
+// autocompletar la contraseña guardada de otra persona.
+//
+// La protección es `autoComplete="off"` + el vaciado al montar. Antes había
+// además un `readOnly` que se levantaba al primer foco; se retiró porque en iOS
+// impedía que se abriera el teclado y dejaba el login inservible (MOB-10). Estos
+// tests fijan que NO vuelva: el teclado de iOS se decide en el mismo gesto que
+// da el foco, así que un campo readOnly en ese instante no lo despliega y
+// quitar el atributo en el re-render posterior ya no lo recupera.
 
 const signUpSpy = vi.fn().mockResolvedValue(true);
 vi.mock("@/lib/auth", () => ({
@@ -30,42 +36,40 @@ const renderPage = () =>
 beforeEach(() => vi.clearAllMocks());
 
 describe("AuthPage — campos limpios en dispositivo compartido", () => {
-  it("la contraseña de login arranca en solo-lectura (bloquea el autocompletado) y se libera al enfocar", () => {
-    renderPage();
-    const pwd = screen.getByPlaceholderText("••••••••") as HTMLInputElement;
-    expect(pwd).toHaveAttribute("readonly");
-    // Al enfocar cualquier campo del formulario, se libera para escribir.
-    fireEvent.focus(pwd);
-    expect(pwd).not.toHaveAttribute("readonly");
-  });
-
-  it("enfocar el correo libera TAMBIÉN la contraseña (el nuevo usuario puede escribir en todo)", () => {
+  it("los campos de login se pueden escribir desde el primer toque (nada de readOnly)", () => {
     renderPage();
     const emailInput = screen.getByPlaceholderText("tu@correo.com") as HTMLInputElement;
     const pwd = screen.getByPlaceholderText("••••••••") as HTMLInputElement;
-    expect(emailInput).toHaveAttribute("readonly");
-    expect(pwd).toHaveAttribute("readonly");
-    // Basta enfocar un campo: el formulario entero se desbloquea.
-    fireEvent.focus(emailInput);
+
+    // MOB-10: readOnly en el instante del toque = sin teclado en iOS.
     expect(emailInput).not.toHaveAttribute("readonly");
     expect(pwd).not.toHaveAttribute("readonly");
-    // Y ya se puede escribir con normalidad.
+
+    fireEvent.change(emailInput, { target: { value: "user@correo.com" } });
     fireEvent.change(pwd, { target: { value: "clave1234" } });
+    expect(emailInput.value).toBe("user@correo.com");
     expect(pwd.value).toBe("clave1234");
   });
 
-  it("los campos de contraseña de REGISTRO también arrancan en solo-lectura", () => {
+  it("los campos de REGISTRO tampoco son de solo-lectura", () => {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: /registrarse/i }));
-    expect(screen.getByPlaceholderText("Mínimo 8 caracteres")).toHaveAttribute("readonly");
-    expect(screen.getByPlaceholderText("Repite tu contraseña")).toHaveAttribute("readonly");
+    expect(screen.getByPlaceholderText("Mínimo 8 caracteres")).not.toHaveAttribute("readonly");
+    expect(screen.getByPlaceholderText("Repite tu contraseña")).not.toHaveAttribute("readonly");
   });
 
-  it("tras cerrar sesión y volver a /auth, los campos quedan limpios y bloqueados para el nuevo usuario", () => {
+  it("las credenciales de login piden al navegador no autocompletar", () => {
+    renderPage();
+    // Esta es la protección que queda para el equipo compartido, y a diferencia
+    // de readOnly no interfiere con el teclado.
+    expect(screen.getByPlaceholderText("tu@correo.com")).toHaveAttribute("autocomplete", "off");
+    expect(screen.getByPlaceholderText("••••••••")).toHaveAttribute("autocomplete", "off");
+  });
+
+  it("tras cerrar sesión y volver a /auth, los campos quedan limpios para el nuevo usuario", () => {
     // Usuario A escribe sus credenciales…
     renderPage();
     const pwdA = screen.getByPlaceholderText("••••••••") as HTMLInputElement;
-    fireEvent.focus(pwdA);
     fireEvent.change(screen.getByPlaceholderText("tu@correo.com"), { target: { value: "userA@correo.com" } });
     fireEvent.change(pwdA, { target: { value: "claveA123" } });
     expect(pwdA.value).toBe("claveA123");
@@ -75,13 +79,8 @@ describe("AuthPage — campos limpios en dispositivo compartido", () => {
 
     // Usuario B abre de nuevo la pantalla de acceso (nuevo montaje).
     renderPage();
-    const emailB = screen.getByPlaceholderText("tu@correo.com") as HTMLInputElement;
-    const pwdB = screen.getByPlaceholderText("••••••••") as HTMLInputElement;
-    expect(emailB.value).toBe("");
-    expect(pwdB.value).toBe("");
-    // Y siguen protegidos contra el autocompletado hasta que B los enfoque.
-    expect(emailB).toHaveAttribute("readonly");
-    expect(pwdB).toHaveAttribute("readonly");
+    expect((screen.getByPlaceholderText("tu@correo.com") as HTMLInputElement).value).toBe("");
+    expect((screen.getByPlaceholderText("••••••••") as HTMLInputElement).value).toBe("");
   });
 
   it("tras registrarse, el formulario de registro queda vacío para el siguiente", async () => {

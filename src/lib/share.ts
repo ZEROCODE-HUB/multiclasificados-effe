@@ -43,9 +43,35 @@ async function openExternal(url: string): Promise<void> {
 }
 
 // Comparte el aviso por WhatsApp (abre la app o WhatsApp Web con el mensaje).
+//
+// En nativo NO se pasa por `Browser.open` (MOB-07): abrir `wa.me` dentro del
+// navegador embebido hacía que iOS pidiera permiso para saltar a WhatsApp y,
+// tras aceptar, WhatsApp se abría VACÍO — el `?text=` se perdía en ese salto.
+// El esquema `whatsapp://` va directo a la app y sí conserva el mensaje; el
+// WebView de Capacitor lo delega al sistema. Si WhatsApp no está instalado el
+// esquema no abre nada, así que se deja un respaldo por tiempo: si al segundo la
+// pantalla sigue visible (no hubo cambio de app), se abre `wa.me` como antes.
 export async function shareListingWhatsApp(title: string, listingId: string): Promise<void> {
-  const url = listingUrl(listingId);
-  await openExternal(`https://wa.me/?text=${encodeURIComponent(shareMessage(title, url))}`);
+  const text = encodeURIComponent(shareMessage(title, listingUrl(listingId)));
+  const webUrl = `https://wa.me/?text=${text}`;
+
+  if (!Capacitor.isNativePlatform()) {
+    await openExternal(webUrl);
+    return;
+  }
+
+  let saltoAWhatsApp = false;
+  const marcarSalto = () => {
+    if (document.visibilityState === "hidden") saltoAWhatsApp = true;
+  };
+  document.addEventListener("visibilitychange", marcarSalto);
+  window.location.assign(`whatsapp://send?text=${text}`);
+
+  window.setTimeout(() => {
+    document.removeEventListener("visibilitychange", marcarSalto);
+    if (saltoAWhatsApp || document.visibilityState === "hidden") return;
+    void openExternal(webUrl);
+  }, 1200);
 }
 
 // Copia el enlace del aviso al portapapeles. Devuelve true si lo logró.

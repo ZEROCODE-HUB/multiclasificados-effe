@@ -29,7 +29,7 @@ const COUNTRY_CODES = [
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 import authBg from "@/assets/auth-bg.webp";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Eye, EyeOff, Search, ShieldCheck, Sparkles, Loader2 } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Search, ShieldCheck, Sparkles, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { BrandMark } from "@/components/BrandMark";
@@ -63,12 +63,17 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
   const [termsOpen, setTermsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Dispositivo compartido: al abrir la pantalla de acceso los campos deben estar
-  // vacíos para el nuevo usuario. Mantenemos las credenciales en solo-lectura
-  // hasta el primer foco para que el navegador (y el WebView del APK) no
-  // autocomplete la contraseña guardada de otra persona; al enfocar cualquier
-  // campo se desbloquean y se puede escribir con normalidad.
-  const [fieldsLocked, setFieldsLocked] = useState(true);
+  // Dispositivo compartido: al abrir la pantalla de acceso los campos se vacían
+  // (efecto de más abajo) y todos los inputs llevan autoComplete="off", que es
+  // la señal estándar contra el autorrelleno del gestor de contraseñas.
+  //
+  // Aquí había además un `readOnly` que se levantaba al primer foco. Se retiró
+  // (MOB-10): en iOS el teclado en pantalla se decide en el MISMO gesto táctil
+  // que da el foco, así que un campo readOnly en el instante del toque no abre
+  // teclado, y quitar el atributo después —en el re-render de React— no lo
+  // recupera. El campo quedaba enfocado pero sin teclado y no se podía iniciar
+  // sesión en absoluto. No volver a usar readOnly en campos que deban recibir
+  // foco táctil.
 
   // Captcha de seguridad: solo en el login de staff y SOLO en web. En la app
   // nativa (APK) el WebView corre sobre localhost y el widget de hCaptcha no
@@ -100,8 +105,6 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
     setEmail(""); setPassword("");
     setRegEmail(""); setRegPassword(""); setRegPasswordConfirm(""); setPhone("");
     setAcceptedTerms(false);
-    setFieldsLocked(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Explorar la plataforma como visitante: NO crea perfiles demo (esos usuarios
@@ -118,6 +121,18 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
     }
     // "Explorar avisos" lleva al buscador, no a la home (IT2-043).
     navigate("/buscar");
+  };
+
+  // Volver atrás (MOB-11). En la app no hay barra de navegador, y salir del
+  // login dependía del gesto de deslizar desde el borde izquierdo (IosSwipeBack)
+  // — invisible y ausente en Android. Si /auth fue la primera pantalla no hay a
+  // dónde retroceder, así que se va al inicio en vez de sacar de la app.
+  const goBack = () => {
+    if ((window.history.state?.idx ?? 0) > 0) {
+      navigate(-1);
+      return;
+    }
+    navigate("/");
   };
 
   // EFFE-031: recuperación de contraseña de autoservicio. Antes el enlace
@@ -293,7 +308,18 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
   const [showRegPasswords, setShowRegPasswords] = useState(false);
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row">
+    <div className="relative min-h-screen flex flex-col lg:flex-row">
+      {/* Volver: por debajo del notch (var(--safe-top)) y con 44px de alto para
+          que sea cómodo de tocar. */}
+      <button
+        type="button"
+        onClick={goBack}
+        aria-label="Volver"
+        className="absolute left-3 top-[calc(0.75rem+var(--safe-top))] z-20 inline-flex min-h-[44px] items-center gap-1.5 rounded-full bg-black/35 px-4 text-sm font-semibold text-primary-foreground backdrop-blur-sm transition-colors hover:bg-black/50 lg:bg-card/85 lg:text-foreground lg:hover:bg-card"
+      >
+        <ArrowLeft size={18} /> Volver
+      </button>
+
       {/* Left side - hidden on mobile */}
       <div className="hidden lg:flex lg:w-1/2 relative items-center justify-center p-12">
         <img src={authBg} alt="Marketplace profesional" className="absolute inset-0 w-full h-full object-cover" />
@@ -341,7 +367,6 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
       <div className="flex-1 flex items-start lg:items-center justify-center p-4 sm:p-6 lg:p-12 bg-background overflow-y-auto -mt-6 lg:mt-0 z-10">
         <div
           className="w-full max-w-md bg-card lg:bg-transparent rounded-2xl lg:rounded-none shadow-xl lg:shadow-none border lg:border-0 p-5 sm:p-6 lg:p-0"
-          onFocusCapture={() => setFieldsLocked(false)}
         >
           {/* Desktop logo - centered */}
           <Link to="/" className="hidden lg:flex justify-center mb-8">
@@ -382,7 +407,7 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
             <div className="space-y-4 animate-fade-in">
               <div>
                 <Label htmlFor="email">Correo electrónico</Label>
-                <Input ref={loginEmailRef} id="email" type="email" autoComplete="off" readOnly={fieldsLocked} placeholder="tu@correo.com" className="mt-1"
+                <Input ref={loginEmailRef} id="email" type="email" autoComplete="off" placeholder="tu@correo.com" className="mt-1"
                   value={email} onChange={(e) => setEmail(e.target.value)} />
               </div>
               <div>
@@ -390,9 +415,10 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
                 <div className="relative mt-1">
                   {/* `pr-10` para que el texto no pase por debajo del ojo, y
                       maxLength 72 = límite real de bcrypt, el mismo que ya usa el
-                      registro (IT3-015). El autorrelleno en equipos compartidos lo
-                      sigue frenando `readOnly` hasta el primer foco. */}
-                  <Input id="password" type={showPassword ? "text" : "password"} autoComplete="current-password" readOnly={fieldsLocked} placeholder="••••••••"
+                      registro (IT3-015). Contra el autorrelleno en equipos
+                      compartidos queda `autoComplete="off"`; el `readOnly` que
+                      había aquí impedía abrir el teclado en iOS (MOB-10). */}
+                  <Input id="password" type={showPassword ? "text" : "password"} autoComplete="off" placeholder="••••••••"
                     className="pr-10" maxLength={72}
                     value={password} onChange={(e) => setPassword(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") handleLogin(); }} />
@@ -455,7 +481,7 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
             <div className="space-y-4 animate-fade-in">
               <div>
                 <Label htmlFor="regEmail">Correo electrónico *</Label>
-                <Input id="regEmail" type="email" inputMode="email" autoComplete="off" readOnly={fieldsLocked} placeholder="tu@correo.com" className="mt-1"
+                <Input id="regEmail" type="email" inputMode="email" autoComplete="off" placeholder="tu@correo.com" className="mt-1"
                   value={regEmail} onChange={(e) => setRegEmail(e.target.value)} />
                 {/* Slot con alto reservado: el error no debe empujar el layout al aparecer. */}
                 <p className="text-xs text-destructive mt-1 min-h-[1rem]">
@@ -492,7 +518,7 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
               <div>
                 <Label htmlFor="regPassword">Contraseña *</Label>
                 <div className="relative mt-1">
-                  <Input id="regPassword" type={showRegPasswords ? "text" : "password"} autoComplete="new-password" readOnly={fieldsLocked} placeholder="Mínimo 8 caracteres"
+                  <Input id="regPassword" type={showRegPasswords ? "text" : "password"} autoComplete="new-password" placeholder="Mínimo 8 caracteres"
                     className="pr-10" minLength={8} maxLength={72}
                     value={regPassword} onChange={(e) => setRegPassword(e.target.value)} />
                   <button
@@ -507,7 +533,7 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
               </div>
               <div>
                 <Label htmlFor="regPasswordConfirm">Confirmar contraseña *</Label>
-                <Input id="regPasswordConfirm" type={showRegPasswords ? "text" : "password"} autoComplete="new-password" readOnly={fieldsLocked} placeholder="Repite tu contraseña" className="mt-1"
+                <Input id="regPasswordConfirm" type={showRegPasswords ? "text" : "password"} autoComplete="new-password" placeholder="Repite tu contraseña" className="mt-1"
                   minLength={8} maxLength={72}
                   value={regPasswordConfirm} onChange={(e) => setRegPasswordConfirm(e.target.value)} />
                 <p className="text-xs text-destructive mt-1 min-h-[1rem]">

@@ -486,7 +486,7 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
           </Card>
 
           <Dialog open={offerDialog.open} onOpenChange={(o) => setOfferDialog((s) => ({ ...s, open: o }))}>
-            <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-lg overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{offerDialog.editing ? "Editar promoción" : "Nueva promoción"}</DialogTitle>
                 <DialogDescription>El descuento se aplica automáticamente al costo al publicar en las categorías elegidas durante el período.</DialogDescription>
