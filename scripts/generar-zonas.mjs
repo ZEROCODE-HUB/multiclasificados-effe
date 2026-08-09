@@ -127,6 +127,46 @@ for (const z of zonas) {
   etiquetas.add(etiqueta);
 }
 
+// Controles antes de escribir nada. Los datos vienen de terceros y ya han
+// llegado sucios más de una vez (espacios de sobra, el mismo sitio escrito con y
+// sin tilde según la tabla, distritos sin coordenadas). Cualquiera de estos
+// fallos se vería como una zona rara en el selector o como un aviso colocado en
+// otra región, así que el generador se planta aquí en vez de escribir el archivo.
+const problemas = [];
+const PERU = { latMin: -18.4, latMax: -0.03, lngMin: -81.4, lngMax: -68.6 };
+
+for (const z of zonas) {
+  const donde = `${z.nombre} (${z.id})`;
+  for (const [campo, valor] of [["nombre", z.nombre], ["provincia", z.provincia], ["departamento", z.departamento]]) {
+    if (!valor) problemas.push(`${donde}: sin ${campo}`);
+    else if (valor !== valor.trim()) problemas.push(`${donde}: ${campo} con espacios de sobra ("${valor}")`);
+  }
+  if (!/^\d{6}$/.test(z.id)) problemas.push(`${donde}: el ubigeo no tiene 6 dígitos`);
+  if (!Number.isFinite(z.lat) || !Number.isFinite(z.lng)) problemas.push(`${donde}: coordenadas no numéricas`);
+  else if (z.lat < PERU.latMin || z.lat > PERU.latMax || z.lng < PERU.lngMin || z.lng > PERU.lngMax) {
+    problemas.push(`${donde}: coordenadas fuera del Perú (${z.lat}, ${z.lng})`);
+  }
+  // El separador del formato compacto no puede aparecer en los datos.
+  if ([z.nombre, z.provincia, z.departamento].some((v) => v.includes("|"))) {
+    problemas.push(`${donde}: contiene el carácter "|", que separa los campos`);
+  }
+}
+
+const ids = new Set();
+for (const z of zonas) {
+  if (ids.has(z.id)) problemas.push(`ubigeo repetido: ${z.id}`);
+  ids.add(z.id);
+}
+
+if (zonas.length < 1800) problemas.push(`solo ${zonas.length} zonas: el país tiene 1.874 distritos`);
+
+if (problemas.length) {
+  console.error(`\nEl catálogo no se escribió, hay ${problemas.length} problema(s):`);
+  for (const p of problemas.slice(0, 20)) console.error(`  · ${p}`);
+  if (problemas.length > 20) console.error(`  … y ${problemas.length - 20} más`);
+  process.exit(1);
+}
+
 zonas.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
 
 // id|nombre|provincia|departamento|lat|lng — y un "3" al final cuando la

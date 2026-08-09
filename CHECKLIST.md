@@ -125,6 +125,24 @@
 
 ---
 
+## 5-bis. 🗄️ Migraciones pendientes de aplicar en Supabase
+
+Estas están **en el repo pero NO en la base de datos**. El código funciona sin
+ellas (degrada limpio), así que nada avisa de que faltan: hay que aplicarlas a
+mano y tachar la casilla aquí.
+
+- [ ] **`0080_search_priority_by_zone.sql`** — los avisos Urgente/Destacado
+  encabezan la búsqueda solo dentro de 60 km de quien mira. Sin aplicarla, un
+  urgente de Piura le sigue saliendo primero a alguien de Trujillo.
+  ⚠️ *Implicación comercial:* el alcance de esos extras pasa a ser la zona del
+  anunciante. Avisar a quien los tenga contratados esperando alcance nacional.
+- [ ] **`0081_backfill_listing_coords.sql`** — pone coordenadas a los avisos
+  **activos** que no las tienen (los publicados antes del selector de zonas).
+  Sin ella, esos avisos no aparecen en ninguna búsqueda por cercanía.
+  Pesa ~355 KB: mejor por CLI (`supabase db push`) o psql que pegándola en el
+  editor web. Al terminar imprime cuántos avisos quedaron sin resolver — esos
+  hay que corregirlos a mano desde el panel.
+
 ## 6. 🎯 Qué queda (al 15-jul, tras la 2.ª sesión)
 
 Casi todo el trabajo **de código** está hecho (Fases 0, 1, 2, 3 y 5 del plan — ver detalle en cada sección). Lo pendiente es:
