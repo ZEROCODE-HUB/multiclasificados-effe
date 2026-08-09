@@ -31,10 +31,25 @@ describe("searchListings — búsqueda por cercanía (EFFE-033)", () => {
     });
   });
 
-  it("con lat/lng pero SIN radio: no activa la cercanía", async () => {
+  it("con lat/lng pero SIN radio: manda el punto igual, y no esconde nada", async () => {
     await searchListings({ lat: -12.05, lng: -77.04, sort: "views" });
+    // El punto viaja siempre que se conozca: el servidor lo necesita para que
+    // los avisos Urgente/Destacado encabecen solo si son de la zona de quien
+    // busca (migración 0080). Sin radio, no se filtra ni se fuerza el orden.
     expect(state.rpcArgs).toMatchObject({
-      p_lat: null, p_lng: null, p_radius_km: null, p_sort: "views",
+      p_lat: -12.05, p_lng: -77.04, p_radius_km: null, p_sort: "views",
+    });
+  });
+
+  it("sin ubicación no manda punto alguno", async () => {
+    await searchListings({ sort: "recent" });
+    expect(state.rpcArgs).toMatchObject({ p_lat: null, p_lng: null, p_radius_km: null });
+  });
+
+  it("el usuario puede pedir el orden por cercanía sin acotar el radio", async () => {
+    await searchListings({ lat: -12.05, lng: -77.04, sort: "distance" });
+    expect(state.rpcArgs).toMatchObject({
+      p_lat: -12.05, p_lng: -77.04, p_radius_km: null, p_sort: "distance",
     });
   });
 });

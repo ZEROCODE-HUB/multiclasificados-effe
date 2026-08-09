@@ -14,6 +14,8 @@ import { searchListings, fetchListingsByOwner, type SortKey } from "@/lib/listin
 import { useSession } from "@/hooks/useSession";
 import { useFavorites } from "@/hooks/useFavorites";
 import { createSavedSearch, DUPLICATE_SEARCH_MSG } from "@/lib/savedSearches";
+import { ZonaPicker } from "@/components/ZonaPicker";
+import { zonaPorId, zonaGuardada, guardarZona, zonaMasCercana, type Zona } from "@/lib/zonas";
 import { toast } from "@/hooks/use-toast";
 import {
   Search,
@@ -82,8 +84,13 @@ export default function SearchPage() {
   const [category, setCategory] = useState<string>(params.get("cat") || "");
   const [priceMin, setPriceMin] = useState<string>(params.get("min") || "");
   const [priceMax, setPriceMax] = useState<string>(params.get("max") || "");
-  // Filtro de ubicación (el RPC no lo soporta: se aplica sobre los resultados).
-  const [location, setLocation] = useState<string>(params.get("loc") || "");
+  // Zona del usuario: el distrito o la provincia que eligió a mano. Es el
+  // camino para quien no da permiso de ubicación —y en iOS, para todo el mundo
+  // hasta el build que declara el permiso (MOB-08)—, así que no es un plan B:
+  // ordena por cercanía igual que el GPS, solo que desde el centro de la zona.
+  // Sustituye al viejo filtro de texto libre, que comparaba "contiene" y hacía
+  // de "Lima, Miraflores" y "Miraflores" dos sitios distintos.
+  const [zona, setZona] = useState<Zona | null>(() => zonaPorId(params.get("z")) ?? zonaGuardada());
   // Moneda (EFFE-050): "" = todas. El RPC search_listings ya filtra por p_currency.
   const [currency, setCurrency] = useState<string>(params.get("cur") || "");
   const [sort, setSort] = useState<SortKey>((params.get("sort") as SortKey) || "recent");
@@ -92,8 +99,21 @@ export default function SearchPage() {
   // Cerca de mí (EFFE-033): centro por geolocalización del navegador + radio en km.
   // No se persiste en la URL: las coordenadas son específicas del dispositivo.
   const [geo, setGeo] = useState<{ lat: number; lng: number } | null>(null);
-  const [radiusKm, setRadiusKm] = useState<number>(10);
+  // Radio de búsqueda alrededor del punto. 0 = "en todo el Perú": se sigue
+  // sabiendo dónde está el usuario (para ordenar por cercanía y para la
+  // prioridad de los destacados) pero no se le esconde nada de fuera.
+  const [radiusKm, setRadiusKm] = useState<number>(0);
+  const soloCerca = radiusKm > 0;
   const [geoLoading, setGeoLoading] = useState(false);
+
+  // Desde dónde se mide la cercanía. El GPS manda sobre la zona elegida a mano
+  // porque es más preciso; sin ninguno de los dos, se busca en todo el país.
+  // Memoizado para que su identidad no cambie en cada render y no dispare la
+  // búsqueda de nuevo sin motivo.
+  const punto = useMemo(
+    () => geo ?? (zona ? { lat: zona.lat, lng: zona.lng } : null),
+    [geo, zona],
+  );
 
   const useMyLocation = () => {
     if (!("geolocation" in navigator)) {
@@ -119,7 +139,15 @@ export default function SearchPage() {
     }, 10000);
     const cerrar = () => { resuelto = true; window.clearTimeout(corte); setGeoLoading(false); };
     navigator.geolocation.getCurrentPosition(
-      (pos) => { if (resuelto) return; cerrar(); setGeo({ lat: pos.coords.latitude, lng: pos.coords.longitude }); },
+      (pos) => {
+        if (resuelto) return;
+        cerrar();
+        const { latitude: lat, longitude: lng } = pos.coords;
+        setGeo({ lat, lng });
+        // Se nombra la zona más cercana solo para poder decir dónde está: las
+        // coordenadas se muestran mejor como "Miraflores, Lima" que como cifras.
+        setZona(zonaMasCercana(lat, lng));
+      },
       () => {
         if (resuelto) return;
         cerrar();
@@ -137,9 +165,15 @@ export default function SearchPage() {
     setSort((params.get("sort") as SortKey) || "recent");
     setPriceMin(params.get("min") || "");
     setPriceMax(params.get("max") || "");
-    setLocation(params.get("loc") || "");
     setCurrency(params.get("cur") || "");
+    // La zona solo se toma de la URL si viene en ella: si no, se respeta la que
+    // ya tenga el usuario (recordada del dispositivo o puesta por el GPS).
+    const enUrl = zonaPorId(params.get("z"));
+    if (enUrl) setZona(enUrl);
   }, [params]);
+
+  // Recuerda la zona elegida para las próximas visitas.
+  useEffect(() => { guardarZona(zona); }, [zona]);
 
   // EFFE-051/092: refleja los filtros EN la URL (replace, para no ensuciar el
   // historial en cada tecla) de modo que copiar el enlace y el botón "atrás"
@@ -152,12 +186,12 @@ export default function SearchPage() {
     put("cat", category);
     put("min", priceMin);
     put("max", priceMax);
-    put("loc", location);
+    put("z", zona?.id ?? "");
     put("cur", currency);
     if (sort && sort !== "recent") next.set("sort", sort); else next.delete("sort");
     if (next.toString() !== params.toString()) setParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, category, priceMin, priceMax, location, currency, sort]);
+  }, [q, category, priceMin, priceMax, zona, currency, sort]);
 
   // Guarda la búsqueda actual (REQ-04).
   const saveCurrentSearch = async () => {
@@ -227,25 +261,24 @@ export default function SearchPage() {
             priceMin: priceMin ? Number(priceMin) : undefined,
             priceMax: priceMax ? Number(priceMax) : undefined,
             currency: currency || undefined,
-            lat: geo?.lat,
-            lng: geo?.lng,
-            radiusKm: geo ? radiusKm : undefined,
+            // El punto se manda SIEMPRE que se conozca, aunque no se filtre por
+            // radio: el servidor lo usa para que los avisos Urgente y Destacado
+            // encabecen la búsqueda solo si son de la zona de quien mira.
+            lat: punto?.lat,
+            lng: punto?.lng,
+            radiusKm: punto && soloCerca ? radiusKm : undefined,
             sort,
           });
       load.then((rows) => {
-        const loc = location.trim().toLowerCase();
-        const filtered = loc
-          ? rows.filter((r) => (r.location ?? "").toLowerCase().includes(loc))
-          : rows;
-        setListings(filtered);
-        setActive(filtered[0]?.id ?? null);
+        setListings(rows);
+        setActive(rows[0]?.id ?? null);
       });
     }, owner ? 0 : 250);
     return () => clearTimeout(t);
-  }, [q, category, priceMin, priceMax, location, currency, sort, owner, geo, radiusKm]);
+  }, [q, category, priceMin, priceMax, currency, sort, owner, punto, soloCerca, radiusKm]);
 
   // Al cambiar la búsqueda o los filtros, vuelve a la primera página.
-  useEffect(() => { setPage(1); }, [q, category, priceMin, priceMax, location, currency, sort, owner, geo, radiusKm]);
+  useEffect(() => { setPage(1); }, [q, category, priceMin, priceMax, currency, sort, owner, punto, soloCerca, radiusKm]);
 
   // Porción visible de resultados según la página actual (clamp por si la lista
   // encogió tras filtrar y la página quedó fuera de rango). 20 por página en
@@ -263,8 +296,10 @@ export default function SearchPage() {
   const applyFilters = () => setShowFilters(false);
 
   // Hay algún filtro activo (para mostrar "Limpiar filtros", IT2-026).
+  // La zona NO cuenta como filtro activo: es de dónde es el usuario, no algo que
+  // haya que limpiar. Sí cuenta restringir el radio, que sí esconde resultados.
   const hasActiveFilters = !!(
-    q || category || priceMin || priceMax || location || currency || geo || (sort && sort !== "recent")
+    q || category || priceMin || priceMax || currency || geo || soloCerca || (sort && sort !== "recent")
   );
   // Resetea TODOS los filtros de una vez. El efecto de URL (arriba) los limpia
   // también del enlace al vaciarse el estado.
@@ -273,10 +308,12 @@ export default function SearchPage() {
     setCategory("");
     setPriceMin("");
     setPriceMax("");
-    setLocation("");
     setCurrency("");
     setSort("recent");
     setGeo(null);
+    setRadiusKm(0);
+    // `zona` se conserva a propósito: limpiar los filtros no debería obligar al
+    // usuario a volver a decir de dónde es.
   };
 
   const switchView = (v: ViewMode) => {
@@ -413,34 +450,39 @@ export default function SearchPage() {
           </SelectContent>
         </Select>
       </div>
+      {/* Zona. Dos caminos igual de válidos: el GPS o elegirla de la lista. Sin
+          permiso de ubicación —o con el permiso denegado— el segundo deja el
+          buscador igual de útil, que es justo lo que antes no existía. */}
       <div>
-        <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Ubicación</label>
-        <Input placeholder="Ej: Lima, Miraflores" className="mt-1.5 rounded-none"
-          value={location} onChange={(e) => setLocation(e.target.value)} />
-      </div>
-      <div>
-        <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Cerca de mí</label>
-        {geo ? (
-          <div className="mt-1.5 space-y-2">
+        <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Tu zona</label>
+        <div className="mt-1.5 space-y-2">
+          <ZonaPicker value={zona} onChange={setZona} placeholder="Elige tu distrito o provincia" className="rounded-none" />
+          {!geo && (
+            <Button variant="outline" size="sm" className="w-full rounded-none gap-2" onClick={useMyLocation} disabled={geoLoading}>
+              <MapPin size={14} /> {geoLoading ? "Ubicando…" : "Usar mi ubicación exacta"}
+            </Button>
+          )}
+          {punto && (
             <Select value={String(radiusKm)} onValueChange={(v) => setRadiusKm(Number(v))}>
               <SelectTrigger className="rounded-none"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="5">5 km a la redonda</SelectItem>
-                <SelectItem value="10">10 km a la redonda</SelectItem>
-                <SelectItem value="25">25 km a la redonda</SelectItem>
-                <SelectItem value="50">50 km a la redonda</SelectItem>
+                <SelectItem value="0">En todo el Perú</SelectItem>
+                <SelectItem value="5">Solo a 5 km a la redonda</SelectItem>
+                <SelectItem value="10">Solo a 10 km a la redonda</SelectItem>
+                <SelectItem value="25">Solo a 25 km a la redonda</SelectItem>
+                <SelectItem value="50">Solo a 50 km a la redonda</SelectItem>
               </SelectContent>
             </Select>
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] text-muted-foreground">Ordenado por cercanía.</span>
-              <button onClick={() => setGeo(null)} className="text-xs font-semibold text-secondary hover:underline">Quitar</button>
+          )}
+          {geo && (
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] text-muted-foreground">Usando tu ubicación exacta.</span>
+              <button onClick={() => setGeo(null)} className="text-xs font-semibold text-secondary hover:underline shrink-0">
+                Quitar
+              </button>
             </div>
-          </div>
-        ) : (
-          <Button variant="outline" size="sm" className="mt-1.5 w-full rounded-none gap-2" onClick={useMyLocation} disabled={geoLoading}>
-            <MapPin size={14} /> {geoLoading ? "Ubicando…" : "Usar mi ubicación"}
-          </Button>
-        )}
+          )}
+        </div>
       </div>
       <div>
         <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Ordenar por</label>
@@ -448,6 +490,8 @@ export default function SearchPage() {
           <SelectTrigger className="mt-1.5 rounded-none"><SelectValue placeholder="Más recientes" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="recent">Más recientes</SelectItem>
+            {/* Solo tiene sentido si se sabe desde dónde medir. */}
+            {punto && <SelectItem value="distance">Más cercanos</SelectItem>}
             <SelectItem value="price_asc">Precio: menor a mayor</SelectItem>
             <SelectItem value="price_desc">Precio: mayor a menor</SelectItem>
             <SelectItem value="views">Más vistos</SelectItem>

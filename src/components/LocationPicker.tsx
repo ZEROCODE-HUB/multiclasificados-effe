@@ -3,13 +3,13 @@ import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from "react-lea
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { MapPin, Loader2, Crosshair } from "lucide-react";
-import { geocode, reverseGeocode } from "@/lib/geocode";
+import { Input } from "@/components/ui/input";
+import { MapPin, ChevronDown, Search, Loader2 } from "lucide-react";
+import { ZonaPicker } from "@/components/ZonaPicker";
+import { etiquetaZona, zonaPorTexto, distanciaKm, type Zona } from "@/lib/zonas";
+import { geocode } from "@/lib/geocode";
 import { toast } from "@/hooks/use-toast";
-
-const LIMA: [number, number] = [-12.0464, -77.0428];
 
 // Pin (marcador con la punta en el punto exacto).
 const pinIcon = L.divIcon({
@@ -19,7 +19,7 @@ const pinIcon = L.divIcon({
   iconAnchor: [15, 30],
 });
 
-// Recentra el mapa cuando cambian las coordenadas (tras geocodificar).
+// Recentra el mapa cuando cambian las coordenadas (al elegir otra zona).
 function Recenter({ pos }: { pos: [number, number] | null }) {
   const map = useMap();
   useEffect(() => {
@@ -44,6 +44,17 @@ interface LocationPickerProps {
   required?: boolean;
 }
 
+/**
+ * Ubicación del aviso: una zona del catálogo y, si el anunciante quiere, el
+ * punto exacto en el mapa.
+ *
+ * Antes era texto libre con un botón que lo geocodificaba. Eso dejaba dos
+ * agujeros: marcar el punto era opcional —y un aviso sin coordenadas NO aparece
+ * en las búsquedas por cercanía— y cada uno escribía la ubicación a su manera
+ * ("Lima, Miraflores", "Miraflores", "miraflores lima"), que para filtrar son
+ * tres sitios distintos. Con el catálogo, elegir la zona ya deja coordenadas
+ * puestas (el centro de la zona) y el texto siempre queda igual escrito.
+ */
 export function LocationPicker({
   location,
   onLocationChange,
@@ -52,100 +63,132 @@ export function LocationPicker({
   onCoordsChange,
   required,
 }: LocationPickerProps) {
-  const [loading, setLoading] = useState(false);
+  const zona = zonaPorTexto(location);
   const pos: [number, number] | null = lat != null && lng != null ? [lat, lng] : null;
+  // El mapa es un ajuste fino: se abre solo si el anunciante lo pide, o si el
+  // aviso ya traía un punto propio distinto del centro de su zona.
+  const [mapaAbierto, setMapaAbierto] = useState(false);
 
-  // Geocodifica el texto de ubicación y coloca el pin.
-  const locate = async () => {
-    if (!location.trim()) {
-      toast({ title: "Escribe una ubicación", description: "Ej: Lima, Miraflores." });
-      return;
-    }
-    setLoading(true);
-    const r = await geocode(location);
-    setLoading(false);
+  const elegirZona = (z: Zona) => {
+    onLocationChange(etiquetaZona(z));
+    // La zona manda: al cambiarla, el punto vuelve a su centro. Si el anunciante
+    // quiere precisión, ajusta el pin después.
+    onCoordsChange(z.lat, z.lng);
+  };
+
+  // Cuánto se alejó el pin del centro de la zona, para poder decirlo.
+  const desvioKm = zona && pos ? distanciaKm(zona.lat, zona.lng, pos[0], pos[1]) : 0;
+  const puntoPropio = desvioKm >= 0.3;
+
+  // Buscar una dirección y llevar el pin hasta ahí, para no tener que
+  // encontrarla a mano arrastrando el mapa. Se busca dentro de la zona elegida
+  // ("Av. Larco 1234" hay en muchos sitios) y con Nominatim, que es el
+  // geocodificador de OpenStreetMap: gratis y sin llaves.
+  const [direccion, setDireccion] = useState("");
+  const [buscando, setBuscando] = useState(false);
+
+  const buscarDireccion = async () => {
+    if (!direccion.trim() || !zona || buscando) return;
+    setBuscando(true);
+    const r = await geocode(`${direccion}, ${etiquetaZona(zona)}`);
+    setBuscando(false);
     if (!r) {
       toast({
-        title: "No se encontró la ubicación",
-        description: "Prueba con un distrito o ciudad, o marca el punto en el mapa.",
-        variant: "destructive",
+        title: "No encontramos esa dirección",
+        description: "Prueba con la calle y el número, o marca el punto tocando el mapa.",
       });
       return;
     }
     onCoordsChange(r.lat, r.lng);
   };
 
-  // Al mover/clic en el mapa: fija coords y actualiza el texto (reverse geocode).
-  const setFromMap = async (la: number, ln: number) => {
-    onCoordsChange(la, ln);
-    const name = await reverseGeocode(la, ln);
-    if (name) onLocationChange(name);
-  };
-
   return (
     <div className="space-y-2">
-      <Label>Ubicación {required && "*"}</Label>
-      <div className="flex gap-2">
-        <Input
-          value={location}
-          onChange={(e) => onLocationChange(e.target.value)}
-          onBlur={() => { if (location.trim() && !pos) locate(); }}
-          placeholder="Ej: Lima, Miraflores"
-          className="flex-1"
-        />
-        <Button type="button" variant="outline" onClick={locate} disabled={loading} className="gap-1.5 shrink-0">
-          {loading ? <Loader2 size={14} className="animate-spin" /> : <Crosshair size={14} />}
-          Ubicar
-        </Button>
-      </div>
+      <Label htmlFor="zona-aviso">Ubicación {required && "*"}</Label>
+      <ZonaPicker
+        id="zona-aviso"
+        value={zona}
+        onChange={elegirZona}
+        placeholder="Elige el distrito o la provincia"
+      />
 
-      <div className="h-56 w-full overflow-hidden rounded border border-border relative">
-        <MapContainer center={pos ?? LIMA} zoom={pos ? 14 : 11} scrollWheelZoom className="w-full h-full z-0">
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-          <Recenter pos={pos} />
-          <ClickCapture onPick={setFromMap} />
-          {pos && (
-            <Marker
-              position={pos}
-              icon={pinIcon}
-              draggable
-              eventHandlers={{
-                dragend: (e) => {
-                  const m = (e.target as L.Marker).getLatLng();
-                  setFromMap(m.lat, m.lng);
-                },
-              }}
-            />
-          )}
-        </MapContainer>
-        {!pos && (
-          <div className="absolute inset-0 z-[500] flex items-end justify-center pb-3 pointer-events-none">
-            <span className="bg-card/90 backdrop-blur border border-border rounded-full px-3 py-1 text-[11px] text-muted-foreground shadow">
-              Pulsa "Ubicar" o toca el mapa para marcar el punto
-            </span>
-          </div>
-        )}
-      </div>
-
-      {pos ? (
-        <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-          <MapPin size={11} className="text-secondary" /> Ubicación fijada · {lat!.toFixed(5)}, {lng!.toFixed(5)}
-          <button
-            type="button"
-            onClick={() => onCoordsChange(null, null)}
-            className="ml-1 text-secondary hover:underline"
-          >
-            quitar
-          </button>
-        </p>
-      ) : (
-        <p className="text-[11px] text-muted-foreground">
-          Marca la ubicación para que tu aviso aparezca en el mapa del buscador.
-        </p>
+      {zona && !mapaAbierto && (
+        <button
+          type="button"
+          onClick={() => setMapaAbierto(true)}
+          className="flex items-center gap-1 text-[11px] font-semibold text-secondary hover:underline"
+        >
+          <ChevronDown size={12} />
+          {puntoPropio ? "Ver el punto exacto en el mapa" : "Marcar el punto exacto (opcional)"}
+        </button>
       )}
+
+      {zona && mapaAbierto && (
+        <>
+          <div className="flex gap-2">
+            <Input
+              value={direccion}
+              onChange={(e) => setDireccion(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); buscarDireccion(); } }}
+              placeholder="Calle y número (opcional)"
+              className="flex-1"
+              aria-label="Buscar una dirección dentro de la zona"
+            />
+            <Button type="button" variant="outline" onClick={buscarDireccion} disabled={buscando || !direccion.trim()} className="gap-1.5 shrink-0">
+              {buscando ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+              Buscar
+            </Button>
+          </div>
+          <div className="h-56 w-full overflow-hidden rounded border border-border relative">
+            <MapContainer center={pos ?? [zona.lat, zona.lng]} zoom={14} scrollWheelZoom className="w-full h-full z-0">
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              <Recenter pos={pos} />
+              <ClickCapture onPick={(la, ln) => onCoordsChange(la, ln)} />
+              {pos && (
+                <Marker
+                  position={pos}
+                  icon={pinIcon}
+                  draggable
+                  eventHandlers={{
+                    dragend: (e) => {
+                      const m = (e.target as L.Marker).getLatLng();
+                      onCoordsChange(m.lat, m.lng);
+                    },
+                  }}
+                />
+              )}
+            </MapContainer>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] text-muted-foreground">
+              Toca el mapa o arrastra el pin para afinar. Cambiar de zona lo devuelve a su centro.
+            </p>
+            {puntoPropio && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-auto shrink-0 px-2 py-1 text-[11px]"
+                onClick={() => onCoordsChange(zona.lat, zona.lng)}
+              >
+                Centrar
+              </Button>
+            )}
+          </div>
+        </>
+      )}
+
+      <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+        <MapPin size={11} className="text-secondary shrink-0" />
+        {zona
+          ? puntoPropio
+            ? `Punto exacto marcado, a ${desvioKm.toFixed(1)} km del centro de ${zona.nombre}.`
+            : "Tu aviso aparecerá en las búsquedas por cercanía de esta zona."
+          : "Elige tu zona para que tu aviso salga a quien busca cerca de ti."}
+      </p>
     </div>
   );
 }

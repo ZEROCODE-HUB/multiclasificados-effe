@@ -90,8 +90,9 @@ describe("SearchPage — «Usar mi ubicación»", () => {
     renderPage();
 
     fireEvent.click(botonUbicacion());
-    // Con la posición ya obtenida, el botón deja paso al filtro por cercanía.
-    await waitFor(() => expect(screen.getByText(/ordenado por cercanía/i)).toBeTruthy());
+    // Con la posición ya obtenida, el botón deja paso al aviso de que se está
+    // usando la ubicación exacta.
+    await waitFor(() => expect(screen.getByText(/usando tu ubicación exacta/i)).toBeTruthy());
 
     // Y el corte de seguridad no salta después a destiempo.
     await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
