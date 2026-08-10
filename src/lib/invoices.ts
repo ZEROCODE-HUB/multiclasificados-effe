@@ -15,6 +15,10 @@ export interface DbInvoice {
   amount: number;
   detail: string;
   listingTitle: string;  // título del aviso (join) o el detalle como respaldo
+  /** Estado ante SUNAT. 'omitido' = comprobante interno, no declarado. */
+  sunatStatus: string;
+  /** Estado del correo al comprador. */
+  emailStatus: string;
 }
 
 interface Row {
@@ -28,6 +32,8 @@ interface Row {
   amount: number | string;
   detail: string | null;
   issued_at: string;
+  sunat_status: string | null;
+  email_status: string | null;
   orders?: { order_listings?: Array<{ listings?: { title?: string | null } | null }> } | null;
 }
 
@@ -35,7 +41,7 @@ export async function loadInvoicesFromDb(): Promise<DbInvoice[]> {
   const { data, error } = await supabase
     .from("invoices")
     .select(
-      "number, type, email, advertiser_name, doc_type, doc_number, factiliza_data, amount, detail, issued_at, orders(order_listings(listings(title)))"
+      "number, type, email, advertiser_name, doc_type, doc_number, factiliza_data, amount, detail, issued_at, sunat_status, email_status, orders(order_listings(listings(title)))"
     )
     .order("issued_at", { ascending: false });
 
@@ -55,6 +61,8 @@ export async function loadInvoicesFromDb(): Promise<DbInvoice[]> {
       amount: Number(r.amount) || 0,
       detail: r.detail ?? "",
       listingTitle: title || r.detail || "—",
+      sunatStatus: r.sunat_status ?? "omitido",
+      emailStatus: r.email_status ?? "pendiente",
     };
   });
 }

@@ -10,6 +10,34 @@ import { loadInvoicesFromDb, type DbInvoice } from "@/lib/invoices";
 import { personKindLabel } from "@/lib/identity";
 import { InvoiceDetailDialog } from "@/components/InvoiceDetailDialog";
 
+/**
+ * Estado real del comprobante. Antes aquí había un "Enviada" fijo, de adorno:
+ * no existía ningún envío detrás y el usuario veía "enviada" una boleta que
+ * nadie le había mandado.
+ */
+function EstadoComprobante({ inv }: { inv: DbInvoice }) {
+  // Lo que le importa a quien compra es si ya lo tiene en el correo.
+  if (inv.emailStatus === "enviado") {
+    return (
+      <Badge variant="outline" className="text-success border-success/30 bg-success/10">
+        Enviada a tu correo
+      </Badge>
+    );
+  }
+  if (inv.emailStatus === "error" || inv.emailStatus === "omitido") {
+    return (
+      <Badge variant="outline" className="text-muted-foreground">
+        Disponible aquí
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="text-muted-foreground">
+      Enviando…
+    </Badge>
+  );
+}
+
 const AdvertiserInvoices = () => {
   const [invoices, setInvoices] = useState<DbInvoice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,6 +100,7 @@ const AdvertiserInvoices = () => {
                       <TableHead>DNI/RUC</TableHead>
                       <TableHead>Usuario/Empresa</TableHead>
                       <TableHead className="text-right">Monto</TableHead>
+                      <TableHead>Estado</TableHead>
                       <TableHead className="text-right">Ver</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -86,6 +115,7 @@ const AdvertiserInvoices = () => {
                         <TableCell className="font-mono text-xs text-muted-foreground">{inv.docNumber || "—"}</TableCell>
                         <TableCell className="text-xs">{personKindLabel(inv.docType, inv.docNumber)}</TableCell>
                         <TableCell className="text-right font-bold">{formatSoles(inv.amount)}</TableCell>
+                        <TableCell><EstadoComprobante inv={inv} /></TableCell>
                         <TableCell className="text-right">
                           <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setDetail(inv)}>
                             <Eye size={14} /> Ver
@@ -129,7 +159,7 @@ const AdvertiserInvoices = () => {
                     </div>
 
                     <div className="mt-3 pt-3 border-t flex items-center justify-between gap-2">
-                      <Badge variant="outline" className="text-success border-success/30 bg-success/10">Enviada</Badge>
+                      <EstadoComprobante inv={inv} />
                       <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setDetail(inv)}>
                         <Eye size={14} /> Ver
                       </Button>
