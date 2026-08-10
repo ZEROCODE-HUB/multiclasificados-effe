@@ -2,13 +2,14 @@ import { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { MAP_TILES_URL, MAP_TILES_ATTRIBUTION } from "@/lib/mapTiles";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MapPin, ChevronDown, Search, Loader2 } from "lucide-react";
 import { ZonaPicker } from "@/components/ZonaPicker";
 import { etiquetaZona, zonaPorTexto, distanciaKm, type Zona } from "@/lib/zonas";
-import { geocode } from "@/lib/geocode";
+import { buscarDirecciones, type GeoResult } from "@/lib/geocode";
 import { toast } from "@/hooks/use-toast";
 
 // Pin (marcador con la punta en el punto exacto).
@@ -81,25 +82,37 @@ export function LocationPicker({
   const puntoPropio = desvioKm >= 0.3;
 
   // Buscar una dirección y llevar el pin hasta ahí, para no tener que
-  // encontrarla a mano arrastrando el mapa. Se busca dentro de la zona elegida
-  // ("Av. Larco 1234" hay en muchos sitios) y con Nominatim, que es el
-  // geocodificador de OpenStreetMap: gratis y sin llaves.
+  // encontrarla a mano arrastrando el mapa. La búsqueda se sesga hacia la zona
+  // elegida, porque "Av. Larco" existe en media docena de ciudades.
   const [direccion, setDireccion] = useState("");
   const [buscando, setBuscando] = useState(false);
+  const [resultados, setResultados] = useState<GeoResult[]>([]);
 
   const buscarDireccion = async () => {
     if (!direccion.trim() || !zona || buscando) return;
     setBuscando(true);
-    const r = await geocode(`${direccion}, ${etiquetaZona(zona)}`);
+    setResultados([]);
+    const rs = await buscarDirecciones(`${direccion}, ${etiquetaZona(zona)}`, {
+      lat: zona.lat,
+      lng: zona.lng,
+    });
     setBuscando(false);
-    if (!r) {
+    if (rs.length === 0) {
       toast({
         title: "No encontramos esa dirección",
         description: "Prueba con la calle y el número, o marca el punto tocando el mapa.",
       });
       return;
     }
+    // Con un único resultado no se hace elegir; con varios, decide el anunciante
+    // en vez de que la app adivine.
+    if (rs.length === 1) onCoordsChange(rs[0].lat, rs[0].lng);
+    else setResultados(rs);
+  };
+
+  const usarResultado = (r: GeoResult) => {
     onCoordsChange(r.lat, r.lng);
+    setResultados([]);
   };
 
   return (
@@ -139,11 +152,30 @@ export function LocationPicker({
               Buscar
             </Button>
           </div>
+
+          {resultados.length > 0 && (
+            <ul className="divide-y rounded border border-border overflow-hidden">
+              {resultados.map((r, i) => (
+                <li key={`${r.lat},${r.lng},${i}`}>
+                  <button
+                    type="button"
+                    onClick={() => usarResultado(r)}
+                    className="w-full px-3 py-2 text-left hover:bg-muted transition-colors"
+                  >
+                    <span className="block text-sm font-medium">{r.label}</span>
+                    {r.detalle && r.detalle !== r.label && (
+                      <span className="block text-[11px] text-muted-foreground">{r.detalle}</span>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
           <div className="h-56 w-full overflow-hidden rounded border border-border relative">
             <MapContainer center={pos ?? [zona.lat, zona.lng]} zoom={14} scrollWheelZoom className="w-full h-full z-0">
               <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution={MAP_TILES_ATTRIBUTION}
+                url={MAP_TILES_URL}
               />
               <Recenter pos={pos} />
               <ClickCapture onPick={(la, ln) => onCoordsChange(la, ln)} />

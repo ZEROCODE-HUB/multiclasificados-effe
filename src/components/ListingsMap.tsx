@@ -5,6 +5,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap, AttributionControl } fr
 import MarkerClusterGroup from "react-leaflet-cluster";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { MAP_TILES_URL, MAP_TILES_ATTRIBUTION } from "@/lib/mapTiles";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import { Link } from "react-router-dom";
 import { MapPin } from "lucide-react";
@@ -104,8 +105,8 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
         {/* Solo el crédito de OSM (la licencia lo exige), sin el prefijo de Leaflet. */}
         <AttributionControl prefix={false} />
         <TileLayer
-          attribution='&copy; OpenStreetMap'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution={MAP_TILES_ATTRIBUTION}
+          url={MAP_TILES_URL}
         />
         <MapController points={points} active={active} />
 

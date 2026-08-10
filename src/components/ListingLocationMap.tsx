@@ -3,6 +3,7 @@ import { Plus, Minus, LocateFixed } from "lucide-react";
 import { MapContainer, TileLayer, Marker, AttributionControl, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { MAP_TILES_URL, MAP_TILES_ATTRIBUTION } from "@/lib/mapTiles";
 
 interface ListingLocationMapProps {
   lat: number;
@@ -79,8 +80,8 @@ export function ListingLocationMap({ lat, lng, price, currency }: ListingLocatio
       >
         <AttributionControl prefix={false} />
         <TileLayer
-          attribution="&copy; OpenStreetMap"
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution={MAP_TILES_ATTRIBUTION}
+          url={MAP_TILES_URL}
         />
         <Marker position={center} icon={priceIcon(formatPrice(price, currency))} />
         <MapBridge onReady={setMap} />
