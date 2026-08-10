@@ -6,9 +6,14 @@
 // pobre fuera de las vías principales y un límite de una consulta por segundo
 // que no da para una app en producción.
 //
-// Se usa la Places API NUEVA (places.googleapis.com) y no la de geocodificación
-// clásica: esta última no admite llamadas desde el navegador —no envía cabeceras
-// CORS— y está pensada para servidores. La nueva sí.
+// Se usa la Geocoding API (maps.googleapis.com/maps/api/geocode). Comprobado
+// contra la llave real del proyecto:
+//   · Geocoding      → responde con `Access-Control-Allow-Origin: *`, o sea que
+//                      el navegador la deja llamar. Es la que se usa.
+//   · Places (New)   → habría que habilitarla aparte en la consola de Google.
+//   · Places legacy  → NO manda cabeceras CORS: el navegador la bloquea.
+// Además Geocoding es la más barata de las tres y devuelve la coordenada del
+// portal exacto cuando la dirección lleva número.
 
 // El `?.` no es adorno: fuera de Vite (el harness de las pruebas de layout
 // compila con esbuild a secas) `import.meta.env` no existe, y sin la guarda el
@@ -38,53 +43,57 @@ export interface SesgoZona {
 
 const NOMINATIM = "https://nominatim.openstreetmap.org";
 
-// ─── Google Places (New) ──────────────────────────────────────────────────────
+// ─── Google Geocoding ─────────────────────────────────────────────────────────
 
-interface PlaceApiRespuesta {
-  places?: Array<{
-    displayName?: { text?: string };
-    formattedAddress?: string;
-    location?: { latitude?: number; longitude?: number };
+interface GeocodingRespuesta {
+  status?: string;
+  error_message?: string;
+  results?: Array<{
+    formatted_address?: string;
+    geometry?: { location?: { lat?: number; lng?: number } };
   }>;
 }
 
+/** Grados de latitud/longitud que abarcan aproximadamente un radio en metros. */
+const gradosPara = (metros: number) => metros / 111_320;
+
 async function buscarEnGoogle(consulta: string, sesgo?: SesgoZona): Promise<GeoResult[]> {
-  // El FieldMask es obligatorio y además define cuánto cuesta la consulta: se
-  // piden SOLO los tres campos que se usan.
-  const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Goog-Api-Key": GOOGLE_KEY,
-      "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.location",
-    },
-    body: JSON.stringify({
-      textQuery: consulta,
-      languageCode: "es",
-      regionCode: "PE",
-      maxResultCount: 5,
-      ...(sesgo
-        ? {
-            locationBias: {
-              circle: {
-                center: { latitude: sesgo.lat, longitude: sesgo.lng },
-                radius: sesgo.radioM ?? 15000,
-              },
-            },
-          }
-        : {}),
-    }),
-  });
-  if (!res.ok) throw new Error(`Places respondió ${res.status}`);
-  const data = (await res.json()) as PlaceApiRespuesta;
-  return (data.places ?? [])
-    .map((p) => ({
-      lat: Number(p.location?.latitude),
-      lng: Number(p.location?.longitude),
-      label: p.displayName?.text || p.formattedAddress || consulta,
-      detalle: p.formattedAddress,
+  const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
+  url.searchParams.set("address", consulta);
+  url.searchParams.set("key", GOOGLE_KEY);
+  url.searchParams.set("language", "es");
+  // `region` inclina los resultados hacia Perú y `components` los limita a él:
+  // sin esto, "Av. Larco" puede devolver una calle de otro país.
+  url.searchParams.set("region", "pe");
+  url.searchParams.set("components", "country:PE");
+  if (sesgo) {
+    // El recuadro es solo una preferencia, no un filtro: si la dirección está
+    // fuera igual se devuelve, pero se prioriza lo de la zona elegida.
+    const d = gradosPara(sesgo.radioM ?? 15000);
+    url.searchParams.set(
+      "bounds",
+      `${sesgo.lat - d},${sesgo.lng - d}|${sesgo.lat + d},${sesgo.lng + d}`,
+    );
+  }
+
+  const res = await fetch(url.toString());
+  if (!res.ok) throw new Error(`Geocoding respondió ${res.status}`);
+  const data = (await res.json()) as GeocodingRespuesta;
+
+  // ZERO_RESULTS es una respuesta normal (no hay esa dirección); el resto de
+  // estados sí son fallos de configuración y conviene verlos en la consola.
+  if (data.status && data.status !== "OK" && data.status !== "ZERO_RESULTS") {
+    throw new Error(`Geocoding: ${data.status}${data.error_message ? ` — ${data.error_message}` : ""}`);
+  }
+
+  return (data.results ?? [])
+    .map((r) => ({
+      lat: Number(r.geometry?.location?.lat),
+      lng: Number(r.geometry?.location?.lng),
+      label: r.formatted_address || consulta,
     }))
-    .filter((r) => Number.isFinite(r.lat) && Number.isFinite(r.lng));
+    .filter((r) => Number.isFinite(r.lat) && Number.isFinite(r.lng))
+    .slice(0, 5);
 }
 
 // ─── Nominatim (respaldo sin llave) ───────────────────────────────────────────
