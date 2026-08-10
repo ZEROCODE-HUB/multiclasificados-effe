@@ -15,6 +15,9 @@ export interface ListingForm {
   description: string;
   price: string;
   currency: string;
+  /** Código de departamento del INEI. Es por lo que se filtra en el buscador. */
+  department: string;
+  /** Referencia libre (distrito, urbanización). No se usa para filtrar. */
   location: string;
   condition: string;
 }
@@ -66,6 +69,7 @@ const listingRow = (input: DraftInput) => ({
   price: Number(input.form.price) || 0,
   currency: input.form.currency === "USD" ? "USD" : "PEN",
   condition: CONDITION_MAP[input.form.condition] ?? "na",
+  department: input.form.department || null,
   location: input.form.location,
   lat: input.lat ?? null,
   lng: input.lng ?? null,

@@ -131,6 +131,7 @@ const AdvertiserPublish = () => {
     description: "",
     price: "",
     currency: "PEN",
+    department: "",
     location: "",
     condition: "nuevo",
   });
@@ -406,7 +407,7 @@ const AdvertiserPublish = () => {
   };
 
   // El salario es opcional en Empleo (EFFE-087); en el resto el precio es obligatorio.
-  const canPublish = form.category && form.title && form.description && (isEmpleo || form.price) && form.location && !!mainPhoto;
+  const canPublish = form.category && form.title && form.description && (isEmpleo || form.price) && form.department && !!mainPhoto;
 
   // Publica según el saldo disponible. La identidad ya viene precargada del
   // perfil (verificada al comprar saldo): no se abre ningún modal de verificación.
@@ -451,7 +452,7 @@ const AdvertiserPublish = () => {
   // formulario completo que puede volver a enviar: `canPublish` pasa a false y
   // republicar el mismo aviso se vuelve imposible por construcción.
   const resetPublishForm = () => {
-    setForm({ category: "", title: "", description: "", price: "", currency: "PEN", location: "", condition: "nuevo" });
+    setForm({ category: "", title: "", description: "", price: "", currency: "PEN", department: "", location: "", condition: "nuevo" });
     setMainPhoto(null);
     setExtraPhotos(Array(MAX_EXTRA_IMAGES).fill(null));
     setCoords(null);
@@ -915,6 +916,8 @@ const AdvertiserPublish = () => {
                   </div>
                 </div>
                 <LocationPicker
+                  department={form.department || null}
+                  onDepartmentChange={(v) => updateForm("department", v ?? "")}
                   location={form.location}
                   onLocationChange={(v) => updateForm("location", v)}
                   lat={coords?.lat ?? null}

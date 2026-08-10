@@ -69,7 +69,7 @@ import AdvertiserPublish from "@/pages/advertiser/AdvertiserPublish";
 
 const seedDraft = () => {
   localStorage.setItem("effe:publish-draft", JSON.stringify({
-    form: { category: "inmuebles", title: "Casa bonita", description: "Descripción larga del aviso", price: "100", currency: "PEN", location: "Lima", condition: "nuevo" },
+    form: { category: "inmuebles", title: "Casa bonita", description: "Descripción larga del aviso", price: "100", currency: "PEN", department: "15", location: "Lima", condition: "nuevo" },
     duration: 7, quantity: 1, extras: {},
   }));
 };

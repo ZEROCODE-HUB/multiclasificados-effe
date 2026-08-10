@@ -6,11 +6,15 @@ import { MAP_TILES_URL, MAP_TILES_ATTRIBUTION } from "@/lib/mapTiles";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MapPin, ChevronDown, Search, Loader2 } from "lucide-react";
-import { ZonaPicker } from "@/components/ZonaPicker";
-import { etiquetaZona, zonaPorTexto, distanciaKm, type Zona } from "@/lib/zonas";
+import { DEPARTAMENTOS, departamentoPorId, nombreDepartamento } from "@/lib/departamentos";
 import { buscarDirecciones, type GeoResult } from "@/lib/geocode";
 import { toast } from "@/hooks/use-toast";
+
+// Centro aproximado del país, para abrir el mapa en algún sitio razonable
+// mientras no haya punto marcado.
+const PERU: [number, number] = [-9.19, -75.015];
 
 // Pin (marcador con la punta en el punto exacto).
 const pinIcon = L.divIcon({
@@ -20,7 +24,7 @@ const pinIcon = L.divIcon({
   iconAnchor: [15, 30],
 });
 
-// Recentra el mapa cuando cambian las coordenadas (al elegir otra zona).
+/** Recentra el mapa cuando cambian las coordenadas. */
 function Recenter({ pos }: { pos: [number, number] | null }) {
   const map = useMap();
   useEffect(() => {
@@ -30,13 +34,17 @@ function Recenter({ pos }: { pos: [number, number] | null }) {
   return null;
 }
 
-// Captura clics en el mapa para colocar el pin.
+/** Captura clics en el mapa para colocar el pin. */
 function ClickCapture({ onPick }: { onPick: (lat: number, lng: number) => void }) {
   useMapEvents({ click: (e) => onPick(e.latlng.lat, e.latlng.lng) });
   return null;
 }
 
 interface LocationPickerProps {
+  /** Código de departamento del INEI. Es el dato por el que se filtra. */
+  department: string | null;
+  onDepartmentChange: (id: string | null) => void;
+  /** Referencia libre: distrito, urbanización, lo que el anunciante quiera. */
   location: string;
   onLocationChange: (v: string) => void;
   lat: number | null;
@@ -46,17 +54,18 @@ interface LocationPickerProps {
 }
 
 /**
- * Ubicación del aviso: una zona del catálogo y, si el anunciante quiere, el
- * punto exacto en el mapa.
+ * Ubicación del aviso: el departamento (obligatorio, es por lo que se filtra),
+ * una referencia libre y, si el anunciante quiere, el punto exacto en el mapa.
  *
- * Antes era texto libre con un botón que lo geocodificaba. Eso dejaba dos
- * agujeros: marcar el punto era opcional —y un aviso sin coordenadas NO aparece
- * en las búsquedas por cercanía— y cada uno escribía la ubicación a su manera
- * ("Lima, Miraflores", "Miraflores", "miraflores lima"), que para filtrar son
- * tres sitios distintos. Con el catálogo, elegir la zona ya deja coordenadas
- * puestas (el centro de la zona) y el texto siempre queda igual escrito.
+ * El departamento se eligió como único criterio de filtrado por ser exacto y
+ * predecible: quien busca en Lima ve Lima, sin radios que entender ni avisos
+ * escondidos por estar unos kilómetros más lejos. Las coordenadas se conservan
+ * porque alimentan el mapa de la ficha y el del buscador, pero ya no deciden
+ * qué avisos se ven.
  */
 export function LocationPicker({
+  department,
+  onDepartmentChange,
   location,
   onLocationChange,
   lat,
@@ -64,38 +73,24 @@ export function LocationPicker({
   onCoordsChange,
   required,
 }: LocationPickerProps) {
-  const zona = zonaPorTexto(location);
   const pos: [number, number] | null = lat != null && lng != null ? [lat, lng] : null;
-  // El mapa es un ajuste fino: se abre solo si el anunciante lo pide, o si el
-  // aviso ya traía un punto propio distinto del centro de su zona.
+  // El mapa es un ajuste fino: se abre solo si el anunciante lo pide.
   const [mapaAbierto, setMapaAbierto] = useState(false);
 
-  const elegirZona = (z: Zona) => {
-    onLocationChange(etiquetaZona(z));
-    // La zona manda: al cambiarla, el punto vuelve a su centro. Si el anunciante
-    // quiere precisión, ajusta el pin después.
-    onCoordsChange(z.lat, z.lng);
-  };
-
-  // Cuánto se alejó el pin del centro de la zona, para poder decirlo.
-  const desvioKm = zona && pos ? distanciaKm(zona.lat, zona.lng, pos[0], pos[1]) : 0;
-  const puntoPropio = desvioKm >= 0.3;
-
   // Buscar una dirección y llevar el pin hasta ahí, para no tener que
-  // encontrarla a mano arrastrando el mapa. La búsqueda se sesga hacia la zona
-  // elegida, porque "Av. Larco" existe en media docena de ciudades.
+  // encontrarla a mano arrastrando el mapa.
   const [direccion, setDireccion] = useState("");
   const [buscando, setBuscando] = useState(false);
   const [resultados, setResultados] = useState<GeoResult[]>([]);
 
   const buscarDireccion = async () => {
-    if (!direccion.trim() || !zona || buscando) return;
+    if (!direccion.trim() || buscando) return;
     setBuscando(true);
     setResultados([]);
-    const rs = await buscarDirecciones(`${direccion}, ${etiquetaZona(zona)}`, {
-      lat: zona.lat,
-      lng: zona.lng,
-    });
+    // Se añade el departamento a la consulta: "Av. Larco" existe en varias
+    // ciudades del país.
+    const contexto = department ? `, ${nombreDepartamento(department)}` : "";
+    const rs = await buscarDirecciones(`${direccion}${contexto}`);
     setBuscando(false);
     if (rs.length === 0) {
       toast({
@@ -104,8 +99,6 @@ export function LocationPicker({
       });
       return;
     }
-    // Con un único resultado no se hace elegir; con varios, decide el anunciante
-    // en vez de que la app adivine.
     if (rs.length === 1) onCoordsChange(rs[0].lat, rs[0].lng);
     else setResultados(rs);
   };
@@ -116,27 +109,52 @@ export function LocationPicker({
   };
 
   return (
-    <div className="space-y-2">
-      <Label htmlFor="zona-aviso">Ubicación {required && "*"}</Label>
-      <ZonaPicker
-        id="zona-aviso"
-        value={zona}
-        onChange={elegirZona}
-        placeholder="Elige el distrito o la provincia"
-      />
+    <div className="space-y-3">
+      <div>
+        <Label htmlFor="departamento-aviso">Departamento {required && "*"}</Label>
+        <Select
+          value={department ?? ""}
+          onValueChange={(v) => onDepartmentChange(v || null)}
+        >
+          <SelectTrigger id="departamento-aviso" className="mt-1.5">
+            <SelectValue placeholder="Elige tu departamento" />
+          </SelectTrigger>
+          <SelectContent>
+            {DEPARTAMENTOS.map((d) => (
+              <SelectItem key={d.id} value={d.id}>{d.nombre}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="mt-1.5 text-[11px] text-muted-foreground">
+          Es lo que usan los compradores para filtrar. Lima y Callao van juntos.
+        </p>
+      </div>
 
-      {zona && !mapaAbierto && (
+      <div>
+        <Label htmlFor="referencia-aviso">
+          Distrito o referencia <span className="text-muted-foreground font-normal">(opcional)</span>
+        </Label>
+        <Input
+          id="referencia-aviso"
+          value={location}
+          onChange={(e) => onLocationChange(e.target.value)}
+          placeholder="Ej: Miraflores, frente al parque"
+          className="mt-1.5"
+        />
+      </div>
+
+      {!mapaAbierto && (
         <button
           type="button"
           onClick={() => setMapaAbierto(true)}
           className="flex items-center gap-1 text-[11px] font-semibold text-secondary hover:underline"
         >
           <ChevronDown size={12} />
-          {puntoPropio ? "Ver el punto exacto en el mapa" : "Marcar el punto exacto (opcional)"}
+          {pos ? "Ver el punto en el mapa" : "Marcar el punto en el mapa (opcional)"}
         </button>
       )}
 
-      {zona && mapaAbierto && (
+      {mapaAbierto && (
         <>
           <div className="flex gap-2">
             <Input
@@ -145,7 +163,7 @@ export function LocationPicker({
               onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); buscarDireccion(); } }}
               placeholder="Calle y número (opcional)"
               className="flex-1"
-              aria-label="Buscar una dirección dentro de la zona"
+              aria-label="Buscar una dirección"
             />
             <Button type="button" variant="outline" onClick={buscarDireccion} disabled={buscando || !direccion.trim()} className="gap-1.5 shrink-0">
               {buscando ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
@@ -171,12 +189,10 @@ export function LocationPicker({
               ))}
             </ul>
           )}
+
           <div className="h-56 w-full overflow-hidden rounded border border-border relative">
-            <MapContainer center={pos ?? [zona.lat, zona.lng]} zoom={14} scrollWheelZoom className="w-full h-full z-0">
-              <TileLayer
-                attribution={MAP_TILES_ATTRIBUTION}
-                url={MAP_TILES_URL}
-              />
+            <MapContainer center={pos ?? PERU} zoom={pos ? 14 : 5} scrollWheelZoom className="w-full h-full z-0">
+              <TileLayer attribution={MAP_TILES_ATTRIBUTION} url={MAP_TILES_URL} />
               <Recenter pos={pos} />
               <ClickCapture onPick={(la, ln) => onCoordsChange(la, ln)} />
               {pos && (
@@ -196,17 +212,17 @@ export function LocationPicker({
           </div>
           <div className="flex items-center justify-between gap-2">
             <p className="text-[11px] text-muted-foreground">
-              Toca el mapa o arrastra el pin para afinar. Cambiar de zona lo devuelve a su centro.
+              Toca el mapa o arrastra el pin. El punto solo sirve para mostrar tu aviso en el mapa.
             </p>
-            {puntoPropio && (
+            {pos && (
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 className="h-auto shrink-0 px-2 py-1 text-[11px]"
-                onClick={() => onCoordsChange(zona.lat, zona.lng)}
+                onClick={() => onCoordsChange(null, null)}
               >
-                Centrar
+                Quitar
               </Button>
             )}
           </div>
@@ -215,11 +231,9 @@ export function LocationPicker({
 
       <p className="text-[11px] text-muted-foreground flex items-center gap-1">
         <MapPin size={11} className="text-secondary shrink-0" />
-        {zona
-          ? puntoPropio
-            ? `Punto exacto marcado, a ${desvioKm.toFixed(1)} km del centro de ${zona.nombre}.`
-            : "Tu aviso aparecerá en las búsquedas por cercanía de esta zona."
-          : "Elige tu zona para que tu aviso salga a quien busca cerca de ti."}
+        {department
+          ? `Tu aviso aparecerá en las búsquedas de ${nombreDepartamento(department)}.`
+          : "Elige tu departamento para que tu aviso aparezca en las búsquedas."}
       </p>
     </div>
   );

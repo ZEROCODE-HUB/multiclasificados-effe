@@ -9,8 +9,11 @@ import { LibroReclamaciones } from "@/components/LibroReclamaciones";
 import { TermsDialog } from "@/components/LegalTerms";
 import { type Listing } from "@/data/mockData";
 import { fetchListings, searchListings } from "@/lib/listings";
-import { ZonaPicker } from "@/components/ZonaPicker";
-import { zonaGuardada, guardarZona, type Zona } from "@/lib/zonas";
+import {
+  DEPARTAMENTOS, departamentoPorId, departamentoGuardado, guardarDepartamento,
+  type Departamento,
+} from "@/lib/departamentos";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fetchPlatformStats, type PlatformStats } from "@/lib/stats";
 import { useSession } from "@/hooks/useSession";
 import { useFittingCount } from "@/hooks/useFittingCount";
@@ -45,8 +48,8 @@ const LISTING_GRID =
 // monitor de 2560 px caben 10 por fila, así que 20 cubre las dos.
 const HOME_LISTINGS = 20;
 
-// Cuántos avisos muestra "Cerca de ti": una fila en escritorio, y en móvil lo
-// justo para que se vea que hay más sin llenar la portada de scroll.
+// Cuántos avisos muestra la sección del departamento: una fila en escritorio, y
+// en móvil lo justo para que se vea que hay más sin llenar la portada de scroll.
 const CERCANOS = 4;
 // Los que se suponen por fila hasta poder medir el ancho de verdad.
 const FALLBACK_COLS = 8;
@@ -140,30 +143,27 @@ const Index = () => {
     fetchPlatformStats().then(setPlatform);
   }, []);
 
-  // "Cerca de ti": la zona que el usuario ya eligió alguna vez (en el buscador o
-  // aquí mismo). No se le pide permiso de ubicación en la portada — sería pedirlo
-  // nada más entrar, justo lo que se corrigió en el arranque de la app.
-  const [zona, setZona] = useState<Zona | null>(() => zonaGuardada());
+  // Avisos del departamento del usuario, que ya eligió en el buscador o aquí.
+  const [departamento, setDepartamento] = useState<Departamento | null>(() => departamentoGuardado());
   const [cercanos, setCercanos] = useState<Listing[]>([]);
 
-  const elegirZona = (z: Zona) => {
-    setZona(z);
-    guardarZona(z);
+  const elegirDepartamento = (id: string) => {
+    const d = departamentoPorId(id);
+    setDepartamento(d);
+    guardarDepartamento(d);
   };
 
   useEffect(() => {
-    if (!zona) {
+    if (!departamento) {
       setCercanos([]);
       return;
     }
     let vigente = true;
-    // Sin radio: si en su distrito no hay nada, mejor enseñarle lo más cercano
-    // que exista antes que una sección vacía.
-    searchListings({ lat: zona.lat, lng: zona.lng, sort: "distance" }).then((rows) => {
+    searchListings({ department: departamento.id }).then((rows) => {
       if (vigente) setCercanos(rows.slice(0, CERCANOS));
     });
     return () => { vigente = false; };
-  }, [zona]);
+  }, [departamento]);
 
   // Métricas exactas de la BD para el hero (con respaldo mientras carga).
   const activeListingsStr = platform ? platform.activeListings.toLocaleString() : "…";
@@ -289,21 +289,20 @@ const Index = () => {
         <CategoryGrid />
       </section>
 
-      {/* Cerca de ti. Es la sección con más sentido en móvil, así que aquí NO se
-          oculta: la portada es lo primero que se abre y donde más vale saber qué
-          hay al lado. Si el usuario aún no tiene zona, se le pregunta aquí
-          mismo; la respuesta se recuerda y también la aprovecha el buscador. */}
+      {/* Avisos de tu departamento. Es la sección con más sentido en móvil, así
+          que aquí NO se oculta. Si el usuario aún no lo ha elegido, se le
+          pregunta aquí; la respuesta se recuerda y la aprovecha el buscador. */}
       <section className="container mx-auto px-4 pb-12 md:pb-16">
         <div className="flex items-end justify-between gap-4 flex-wrap mb-6 md:mb-8">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] font-bold text-secondary mb-2">Cerca de ti</p>
             <h2 className="text-2xl md:text-4xl font-bold text-foreground">
-              {zona ? `Lo más cercano en ${zona.nombre}` : "¿Qué hay cerca de ti?"}
+              {departamento ? `Avisos en ${departamento.nombre}` : "¿Dónde estás?"}
             </h2>
           </div>
-          {zona && cercanos.length > 0 && (
+          {departamento && cercanos.length > 0 && (
             <Link
-              to={`/buscar?z=${zona.id}&sort=distance`}
+              to={`/buscar?dep=${departamento.id}`}
               className="text-xs font-bold uppercase tracking-[0.2em] text-primary border-b-2 border-secondary pb-1 hover:text-secondary transition-colors"
             >
               Ver todos →
@@ -311,19 +310,26 @@ const Index = () => {
           )}
         </div>
 
-        {!zona ? (
+        {!departamento ? (
           <div className="border border-dashed border-border p-6 md:p-8 text-center">
             <p className="text-sm text-muted-foreground mb-4">
-              Dinos tu distrito y te mostramos primero lo que tienes al lado.
+              Dinos tu departamento y te mostramos lo que hay publicado ahí.
             </p>
             <div className="max-w-sm mx-auto">
-              <ZonaPicker value={null} onChange={elegirZona} placeholder="Elige tu distrito" />
+              <Select onValueChange={elegirDepartamento}>
+                <SelectTrigger><SelectValue placeholder="Elige tu departamento" /></SelectTrigger>
+                <SelectContent>
+                  {DEPARTAMENTOS.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>{d.nombre}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         ) : cercanos.length === 0 ? (
           <div className="border border-dashed border-border py-10 text-center">
             <p className="text-muted-foreground text-sm">
-              Todavía no hay avisos publicados cerca de {zona.nombre}.
+              Todavía no hay avisos publicados en {departamento.nombre}.
             </p>
             <Link to="/buscar" className="text-sm font-bold text-secondary hover:underline mt-2 inline-block">
               Ver los de todo el país →
@@ -336,13 +342,13 @@ const Index = () => {
             ))}
           </div>
         )}
-        {zona && (
+        {departamento && (
           <button
             type="button"
-            onClick={() => { setZona(null); guardarZona(null); }}
+            onClick={() => { setDepartamento(null); guardarDepartamento(null); }}
             className="mt-4 text-xs font-semibold text-secondary hover:underline"
           >
-            Cambiar mi zona
+            Cambiar de departamento
           </button>
         )}
       </section>

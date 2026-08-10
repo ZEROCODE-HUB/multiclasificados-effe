@@ -56,6 +56,8 @@ interface EditState {
   description: string;
   price: string;
   currency: string;
+  /** Código de departamento del INEI: por lo que se filtra en el buscador. */
+  department: string;
   location: string;
   lat: number | null;
   lng: number | null;
@@ -107,6 +109,7 @@ const AdvertiserListings = () => {
       description: l.description ?? "",
       price: String(l.price ?? ""),
       currency: l.currency || "PEN",
+      department: l.department ?? "",
       location: l.location ?? "",
       lat: l.lat ?? null,
       lng: l.lng ?? null,
@@ -152,6 +155,7 @@ const AdvertiserListings = () => {
         description: edit.description.trim(),
         price: Number(edit.price) || 0,
         currency: edit.currency,
+        department: edit.department || null,
         location: edit.location.trim(),
         lat: edit.lat,
         lng: edit.lng,
@@ -446,6 +450,8 @@ const AdvertiserListings = () => {
                 </div>
               </div>
               <LocationPicker
+                department={edit.department || null}
+                onDepartmentChange={(v) => setEdit({ ...edit, department: v ?? "" })}
                 location={edit.location}
                 onLocationChange={(v) => setEdit({ ...edit, location: v })}
                 lat={edit.lat}

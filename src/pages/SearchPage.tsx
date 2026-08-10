@@ -14,8 +14,10 @@ import { searchListings, fetchListingsByOwner, type SortKey } from "@/lib/listin
 import { useSession } from "@/hooks/useSession";
 import { useFavorites } from "@/hooks/useFavorites";
 import { createSavedSearch, DUPLICATE_SEARCH_MSG } from "@/lib/savedSearches";
-import { ZonaPicker } from "@/components/ZonaPicker";
-import { zonaPorId, zonaGuardada, guardarZona, zonaMasCercana, type Zona } from "@/lib/zonas";
+import {
+  DEPARTAMENTOS, departamentoPorId, departamentoGuardado, guardarDepartamento,
+  type Departamento,
+} from "@/lib/departamentos";
 import { toast } from "@/hooks/use-toast";
 import {
   Search,
@@ -84,105 +86,37 @@ export default function SearchPage() {
   const [category, setCategory] = useState<string>(params.get("cat") || "");
   const [priceMin, setPriceMin] = useState<string>(params.get("min") || "");
   const [priceMax, setPriceMax] = useState<string>(params.get("max") || "");
-  // Zona del usuario: el distrito o la provincia que eligió a mano. Es el
-  // camino para quien no da permiso de ubicación —y en iOS, para todo el mundo
-  // hasta el build que declara el permiso (MOB-08)—, así que no es un plan B:
-  // ordena por cercanía igual que el GPS, solo que desde el centro de la zona.
-  // Sustituye al viejo filtro de texto libre, que comparaba "contiene" y hacía
-  // de "Lima, Miraflores" y "Miraflores" dos sitios distintos.
-  // En una referencia: es "con qué zona se abrió esta pantalla", no cambia con
-  // los renders, y así buscarla en el catálogo se hace una sola vez.
-  const zonaInicial = useRef(zonaPorId(params.get("z")) ?? zonaGuardada()).current;
-  const [zona, setZona] = useState<Zona | null>(zonaInicial);
+  // Departamento: el único filtro de ubicación. Exacto y predecible — eliges
+  // Lima y ves Lima. Se recuerda en el dispositivo y viaja en la URL (dep=15).
+  const [departamento, setDepartamento] = useState<Departamento | null>(
+    () => departamentoPorId(params.get("dep")) ?? departamentoGuardado(),
+  );
   // Moneda (EFFE-050): "" = todas. El RPC search_listings ya filtra por p_currency.
   const [currency, setCurrency] = useState<string>(params.get("cur") || "");
-  // Con la zona ya conocida, el orden natural es por cercanía: si no, elegir tu
-  // distrito no cambiaba nada de lo que veías y el filtro parecía no servir.
-  const [sort, setSort] = useState<SortKey>(
-    () => (params.get("sort") as SortKey) || (zonaInicial ? "distance" : "recent"),
-  );
+  const [sort, setSort] = useState<SortKey>((params.get("sort") as SortKey) || "recent");
   const [page, setPage] = useState(1);
 
-  // Cerca de mí (EFFE-033): centro por geolocalización del navegador + radio en km.
-  // No se persiste en la URL: las coordenadas son específicas del dispositivo.
-  const [geo, setGeo] = useState<{ lat: number; lng: number } | null>(null);
-  const [geoLoading, setGeoLoading] = useState(false);
 
-  // Desde dónde se mide la cercanía. El GPS manda sobre la zona elegida a mano
-  // porque es más preciso; sin ninguno de los dos, se busca en todo el país.
-  // Memoizado para que su identidad no cambie en cada render y no dispare la
-  // búsqueda de nuevo sin motivo.
-  const punto = useMemo(
-    () => geo ?? (zona ? { lat: zona.lat, lng: zona.lng } : null),
-    [geo, zona],
-  );
 
-  // Elegir zona reordena por cercanía, salvo que el usuario ya hubiera pedido
-  // otro orden (precio, vistas…): en ese caso manda lo que él eligió.
-  const elegirZona = (z: Zona) => {
-    setZona(z);
-    if (sort === "recent") setSort("distance");
-  };
 
-  const useMyLocation = () => {
-    if (!("geolocation" in navigator)) {
-      toast({ title: "Ubicación no disponible", description: "Tu navegador no permite geolocalización." });
-      return;
-    }
-    setGeoLoading(true);
-    // Corte propio además del `timeout` de la API (MOB-08): en el WebView de iOS
-    // getCurrentPosition puede no llamar NUNCA a ninguno de los dos callbacks
-    // —ni el de error— cuando el permiso no se puede conceder, y el botón se
-    // quedaba en "Ubicando…" para siempre. `resuelto` evita que el corte pise
-    // una respuesta que ya llegó.
-    let resuelto = false;
-    const corte = window.setTimeout(() => {
-      if (resuelto) return;
-      resuelto = true;
-      setGeoLoading(false);
-      toast({
-        title: "No se pudo obtener tu ubicación",
-        description: "Revisa que la app tenga permiso de ubicación y vuelve a intentarlo.",
-        variant: "destructive",
-      });
-    }, 10000);
-    const cerrar = () => { resuelto = true; window.clearTimeout(corte); setGeoLoading(false); };
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        if (resuelto) return;
-        cerrar();
-        const { latitude: lat, longitude: lng } = pos.coords;
-        setGeo({ lat, lng });
-        // Se nombra la zona más cercana solo para poder decir dónde está: las
-        // coordenadas se muestran mejor como "Miraflores, Lima" que como cifras.
-        setZona(zonaMasCercana(lat, lng));
-      },
-      () => {
-        if (resuelto) return;
-        cerrar();
-        toast({ title: "No se pudo obtener tu ubicación", description: "Revisa los permisos de ubicación del navegador.", variant: "destructive" });
-      },
-      { enableHighAccuracy: false, timeout: 8000 },
-    );
-  };
 
   // Sincroniza los filtros DESDE la URL (navbar, hero, búsquedas guardadas, o el
   // botón "atrás" que restaura una URL con filtros).
   useEffect(() => {
     setQ(params.get("q") || "");
     setCategory(params.get("cat") || "");
-    setSort((params.get("sort") as SortKey) || (zonaInicial ? "distance" : "recent"));
+    setSort((params.get("sort") as SortKey) || "recent");
     setPriceMin(params.get("min") || "");
     setPriceMax(params.get("max") || "");
     setCurrency(params.get("cur") || "");
-    // La zona solo se toma de la URL si viene en ella: si no, se respeta la que
-    // ya tenga el usuario (recordada del dispositivo o puesta por el GPS).
-    const enUrl = zonaPorId(params.get("z"));
-    if (enUrl) setZona(enUrl);
-  }, [params, zonaInicial]);
+    // El departamento solo se toma de la URL si viene en ella: si no, se respeta
+    // el que ya tenga el usuario recordado del dispositivo.
+    const enUrl = departamentoPorId(params.get("dep"));
+    if (enUrl) setDepartamento(enUrl);
+  }, [params]);
 
-  // Recuerda la zona elegida para las próximas visitas.
-  useEffect(() => { guardarZona(zona); }, [zona]);
+  // Recuerda el departamento para las próximas visitas.
+  useEffect(() => { guardarDepartamento(departamento); }, [departamento]);
 
   // EFFE-051/092: refleja los filtros EN la URL (replace, para no ensuciar el
   // historial en cada tecla) de modo que copiar el enlace y el botón "atrás"
@@ -195,12 +129,12 @@ export default function SearchPage() {
     put("cat", category);
     put("min", priceMin);
     put("max", priceMax);
-    put("z", zona?.id ?? "");
+    put("dep", departamento?.id ?? "");
     put("cur", currency);
     if (sort && sort !== "recent") next.set("sort", sort); else next.delete("sort");
     if (next.toString() !== params.toString()) setParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, category, priceMin, priceMax, zona, currency, sort]);
+  }, [q, category, priceMin, priceMax, departamento, currency, sort]);
 
   // Guarda la búsqueda actual (REQ-04).
   const saveCurrentSearch = async () => {
@@ -270,11 +204,7 @@ export default function SearchPage() {
             priceMin: priceMin ? Number(priceMin) : undefined,
             priceMax: priceMax ? Number(priceMax) : undefined,
             currency: currency || undefined,
-            // El punto se manda SIEMPRE que se conozca, aunque no se filtre por
-            // radio: el servidor lo usa para que los avisos Urgente y Destacado
-            // encabecen la búsqueda solo si son de la zona de quien mira.
-            lat: punto?.lat,
-            lng: punto?.lng,
+            department: departamento?.id,
             sort,
           });
       load.then((rows) => {
@@ -283,10 +213,10 @@ export default function SearchPage() {
       });
     }, owner ? 0 : 250);
     return () => clearTimeout(t);
-  }, [q, category, priceMin, priceMax, currency, sort, owner, punto]);
+  }, [q, category, priceMin, priceMax, currency, sort, owner, departamento]);
 
   // Al cambiar la búsqueda o los filtros, vuelve a la primera página.
-  useEffect(() => { setPage(1); }, [q, category, priceMin, priceMax, currency, sort, owner, punto]);
+  useEffect(() => { setPage(1); }, [q, category, priceMin, priceMax, currency, sort, owner, departamento]);
 
   // Porción visible de resultados según la página actual (clamp por si la lista
   // encogió tras filtrar y la página quedó fuera de rango). 20 por página en
@@ -304,10 +234,10 @@ export default function SearchPage() {
   const applyFilters = () => setShowFilters(false);
 
   // Hay algún filtro activo (para mostrar "Limpiar filtros", IT2-026).
-  // La zona NO cuenta como filtro activo: es de dónde es el usuario, no algo que
-  // haya que limpiar. Sí cuenta restringir el radio, que sí esconde resultados.
+  // El departamento SÍ cuenta como filtro activo: a diferencia del orden, sí
+  // deja fuera avisos, así que tiene que poder limpiarse.
   const hasActiveFilters = !!(
-    q || category || priceMin || priceMax || currency || geo || (sort && sort !== "recent" && sort !== "distance")
+    q || category || priceMin || priceMax || currency || departamento || (sort && sort !== "recent")
   );
   // Resetea TODOS los filtros de una vez. El efecto de URL (arriba) los limpia
   // también del enlace al vaciarse el estado.
@@ -317,10 +247,8 @@ export default function SearchPage() {
     setPriceMin("");
     setPriceMax("");
     setCurrency("");
-    setSort(zona ? "distance" : "recent");
-    setGeo(null);
-    // `zona` se conserva a propósito: limpiar los filtros no debería obligar al
-    // usuario a volver a decir de dónde es.
+    setSort("recent");
+    setDepartamento(null);
   };
 
   const switchView = (v: ViewMode) => {
@@ -457,38 +385,24 @@ export default function SearchPage() {
           </SelectContent>
         </Select>
       </div>
-      {/* Zona. Dos caminos igual de válidos: el GPS o elegirla de la lista. Sin
-          permiso de ubicación —o con el permiso denegado— el segundo deja el
-          buscador igual de útil, que es justo lo que antes no existía. */}
+      {/* Ubicación: un desplegable de departamentos y nada más. Exacto y
+          predecible — eliges Lima y ves Lima. Lima y Callao van juntos porque
+          en la práctica son la misma ciudad: separarlos escondería avisos que
+          el usuario tiene cruzando la avenida. */}
       <div>
-        <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Tu zona</label>
-        <div className="mt-1.5 space-y-2">
-          <ZonaPicker value={zona} onChange={elegirZona} placeholder="Elige tu distrito o provincia" className="rounded-none" />
-          {!geo && (
-            <Button variant="outline" size="sm" className="w-full rounded-none gap-2" onClick={useMyLocation} disabled={geoLoading}>
-              <MapPin size={14} /> {geoLoading ? "Ubicando…" : "Usar mi ubicación exacta"}
-            </Button>
-          )}
-          {/* No hay selector de radio a propósito: recortar por kilómetros
-              obligaba al usuario a adivinar una cifra y escondía avisos buenos
-              por estar un poco más lejos. Con la zona puesta, los resultados
-              salen del más cercano al más lejano y no se oculta nada: primero
-              su distrito, luego los vecinos, luego su ciudad y después el resto
-              del país. */}
-          {punto && (
-            <p className="text-[11px] text-muted-foreground">
-              Verás primero lo más cercano a {zona ? zona.nombre : "ti"}, y después el resto del país.
-            </p>
-          )}
-          {geo && (
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] text-muted-foreground">Usando tu ubicación exacta.</span>
-              <button onClick={() => setGeo(null)} className="text-xs font-semibold text-secondary hover:underline shrink-0">
-                Quitar
-              </button>
-            </div>
-          )}
-        </div>
+        <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Departamento</label>
+        <Select
+          value={departamento?.id ?? "all"}
+          onValueChange={(v) => setDepartamento(v === "all" ? null : departamentoPorId(v))}
+        >
+          <SelectTrigger className="mt-1.5 rounded-none"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todo el Perú</SelectItem>
+            {DEPARTAMENTOS.map((d) => (
+              <SelectItem key={d.id} value={d.id}>{d.nombre}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <div>
         <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Ordenar por</label>
@@ -496,8 +410,6 @@ export default function SearchPage() {
           <SelectTrigger className="mt-1.5 rounded-none"><SelectValue placeholder="Más recientes" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="recent">Más recientes</SelectItem>
-            {/* Solo tiene sentido si se sabe desde dónde medir. */}
-            {punto && <SelectItem value="distance">Más cercanos</SelectItem>}
             <SelectItem value="price_asc">Precio: menor a mayor</SelectItem>
             <SelectItem value="price_desc">Precio: mayor a menor</SelectItem>
             <SelectItem value="views">Más vistos</SelectItem>

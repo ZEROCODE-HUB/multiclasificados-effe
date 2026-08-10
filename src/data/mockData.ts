@@ -11,6 +11,8 @@ export interface Listing {
   condition?: string;
   category: string;
   location: string;
+  /** Código de departamento del INEI ("15" = Lima y Callao). Filtra el buscador. */
+  department?: string | null;
   imageUrl: string;
   date: string;
   featured: boolean;

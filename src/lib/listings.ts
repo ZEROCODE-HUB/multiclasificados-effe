@@ -22,6 +22,7 @@ interface CardRow {
   condition: string | null;
   category_id: string;
   location: string | null;
+  department: string | null;
   lat: number | string | null;
   lng: number | string | null;
   featured: boolean;
@@ -45,6 +46,7 @@ export function mapCard(r: CardRow): Listing {
     condition: (r.condition ?? "na") as ListingCondition,
     category: r.category_id,
     location: r.location ?? "",
+    department: r.department ?? null,
     lat: r.lat != null ? Number(r.lat) : null,
     lng: r.lng != null ? Number(r.lng) : null,
     imageUrl: r.image_url ?? FALLBACK_IMG,
@@ -58,9 +60,7 @@ export function mapCard(r: CardRow): Listing {
   };
 }
 
-// "distance" solo es válido si la búsqueda lleva un punto de referencia (la zona
-// del usuario o su GPS); sin él, el servidor lo trata como el orden por defecto.
-export type SortKey = "recent" | "price_asc" | "price_desc" | "views" | "distance";
+export type SortKey = "recent" | "price_asc" | "price_desc" | "views";
 
 export interface SearchFilters {
   q?: string;
@@ -70,11 +70,12 @@ export interface SearchFilters {
   priceMax?: number;
   currency?: string;
   sort?: SortKey;
-  // Búsqueda por cercanía (EFFE-033): centro (lat/lng) + radio en km. Cuando los
-  // tres vienen, el RPC filtra por distancia (Haversine) y ordena por cercanía.
-  lat?: number;
-  lng?: number;
-  radiusKm?: number;
+  /**
+   * Código de departamento del INEI (2 dígitos); "15" agrupa Lima y Callao.
+   * Sin él se busca en todo el país. Es el único filtro de ubicación: se
+   * comparaba por distancia y se cambió por esto, que es exacto y predecible.
+   */
+  department?: string;
 }
 
 // Lista de avisos para home / destacados.
@@ -174,12 +175,6 @@ export async function fetchListingDocumentUrl(id: string): Promise<string | null
 // Buscador con filtros combinados (usa el RPC search_listings).
 export async function searchListings(f: SearchFilters): Promise<Listing[]> {
   try {
-    // EFFE-033: el centro (lat/lng) se manda SIEMPRE que se conozca, aunque no
-    // se filtre por radio — el servidor lo necesita para que los avisos Urgente
-    // y Destacado encabecen la lista solo si son de la zona de quien busca.
-    // El radio es aparte: solo cuando el usuario decide esconder lo de fuera.
-    const conPunto = f.lat != null && f.lng != null;
-    const nearby = conPunto && !!f.radiusKm;
     const { data, error } = await supabase.rpc("search_listings", {
       p_query: f.q || null,
       p_category: f.category || null,
@@ -187,11 +182,10 @@ export async function searchListings(f: SearchFilters): Promise<Listing[]> {
       p_price_min: f.priceMin ?? null,
       p_price_max: f.priceMax ?? null,
       p_currency: f.currency || null,
-      p_lat: conPunto ? f.lat : null,
-      p_lng: conPunto ? f.lng : null,
-      p_radius_km: nearby ? f.radiusKm : null,
-      // Acotar a un radio implica querer lo más cercano primero.
-      p_sort: nearby ? "distance" : (f.sort || "recent"),
+      // El departamento también gobierna la prioridad: un aviso Urgente de otro
+      // departamento aparece, pero no encabeza la búsqueda de quien mira este.
+      p_department: f.department || null,
+      p_sort: f.sort || "recent",
       p_limit: 48,
       p_offset: 0,
     });
@@ -328,6 +322,7 @@ export interface ListingPatch {
   description?: string;
   price?: number;
   currency?: string;
+  department?: string | null;
   location?: string;
   lat?: number | null;
   lng?: number | null;
