@@ -18,10 +18,10 @@ import path from "node:path";
  *   - los Urgente y Destacado encabezan solo dentro del departamento que se mira.
  */
 
-const MIGRATION = fs.readFileSync(
-  path.resolve(__dirname, "../../supabase/migrations/0084_listing_department.sql"),
-  "utf8",
-);
+const leer = (f: string) =>
+  fs.readFileSync(path.resolve(__dirname, "../../supabase/migrations/", f), "utf8");
+const MIGRATION = leer("0084_listing_department.sql");
+const M0085 = leer("0085_search_nearest_option.sql");
 
 let db: PGlite;
 
@@ -59,7 +59,13 @@ async function montar() {
         from public.listings l join public.profiles p on p.id = l.owner_id
        where l.status = 'active';
   `);
+  await aplicar();
+}
+
+/** Aplica las migraciones en orden, como en producción. */
+async function aplicar() {
   await db.exec(MIGRATION);
+  await db.exec(M0085);
 }
 
 const aviso = (n: number, location: string, extra = "") =>
@@ -67,9 +73,11 @@ const aviso = (n: number, location: string, extra = "") =>
            values ('${ID(n)}', '${ID(99)}', 'Aviso ${n}', 100, 'PEN', '${location}'
                    ${extra ? ", " + extra.split("=")[1] : ""});`);
 
-const buscar = async (dep: string | null) => {
+const buscar = async (dep: string | null, orden = "recent", punto?: [number, number]) => {
   const { rows } = await db.query<{ title: string }>(
-    `select title from public.search_listings(null,null,null,null,null,null,${dep ? `'${dep}'` : "null"},'recent',50,0)`,
+    `select title from public.search_listings(
+       null,null,null,null,null,null,${dep ? `'${dep}'` : "null"},'${orden}',50,0,
+       ${punto ? punto[0] : "null"}, ${punto ? punto[1] : "null"})`,
   );
   return rows.map((r) => r.title);
 };
@@ -89,7 +97,7 @@ describe("0084 — filtrar por departamento", () => {
     await aviso(2, "Bellavista, Callao");
     await aviso(3, "Cayma, Arequipa");
     await aviso(4, "Trujillo, La Libertad");
-    await db.exec(MIGRATION); // les asigna el departamento desde su texto
+    await aplicar(); // les asigna el departamento desde su texto
   });
 
   it("elegir un departamento devuelve solo sus avisos", async () => {
@@ -118,7 +126,7 @@ describe("0084 — departamento de los avisos ya publicados", () => {
     await aviso(1, "Miraflores, Lima");
     await aviso(2, "Cayma, Arequipa");
     await aviso(3, "Tarapoto, San Martín");
-    await db.exec(MIGRATION); // el backfill corre dentro de la migración
+    await aplicar(); // el backfill corre dentro de la migración
 
     expect(await departamentoDe(1)).toBe("15");
     expect(await departamentoDe(2)).toBe("04");
@@ -127,14 +135,14 @@ describe("0084 — departamento de los avisos ya publicados", () => {
 
   it("el Callao queda junto a Lima", async () => {
     await aviso(1, "Bellavista, Callao");
-    await db.exec(MIGRATION);
+    await aplicar();
     expect(await departamentoDe(1)).toBe("15");
   });
 
   it("acierta sin tildes y en mayúsculas", async () => {
     await aviso(1, "HUANUCO");
     await aviso(2, "ancash");
-    await db.exec(MIGRATION);
+    await aplicar();
     expect(await departamentoDe(1)).toBe("10");
     expect(await departamentoDe(2)).toBe("02");
   });
@@ -143,14 +151,14 @@ describe("0084 — departamento de los avisos ya publicados", () => {
     // "Limatambo" es un distrito del Cusco. Si esto fallara, el aviso saldría
     // en las búsquedas de Lima, que es justo el error que hay que evitar.
     await aviso(1, "Limatambo");
-    await db.exec(MIGRATION);
+    await aplicar();
     expect(await departamentoDe(1)).not.toBe("15");
   });
 
   it("deja sin departamento lo que no nombra ninguno", async () => {
     await aviso(1, "A domicilio en todo el país");
     await aviso(2, "Online");
-    await db.exec(MIGRATION);
+    await aplicar();
     expect(await departamentoDe(1)).toBeNull();
     expect(await departamentoDe(2)).toBeNull();
   });
@@ -158,7 +166,7 @@ describe("0084 — departamento de los avisos ya publicados", () => {
   it("no pisa el departamento de un aviso que ya lo tiene", async () => {
     await aviso(1, "Miraflores, Lima");
     await db.exec(`update public.listings set department = '04' where id = '${ID(1)}'`);
-    await db.exec(MIGRATION);
+    await aplicar();
     expect(await departamentoDe(1)).toBe("04");
   });
 });
@@ -168,7 +176,7 @@ describe("0084 — prioridad de Urgente y Destacado", () => {
     await aviso(1, "Miraflores, Lima");
     await aviso(2, "Cayma, Arequipa", "urgent=true");
     await aviso(3, "San Isidro, Lima", "urgent=true");
-    await db.exec(MIGRATION);
+    await aplicar();
   });
 
   it("el urgente de otro departamento no encabeza tu búsqueda", async () => {
@@ -188,9 +196,47 @@ describe("0084 — prioridad de Urgente y Destacado", () => {
 describe("0084 — repetible", () => {
   it("se puede volver a aplicar sin romper nada", async () => {
     await aviso(1, "Miraflores, Lima");
-    await db.exec(MIGRATION);
-    await db.exec(MIGRATION);
+    await aplicar();
+    await aplicar();
     expect(await departamentoDe(1)).toBe("15");
     expect(await buscar("15")).toEqual(["Aviso 1"]);
+  });
+});
+
+describe("0085 — ordenar por cercanía, sin esconder nada", () => {
+  beforeEach(async () => {
+    // Dos avisos en Lima, uno lejos del otro, y uno sin coordenadas.
+    await db.exec(`insert into public.listings (id, owner_id, title, price, currency, location, lat, lng)
+      values ('${ID(1)}','${ID(99)}','Cerca',100,'PEN','Lima',-12.05,-77.04)`);
+    await db.exec(`insert into public.listings (id, owner_id, title, price, currency, location, lat, lng)
+      values ('${ID(2)}','${ID(99)}','Lejos',100,'PEN','Lima',-12.40,-76.80)`);
+    await db.exec(`insert into public.listings (id, owner_id, title, price, currency, location)
+      values ('${ID(3)}','${ID(99)}','Sin punto',100,'PEN','Lima')`);
+    await aplicar();
+  });
+
+  it("ordena del más cercano al más lejano", async () => {
+    const r = await buscar("15", "distance", [-12.05, -77.04]);
+    expect(r[0]).toBe("Cerca");
+    expect(r[1]).toBe("Lejos");
+  });
+
+  it("el aviso sin coordenadas NO desaparece: va al final", async () => {
+    // Es la diferencia con filtrar por distancia: aquí nada se esconde.
+    const r = await buscar("15", "distance", [-12.05, -77.04]);
+    expect(r).toContain("Sin punto");
+    expect(r[r.length - 1]).toBe("Sin punto");
+  });
+
+  it("pedir cercanía sin ubicación no rompe ni esconde nada", async () => {
+    expect((await buscar("15", "distance")).length).toBe(3);
+  });
+
+  it("la ubicación no filtra: sigue mandando el departamento", async () => {
+    await db.exec(`insert into public.listings (id, owner_id, title, price, currency, location, lat, lng)
+      values ('${ID(4)}','${ID(99)}','Arequipa',100,'PEN','Arequipa',-16.4,-71.5)`);
+    await aplicar();
+    // Aunque el punto esté en Lima, al filtrar Arequipa se ve solo Arequipa.
+    expect(await buscar("04", "distance", [-12.05, -77.04])).toEqual(["Arequipa"]);
   });
 });

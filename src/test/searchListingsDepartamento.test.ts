@@ -37,12 +37,8 @@ describe("searchListings — filtro por departamento", () => {
     expect(state.rpcArgs).toMatchObject({ p_department: null });
   });
 
-  it("ya no se manda nada de la búsqueda por distancia", async () => {
-    // Si estos parámetros reaparecieran, el servidor los ignoraría en silencio
-    // y el filtro dejaría de funcionar sin que nadie se entere.
-    await searchListings({ department: "04", q: "camioneta" });
-    expect(state.rpcArgs).not.toHaveProperty("p_lat");
-    expect(state.rpcArgs).not.toHaveProperty("p_lng");
+  it("nunca se manda un radio: la distancia no puede esconder avisos", async () => {
+    await searchListings({ department: "04", q: "camioneta", lat: -16.4, lng: -71.5 });
     expect(state.rpcArgs).not.toHaveProperty("p_radius_km");
   });
 
@@ -56,5 +52,25 @@ describe("searchListings — filtro por departamento", () => {
       p_price_min: 100, p_price_max: 900,
       p_currency: "PEN", p_department: "13", p_sort: "views",
     });
+  });
+});
+
+describe("searchListings — ordenar por cercanía (opción del usuario)", () => {
+  it("sin ubicación no manda punto alguno", async () => {
+    await searchListings({ department: "15" });
+    expect(state.rpcArgs).toMatchObject({ p_lat: null, p_lng: null });
+  });
+
+  it("con ubicación concedida la manda para ORDENAR, sin dejar de filtrar por departamento", async () => {
+    await searchListings({ department: "15", lat: -12.05, lng: -77.04, sort: "distance" });
+    expect(state.rpcArgs).toMatchObject({
+      p_department: "15", p_lat: -12.05, p_lng: -77.04, p_sort: "distance",
+    });
+  });
+
+  it("la ubicación NO sustituye al filtro: sin departamento se sigue viendo todo el país", async () => {
+    // Es la diferencia con el diseño anterior: la distancia solo reordena.
+    await searchListings({ lat: -12.05, lng: -77.04, sort: "distance" });
+    expect(state.rpcArgs).toMatchObject({ p_department: null, p_sort: "distance" });
   });
 });

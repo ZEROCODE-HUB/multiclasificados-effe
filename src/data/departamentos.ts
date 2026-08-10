@@ -16,6 +16,12 @@ export interface Departamento {
   nombre: string;
   /** Códigos que abarca, para poder cruzarlo con los datos del INEI. */
   ubigeos: string[];
+  /**
+   * Otras formas de nombrarlo, para reconocerlo en un texto. Necesario porque
+   * los mapas de Google devuelven "Cuzco" con zeta, y sin este alias el aviso
+   * se quedaba sin departamento (comprobado contra su API con los 25).
+   */
+  alias?: string[];
 }
 
 export const DEPARTAMENTOS: Departamento[] = [
@@ -25,7 +31,7 @@ export const DEPARTAMENTOS: Departamento[] = [
   { id: "04", nombre: "Arequipa", ubigeos: ["04"] },
   { id: "05", nombre: "Ayacucho", ubigeos: ["05"] },
   { id: "06", nombre: "Cajamarca", ubigeos: ["06"] },
-  { id: "08", nombre: "Cusco", ubigeos: ["08"] },
+  { id: "08", nombre: "Cusco", ubigeos: ["08"], alias: ["Cuzco"] },
   { id: "09", nombre: "Huancavelica", ubigeos: ["09"] },
   { id: "10", nombre: "Huánuco", ubigeos: ["10"] },
   { id: "11", nombre: "Ica", ubigeos: ["11"] },

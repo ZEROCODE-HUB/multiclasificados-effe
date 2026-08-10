@@ -140,3 +140,39 @@ export async function geocode(consulta: string, sesgo?: SesgoZona): Promise<GeoR
   const [primero] = await buscarDirecciones(consulta, sesgo);
   return primero ?? null;
 }
+
+/**
+ * Región de unas coordenadas: el nombre del departamento al que pertenece el
+ * punto ("Provincia de Lima", "Cuzco", "La Libertad"…).
+ *
+ * Se usa al publicar para deducir el departamento del punto que marca el
+ * anunciante, en vez de hacérselo elegir. Devuelve null sin llave, si el
+ * servicio falla o si el punto cae fuera de una región conocida — quien llama
+ * debe tener siempre un camino alternativo.
+ *
+ * Se pide `administrative_area_level_1`, que es el nivel de departamento en
+ * Perú. Ojo con los nombres: Google devuelve "Cuzco" con zeta y "Provincia de
+ * Lima" en vez de "Lima", así que hay que reconocerlos con tolerancia
+ * (departamentoDeTexto lo hace).
+ */
+export async function regionDeCoordenadas(lat: number, lng: number): Promise<string | null> {
+  if (!hayGoogleMaps()) return null;
+  const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
+  url.searchParams.set("latlng", `${lat},${lng}`);
+  url.searchParams.set("key", GOOGLE_KEY);
+  url.searchParams.set("language", "es");
+  url.searchParams.set("result_type", "administrative_area_level_1");
+  try {
+    const res = await fetch(url.toString());
+    if (!res.ok) throw new Error(`Geocoding respondió ${res.status}`);
+    const data = (await res.json()) as {
+      status?: string;
+      results?: Array<{ address_components?: Array<{ long_name?: string }> }>;
+    };
+    if (data.status && data.status !== "OK") return null;
+    return data.results?.[0]?.address_components?.[0]?.long_name ?? null;
+  } catch (e) {
+    console.warn("[geocode] no se pudo identificar la región del punto:", e);
+    return null;
+  }
+}

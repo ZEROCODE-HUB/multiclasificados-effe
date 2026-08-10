@@ -60,7 +60,7 @@ export function mapCard(r: CardRow): Listing {
   };
 }
 
-export type SortKey = "recent" | "price_asc" | "price_desc" | "views";
+export type SortKey = "recent" | "price_asc" | "price_desc" | "views" | "distance";
 
 export interface SearchFilters {
   q?: string;
@@ -76,6 +76,12 @@ export interface SearchFilters {
    * comparaba por distancia y se cambió por esto, que es exacto y predecible.
    */
   department?: string;
+  /**
+   * Ubicación del dispositivo, solo con permiso concedido. NO filtra nada: se
+   * usa únicamente para ordenar cuando `sort` es "distance".
+   */
+  lat?: number;
+  lng?: number;
 }
 
 // Lista de avisos para home / destacados.
@@ -186,6 +192,8 @@ export async function searchListings(f: SearchFilters): Promise<Listing[]> {
       // departamento aparece, pero no encabeza la búsqueda de quien mira este.
       p_department: f.department || null,
       p_sort: f.sort || "recent",
+      p_lat: f.lat ?? null,
+      p_lng: f.lng ?? null,
       p_limit: 48,
       p_offset: 0,
     });

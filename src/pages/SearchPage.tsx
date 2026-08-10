@@ -96,6 +96,53 @@ export default function SearchPage() {
   const [sort, setSort] = useState<SortKey>((params.get("sort") as SortKey) || "recent");
   const [page, setPage] = useState(1);
 
+  // Ubicación del dispositivo. Solo se pide cuando el usuario pulsa "Ver los más
+  // cercanos", nunca al entrar, y solo sirve para ORDENAR: el filtro sigue
+  // siendo el departamento y no se esconde nada por estar lejos.
+  const [geo, setGeo] = useState<{ lat: number; lng: number } | null>(null);
+  const [geoLoading, setGeoLoading] = useState(false);
+
+  const verMasCercanos = () => {
+    if (!("geolocation" in navigator)) {
+      toast({ title: "Ubicación no disponible", description: "Tu navegador no permite geolocalización." });
+      return;
+    }
+    setGeoLoading(true);
+    // Corte propio además del `timeout` de la API: en el WebView de iOS
+    // getCurrentPosition puede no llamar NUNCA a ninguno de los dos callbacks
+    // y el botón se quedaba cargando para siempre (MOB-08).
+    let resuelto = false;
+    const corte = window.setTimeout(() => {
+      if (resuelto) return;
+      resuelto = true;
+      setGeoLoading(false);
+      toast({
+        title: "No se pudo obtener tu ubicación",
+        description: "Revisa el permiso de ubicación y vuelve a intentarlo.",
+        variant: "destructive",
+      });
+    }, 10000);
+    const cerrar = () => { resuelto = true; window.clearTimeout(corte); setGeoLoading(false); };
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        if (resuelto) return;
+        cerrar();
+        setGeo({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setSort("distance");
+      },
+      () => {
+        if (resuelto) return;
+        cerrar();
+        toast({
+          title: "No se pudo obtener tu ubicación",
+          description: "Puedes seguir filtrando por departamento con normalidad.",
+          variant: "destructive",
+        });
+      },
+      { enableHighAccuracy: false, timeout: 8000 },
+    );
+  };
+
 
 
 
@@ -205,6 +252,9 @@ export default function SearchPage() {
             priceMax: priceMax ? Number(priceMax) : undefined,
             currency: currency || undefined,
             department: departamento?.id,
+            // Solo con permiso concedido, y solo para ordenar.
+            lat: geo?.lat,
+            lng: geo?.lng,
             sort,
           });
       load.then((rows) => {
@@ -213,10 +263,10 @@ export default function SearchPage() {
       });
     }, owner ? 0 : 250);
     return () => clearTimeout(t);
-  }, [q, category, priceMin, priceMax, currency, sort, owner, departamento]);
+  }, [q, category, priceMin, priceMax, currency, sort, owner, departamento, geo]);
 
   // Al cambiar la búsqueda o los filtros, vuelve a la primera página.
-  useEffect(() => { setPage(1); }, [q, category, priceMin, priceMax, currency, sort, owner, departamento]);
+  useEffect(() => { setPage(1); }, [q, category, priceMin, priceMax, currency, sort, owner, departamento, geo]);
 
   // Porción visible de resultados según la página actual (clamp por si la lista
   // encogió tras filtrar y la página quedó fuera de rango). 20 por página en
@@ -237,7 +287,7 @@ export default function SearchPage() {
   // El departamento SÍ cuenta como filtro activo: a diferencia del orden, sí
   // deja fuera avisos, así que tiene que poder limpiarse.
   const hasActiveFilters = !!(
-    q || category || priceMin || priceMax || currency || departamento || (sort && sort !== "recent")
+    q || category || priceMin || priceMax || currency || departamento || geo || (sort && sort !== "recent")
   );
   // Resetea TODOS los filtros de una vez. El efecto de URL (arriba) los limpia
   // también del enlace al vaciarse el estado.
@@ -249,6 +299,7 @@ export default function SearchPage() {
     setCurrency("");
     setSort("recent");
     setDepartamento(null);
+    setGeo(null);
   };
 
   const switchView = (v: ViewMode) => {
@@ -403,6 +454,31 @@ export default function SearchPage() {
             ))}
           </SelectContent>
         </Select>
+
+        {/* Ordenar por cercanía real. Se pide el permiso AQUÍ, cuando el usuario
+            lo pulsa, y no al entrar en la app. No filtra: reordena lo que ya se
+            está viendo. */}
+        {geo ? (
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <span className="text-[11px] text-muted-foreground">Ordenado por cercanía a ti.</span>
+            <button
+              onClick={() => { setGeo(null); setSort("recent"); }}
+              className="text-xs font-semibold text-secondary hover:underline shrink-0"
+            >
+              Quitar
+            </button>
+          </div>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2 w-full rounded-none gap-2"
+            onClick={verMasCercanos}
+            disabled={geoLoading}
+          >
+            <MapPin size={14} /> {geoLoading ? "Ubicando…" : "Ver los más cercanos"}
+          </Button>
+        )}
       </div>
       <div>
         <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Ordenar por</label>
@@ -410,6 +486,7 @@ export default function SearchPage() {
           <SelectTrigger className="mt-1.5 rounded-none"><SelectValue placeholder="Más recientes" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="recent">Más recientes</SelectItem>
+            {geo && <SelectItem value="distance">Más cercanos</SelectItem>}
             <SelectItem value="price_asc">Precio: menor a mayor</SelectItem>
             <SelectItem value="price_desc">Precio: mayor a menor</SelectItem>
             <SelectItem value="views">Más vistos</SelectItem>

@@ -8,8 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MapPin, ChevronDown, Search, Loader2 } from "lucide-react";
-import { DEPARTAMENTOS, departamentoPorId, nombreDepartamento } from "@/lib/departamentos";
-import { buscarDirecciones, type GeoResult } from "@/lib/geocode";
+import { DEPARTAMENTOS, departamentoDeTexto, nombreDepartamento } from "@/lib/departamentos";
+import { buscarDirecciones, regionDeCoordenadas, type GeoResult } from "@/lib/geocode";
 import { toast } from "@/hooks/use-toast";
 
 // Centro aproximado del país, para abrir el mapa en algún sitio razonable
@@ -76,6 +76,30 @@ export function LocationPicker({
   const pos: [number, number] | null = lat != null && lng != null ? [lat, lng] : null;
   // El mapa es un ajuste fino: se abre solo si el anunciante lo pide.
   const [mapaAbierto, setMapaAbierto] = useState(false);
+  const [deduciendo, setDeduciendo] = useState(false);
+  // Se muestra el desplegable solo cuando hace falta: si el punto del mapa ya
+  // dijo el departamento, no tiene sentido preguntar lo que ya sabemos.
+  const [pedirAMano, setPedirAMano] = useState(!department);
+
+  /**
+   * Marca el punto y, de paso, deduce el departamento preguntando a qué región
+   * pertenece. Si no se puede (sin llave, sin red, punto raro), se pide a mano:
+   * el departamento es obligatorio y un aviso sin él no aparece en ningún filtro.
+   */
+  const marcarPunto = async (la: number | null, ln: number | null) => {
+    onCoordsChange(la, ln);
+    if (la == null || ln == null) return;
+    setDeduciendo(true);
+    const region = await regionDeCoordenadas(la, ln);
+    setDeduciendo(false);
+    const dep = departamentoDeTexto(region);
+    if (dep) {
+      onDepartmentChange(dep.id);
+      setPedirAMano(false);
+    } else {
+      setPedirAMano(true);
+    }
+  };
 
   // Buscar una dirección y llevar el pin hasta ahí, para no tener que
   // encontrarla a mano arrastrando el mapa.
@@ -99,36 +123,44 @@ export function LocationPicker({
       });
       return;
     }
-    if (rs.length === 1) onCoordsChange(rs[0].lat, rs[0].lng);
+    if (rs.length === 1) void marcarPunto(rs[0].lat, rs[0].lng);
     else setResultados(rs);
   };
 
   const usarResultado = (r: GeoResult) => {
-    onCoordsChange(r.lat, r.lng);
+    void marcarPunto(r.lat, r.lng);
     setResultados([]);
   };
 
   return (
     <div className="space-y-3">
-      <div>
-        <Label htmlFor="departamento-aviso">Departamento {required && "*"}</Label>
-        <Select
-          value={department ?? ""}
-          onValueChange={(v) => onDepartmentChange(v || null)}
-        >
-          <SelectTrigger id="departamento-aviso" className="mt-1.5">
-            <SelectValue placeholder="Elige tu departamento" />
-          </SelectTrigger>
-          <SelectContent>
-            {DEPARTAMENTOS.map((d) => (
-              <SelectItem key={d.id} value={d.id}>{d.nombre}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="mt-1.5 text-[11px] text-muted-foreground">
-          Es lo que usan los compradores para filtrar. Lima y Callao van juntos.
-        </p>
-      </div>
+      {/* El desplegable solo aparece si el punto del mapa no ha dicho ya el
+          departamento. En el caso normal —marcas el punto y se deduce— el
+          anunciante no ve ningún selector. Se mantiene como camino alternativo
+          porque el departamento es obligatorio: sin él el aviso no sale en
+          ninguna búsqueda, y no puede depender de que un servicio externo
+          responda. */}
+      {pedirAMano && (
+        <div>
+          <Label htmlFor="departamento-aviso">Departamento {required && "*"}</Label>
+          <Select
+            value={department ?? ""}
+            onValueChange={(v) => { onDepartmentChange(v || null); }}
+          >
+            <SelectTrigger id="departamento-aviso" className="mt-1.5">
+              <SelectValue placeholder="Elige tu departamento" />
+            </SelectTrigger>
+            <SelectContent>
+              {DEPARTAMENTOS.map((d) => (
+                <SelectItem key={d.id} value={d.id}>{d.nombre}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="mt-1.5 text-[11px] text-muted-foreground">
+            Es lo que usan los compradores para filtrar. Lima y Callao van juntos.
+          </p>
+        </div>
+      )}
 
       <div>
         <Label htmlFor="referencia-aviso">
@@ -194,7 +226,7 @@ export function LocationPicker({
             <MapContainer center={pos ?? PERU} zoom={pos ? 14 : 5} scrollWheelZoom className="w-full h-full z-0">
               <TileLayer attribution={MAP_TILES_ATTRIBUTION} url={MAP_TILES_URL} />
               <Recenter pos={pos} />
-              <ClickCapture onPick={(la, ln) => onCoordsChange(la, ln)} />
+              <ClickCapture onPick={(la, ln) => void marcarPunto(la, ln)} />
               {pos && (
                 <Marker
                   position={pos}
@@ -203,7 +235,7 @@ export function LocationPicker({
                   eventHandlers={{
                     dragend: (e) => {
                       const m = (e.target as L.Marker).getLatLng();
-                      onCoordsChange(m.lat, m.lng);
+                      void marcarPunto(m.lat, m.lng);
                     },
                   }}
                 />
@@ -230,10 +262,28 @@ export function LocationPicker({
       )}
 
       <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-        <MapPin size={11} className="text-secondary shrink-0" />
-        {department
-          ? `Tu aviso aparecerá en las búsquedas de ${nombreDepartamento(department)}.`
-          : "Elige tu departamento para que tu aviso aparezca en las búsquedas."}
+        {deduciendo ? (
+          <><Loader2 size={11} className="animate-spin shrink-0" /> Identificando el departamento…</>
+        ) : department ? (
+          <>
+            <MapPin size={11} className="text-secondary shrink-0" />
+            Tu aviso aparecerá en las búsquedas de <strong>{nombreDepartamento(department)}</strong>.
+            {!pedirAMano && (
+              <button
+                type="button"
+                onClick={() => setPedirAMano(true)}
+                className="text-secondary hover:underline font-semibold"
+              >
+                Cambiar
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            <MapPin size={11} className="text-secondary shrink-0" />
+            Marca tu punto en el mapa o elige el departamento para que tu aviso aparezca.
+          </>
+        )}
       </p>
     </div>
   );

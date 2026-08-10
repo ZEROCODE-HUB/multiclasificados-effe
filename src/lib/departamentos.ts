@@ -41,8 +41,12 @@ export function departamentoDeTexto(texto: string | null | undefined): Departame
   const palabras = t.split(/[^a-z0-9]+/).filter(Boolean);
 
   for (const dep of DEPARTAMENTOS) {
-    // "Lima y Callao" se reconoce por cualquiera de los dos nombres.
-    const alias = dep.id === "15" ? ["lima", "callao"] : [normalizar(dep.nombre)];
+    // "Lima y Callao" se reconoce por cualquiera de los dos nombres, y cada
+    // departamento por los alias que traiga (ver el catálogo).
+    const alias =
+      dep.id === "15"
+        ? ["lima", "callao"]
+        : [normalizar(dep.nombre), ...(dep.alias ?? []).map(normalizar)];
     for (const a of alias) {
       const partes = a.split(" ");
       // Nombre de una palabra: tiene que aparecer como palabra suelta.

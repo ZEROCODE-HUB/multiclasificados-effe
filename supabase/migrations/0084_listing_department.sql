@@ -112,8 +112,11 @@ grant select on public.listing_cards to anon, authenticated;
 --     está mirando el usuario. Un urgente de Piura no le sirve a quien busca en
 --     Trujillo, pero sigue apareciendo: pierde el privilegio, no la visibilidad;
 --   · desaparecen p_lat/p_lng/p_radius_km: la distancia ya no decide nada.
+-- Se retiran todas las firmas anteriores: si quedara alguna, una llamada con
+-- parámetros por defecto sería ambigua y Postgres la rechazaría.
 drop function if exists public.search_listings(text, text, uuid, numeric, numeric, public.currency, numeric, numeric, numeric, text, int, int);
 drop function if exists public.search_listings(text, text, uuid, numeric, numeric, public.currency, numeric, numeric, numeric, text, int, int, numeric);
+drop function if exists public.search_listings(text, text, uuid, numeric, numeric, public.currency, text, text, int, int, numeric, numeric);
 
 create or replace function public.search_listings(
   p_query        text default null,
