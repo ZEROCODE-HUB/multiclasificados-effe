@@ -49,24 +49,63 @@ function obtenerIndice(): Entrada[] {
   return indice;
 }
 
+/** Empieza por el texto alguna de las palabras (no vale a media palabra). */
+function empiezaAlguna(texto: string, q: string): boolean {
+  return texto.split(" ").some((palabra) => palabra.startsWith(q));
+}
+
 /**
- * Zonas que coinciden con lo tecleado. Primero las que EMPIEZAN por el texto
- * ("Lima" antes que "Alto Amazonas"), luego el resto. Busca también por
- * provincia y departamento, así que "arequipa" saca todos sus distritos.
+ * Cuánto encaja una zona con lo tecleado. 0 = no sale.
+ *
+ * Se compara por INICIO DE PALABRA y no "contiene" a secas: con `includes`,
+ * escribir una "x" devolvía "Alexander Von Humboldt" y "Oxapampa", y daba la
+ * sensación de que el buscador encuentra cualquier cosa.
+ */
+function puntuar(e: Entrada, q: string): number {
+  const nombre = normalizar(e.zona.nombre);
+  let p = 0;
+
+  if (nombre === q) p = 120;                    // el nombre exacto
+  else if (nombre.startsWith(q)) p = 100;       // "mira" → Miraflores
+  else if (empiezaAlguna(nombre, q)) p = 70;    // "olivos" → Los Olivos
+  else if (empiezaAlguna(e.buscable, q)) p = 40; // por provincia o departamento
+  else return 0;
+
+  // Desempate: con "Miraflores" hay cinco en el país, y quien escribe eso casi
+  // siempre busca el de Lima. Lima y Callao concentran la mayoría de usuarios.
+  if (e.zona.provincia === "Lima" || e.zona.provincia === "Callao") p += 10;
+  return p;
+}
+
+/**
+ * Zonas que coinciden con lo tecleado, de la más probable a la menos.
+ * Busca también por provincia y departamento, así que "arequipa" saca sus
+ * distritos aunque no se llamen así.
  */
 export function buscarZonas(consulta: string, limite = 50): Zona[] {
   const q = normalizar(consulta);
-  const entradas = obtenerIndice();
-  if (!q) return entradas.slice(0, limite).map((e) => e.zona);
+  if (!q) return zonasSugeridas(limite);
 
-  const empiezan: Zona[] = [];
-  const contienen: Zona[] = [];
-  for (const e of entradas) {
-    if (e.clave.startsWith(q)) empiezan.push(e.zona);
-    else if (e.buscable.includes(q)) contienen.push(e.zona);
-    if (empiezan.length >= limite) break;
+  const conPuntos: Array<{ zona: Zona; p: number; clave: string }> = [];
+  for (const e of obtenerIndice()) {
+    const p = puntuar(e, q);
+    if (p > 0) conPuntos.push({ zona: e.zona, p, clave: e.clave });
   }
-  return [...empiezan, ...contienen].slice(0, limite);
+  conPuntos.sort((a, b) => b.p - a.p || a.clave.localeCompare(b.clave, "es"));
+  return conPuntos.slice(0, limite).map((r) => r.zona);
+}
+
+/**
+ * Qué enseñar cuando aún no se ha escrito nada. Antes salían las primeras del
+ * catálogo por orden alfabético, o sea todas con A —Abancay, Acarí, Accha—, que
+ * no le sirven a nadie. Ahora salen los distritos de Lima y Callao, que es donde
+ * está la mayoría de usuarios; el resto del país se encuentra escribiendo.
+ */
+export function zonasSugeridas(limite = 50): Zona[] {
+  return obtenerIndice()
+    .filter((e) => e.zona.provincia === "Lima" || e.zona.provincia === "Callao")
+    .slice(0, limite)
+    .map((e) => e.zona);
 }
 
 export function zonaPorId(id: string | null | undefined): Zona | null {

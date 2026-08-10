@@ -88,6 +88,49 @@ describe("buscar zonas", () => {
   it("devuelve vacío si no hay nada parecido", () => {
     expect(buscarZonas("zzzz")).toEqual([]);
   });
+
+  // Lo que se veía al abrir el selector: las primeras del catálogo por orden
+  // alfabético, o sea TODAS con A (Abancay, Acarí, Accha…). No le sirven a nadie.
+  it("sin escribir nada NO enseña el abecedario, sino sitios reconocibles", () => {
+    const iniciales = new Set(buscarZonas("", 20).map((z) => z.nombre[0].toUpperCase()));
+    expect(iniciales.size).toBeGreaterThan(3);
+    // Son los distritos de Lima y Callao, donde está la mayoría de usuarios.
+    expect(buscarZonas("", 50).every((z) => z.provincia === "Lima" || z.provincia === "Callao")).toBe(true);
+  });
+
+  // Antes se buscaba "contiene" en cualquier posición, así que una letra suelta
+  // devolvía cosas absurdas y parecía que siempre encontraba algo.
+  it("no encuentra a media palabra: una 'x' no saca 'Alexander' ni 'Oxapampa'", () => {
+    const r = buscarZonas("x");
+    expect(r.map((z) => z.nombre)).not.toContain("Alexander Von Humboldt");
+    expect(r.every((z) => z.nombre.toLowerCase().startsWith("x"))).toBe(true);
+  });
+
+  it("sí encuentra por el inicio de cualquier palabra del nombre", () => {
+    // Quien busca "Los Olivos" suele escribir "olivos".
+    expect(buscarZonas("olivos")[0].nombre).toBe("Los Olivos");
+  });
+});
+
+describe("buscar zonas — cuál sale primero", () => {
+  it("con 'mira', Miraflores de Lima va por delante del resto", () => {
+    // Hay cinco Miraflores en el país y uno se llama "Miracosta". Quien escribe
+    // "mira" casi siempre busca el distrito limeño.
+    const r = buscarZonas("mira");
+    expect(r[0].nombre).toBe("Miraflores");
+    expect(r[0].provincia).toBe("Lima");
+  });
+
+  it("el nombre exacto gana a los que solo empiezan igual", () => {
+    expect(buscarZonas("lima")[0].nombre).toBe("Lima");
+    expect(buscarZonas("cusco")[0].nombre).toBe("Cusco");
+  });
+
+  it("escribir una ciudad saca primero la ciudad y luego sus distritos", () => {
+    const r = buscarZonas("arequipa", 200);
+    expect(r[0].nombre).toBe("Arequipa");
+    expect(r.some((z) => z.nombre === "Cayma")).toBe(true);
+  });
 });
 
 describe("reconocer la zona de un aviso ya publicado", () => {

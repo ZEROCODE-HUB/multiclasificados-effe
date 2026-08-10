@@ -4,7 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
-import { buscarZonas, etiquetaZona, type Zona } from "@/lib/zonas";
+import { buscarZonas, etiquetaZona, zonas, type Zona } from "@/lib/zonas";
+
+const ZONAS_TOTAL = zonas().length;
 
 interface ZonaPickerProps {
   value: Zona | null;
@@ -56,6 +58,13 @@ export function ZonaPicker({ value, onChange, placeholder = "Elige tu zona", cla
           <CommandInput placeholder="Busca tu distrito o provincia…" value={consulta} onValueChange={setConsulta} />
           <CommandList>
             <CommandEmpty>No encontramos esa zona.</CommandEmpty>
+            {/* Sin escribir se muestran distritos de Lima y Callao. Sin este
+                aviso parecía que el selector solo tenía Lima. */}
+            {!consulta && (
+              <p className="px-3 py-2 text-[11px] text-muted-foreground">
+                Escribe para buscar entre los {ZONAS_TOTAL.toLocaleString("es-PE")} distritos del país.
+              </p>
+            )}
             {resultados.map((zona) => (
               <CommandItem
                 key={zona.id}
