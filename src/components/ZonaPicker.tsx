@@ -29,7 +29,10 @@ export function ZonaPicker({ value, onChange, placeholder = "Elige tu zona", cla
   const resultados = buscarZonas(consulta);
 
   return (
-    <Popover open={abierto} onOpenChange={setAbierto}>
+    // `modal`: sin esto, dentro del panel de filtros (un Sheet) o de una ventana
+    // modal, la lista se dibuja fuera de ese contenedor y el contenedor la trata
+    // como "fuera": se veía, pero no se podía escribir ni elegir nada.
+    <Popover open={abierto} onOpenChange={setAbierto} modal>
       <PopoverTrigger asChild>
         <Button
           id={id}

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { imgUrl, imgSrcSet } from "@/lib/imageUrl";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -90,20 +90,22 @@ export default function SearchPage() {
   // ordena por cercanía igual que el GPS, solo que desde el centro de la zona.
   // Sustituye al viejo filtro de texto libre, que comparaba "contiene" y hacía
   // de "Lima, Miraflores" y "Miraflores" dos sitios distintos.
-  const [zona, setZona] = useState<Zona | null>(() => zonaPorId(params.get("z")) ?? zonaGuardada());
+  // En una referencia: es "con qué zona se abrió esta pantalla", no cambia con
+  // los renders, y así buscarla en el catálogo se hace una sola vez.
+  const zonaInicial = useRef(zonaPorId(params.get("z")) ?? zonaGuardada()).current;
+  const [zona, setZona] = useState<Zona | null>(zonaInicial);
   // Moneda (EFFE-050): "" = todas. El RPC search_listings ya filtra por p_currency.
   const [currency, setCurrency] = useState<string>(params.get("cur") || "");
-  const [sort, setSort] = useState<SortKey>((params.get("sort") as SortKey) || "recent");
+  // Con la zona ya conocida, el orden natural es por cercanía: si no, elegir tu
+  // distrito no cambiaba nada de lo que veías y el filtro parecía no servir.
+  const [sort, setSort] = useState<SortKey>(
+    () => (params.get("sort") as SortKey) || (zonaInicial ? "distance" : "recent"),
+  );
   const [page, setPage] = useState(1);
 
   // Cerca de mí (EFFE-033): centro por geolocalización del navegador + radio en km.
   // No se persiste en la URL: las coordenadas son específicas del dispositivo.
   const [geo, setGeo] = useState<{ lat: number; lng: number } | null>(null);
-  // Radio de búsqueda alrededor del punto. 0 = "en todo el Perú": se sigue
-  // sabiendo dónde está el usuario (para ordenar por cercanía y para la
-  // prioridad de los destacados) pero no se le esconde nada de fuera.
-  const [radiusKm, setRadiusKm] = useState<number>(0);
-  const soloCerca = radiusKm > 0;
   const [geoLoading, setGeoLoading] = useState(false);
 
   // Desde dónde se mide la cercanía. El GPS manda sobre la zona elegida a mano
@@ -114,6 +116,13 @@ export default function SearchPage() {
     () => geo ?? (zona ? { lat: zona.lat, lng: zona.lng } : null),
     [geo, zona],
   );
+
+  // Elegir zona reordena por cercanía, salvo que el usuario ya hubiera pedido
+  // otro orden (precio, vistas…): en ese caso manda lo que él eligió.
+  const elegirZona = (z: Zona) => {
+    setZona(z);
+    if (sort === "recent") setSort("distance");
+  };
 
   const useMyLocation = () => {
     if (!("geolocation" in navigator)) {
@@ -162,7 +171,7 @@ export default function SearchPage() {
   useEffect(() => {
     setQ(params.get("q") || "");
     setCategory(params.get("cat") || "");
-    setSort((params.get("sort") as SortKey) || "recent");
+    setSort((params.get("sort") as SortKey) || (zonaInicial ? "distance" : "recent"));
     setPriceMin(params.get("min") || "");
     setPriceMax(params.get("max") || "");
     setCurrency(params.get("cur") || "");
@@ -170,7 +179,7 @@ export default function SearchPage() {
     // ya tenga el usuario (recordada del dispositivo o puesta por el GPS).
     const enUrl = zonaPorId(params.get("z"));
     if (enUrl) setZona(enUrl);
-  }, [params]);
+  }, [params, zonaInicial]);
 
   // Recuerda la zona elegida para las próximas visitas.
   useEffect(() => { guardarZona(zona); }, [zona]);
@@ -266,7 +275,6 @@ export default function SearchPage() {
             // encabecen la búsqueda solo si son de la zona de quien mira.
             lat: punto?.lat,
             lng: punto?.lng,
-            radiusKm: punto && soloCerca ? radiusKm : undefined,
             sort,
           });
       load.then((rows) => {
@@ -275,10 +283,10 @@ export default function SearchPage() {
       });
     }, owner ? 0 : 250);
     return () => clearTimeout(t);
-  }, [q, category, priceMin, priceMax, currency, sort, owner, punto, soloCerca, radiusKm]);
+  }, [q, category, priceMin, priceMax, currency, sort, owner, punto]);
 
   // Al cambiar la búsqueda o los filtros, vuelve a la primera página.
-  useEffect(() => { setPage(1); }, [q, category, priceMin, priceMax, currency, sort, owner, punto, soloCerca, radiusKm]);
+  useEffect(() => { setPage(1); }, [q, category, priceMin, priceMax, currency, sort, owner, punto]);
 
   // Porción visible de resultados según la página actual (clamp por si la lista
   // encogió tras filtrar y la página quedó fuera de rango). 20 por página en
@@ -299,7 +307,7 @@ export default function SearchPage() {
   // La zona NO cuenta como filtro activo: es de dónde es el usuario, no algo que
   // haya que limpiar. Sí cuenta restringir el radio, que sí esconde resultados.
   const hasActiveFilters = !!(
-    q || category || priceMin || priceMax || currency || geo || soloCerca || (sort && sort !== "recent")
+    q || category || priceMin || priceMax || currency || geo || (sort && sort !== "recent" && sort !== "distance")
   );
   // Resetea TODOS los filtros de una vez. El efecto de URL (arriba) los limpia
   // también del enlace al vaciarse el estado.
@@ -309,9 +317,8 @@ export default function SearchPage() {
     setPriceMin("");
     setPriceMax("");
     setCurrency("");
-    setSort("recent");
+    setSort(zona ? "distance" : "recent");
     setGeo(null);
-    setRadiusKm(0);
     // `zona` se conserva a propósito: limpiar los filtros no debería obligar al
     // usuario a volver a decir de dónde es.
   };
@@ -456,23 +463,22 @@ export default function SearchPage() {
       <div>
         <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Tu zona</label>
         <div className="mt-1.5 space-y-2">
-          <ZonaPicker value={zona} onChange={setZona} placeholder="Elige tu distrito o provincia" className="rounded-none" />
+          <ZonaPicker value={zona} onChange={elegirZona} placeholder="Elige tu distrito o provincia" className="rounded-none" />
           {!geo && (
             <Button variant="outline" size="sm" className="w-full rounded-none gap-2" onClick={useMyLocation} disabled={geoLoading}>
               <MapPin size={14} /> {geoLoading ? "Ubicando…" : "Usar mi ubicación exacta"}
             </Button>
           )}
+          {/* No hay selector de radio a propósito: recortar por kilómetros
+              obligaba al usuario a adivinar una cifra y escondía avisos buenos
+              por estar un poco más lejos. Con la zona puesta, los resultados
+              salen del más cercano al más lejano y no se oculta nada: primero
+              su distrito, luego los vecinos, luego su ciudad y después el resto
+              del país. */}
           {punto && (
-            <Select value={String(radiusKm)} onValueChange={(v) => setRadiusKm(Number(v))}>
-              <SelectTrigger className="rounded-none"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="0">En todo el Perú</SelectItem>
-                <SelectItem value="5">Solo a 5 km a la redonda</SelectItem>
-                <SelectItem value="10">Solo a 10 km a la redonda</SelectItem>
-                <SelectItem value="25">Solo a 25 km a la redonda</SelectItem>
-                <SelectItem value="50">Solo a 50 km a la redonda</SelectItem>
-              </SelectContent>
-            </Select>
+            <p className="text-[11px] text-muted-foreground">
+              Verás primero lo más cercano a {zona ? zona.nombre : "ti"}, y después el resto del país.
+            </p>
           )}
           {geo && (
             <div className="flex items-center justify-between gap-2">
