@@ -8,12 +8,14 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Send, Megaphone, Users, Mail, Bell, Loader2, X } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCategories } from "@/hooks/useCategories";
 import {
   fetchAudienceCount, sendIndividualMessage, broadcastMessage, fetchCommStats,
-  fetchAdminUsers, type CommStats, type AdminUser,
+  fetchAdminUsers, type CommStats, type AdminUser, type AudienciaMasiva,
 } from "@/lib/admin";
 
 const timeAgo = (iso: string) => {
@@ -60,27 +62,59 @@ const AdminCommunications = ({ role }: { role: AdminRole }) => {
   const [copyStaff, setCopyStaff] = useState(false);
   const [sendingMass, setSendingMass] = useState(false);
 
+  // A quién va: a todos, o a quienes publicaron en ciertas categorías.
+  const categorias = useCategories();
+  const [porCategoria, setPorCategoria] = useState(false);
+  const [categoriasElegidas, setCategoriasElegidas] = useState<string[]>([]);
+  // Dentro de esas categorías: solo quien tiene un aviso vigente, o cualquiera
+  // que haya publicado ahí alguna vez.
+  const [soloVigentes, setSoloVigentes] = useState(true);
+
+  const alternarCategoria = (id: string) =>
+    setCategoriasElegidas((prev) =>
+      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id],
+    );
+
+  // El filtro que viaja a la BD. Sin categorías marcadas no se filtra nada: es
+  // el mismo objeto que reciben el contador y el envío, así que no pueden
+  // acabar apuntando a audiencias distintas.
+  const filtro: AudienciaMasiva = {
+    categories: porCategoria ? categoriasElegidas : [],
+    onlyActive: porCategoria && soloVigentes,
+    copyStaff,
+  };
+  // Marcar "por categoría" sin elegir ninguna no es una audiencia: es una
+  // pregunta a medias. Se distingue de "0 destinatarios", que sí es una
+  // respuesta.
+  const filtroIncompleto = porCategoria && categoriasElegidas.length === 0;
+
   // Conteo REAL de destinatarios para la audiencia elegida. `countError`
   // distingue "no se pudo calcular" de "calculando…" y de "0 destinatarios",
   // que antes se confundían todos en `null` (IT2-023).
-  // Se piden DOS conteos: la base (todos los usuarios) y el total incluyendo al
-  // equipo interno. Como todo perfil es "buscador" (no-staff) o staff, la
-  // audiencia 'all' equivale exactamente a "usuarios ∪ staff" — el mismo conjunto
-  // que arma admin_broadcast cuando se activa la copia. Así el contador coincide
-  // con el envío real sin necesidad de un RPC extra.
-  const [baseCount, setBaseCount] = useState<number | null>(null);
-  const [withStaffCount, setWithStaffCount] = useState<number | null>(null);
+  //
+  // Lo calcula la MISMA función de la BD que arma el envío (comm_destinatarios,
+  // migración 0088), copia al equipo interno incluida. Antes eran dos caminos y
+  // el contador se apañaba con un truco —pedir la audiencia 'all', que equivale
+  // a usuarios ∪ staff— que dejó de valer en cuanto hubo filtros de por medio.
+  const [count, setCount] = useState<number | null>(null);
   const [countError, setCountError] = useState(false);
+  // La firma del filtro, para no re-consultar en cada render por el hecho de
+  // que `filtro` sea un objeto nuevo cada vez.
+  const filtroKey = JSON.stringify([porCategoria, [...categoriasElegidas].sort(), soloVigentes, copyStaff]);
   useEffect(() => {
+    if (filtroIncompleto) { setCount(null); setCountError(false); return; }
     let alive = true;
-    setBaseCount(null); setWithStaffCount(null); setCountError(false);
-    Promise.all([fetchAudienceCount(BROADCAST_AUDIENCE), fetchAudienceCount("all")])
-      .then(([base, all]) => { if (alive) { setBaseCount(base); setWithStaffCount(all); } })
-      .catch(() => { if (alive) setCountError(true); });
-    return () => { alive = false; };
-  }, []);
-  // Destinatarios efectivos: con la copia activada se suma al equipo interno.
-  const count = copyStaff ? withStaffCount : baseCount;
+    setCount(null); setCountError(false);
+    // Pequeña espera: marcar cuatro categorías seguidas no debe disparar cuatro
+    // consultas.
+    const t = setTimeout(() => {
+      fetchAudienceCount(BROADCAST_AUDIENCE, filtro)
+        .then((n) => { if (alive) setCount(n); })
+        .catch(() => { if (alive) setCountError(true); });
+    }, 200);
+    return () => { alive = false; clearTimeout(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtroKey, filtroIncompleto]);
 
   // Búsqueda de destinatario (individual) con debounce. No busca si ya hay uno
   // seleccionado o si el texto es demasiado corto (< 2 caracteres).
@@ -132,9 +166,12 @@ const AdminCommunications = ({ role }: { role: AdminRole }) => {
     if (!massSubject.trim() || !massBody.trim()) {
       toast({ title: "Asunto y mensaje son obligatorios", variant: "destructive" }); return;
     }
+    if (filtroIncompleto) {
+      toast({ title: "Elige al menos una categoría", description: "O cambia la audiencia a «Todos los usuarios».", variant: "destructive" }); return;
+    }
     setSendingMass(true);
     try {
-      const n = await broadcastMessage(BROADCAST_AUDIENCE, massSubject.trim(), massBody.trim(), massEmail, copyStaff);
+      const n = await broadcastMessage(BROADCAST_AUDIENCE, massSubject.trim(), massBody.trim(), massEmail, filtro);
       toast({ title: "Envío realizado", description: `${n.toLocaleString()} destinatarios${massEmail ? " · in-app + email" : " · in-app"}` });
       setMassSubject(""); setMassBody("");
       loadStats();
@@ -239,6 +276,76 @@ const AdminCommunications = ({ role }: { role: AdminRole }) => {
 
                 {/* -------------------------------------------------- Masivo */}
                 <TabsContent value="masivo" className="space-y-4 pt-4">
+                  {/* -------- A quién va -------- */}
+                  <div className="rounded-lg border p-3 space-y-3">
+                    <Label>Destinatarios</Label>
+                    <RadioGroup
+                      value={porCategoria ? "categoria" : "todos"}
+                      onValueChange={(v) => setPorCategoria(v === "categoria")}
+                      className="gap-2"
+                    >
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <RadioGroupItem value="todos" id="aud-todos" />
+                        <span>Todos los usuarios</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <RadioGroupItem value="categoria" id="aud-categoria" />
+                        <span>Quienes publicaron en ciertas categorías</span>
+                      </label>
+                    </RadioGroup>
+
+                    {porCategoria && (
+                      <div className="space-y-3 border-t pt-3">
+                        <div>
+                          <p className="text-xs font-medium text-foreground mb-2">Categorías</p>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
+                            {categorias.map((c) => (
+                              <label key={c.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                                <Checkbox
+                                  checked={categoriasElegidas.includes(c.id)}
+                                  onCheckedChange={() => alternarCategoria(c.id)}
+                                  aria-label={c.name}
+                                />
+                                <span className="truncate">{c.name}</span>
+                              </label>
+                            ))}
+                          </div>
+                          {categorias.length === 0 && (
+                            <p className="text-xs text-muted-foreground">No se pudieron cargar las categorías.</p>
+                          )}
+                        </div>
+
+                        <div>
+                          <p className="text-xs font-medium text-foreground mb-2">De esos anunciantes…</p>
+                          <RadioGroup
+                            value={soloVigentes ? "vigentes" : "historico"}
+                            onValueChange={(v) => setSoloVigentes(v === "vigentes")}
+                            className="gap-2"
+                          >
+                            <label className="flex items-start gap-2 text-sm cursor-pointer">
+                              <RadioGroupItem value="vigentes" id="aud-vigentes" className="mt-0.5" />
+                              <span>
+                                Solo los que tienen un aviso vigente
+                                <span className="block text-[11px] text-muted-foreground">
+                                  Publicado, activo y sin vencer.
+                                </span>
+                              </span>
+                            </label>
+                            <label className="flex items-start gap-2 text-sm cursor-pointer">
+                              <RadioGroupItem value="historico" id="aud-historico" className="mt-0.5" />
+                              <span>
+                                Todos los que publicaron ahí alguna vez
+                                <span className="block text-[11px] text-muted-foreground">
+                                  Incluye avisos vencidos, pausados o vendidos.
+                                </span>
+                              </span>
+                            </label>
+                          </RadioGroup>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   <div>
                     <Label>Asunto</Label>
                     <Input value={massSubject} onChange={(e) => setMassSubject(e.target.value)} placeholder="Título de la campaña" className="mt-1" />
@@ -277,25 +384,46 @@ const AdminCommunications = ({ role }: { role: AdminRole }) => {
                   <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                     <Badge variant="outline" className="gap-1">
                       <Users size={12} />
-                      {countError
-                        ? "no se pudo calcular"
-                        : count === null
-                          ? "calculando…"
-                          : `${count.toLocaleString()} destinatarios`}
+                      {filtroIncompleto
+                        ? "elige una categoría"
+                        : countError
+                          ? "no se pudo calcular"
+                          : count === null
+                            ? "calculando…"
+                            : `${count.toLocaleString()} destinatarios`}
                     </Badge>
+                    {porCategoria && !filtroIncompleto && (
+                      <Badge variant="outline" className="gap-1 text-secondary border-secondary/40">
+                        {categoriasElegidas.length === 1
+                          ? categorias.find((c) => c.id === categoriasElegidas[0])?.name ?? "1 categoría"
+                          : `${categoriasElegidas.length} categorías`}
+                        {" · "}
+                        {soloVigentes ? "con aviso vigente" : "histórico"}
+                      </Badge>
+                    )}
                     <Badge variant="outline" className="gap-1"><Bell size={12} /> Notificación in-app + Push</Badge>
                     {massEmail && <Badge variant="outline" className="gap-1"><Mail size={12} /> Email</Badge>}
                     {copyStaff && <Badge variant="outline" className="text-secondary border-secondary/40">CC: equipo interno</Badge>}
                   </div>
-                  {/* Aviso explícito cuando la audiencia no tiene a nadie (IT2-023). */}
-                  {count === 0 && !countError && (
+                  {/* Aviso explícito cuando la audiencia no tiene a nadie (IT2-023).
+                      Se distingue de "aún no has elegido categoría", que no es
+                      una audiencia vacía sino una pregunta a medias. */}
+                  {filtroIncompleto ? (
                     <p className="text-xs text-muted-foreground">
-                      Esta audiencia no tiene destinatarios; no hay a quién enviar.
+                      Marca al menos una categoría para saber a cuántos anunciantes llega.
+                    </p>
+                  ) : count === 0 && !countError && (
+                    <p className="text-xs text-muted-foreground">
+                      {porCategoria
+                        ? soloVigentes
+                          ? "Nadie tiene avisos vigentes en esas categorías. Prueba con «todos los que publicaron alguna vez»."
+                          : "Nadie ha publicado nunca en esas categorías."
+                        : "Esta audiencia no tiene destinatarios; no hay a quién enviar."}
                     </p>
                   )}
-                  <Button className="w-full md:w-auto" onClick={sendMasivo} disabled={sendingMass || count === 0 || countError || count === null || !canSend}>
+                  <Button className="w-full md:w-auto" onClick={sendMasivo} disabled={sendingMass || filtroIncompleto || count === 0 || countError || count === null || !canSend}>
                     {sendingMass && <Loader2 size={14} className="mr-2 animate-spin" />}
-                    Enviar a {count === null ? "…" : count.toLocaleString()}
+                    Enviar a {filtroIncompleto || count === null ? "…" : count.toLocaleString()}
                   </Button>
                 </TabsContent>
               </Tabs>

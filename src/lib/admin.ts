@@ -837,8 +837,37 @@ export async function setSetting(key: string, value: any, label?: string) {
 // vía las RPCs security-definer de la migración 0039_admin_communications.
 
 // Nº real de destinatarios de una audiencia ("all" | "anunciante" | "buscador").
-export async function fetchAudienceCount(audience: string): Promise<number> {
-  const { data, error } = await supabase.rpc("admin_audience_count", { p_audience: audience });
+/**
+ * A quién va un envío masivo.
+ *
+ * Sin categorías es "todos los usuarios", que es como funcionaba antes de que
+ * existiera este filtro.
+ */
+export interface AudienciaMasiva {
+  /** Códigos de categoría. Vacío = todos los usuarios, sin filtrar. */
+  categories?: string[];
+  /**
+   * true  → solo quien tiene un aviso VIGENTE en esas categorías.
+   * false → cualquiera que haya publicado ahí alguna vez.
+   */
+  onlyActive?: boolean;
+  /** Incluir en copia al equipo interno. */
+  copyStaff?: boolean;
+}
+
+/** Los parámetros del filtro, tal como los espera la BD. */
+const paramsDeAudiencia = (a: AudienciaMasiva = {}) => ({
+  // Un array vacío y `null` significan lo mismo para la BD, pero se manda null
+  // para que quede claro en los registros que no había filtro.
+  p_categories: a.categories?.length ? a.categories : null,
+  p_only_active: !!a.onlyActive,
+  p_copy_staff: !!a.copyStaff,
+});
+
+export async function fetchAudienceCount(audience: string, filtro: AudienciaMasiva = {}): Promise<number> {
+  const { data, error } = await supabase.rpc("admin_audience_count", {
+    p_audience: audience, ...paramsDeAudiencia(filtro),
+  });
   if (error) throw error;
   return Number(data) || 0;
 }
@@ -856,11 +885,16 @@ export async function sendIndividualMessage(
 }
 
 // Envío masivo a una audiencia real. Devuelve el nº de destinatarios alcanzados.
+// El filtro es el MISMO objeto que se le pasó a fetchAudienceCount, y del otro
+// lado lo resuelve la misma función de la BD: el número del botón y el del
+// envío no pueden salir distintos.
 export async function broadcastMessage(
-  audience: string, title: string, body: string, email: boolean, copyStaff: boolean,
+  audience: string, title: string, body: string, email: boolean, filtro: AudienciaMasiva = {},
 ): Promise<number> {
+  const { p_categories, p_only_active, p_copy_staff } = paramsDeAudiencia(filtro);
   const { data, error } = await supabase.rpc("admin_broadcast", {
-    p_audience: audience, p_title: title, p_body: body, p_email: email, p_copy_staff: copyStaff,
+    p_audience: audience, p_title: title, p_body: body, p_email: email,
+    p_copy_staff, p_categories, p_only_active,
   });
   if (error) throw error;
   return Number(data) || 0;
