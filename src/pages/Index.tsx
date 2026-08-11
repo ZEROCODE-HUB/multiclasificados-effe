@@ -17,7 +17,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { fetchPlatformStats, type PlatformStats } from "@/lib/stats";
 import { useSession } from "@/hooks/useSession";
 import { useFittingCount } from "@/hooks/useFittingCount";
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+
+// El mapa de la portada llega aparte y solo cuando la sección entra en pantalla:
+// el SDK de mapas no es ligero y esta sección ni siquiera se muestra en móvil.
+// Además cada mapa que se monta es una carga facturable, así que no conviene
+// pagarla por quien nunca baja hasta aquí.
+const PeruMapTeaser = lazy(() => import("@/components/PeruMapTeaser"));
 // WebP 1600×900 (191 KiB) en vez del JPG 1920×1080 (378 KiB). Se sirve desde
 // /public (ruta estable `/hero-bg.webp`) en lugar de un import hasheado, para
 // poder precargarlo desde el <head> del index.html y que sea el LCP descubrible
@@ -129,23 +135,41 @@ const Index = () => {
   // Así no queda nunca una última fila a medias.
   const semana = useFittingCount(CARD_MIN_WIDTH, CARD_GAP, FALLBACK_COLS);
   const nuevos = useFittingCount(CARD_MIN_WIDTH, CARD_GAP, FALLBACK_COLS);
-  // La segunda sección arranca donde termina la primera: si arrancara en un
-  // índice fijo, en pantallas anchas (donde la primera fila se lleva más avisos)
-  // las dos secciones volverían a repetir avisos.
-  const nuevosDesde = semana.count;
   const [platform, setPlatform] = useState<PlatformStats | null>(null);
   // Términos/Privacidad del footer: abren el documento legal (antes eran href="#").
   const [termsOpen, setTermsOpen] = useState(false);
   useEffect(() => {
-    // 16 porque la portada tiene DOS rejillas: con 8 ambas mostraban los mismos
-    // avisos (la de abajo era la misma lista al revés). Se reparten 8 y 8.
-    fetchListings({ limit: HOME_LISTINGS }).then(setListings);
     fetchPlatformStats().then(setPlatform);
   }, []);
 
-  // Avisos del departamento del usuario, que ya eligió en el buscador o aquí.
+  // El mapa del Perú solo se descarga cuando el usuario llega hasta su sección.
+  // La sección es `hidden md:block`, y un elemento con `display:none` nunca
+  // "entra en pantalla": en móvil, donde no se ve, el mapa no se carga jamás.
+  // Sin IntersectionObserver (jsdom, en las pruebas) tampoco: es un adorno.
+  const mapaRef = useRef<HTMLDivElement>(null);
+  const [mapaVisible, setMapaVisible] = useState(false);
+  useEffect(() => {
+    const el = mapaRef.current;
+    if (!el || mapaVisible || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entradas) => {
+        if (entradas.some((e) => e.isIntersecting)) {
+          setMapaVisible(true);
+          io.disconnect();
+        }
+      },
+      // Un poco antes de que asome, para que no se vea cargar.
+      { rootMargin: "200px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [mapaVisible]);
+
+  // El departamento que el usuario ya eligió, aquí o en el buscador. Manda
+  // sobre TODA la portada, no solo sobre la sección "Avisos en …": si alguien
+  // dice que está en Lima, enseñarle un destacado de Piura en la rejilla de
+  // abajo es enseñarle algo que no puede ir a ver.
   const [departamento, setDepartamento] = useState<Departamento | null>(() => departamentoGuardado());
-  const [cercanos, setCercanos] = useState<Listing[]>([]);
 
   const elegirDepartamento = (id: string) => {
     const d = departamentoPorId(id);
@@ -154,16 +178,24 @@ const Index = () => {
   };
 
   useEffect(() => {
-    if (!departamento) {
-      setCercanos([]);
-      return;
-    }
     let vigente = true;
-    searchListings({ department: departamento.id }).then((rows) => {
-      if (vigente) setCercanos(rows.slice(0, CERCANOS));
-    });
+    // Sin departamento elegido, la portada es la de todo el país.
+    const cargar = departamento
+      ? searchListings({ department: departamento.id, limit: HOME_LISTINGS + CERCANOS })
+      : fetchListings({ limit: HOME_LISTINGS + CERCANOS });
+    cargar.then((rows) => { if (vigente) setListings(rows); });
     return () => { vigente = false; };
   }, [departamento]);
+
+  // Las tres rejillas salen de la MISMA lista y no se pisan: antes "Avisos en
+  // tu departamento" hacía su propia consulta y, al filtrar también las de
+  // abajo, los cuatro primeros avisos habrían salido dos veces seguidos.
+  const cercanos = departamento ? listings.slice(0, CERCANOS) : [];
+  const restoDesde = cercanos.length;
+  // Y la segunda rejilla arranca donde termina la primera: si arrancara en un
+  // índice fijo, en pantallas anchas (donde la primera fila se lleva más
+  // avisos) las dos volverían a repetir avisos.
+  const nuevosDesde = restoDesde + semana.count;
 
   // Métricas exactas de la BD para el hero (con respaldo mientras carga).
   const activeListingsStr = platform ? platform.activeListings.toLocaleString() : "…";
@@ -410,23 +442,32 @@ const Index = () => {
       <section className="hidden md:block container mx-auto px-4 py-14 md:py-20">
         <div className="flex items-end justify-between mb-8 md:mb-10 gap-4 flex-wrap">
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] font-bold text-secondary mb-2">Destacados</p>
+            <p className="text-xs uppercase tracking-[0.2em] font-bold text-secondary mb-2">
+              {departamento ? `Destacados en ${departamento.nombre}` : "Destacados"}
+            </p>
             <h2 className="text-3xl md:text-5xl font-extrabold text-foreground tracking-tight uppercase">Avisos de la semana</h2>
           </div>
-          <Link to="/buscar" className="text-xs font-bold uppercase tracking-[0.2em] text-primary border-b-2 border-secondary pb-1 hover:text-secondary transition-colors">
+          <Link
+            to={departamento ? `/buscar?dep=${departamento.id}` : "/buscar"}
+            className="text-xs font-bold uppercase tracking-[0.2em] text-primary border-b-2 border-secondary pb-1 hover:text-secondary transition-colors"
+          >
             Ver todo el catálogo →
           </Link>
         </div>
-        {listings.length === 0 ? (
+        {listings.length <= restoDesde ? (
           <div className="border border-dashed border-border py-16 text-center">
-            <p className="text-muted-foreground">Aún no hay avisos publicados.</p>
+            <p className="text-muted-foreground">
+              {departamento
+                ? `Aún no hay más avisos publicados en ${departamento.nombre}.`
+                : "Aún no hay avisos publicados."}
+            </p>
             <Link to="/dashboard/anunciante/publicar" className="text-sm font-bold text-secondary hover:underline mt-2 inline-block">
               Publica el primero →
             </Link>
           </div>
         ) : (
           <div ref={semana.ref} className={LISTING_GRID}>
-            {listings.slice(0, semana.count).map((listing) => (
+            {listings.slice(restoDesde, restoDesde + semana.count).map((listing) => (
               <ListingCard key={listing.id} listing={listing} />
             ))}
           </div>
@@ -440,7 +481,8 @@ const Index = () => {
               `auto=format` hace que Unsplash sirva AVIF/WebP (291 KiB -> ~40). */}
           <img
             src="https://images.unsplash.com/photo-1524661135-423995f22d0b?w=1200&h=450&fit=crop&auto=format&q=55"
-            alt="Mapa de Perú"
+            alt=""
+            aria-hidden="true"
             className="w-full h-full object-cover"
             loading="lazy"
           />
@@ -464,28 +506,17 @@ const Index = () => {
               </Button>
             </Link>
           </div>
-          <div className="relative aspect-[4/3] rounded-2xl overflow-hidden border border-primary-foreground/15 shadow-2xl">
-            <img
-              src="https://images.unsplash.com/photo-1569336415962-a4bd9f69cd83?w=700&h=525&fit=crop&auto=format&q=65"
-              alt="Vista de mapa con pines de avisos"
-              className="w-full h-full object-cover"
-              loading="lazy"
-            />
-            {/* Floating pins */}
-            {[
-              { x: "20%", y: "30%", price: "US$ 285K" },
-              { x: "55%", y: "45%", price: "S/ 4,500" },
-              { x: "70%", y: "65%", price: "US$ 22.5K" },
-              { x: "35%", y: "70%", price: "S/ 1,200" },
-            ].map((p, i) => (
-              <div
-                key={i}
-                className="absolute -translate-x-1/2 -translate-y-1/2 px-3 py-1.5 rounded-full bg-secondary text-secondary-foreground text-xs font-bold shadow-lg ring-4 ring-secondary/20"
-                style={{ left: p.x, top: p.y }}
-              >
-                {p.price}
-              </div>
-            ))}
+          {/* El mapa del Perú con los avisos publicados. `bg-primary/40` es lo
+              que se ve mientras llegan las imágenes del mapa. */}
+          <div
+            ref={mapaRef}
+            className="relative aspect-[4/3] rounded-2xl overflow-hidden border border-primary-foreground/15 shadow-2xl bg-primary/40"
+          >
+            {mapaVisible && (
+              <Suspense fallback={null}>
+                <PeruMapTeaser listings={listings} />
+              </Suspense>
+            )}
           </div>
         </div>
       </section>
@@ -494,10 +525,15 @@ const Index = () => {
       <section className="hidden md:block container mx-auto px-4 py-14 md:py-20">
         <div className="flex items-end justify-between mb-8 md:mb-10 gap-4 flex-wrap">
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] font-bold text-secondary mb-2">Recién publicados</p>
+            <p className="text-xs uppercase tracking-[0.2em] font-bold text-secondary mb-2">
+              {departamento ? `Recién publicados en ${departamento.nombre}` : "Recién publicados"}
+            </p>
             <h2 className="text-3xl md:text-5xl font-extrabold text-foreground tracking-tight uppercase">Lo más nuevo</h2>
           </div>
-          <Link to="/buscar?sort=new" className="text-xs font-bold uppercase tracking-[0.2em] text-primary border-b-2 border-secondary pb-1 hover:text-secondary transition-colors">
+          <Link
+            to={departamento ? `/buscar?dep=${departamento.id}&sort=new` : "/buscar?sort=new"}
+            className="text-xs font-bold uppercase tracking-[0.2em] text-primary border-b-2 border-secondary pb-1 hover:text-secondary transition-colors"
+          >
             Ver más recientes →
           </Link>
         </div>
@@ -505,7 +541,11 @@ const Index = () => {
             avisos publicados esta sección aún no tiene nada propio que mostrar. */}
         {listings.length <= nuevosDesde ? (
           <div className="border border-dashed border-border py-16 text-center">
-            <p className="text-muted-foreground">Aún no hay más avisos recientes.</p>
+            <p className="text-muted-foreground">
+              {departamento
+                ? `Aún no hay más avisos recientes en ${departamento.nombre}.`
+                : "Aún no hay más avisos recientes."}
+            </p>
           </div>
         ) : (
           <div ref={nuevos.ref} className={LISTING_GRID}>

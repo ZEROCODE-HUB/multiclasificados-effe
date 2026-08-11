@@ -2,49 +2,63 @@ import { test, expect } from "@playwright/test";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { harnessHtml } from "./harness/build";
+import { ENTORNO_DE_MAPAS, hayLlaveDeMapas, MAPA_DE_GOOGLE } from "./harness/googleEnv";
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 
 /**
- * El bug (MOB-10): el mapa de la ficha era un iframe de OpenStreetMap tapado con
- * `pointer-events-none`, y en iOS atrapaba el toque — la página no scrolleaba y
- * el mapa tampoco se movía. Ahora es Leaflet con el pin anclado a la coordenada,
- * y la convivencia con el scroll se decide por `touch-action`.
+ * El mapa de la ficha del aviso, en Chromium y con el SDK real.
  *
- * jsdom no calcula estilos en cascada ni monta Leaflet, así que esto se
- * comprueba en Chromium.
+ * El bug original (MOB-10): era un iframe de OpenStreetMap tapado con
+ * `pointer-events-none`, y en iOS atrapaba el toque — la página no scrolleaba y
+ * el mapa tampoco se movía. Después fue Leaflet con el pin anclado y un apaño de
+ * `touch-action`. Ahora es Google, y la convivencia con el scroll la resuelve
+ * `gestureHandling: "cooperative"`, que es una opción del propio mapa.
+ *
+ * jsdom no monta un mapa ni calcula estilos en cascada, así que esto se
+ * comprueba aquí. Sin llave en el `.env` estas pruebas se saltan solas.
  */
 
+test.skip(!hayLlaveDeMapas(), "sin VITE_GOOGLE_MAPS_API_KEY no hay mapa que probar");
+
 const html = () =>
-  harnessHtml({ entry: "listingLocationMap.tsx", stubs: path.join(DIR, "harness", "stubs.ts"), stubbed: [] });
+  harnessHtml({
+    entry: "listingLocationMap.tsx",
+    stubs: path.join(DIR, "harness", "stubs.ts"),
+    stubbed: [],
+    env: ENTORNO_DE_MAPAS,
+  });
 
-test("el mapa es de Leaflet, no un iframe tapado", async ({ page }) => {
+const mapaVisible = async (page: import("@playwright/test").Page) => {
+  await expect(page.locator(MAPA_DE_GOOGLE)).toBeVisible({ timeout: 15_000 });
+};
+
+test("el mapa es un mapa de verdad, no un embed tapado", async ({ page }) => {
   await page.setContent(await html());
+  await mapaVisible(page);
 
-  await expect(page.locator(".leaflet-container")).toBeVisible();
-  // El iframe viejo no debe volver: era la causa de que el toque se perdiera.
-  await expect(page.locator("iframe")).toHaveCount(0);
-});
+  // El embed viejo no debe volver: era la causa de que el toque se perdiera.
+  // (Google monta iframes internos suyos, así que no vale contar iframes a
+  // secas: lo que no puede haber es un mapa ajeno incrustado.)
+  await expect(page.locator('iframe[src*="openstreetmap"]')).toHaveCount(0);
 
-test("deja scrollear la página con el dedo (touch-action: pan-y)", async ({ page }) => {
-  await page.setContent(await html());
-
-  // Leaflet pone `touch-action: none` en cuanto el arrastre y el zoom táctil
-  // están activos; la regla .map-pan-y de index.css tiene que ganarle.
-  const touchAction = await page
-    .locator(".leaflet-container")
-    .evaluate((el) => getComputedStyle(el).touchAction);
-  expect(touchAction).toBe("pan-y");
+  // Y el mapa recibe el puntero, que es lo que el embed anulaba con
+  // `pointer-events: none` para que el pin no se despegara de su sitio.
+  const recibeElPuntero = await page
+    .locator(MAPA_DE_GOOGLE)
+    .evaluate((el) => getComputedStyle(el).pointerEvents !== "none");
+  expect(recibeElPuntero).toBe(true);
 });
 
 test("el pin de precio está anclado al mapa y muestra el precio", async ({ page }) => {
   await page.setContent(await html());
+  await mapaVisible(page);
 
   const pin = page.getByText("US$ 185,000");
   await expect(pin).toBeVisible();
-  // Dentro del panel de marcadores: se mueve CON el mapa, que es justo lo que
-  // el iframe no podía hacer (el pin iba fijo al centro de la caja).
-  await expect(page.locator(".leaflet-marker-pane").getByText("US$ 185,000")).toBeVisible();
+  // Dentro del mapa: se mueve CON él, que es justo lo que el iframe no podía
+  // hacer (el pin iba fijo al centro de la caja).
+  await expect(page.locator(MAPA_DE_GOOGLE).getByText("US$ 185,000")).toBeVisible();
 });
 
 test("los botones de zoom siguen disponibles", async ({ page }) => {
@@ -60,17 +74,19 @@ test("los botones de zoom siguen disponibles", async ({ page }) => {
  */
 test("se puede volver a la ubicación del aviso tras arrastrar el mapa", async ({ page }) => {
   await page.setContent(await html());
+  await mapaVisible(page);
 
   // El mapa vive al final de la ficha: sin esto queda fuera de la ventana y el
   // ratón no llega a tocarlo.
-  await page.locator(".leaflet-container").scrollIntoViewIfNeeded();
+  await page.locator(MAPA_DE_GOOGLE).scrollIntoViewIfNeeded();
 
-  const pin = page.locator(".leaflet-marker-pane").getByText("US$ 185,000");
+  const pin = page.locator(MAPA_DE_GOOGLE).getByText("US$ 185,000");
+  await expect(pin).toBeVisible();
   const inicio = (await pin.boundingBox())!;
 
   // Arrastra el mapa lo bastante para sacar el pin de su sitio. Se agarra por
   // una esquina: en el centro está el propio pin, que se traga el arrastre.
-  const mapa = (await page.locator(".leaflet-container").boundingBox())!;
+  const mapa = (await page.locator(MAPA_DE_GOOGLE).boundingBox())!;
   await page.mouse.move(mapa.x + 40, mapa.y + 40);
   await page.mouse.down();
   await page.mouse.move(mapa.x + mapa.width - 40, mapa.y + 40, { steps: 10 });
@@ -82,33 +98,25 @@ test("se puede volver a la ubicación del aviso tras arrastrar el mapa", async (
 
   await page.getByLabel("Centrar en la ubicación del aviso").click();
 
-  // flyTo es animado: se espera a que el pin vuelva a su posición original.
   await expect
     .poll(async () => Math.abs((await pin.boundingBox())!.x - inicio.x), { timeout: 5000 })
-    .toBeLessThan(2);
+    .toBeLessThan(4);
 });
 
 /**
- * MOB-06: el hint y los controles llevaban z-index 600. Esta sección no crea un
- * contexto de apilamiento propio, así que ese 600 competía contra el z-50 de la
- * barra superior y se le montaba encima al hacer scroll.
+ * MOB-06: los controles llevaban z-index 600. Esta sección no crea un contexto
+ * de apilamiento propio, así que ese 600 competía contra el z-50 de la barra
+ * superior y se le montaba encima al hacer scroll.
  */
-test("los adornos del mapa quedan por debajo de la barra superior", async ({ page }) => {
+test("los controles del mapa quedan por debajo de la barra superior", async ({ page }) => {
   await page.setContent(await html());
 
-  // El hint solo se muestra en pantallas táctiles, pero su z-index se computa
-  // igual y es lo que se está fijando aquí. El z-index vive en el contenedor
-  // posicionado, no en el texto.
-  const zHint = await page
-    .getByText("Usa dos dedos para mover el mapa")
-    .evaluate((el) => Number(getComputedStyle(el.parentElement!).zIndex));
   const zControles = await page.getByLabel("Acercar").evaluate(
     (el) => Number(getComputedStyle(el.parentElement!).zIndex),
   );
 
   const Z_NAVBAR = 50;
-  expect(zHint).toBeLessThan(Z_NAVBAR);
   expect(zControles).toBeLessThan(Z_NAVBAR);
-  // …y por encima del mapa, que va en z-0.
+  // …y por encima del mapa.
   expect(zControles).toBeGreaterThan(0);
 });

@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useRef } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import type { MarkerClusterer } from "@googlemaps/markerclusterer";
 import { imgUrl } from "@/lib/imageUrl";
 import { formatCompactPrice } from "@/lib/pricing";
-import { MapContainer, TileLayer, Marker, Popup, useMap, AttributionControl } from "react-leaflet";
-import MarkerClusterGroup from "react-leaflet-cluster";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
-import { MAP_TILES_URL, MAP_TILES_ATTRIBUTION } from "@/lib/mapTiles";
-import "leaflet.markercluster/dist/MarkerCluster.css";
+import { pinDePrecio } from "@/components/mapIcons";
+import { crearAgrupador } from "@/components/mapCluster";
+import { useMapaDeGoogle, textoDeEstadoDelMapa } from "@/lib/googleMaps";
 import { Link } from "react-router-dom";
 import { MapPin } from "lucide-react";
 import type { Listing } from "@/data/mockData";
 
-// Centro por defecto: Lima Metropolitana.
-const LIMA_CENTER: [number, number] = [-12.0464, -77.0428];
+// Centro por defecto: Lima Metropolitana. Solo se ve un instante, hasta que el
+// mapa se encuadra a los avisos de la búsqueda.
+const LIMA_CENTER = { lat: -12.0464, lng: -77.0428 };
 
 // Precio compacto para el pin del mapa (ver formatCompactPrice en pricing.ts).
 const formatPrice = formatCompactPrice;
@@ -24,59 +24,6 @@ const hasCoords = (l: Listing): l is GeoListing =>
   typeof l.lat === "number" && typeof l.lng === "number" &&
   !Number.isNaN(l.lat) && !Number.isNaN(l.lng);
 
-// Pin de precio como divIcon (respeta el diseño de la app con clases Tailwind).
-function priceIcon(label: string, active: boolean): L.DivIcon {
-  const cls = active
-    ? "bg-primary text-primary-foreground scale-110 ring-4 ring-primary/20"
-    : "bg-secondary text-secondary-foreground ring-2 ring-secondary/20";
-  return L.divIcon({
-    className: "!bg-transparent !border-0",
-    html: `<div class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold shadow-lg whitespace-nowrap transition-all ${cls}">${label}</div>`,
-    iconSize: [0, 0],
-    iconAnchor: [0, 0],
-  });
-}
-
-// Ícono de clúster (varios avisos cercanos agrupados) con el color de marca.
-// El tamaño crece un poco con la cantidad para que se lea la densidad.
-function clusterIcon(cluster: { getChildCount: () => number }): L.DivIcon {
-  const count = cluster.getChildCount();
-  const size = count < 10 ? 40 : count < 50 ? 48 : 56;
-  return L.divIcon({
-    className: "!bg-transparent !border-0",
-    html: `<div class="flex items-center justify-center rounded-full bg-secondary text-secondary-foreground font-extrabold shadow-lg ring-4 ring-secondary/25" style="width:${size}px;height:${size}px;font-size:${count < 100 ? 14 : 12}px">${count}</div>`,
-    iconSize: L.point(size, size, true),
-    iconAnchor: [size / 2, size / 2],
-  });
-}
-
-// Encuadra el mapa a los avisos con coordenadas; si cambia el activo, vuela a él.
-function MapController({ points, active }: { points: GeoListing[]; active: string | null }) {
-  const map = useMap();
-  const inited = useRef(false);
-
-  // Encuadra el mapa a TODOS los avisos con coordenadas (vista panorámica).
-  useEffect(() => {
-    if (points.length === 0) return;
-    const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng] as [number, number]));
-    map.fitBounds(bounds, { padding: [48, 48], maxZoom: 15 });
-    inited.current = false; // permite re-ajustar; el próximo "active" no debe pisar el encuadre
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [points.map((p) => p.id).join(",")]);
-
-  // Al pasar el mouse por la lista: pan suave al aviso (sin cambiar el zoom).
-  // Se omite la primera selección automática para no pisar el encuadre inicial.
-  useEffect(() => {
-    if (!active) return;
-    if (!inited.current) { inited.current = true; return; }
-    const p = points.find((x) => x.id === active);
-    if (p) map.panTo([p.lat, p.lng], { animate: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active]);
-
-  return null;
-}
-
 interface ListingsMapProps {
   listings: Listing[];
   active: string | null;
@@ -85,79 +32,155 @@ interface ListingsMapProps {
   hrefFor: (id: string) => string;
 }
 
+/** La tarjetita que sale al pulsar un pin. */
+function FichaDelPin({ l, href }: { l: GeoListing; href: string }) {
+  return (
+    <Link to={href} className="block w-52 no-underline">
+      <div className="aspect-[4/3] bg-muted overflow-hidden rounded-t">
+        <img src={imgUrl(l.imageUrl, 300)} alt={l.title} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+      </div>
+      <div className="pt-2">
+        <span className="text-[10px] uppercase tracking-wider font-bold text-secondary">{l.category}</span>
+        <h4 className="text-sm font-semibold text-foreground line-clamp-2 mt-0.5">{l.title}</h4>
+        <p className="flex items-center gap-1 text-[11px] text-muted-foreground mt-1">
+          <MapPin size={10} /> {l.location}
+        </p>
+        <p className="text-base font-extrabold text-primary mt-1">{formatPrice(l.price, l.currency)}</p>
+      </div>
+    </Link>
+  );
+}
+
 export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMapProps) {
   const points = useMemo(() => listings.filter(hasCoords), [listings]);
   const missing = listings.length - points.length;
 
+  const { contenedor, mapa, libs, estado } = useMapaDeGoogle({
+    center: LIMA_CENTER,
+    zoom: 12,
+    // "greedy": la rueda del ratón y un dedo mueven el mapa sin pedir permiso.
+    // Este mapa ocupa su propio panel, no compite con el scroll de la página.
+    gestureHandling: "greedy",
+    disableDefaultUI: true,
+    zoomControl: true,
+    clickableIcons: false,
+  });
+
+  // Los marcadores vivos, por id de aviso: hacen falta para poder repintar el
+  // que está activo sin reconstruirlos todos.
+  const marcadores = useRef(new Map<string, google.maps.marker.AdvancedMarkerElement>());
+  const agrupador = useRef<MarkerClusterer | null>(null);
+  // La ficha del pin se pinta con React dentro de un InfoWindow, que es DOM
+  // suelto de Google: hay que guardar la raíz para desmontarla y no dejar
+  // árboles de React colgando cada vez que se abre un pin.
+  const ficha = useRef<{ ventana: google.maps.InfoWindow; raiz: Root; nodo: HTMLElement } | null>(null);
+  // El primer encuadre no debe pisarse: al llegar los avisos se encuadra a
+  // todos, y la selección automática que viene detrás no debe centrar el mapa
+  // en uno solo.
+  const yaEncuadrado = useRef(false);
+
+  // ---- Pines: se reconstruyen cuando cambia la lista de avisos ----
+  useEffect(() => {
+    if (!mapa || !libs) return;
+
+    const creados = points.map((l) => {
+      const m = new libs.marker.AdvancedMarkerElement({
+        position: { lat: l.lat, lng: l.lng },
+        content: pinDePrecio(formatPrice(l.price, l.currency), false),
+      });
+      // EFFE-093: seleccionar SOLO al pulsar. Antes el `mouseover` también
+      // activaba el pin, así que mover el ratón por el mapa iba seleccionando y
+      // haciendo pan a cada aviso que rozaba — molesto.
+      m.addListener("gmp-click", () => {
+        onActive(l.id);
+        abrirFicha(l, m);
+      });
+      return m;
+    });
+
+    marcadores.current = new Map(points.map((l, i) => [l.id, creados[i]]));
+    agrupador.current = crearAgrupador(mapa, libs, creados);
+
+    // Encuadre panorámico a todos los avisos con ubicación.
+    if (points.length > 0) {
+      const caja = new google.maps.LatLngBounds();
+      points.forEach((p) => caja.extend({ lat: p.lat, lng: p.lng }));
+      mapa.fitBounds(caja, 48);
+      // Con un solo aviso `fitBounds` se acerca hasta el máximo y se ve el
+      // tejado: se limita para que quede a escala de barrio.
+      const corregir = google.maps.event.addListenerOnce(mapa, "idle", () => {
+        if ((mapa.getZoom() ?? 0) > 15) mapa.setZoom(15);
+      });
+      yaEncuadrado.current = false;
+      return () => {
+        google.maps.event.removeListener(corregir);
+        agrupador.current?.clearMarkers();
+        agrupador.current = null;
+        creados.forEach((m) => { m.map = null; });
+      };
+    }
+
+    return () => {
+      agrupador.current?.clearMarkers();
+      agrupador.current = null;
+      creados.forEach((m) => { m.map = null; });
+    };
+    // `onActive` fuera a propósito: cambia de identidad en cada render del padre
+    // y reconstruiría todos los pines sin motivo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapa, libs, points]);
+
+  // ---- El aviso activo: se repinta y el mapa se acerca a él ----
+  useEffect(() => {
+    if (!mapa) return;
+    for (const [id, m] of marcadores.current) {
+      const l = points.find((p) => p.id === id);
+      if (l) m.content = pinDePrecio(formatPrice(l.price, l.currency), id === active);
+    }
+    if (!active) return;
+    // Se omite la primera selección para no pisar el encuadre panorámico.
+    if (!yaEncuadrado.current) { yaEncuadrado.current = true; return; }
+    const p = points.find((x) => x.id === active);
+    if (p) mapa.panTo({ lat: p.lat, lng: p.lng });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, mapa, points]);
+
+  /** Abre (o reutiliza) la tarjetita del aviso sobre su pin. */
+  function abrirFicha(l: GeoListing, marcador: google.maps.marker.AdvancedMarkerElement) {
+    if (!mapa) return;
+    if (!ficha.current) {
+      const nodo = document.createElement("div");
+      ficha.current = {
+        ventana: new google.maps.InfoWindow({ content: nodo }),
+        raiz: createRoot(nodo),
+        nodo,
+      };
+    }
+    ficha.current.raiz.render(<FichaDelPin l={l} href={hrefFor(l.id)} />);
+    ficha.current.ventana.open({ map: mapa, anchor: marcador });
+  }
+
+  // Al desmontar, la raíz de React de la ficha se desmonta aparte: vive en un
+  // nodo que Google creó y que React no limpia solo.
+  useEffect(() => () => {
+    const f = ficha.current;
+    ficha.current = null;
+    if (f) { f.ventana.close(); setTimeout(() => f.raiz.unmount(), 0); }
+  }, []);
+
+  const aviso = textoDeEstadoDelMapa(estado);
+
   return (
     <div className="absolute inset-0">
-      <MapContainer
-        center={LIMA_CENTER}
-        zoom={12}
-        scrollWheelZoom
-        className="w-full h-full z-0"
-        // Desactivamos el control de atribución por defecto (traía el prefijo
-        // "Leaflet | Reporta un problema / Haz donación" que ensuciaba la esquina,
-        // IT2-029) y lo reemplazamos abajo por uno mínimo, `prefix={false}`.
-        attributionControl={false}
-        // El contenedor padre ya tiene bg-muted mientras cargan los tiles.
-      >
-        {/* Solo el crédito de OSM (la licencia lo exige), sin el prefijo de Leaflet. */}
-        <AttributionControl prefix={false} />
-        <TileLayer
-          attribution={MAP_TILES_ATTRIBUTION}
-          url={MAP_TILES_URL}
-        />
-        <MapController points={points} active={active} />
+      <div ref={contenedor} className="w-full h-full" />
 
-        <MarkerClusterGroup
-          iconCreateFunction={clusterIcon}
-          maxClusterRadius={45}
-          showCoverageOnHover={false}
-          spiderfyOnMaxZoom
-          // A partir de este zoom no se vuelve a agrupar (MOB-09). Antes, tras
-          // abrir un grupo de avisos cercanos, cualquier zoom recalculaba los
-          // clusters y los pines se volvían a juntar: la separación es un estado
-          // transitorio de la librería, no una posición fija. Con el mapa ya muy
-          // acercado el usuario quiere ver los avisos uno a uno.
-          disableClusteringAtZoom={17}
-          chunkedLoading
-        >
-          {points.map((l) => (
-            <Marker
-              key={l.id}
-              position={[l.lat, l.lng]}
-              icon={priceIcon(formatPrice(l.price, l.currency), active === l.id)}
-              // EFFE-093: seleccionar SOLO al hacer click. Antes `mouseover`
-              // también activaba el pin, así que mover el ratón por el mapa iba
-              // seleccionando y haciendo pan a cada aviso que rozaba — molesto.
-              eventHandlers={{ click: () => onActive(l.id) }}
-            >
-              <Popup>
-                <Link to={hrefFor(l.id)} className="block w-52 no-underline">
-                  <div className="aspect-[4/3] bg-muted overflow-hidden rounded-t">
-                    <img src={imgUrl(l.imageUrl, 300)} alt={l.title} loading="lazy" decoding="async" className="w-full h-full object-cover" />
-                  </div>
-                  <div className="pt-2">
-                    <span className="text-[10px] uppercase tracking-wider font-bold text-secondary">
-                      {l.category}
-                    </span>
-                    <h4 className="text-sm font-semibold text-foreground line-clamp-2 mt-0.5">{l.title}</h4>
-                    <p className="flex items-center gap-1 text-[11px] text-muted-foreground mt-1">
-                      <MapPin size={10} /> {l.location}
-                    </p>
-                    <p className="text-base font-extrabold text-primary mt-1">
-                      {formatPrice(l.price, l.currency)}
-                    </p>
-                  </div>
-                </Link>
-              </Popup>
-            </Marker>
-          ))}
-        </MarkerClusterGroup>
-      </MapContainer>
+      {aviso && (
+        <div className="absolute inset-0 flex items-center justify-center bg-muted">
+          <p className="text-sm text-muted-foreground">{aviso}</p>
+        </div>
+      )}
 
-      {points.length === 0 && (
+      {!aviso && points.length === 0 && (
         <div className="absolute inset-0 z-[500] flex items-center justify-center pointer-events-none">
           <div className="bg-card/95 backdrop-blur border border-border rounded-lg px-4 py-3 text-center shadow-lg max-w-xs">
             <p className="text-sm font-semibold text-foreground">Sin ubicaciones en el mapa</p>
@@ -170,7 +193,9 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
 
       {missing > 0 && points.length > 0 && (
         <div className="absolute bottom-3 left-3 z-[500] px-2 py-1 bg-card/90 backdrop-blur text-[10px] text-muted-foreground rounded shadow">
-          {missing} {missing === 1 ? "aviso sin ubicación" : "avisos sin ubicación"} no se muestran
+          {missing === 1
+            ? "1 aviso sin ubicación no se muestra"
+            : `${missing} avisos sin ubicación no se muestran`}
         </div>
       )}
     </div>

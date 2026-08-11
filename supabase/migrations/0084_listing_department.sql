@@ -34,6 +34,11 @@ create index if not exists listings_department_idx
 -- ---------- Departamento de los avisos ya publicados ----------
 -- Se deduce del texto que escribieron sus dueños ("Miraflores, Lima").
 -- Se compara por PALABRA COMPLETA: "Limatambo" es del Cusco, no de Lima.
+--
+-- Es un primer intento, no la verdad: el texto es una redacción, y hay nombres
+-- de distrito que llevan dentro el de otro departamento ("San Martín de Porres"
+-- está en Lima). La 0086 corrige eso con el punto que marcó el anunciante en el
+-- mapa, que sí es un dato. Aquí queda lo que se puede sacar sin salir de la BD.
 do $$
 declare
   v_dep record;
@@ -43,7 +48,8 @@ begin
   for v_dep in
     select * from (values
       ('01','amazonas'), ('02','ancash'), ('03','apurimac'), ('04','arequipa'),
-      ('05','ayacucho'), ('06','cajamarca'), ('08','cusco'), ('09','huancavelica'),
+      ('05','ayacucho'), ('06','cajamarca'), ('08','cusco'), ('08','cuzco'),
+      ('09','huancavelica'),
       ('10','huanuco'), ('11','ica'), ('12','junin'), ('13','la libertad'),
       ('14','lambayeque'), ('15','lima'), ('15','callao'), ('16','loreto'),
       ('17','madre de dios'), ('18','moquegua'), ('19','pasco'), ('20','piura'),

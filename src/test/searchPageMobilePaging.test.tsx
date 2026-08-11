@@ -25,6 +25,9 @@ const { LISTINGS } = vi.hoisted(() => ({
 vi.mock("@/lib/listings", () => ({
   searchListings: vi.fn().mockResolvedValue(LISTINGS),
   fetchListingsByOwner: vi.fn().mockResolvedValue([]),
+  // Estas pruebas trabajan con listas muy por debajo del tope, así que aquí
+  // nunca se recorta nada.
+  topeAlcanzado: () => false,
 }));
 
 // Móvil: 10 por página.

@@ -203,9 +203,15 @@ export async function finalizeListingPublication(
   // Persistir la identidad verificada (Factiliza) en el perfil del usuario, para
   // que el DNI/RUC quede en la base de datos. Se reutiliza en la compra de
   // créditos, que es el único punto donde se emite el comprobante.
+  //
+  // NO se toca `profiles.verified`: ese es el sello de confianza que decide el
+  // equipo de administración y que se enseña en las tarjetas. Antes se ponía a
+  // true aquí, con lo que casi cualquiera que publicase salía como "Verificado"
+  // sin que nadie lo hubiera comprobado (ver migración 0087). Que el documento
+  // esté validado se sabe por `doc_number`, que es lo que se guarda aquí.
   if (input.docType && input.docNumber) {
     const pf: Record<string, unknown> = {
-      doc_type: input.docType, doc_number: input.docNumber, verified: true,
+      doc_type: input.docType, doc_number: input.docNumber,
     };
     if (input.advertiserName) pf.legal_name = input.advertiserName;
     const { error: pfErr } = await supabase.from("profiles").update(pf).eq("id", user.id);

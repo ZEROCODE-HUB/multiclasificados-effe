@@ -95,7 +95,7 @@ const AdvertiserPublish = () => {
   // y alimenta el comprobante. Así el usuario no repite la verificación.
   const [personType, setPersonType] = useState<PersonType>("");
   const [docNumber, setDocNumber] = useState("");
-  const [verified, setVerified] = useState(false);
+  const [docVerified, setDocVerified] = useState(false);
   const [verifiedName, setVerifiedName] = useState("");
 
   // Precarga la identidad verificada del perfil para el comprobante (sin modal).
@@ -106,7 +106,7 @@ const AdvertiserPublish = () => {
       if (id.docNumber) setDocNumber(id.docNumber);
       if (id.docType) setPersonType(id.docType === "ruc" ? "juridica" : "natural");
       if (id.name) setVerifiedName(id.name);
-      setVerified(id.verified);
+      setDocVerified(id.docVerified);
     });
     return () => { active = false; };
   }, [session?.supabase]);
@@ -406,8 +406,11 @@ const AdvertiserPublish = () => {
     } catch { /* noop */ }
   };
 
-  // El salario es opcional en Empleo (EFFE-087); en el resto el precio es obligatorio.
-  const canPublish = form.category && form.title && form.description && (isEmpleo || form.price) && form.department && !!mainPhoto;
+  // El salario es opcional en Empleo (EFFE-087); en el resto el precio es
+  // obligatorio. La FOTO no lo es: quien no suba ninguna publica igual y su
+  // aviso sale con la imagen de la marca (FALLBACK_IMG). Es mejor un aviso
+  // publicado sin foto que un anunciante que abandona por no tener una a mano.
+  const canPublish = form.category && form.title && form.description && (isEmpleo || form.price) && form.department;
 
   // Publica según el saldo disponible. La identidad ya viene precargada del
   // perfil (verificada al comprar saldo): no se abre ningún modal de verificación.
@@ -627,11 +630,18 @@ const AdvertiserPublish = () => {
   };
 
 
+  // Lo que marca el medidor es lo que hace falta para publicar, ni más ni menos.
+  // Antes contaba la foto (que ya no es obligatoria) y la referencia de
+  // ubicación (que nunca lo fue), y en cambio se saltaba el departamento, que sí
+  // lo es: se podía llegar al 100% con el botón de publicar deshabilitado.
   const completion = (() => {
-    const fields = [form.category, form.title, form.description, form.price, form.location];
+    const fields = [
+      form.category, form.title, form.description,
+      isEmpleo ? "n/a" : form.price, // el salario es opcional en Empleo
+      form.department,
+    ];
     const filled = fields.filter((v) => v && v.trim().length > 0).length;
-    const total = fields.length + 1; // +1 fotos
-    return Math.round(((filled + (mainPhoto ? 1 : 0)) / total) * 100);
+    return Math.round((filled / fields.length) * 100);
   })();
 
   // Mientras se verifica la sesión (o se redirige al login) no mostramos el formulario.
@@ -662,7 +672,7 @@ const AdvertiserPublish = () => {
             <div className="w-full md:w-44 h-1.5 bg-muted overflow-hidden">
               <div className="h-full bg-secondary transition-all" style={{ width: `${completion}%` }} />
             </div>
-            {verified && (
+            {docVerified && (
               <Badge variant="outline" className="text-success border-success/30 bg-success/10 gap-1">
                 <ShieldCheck size={11} /> {personType === "natural" ? "DNI" : "RUC"} verificado
               </Badge>
@@ -720,7 +730,10 @@ const AdvertiserPublish = () => {
                   <span className="w-8 h-8 shrink-0 aspect-square bg-primary text-primary-foreground text-xs font-extrabold flex items-center justify-center">02</span>
                   <div className="flex-1 min-w-0">
                     <CardTitle className="text-base flex items-center gap-2"><Camera size={16} className="text-secondary" /> Imágenes del aviso</CardTitle>
-                    <CardDescription className="text-xs">La imagen principal va incluida. Con el adicional “Imagen adicional” puedes sumar hasta 3 imágenes más (4 en total).</CardDescription>
+                    <CardDescription className="text-xs">
+                      Opcional: si no subes ninguna, tu aviso saldrá con la imagen de eFFe.
+                      La principal va incluida y con el adicional “Imagen adicional” puedes sumar hasta 3 más (4 en total).
+                    </CardDescription>
                   </div>
                 </div>
               </CardHeader>
@@ -758,7 +771,7 @@ const AdvertiserPublish = () => {
                       <div className="text-center px-4">
                         <ImagePlus size={28} className="mx-auto text-muted-foreground mb-2" />
                         <p className="text-xs font-semibold text-foreground">Imagen principal</p>
-                        <p className="text-[11px] text-muted-foreground">Incluida · hasta 100 KB</p>
+                        <p className="text-[11px] text-muted-foreground">Opcional · incluida · hasta 100 KB</p>
                       </div>
                     )}
                   </button>

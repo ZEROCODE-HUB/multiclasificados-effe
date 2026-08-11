@@ -8,6 +8,9 @@ const listing = {
   category: "vehiculos", location: "Vitarte, Ate", imageUrl:
     "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Crect width='300' height='300' fill='%23bfae90'/%3E%3C/svg%3E",
   date: "2026-07-10", featured: true, urgent: true, confidential: true, advertiser: "A", views: 0,
+  // Con sello: es el caso que puede solaparse con las insignias. Sin él no hay
+  // nada a la derecha contra lo que chocar y la prueba no comprobaría nada.
+  advertiserVerified: true,
 };
 
 createRoot(document.getElementById("root")!).render(

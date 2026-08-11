@@ -10,7 +10,7 @@ control de acceso por rol y app móvil (Android hoy; iOS en preparación) vía C
 - **Frontend:** React 18 + TypeScript + Vite, Tailwind CSS, shadcn/ui (Radix).
 - **Backend:** Supabase (Postgres + RLS, Auth, Realtime, Storage, Edge Functions en Deno).
 - **Móvil:** Capacitor 8 (APK Android; pipeline iOS → TestFlight en `codemagic.yaml`).
-- **Mapas:** Leaflet + OpenStreetMap. **Gráficas:** Recharts. **Tests:** Vitest + Testing Library + PGlite.
+- **Mapas y direcciones:** Google Maps Platform (Maps JavaScript API, Places API (New) y Geocoding API). **Gráficas:** Recharts. **Tests:** Vitest + Testing Library + PGlite.
 
 ## Requisitos
 

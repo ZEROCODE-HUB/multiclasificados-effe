@@ -6,8 +6,19 @@ import { supabase } from "@/lib/supabase";
 import { compressImage } from "@/lib/compressImage";
 import type { Listing } from "@/data/mockData";
 
-export const FALLBACK_IMG =
-  "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=400&h=300&fit=crop";
+/**
+ * La imagen de un aviso publicado sin foto.
+ *
+ * Subir foto es opcional, así que esto no es un caso raro: es lo que verá
+ * cualquiera que publique deprisa. Antes era una foto de archivo de un edificio
+ * de oficinas traída de Unsplash, que además de no decir nada dependía de un
+ * servidor ajeno; ahora es la marca, servida desde el propio dominio.
+ *
+ * El archivo se genera con scripts/generar-imagen-por-defecto.mjs, que le deja
+ * márgenes a propósito: los huecos de imagen usan `object-cover` y sin margen el
+ * recorte se comía el logo. No sustituirlo por el original sin márgenes.
+ */
+export const FALLBACK_IMG = "/aviso-sin-imagen.jpg";
 
 const isUuid = (v: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
@@ -33,6 +44,7 @@ interface CardRow {
   created_at: string | null;
   expires_at: string | null;
   advertiser: string | null;
+  advertiser_verified: boolean | null;
   image_url: string | null;
 }
 
@@ -49,12 +61,17 @@ export function mapCard(r: CardRow): Listing {
     department: r.department ?? null,
     lat: r.lat != null ? Number(r.lat) : null,
     lng: r.lng != null ? Number(r.lng) : null,
-    imageUrl: r.image_url ?? FALLBACK_IMG,
+    // `||` y no `??`: una cadena vacía también significa "sin imagen", y con
+    // `??` se colaría hasta el <img>, que pintaría el icono de imagen rota.
+    imageUrl: r.image_url || FALLBACK_IMG,
     date: (r.published_at ?? r.created_at ?? new Date().toISOString()).slice(0, 10),
     featured: !!r.featured,
     urgent: !!r.urgent,
     confidential: !!r.confidential,
     advertiser: r.advertiser ?? "Anunciante",
+    // Solo el sello del equipo de administración. Una vista antigua (anterior a
+    // la 0087) no trae la columna: sin dato, no hay sello. Nunca al revés.
+    advertiserVerified: !!r.advertiser_verified,
     views: Number(r.views) || 0,
     expiresAt: r.expires_at ?? null,
   };
@@ -82,7 +99,27 @@ export interface SearchFilters {
    */
   lat?: number;
   lng?: number;
+  /** Cuántos avisos traer. Nunca más de TOPE_RESULTADOS. */
+  limit?: number;
 }
+
+/**
+ * Tope de avisos que se piden de una vez.
+ *
+ * El buscador pagina en el navegador sobre la lista que recibe, así que este
+ * número no es "cuántos se ven por página": es cuántos EXISTEN para el usuario.
+ * Estaba en 48 y por eso con 89 avisos publicados el buscador decía "48 avisos
+ * disponibles" y los otros 41 no había forma de alcanzarlos, ni paginando.
+ *
+ * 500 no es un número mágico: es lo bastante alto para que hoy no se roce y lo
+ * bastante bajo para no volcar la base entera en una respuesta. Cuando se toque
+ * el tope, la interfaz lo dice en vez de fingir que eso es todo lo que hay
+ * (ver `topeAlcanzado`).
+ */
+export const TOPE_RESULTADOS = 500;
+
+/** True si la lista viene recortada por el tope y hay más avisos sin mostrar. */
+export const topeAlcanzado = (n: number): boolean => n >= TOPE_RESULTADOS;
 
 // Lista de avisos para home / destacados.
 export async function fetchListings(opts?: { limit?: number; sort?: SortKey }): Promise<Listing[]> {
@@ -194,12 +231,18 @@ export async function searchListings(f: SearchFilters): Promise<Listing[]> {
       p_sort: f.sort || "recent",
       p_lat: f.lat ?? null,
       p_lng: f.lng ?? null,
-      p_limit: 48,
+      p_limit: Math.min(f.limit ?? TOPE_RESULTADOS, TOPE_RESULTADOS),
       p_offset: 0,
     });
     if (error) throw error;
     return (data ?? []).map((r) => mapCard(r as CardRow));
-  } catch {
+  } catch (e) {
+    // Se sigue devolviendo una lista vacía —el buscador no debe romperse— pero
+    // el motivo queda en la consola. Sin esto, un fallo del servidor se ve
+    // igual que "no hay avisos con esos filtros", y eso cuesta horas de
+    // encontrar: es lo que pasó al filtrar por departamento contra una base de
+    // datos donde aún no estaba aplicada la migración que añade ese parámetro.
+    console.error("[listings] falló search_listings:", e);
     return [];
   }
 }

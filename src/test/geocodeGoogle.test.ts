@@ -1,156 +1,272 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-// Buscar una dirección al publicar. Con llave de Google usa su Geocoding API
-// (mucho mejor cobertura de calles en Perú); sin llave cae a Nominatim, que es
-// gratis pero flojo y con límite de una consulta por segundo.
-//
-// Se usa Geocoding y no Places, comprobado contra la llave real: Geocoding
-// responde con cabeceras CORS —el navegador la deja llamar—, Places legacy no,
-// y Places (New) hay que habilitarla aparte en la consola de Google.
+/**
+ * Buscar una dirección al publicar, con Places API (New).
+ *
+ * Places es el servicio hecho para esto: entiende texto a medias y devuelve
+ * PREDICCIONES, no direcciones. La contrapartida es que no trae coordenadas: hay
+ * que pedir el detalle del lugar elegido, y esa segunda llamada es también la
+ * que cierra la sesión de facturación. Todas las teclas de una búsqueda
+ * comparten sesión; sin eso, Places cobraría cada pulsación por separado.
+ *
+ * Hay un respaldo por Geocoding para el caso de que Places no esté habilitada en
+ * el proyecto de Google. No es la forma buena de hacerlo —lo avisa por consola—
+ * pero evita que publicar se quede sin buscador mientras se configura la consola.
+ */
 
 const fetchMock = vi.fn();
 
-async function cargar(conLlave: boolean) {
+async function cargar(conLlave = true) {
   vi.resetModules();
   vi.stubEnv("VITE_GOOGLE_MAPS_API_KEY", conLlave ? "llave-de-prueba" : "");
   return import("@/lib/geocode");
 }
 
-// Forma real de la respuesta de la Geocoding API.
-const respuestaGoogle = {
-  status: "OK",
-  results: [
+const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) });
+const falla = (status: number) => Promise.resolve({ ok: false, status, json: () => Promise.resolve({}) });
+
+// Forma real de la respuesta de Places Autocomplete (New).
+const PREDICCIONES = {
+  suggestions: [
     {
-      formatted_address: "Av. José Larco 1234, Miraflores 15074, Perú",
-      geometry: { location: { lat: -12.1215, lng: -77.0301 } },
+      placePrediction: {
+        placeId: "ChIJ-larco",
+        text: { text: "Av. José Larco 1234, Miraflores, Perú" },
+        structuredFormat: {
+          mainText: { text: "Av. José Larco 1234" },
+          secondaryText: { text: "Miraflores, Lima, Perú" },
+        },
+      },
     },
     {
-      formatted_address: "Av. José Larco 1300, Miraflores, Perú",
-      geometry: { location: { lat: -12.1225, lng: -77.0305 } },
+      placePrediction: {
+        placeId: "ChIJ-mirafl-aqp",
+        text: { text: "Miraflores, Arequipa, Perú" },
+        structuredFormat: {
+          mainText: { text: "Miraflores" },
+          secondaryText: { text: "Arequipa, Perú" },
+        },
+      },
     },
   ],
 };
 
-const ok = (body: unknown) => Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
-
 beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
+  vi.spyOn(console, "warn").mockImplementation(() => {});
 });
 
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
-describe("buscar direcciones — con llave de Google", () => {
-  it("consulta la Geocoding API y devuelve los resultados con su punto", async () => {
-    fetchMock.mockReturnValue(ok(respuestaGoogle));
-    const { buscarDirecciones } = await cargar(true);
+describe("sugerir direcciones con Places", () => {
+  it("llama a Places y devuelve el título y el detalle de cada predicción", async () => {
+    fetchMock.mockReturnValue(ok(PREDICCIONES));
+    const { sugerirDirecciones } = await cargar();
 
-    const rs = await buscarDirecciones("Av. Larco 1234, Miraflores, Lima");
+    const rs = await sugerirDirecciones("av larco");
 
     expect(rs).toHaveLength(2);
-    expect(rs[0].label).toBe("Av. José Larco 1234, Miraflores 15074, Perú");
-    expect(rs[0].lat).toBeCloseTo(-12.1215, 4);
-
-    const url = String(fetchMock.mock.calls[0][0]);
-    expect(url).toContain("https://maps.googleapis.com/maps/api/geocode/json");
-    expect(url).toContain("key=llave-de-prueba");
+    expect(rs[0]).toMatchObject({
+      id: "ChIJ-larco",
+      titulo: "Av. José Larco 1234",
+      detalle: "Miraflores, Lima, Perú",
+    });
+    expect(String(fetchMock.mock.calls[0][0])).toBe("https://places.googleapis.com/v1/places:autocomplete");
   });
 
-  it("busca en Perú, en español y alrededor de la zona elegida", async () => {
-    fetchMock.mockReturnValue(ok(respuestaGoogle));
-    const { buscarDirecciones } = await cargar(true);
+  it("va con la llave en la cabecera, en español y limitado al Perú", async () => {
+    fetchMock.mockReturnValue(ok(PREDICCIONES));
+    const { sugerirDirecciones } = await cargar();
+    await sugerirDirecciones("av larco");
 
-    await buscarDirecciones("Av. Larco 1234", { lat: -12.12, lng: -77.03 });
-
-    const url = new URL(String(fetchMock.mock.calls[0][0]));
-    expect(url.searchParams.get("language")).toBe("es");
-    // Sin limitar el país, "Av. Larco" puede caer en otro sitio del mundo.
-    expect(url.searchParams.get("components")).toBe("country:PE");
-    // Y sin el recuadro, en otra ciudad del Perú.
-    const bounds = url.searchParams.get("bounds")!;
-    const [sw, ne] = bounds.split("|").map((p) => p.split(",").map(Number));
-    expect(sw[0]).toBeLessThan(-12.12);
-    expect(ne[0]).toBeGreaterThan(-12.12);
+    const opciones = fetchMock.mock.calls[0][1] as { method: string; headers: Record<string, string>; body: string };
+    expect(opciones.method).toBe("POST");
+    expect(opciones.headers["X-Goog-Api-Key"]).toBe("llave-de-prueba");
+    const cuerpo = JSON.parse(opciones.body);
+    expect(cuerpo.languageCode).toBe("es");
+    // Sin esto, "Av. Larco" puede caer en cualquier país del mundo.
+    expect(cuerpo.includedRegionCodes).toEqual(["pe"]);
   });
 
-  it("descarta resultados sin coordenadas en vez de colar un pin inválido", async () => {
-    fetchMock.mockReturnValue(
-      ok({ status: "OK", results: [{ formatted_address: "Sin punto" }, ...respuestaGoogle.results] }),
-    );
-    const { buscarDirecciones } = await cargar(true);
+  it("manda la sesión, que es lo que hace que la búsqueda entera cueste una", async () => {
+    fetchMock.mockReturnValue(ok(PREDICCIONES));
+    const { sugerirDirecciones } = await cargar();
+    await sugerirDirecciones("av larco", { sesion: "abc-123" });
 
-    const rs = await buscarDirecciones("lo que sea");
-    expect(rs).toHaveLength(2);
-    expect(rs.every((r) => Number.isFinite(r.lat) && Number.isFinite(r.lng))).toBe(true);
+    expect(JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body).sessionToken).toBe("abc-123");
   });
 
-  it("una dirección que no existe devuelve vacío, sin tratarlo como error", async () => {
-    fetchMock.mockReturnValue(ok({ status: "ZERO_RESULTS", results: [] }));
-    const { buscarDirecciones } = await cargar(true);
-    expect(await buscarDirecciones("calle que no existe 999")).toEqual([]);
+  it("con el pin ya puesto, prefiere las direcciones de esa zona", async () => {
+    fetchMock.mockReturnValue(ok(PREDICCIONES));
+    const { sugerirDirecciones } = await cargar();
+    await sugerirDirecciones("av larco", { sesgo: { lat: -12.12, lng: -77.03 } });
+
+    const cuerpo = JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body);
+    expect(cuerpo.locationBias.circle.center).toEqual({ latitude: -12.12, longitude: -77.03 });
+    // Preferencia, no filtro: `locationBias` y NO `locationRestriction`.
+    expect(cuerpo.locationRestriction).toBeUndefined();
   });
 
-  it("un problema de configuración (llave sin permisos) no rompe la publicación", async () => {
-    fetchMock.mockReturnValue(
-      ok({ status: "REQUEST_DENIED", error_message: "API key not authorized" }),
-    );
-    const { buscarDirecciones } = await cargar(true);
-    expect(await buscarDirecciones("Av. Larco 1234")).toEqual([]);
+  it("descarta predicciones sin identificador: no se puede pedir su punto", async () => {
+    fetchMock.mockReturnValue(ok({
+      suggestions: [
+        { queryPrediction: { text: { text: "pizzerías cerca" } } },
+        PREDICCIONES.suggestions[0],
+      ],
+    }));
+    const { sugerirDirecciones } = await cargar();
+    expect(await sugerirDirecciones("pizza")).toHaveLength(1);
   });
 
-  it("si Google rechaza la llave, devuelve vacío y no rompe la publicación", async () => {
-    // Buscar la dirección es una comodidad: siempre queda marcar el punto a mano.
-    fetchMock.mockReturnValue(Promise.resolve({ ok: false, status: 403 }));
-    const { buscarDirecciones } = await cargar(true);
-
-    expect(await buscarDirecciones("Av. Larco 1234")).toEqual([]);
-  });
-
-  it("si la red falla, tampoco rompe", async () => {
-    fetchMock.mockRejectedValue(new Error("sin conexión"));
-    const { buscarDirecciones } = await cargar(true);
-
-    expect(await buscarDirecciones("Av. Larco 1234")).toEqual([]);
-  });
-});
-
-describe("buscar direcciones — sin llave (respaldo)", () => {
-  it("usa Nominatim y no llama a Google", async () => {
-    fetchMock.mockReturnValue(
-      ok([{ lat: "-12.1215", lon: "-77.0301", name: "Avenida José Larco", display_name: "Avenida José Larco, Miraflores, Lima" }]),
-    );
-    const { buscarDirecciones } = await cargar(false);
-
-    const rs = await buscarDirecciones("Av. Larco, Miraflores");
-
-    expect(rs[0].lat).toBeCloseTo(-12.1215, 4);
-    expect(String(fetchMock.mock.calls[0][0])).toContain("nominatim.openstreetmap.org");
-    expect(String(fetchMock.mock.calls[0][0])).toContain("countrycodes=pe");
-  });
-
-  it("hayGoogleMaps dice si la llave está puesta", async () => {
-    expect((await cargar(false)).hayGoogleMaps()).toBe(false);
-    expect((await cargar(true)).hayGoogleMaps()).toBe(true);
-  });
-});
-
-describe("buscar direcciones — casos vacíos", () => {
   it("con texto vacío no consulta nada", async () => {
-    const { buscarDirecciones } = await cargar(true);
-    expect(await buscarDirecciones("   ")).toEqual([]);
+    const { sugerirDirecciones } = await cargar();
+    expect(await sugerirDirecciones("   ")).toEqual([]);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("geocode devuelve solo el primero, o null", async () => {
-    fetchMock.mockReturnValue(ok(respuestaGoogle));
-    const { geocode } = await cargar(true);
-    expect((await geocode("Av. Larco"))?.label).toBe("Av. José Larco 1234, Miraflores 15074, Perú");
+  it("sin llave no consulta nada", async () => {
+    const { sugerirDirecciones } = await cargar(false);
+    expect(await sugerirDirecciones("av larco")).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
 
-    fetchMock.mockReturnValue(ok({ status: "ZERO_RESULTS", results: [] }));
-    const { geocode: geocode2 } = await cargar(true);
-    expect(await geocode2("no existe")).toBeNull();
+describe("respaldo cuando Places no está habilitada", () => {
+  // Es el caso real de un proyecto de Google recién configurado: Places (New)
+  // viene desactivada y responde 403. Publicar no puede quedarse sin buscador
+  // de direcciones por eso.
+  const GEOCODING = {
+    status: "OK",
+    results: [{
+      place_id: "geo-mirafl-lima",
+      formatted_address: "Miraflores, Perú",
+      address_components: [
+        { long_name: "Miraflores", types: ["locality", "political"] },
+        { long_name: "Lima", types: ["administrative_area_level_2", "political"] },
+        { long_name: "Provincia de Lima", types: ["administrative_area_level_1", "political"] },
+        { long_name: "Perú", types: ["country", "political"] },
+      ],
+    }],
+  };
+
+  it("si Places responde 403, busca por Geocoding", async () => {
+    fetchMock.mockReturnValueOnce(falla(403)).mockReturnValue(ok(GEOCODING));
+    const { sugerirDirecciones } = await cargar();
+
+    const rs = await sugerirDirecciones("mirafl");
+
+    expect(rs).toHaveLength(1);
+    expect(rs[0].titulo).toBe("Miraflores");            // sin el ", Perú"
+    expect(rs[0].detalle).toBe("Lima, Provincia de Lima");
+    expect(String(fetchMock.mock.calls[1][0])).toContain("maps/api/geocode/json");
+  });
+
+  it("lo avisa por consola: es una red de seguridad, no la forma buena", async () => {
+    fetchMock.mockReturnValueOnce(falla(403)).mockReturnValue(ok(GEOCODING));
+    const { sugerirDirecciones } = await cargar();
+    await sugerirDirecciones("mirafl");
+    expect(console.warn).toHaveBeenCalled();
+  });
+
+  it("si también falla el respaldo, devuelve vacío y no rompe la publicación", async () => {
+    fetchMock.mockRejectedValue(new Error("sin red"));
+    const { sugerirDirecciones } = await cargar();
+    expect(await sugerirDirecciones("mirafl")).toEqual([]);
+  });
+
+  it("dos resultados que se leerían igual se quedan en uno", async () => {
+    const repetido = GEOCODING.results[0];
+    fetchMock.mockReturnValueOnce(falla(403)).mockReturnValue(ok({
+      status: "OK",
+      results: [repetido, { ...repetido, place_id: "otro" }],
+    }));
+    const { sugerirDirecciones } = await cargar();
+    expect(await sugerirDirecciones("mirafl")).toHaveLength(1);
+  });
+});
+
+describe("el detalle del lugar elegido", () => {
+  const DETALLE = {
+    location: { latitude: -12.1215, longitude: -77.0301 },
+    addressComponents: [
+      { longText: "Miraflores", types: ["locality", "political"] },
+      { longText: "Lima", types: ["administrative_area_level_2", "political"] },
+      { longText: "Provincia de Lima", types: ["administrative_area_level_1", "political"] },
+      { longText: "Perú", types: ["country", "political"] },
+    ],
+  };
+
+  it("una sola llamada trae el punto Y la zona", async () => {
+    // Es la clave del diseño: sin esto habría que geocodificar al revés el punto
+    // recién obtenido, o sea pagar y esperar dos veces por lo mismo.
+    fetchMock.mockReturnValue(ok(DETALLE));
+    const { detalleDeLugar } = await cargar();
+
+    const r = await detalleDeLugar("ChIJ-larco", "abc-123");
+
+    expect(r).toEqual({
+      lat: -12.1215, lng: -77.0301,
+      region: "Provincia de Lima", referencia: "Miraflores, Lima",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("cierra la sesión de facturación con el mismo identificador", async () => {
+    fetchMock.mockReturnValue(ok(DETALLE));
+    const { detalleDeLugar } = await cargar();
+    await detalleDeLugar("ChIJ-larco", "abc-123");
+
+    const url = new URL(String(fetchMock.mock.calls[0][0]));
+    expect(url.pathname).toBe("/v1/places/ChIJ-larco");
+    expect(url.searchParams.get("sessionToken")).toBe("abc-123");
+  });
+
+  it("pide solo los campos que usa: el FieldMask es lo que se cobra", async () => {
+    fetchMock.mockReturnValue(ok(DETALLE));
+    const { detalleDeLugar } = await cargar();
+    await detalleDeLugar("ChIJ-larco");
+
+    const cabeceras = (fetchMock.mock.calls[0][1] as { headers: Record<string, string> }).headers;
+    expect(cabeceras["X-Goog-FieldMask"]).toBe("location,addressComponents");
+  });
+
+  it("un lugar sin coordenadas devuelve null en vez de un pin en el mar", async () => {
+    fetchMock.mockReturnValue(ok({ addressComponents: DETALLE.addressComponents }));
+    const { detalleDeLugar } = await cargar();
+    expect(await detalleDeLugar("ChIJ-sin-punto")).toBeNull();
+  });
+
+  it("si el servicio falla devuelve null, y publicar sigue siendo posible", async () => {
+    fetchMock.mockReturnValue(falla(500));
+    const { detalleDeLugar } = await cargar();
+    expect(await detalleDeLugar("ChIJ-larco")).toBeNull();
+  });
+});
+
+describe("las sesiones de búsqueda", () => {
+  it("cada una es distinta", async () => {
+    const { nuevaSesionDeBusqueda } = await cargar();
+    const vistas = new Set(Array.from({ length: 50 }, () => nuevaSesionDeBusqueda()));
+    expect(vistas.size).toBe(50);
+  });
+
+  it("funciona aunque el navegador no tenga crypto.randomUUID", async () => {
+    // WebViews antiguos. El identificador solo tiene que ser distinto por
+    // sesión, no criptográficamente fuerte.
+    const { nuevaSesionDeBusqueda } = await cargar();
+    vi.stubGlobal("crypto", {});
+    expect(nuevaSesionDeBusqueda()).toMatch(/^s-\d+-\d+$/);
+  });
+});
+
+describe("hayGoogleMaps", () => {
+  it("dice si la llave está puesta", async () => {
+    expect((await cargar(false)).hayGoogleMaps()).toBe(false);
+    expect((await cargar(true)).hayGoogleMaps()).toBe(true);
   });
 });

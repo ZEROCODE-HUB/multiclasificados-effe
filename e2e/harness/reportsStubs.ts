@@ -27,3 +27,16 @@ export const supabase = { functions: { invoke: async () => ({ data: null, error:
 // --- @/hooks/use-toast
 export const toast = () => {};
 export const useToast = () => ({ toast, dismiss: () => {}, toasts: [] });
+
+// Tamaño de página de las transacciones de crédito. Lo importa el panel real
+// (src/lib/admin.ts); el stub tiene que exportarlo o el bundle no compila.
+export const CREDIT_TX_PAGE_SIZE = 20;
+
+// Transacciones de crédito de la pestaña de reportes. Vacías: la prueba mira
+// que la exportación (PDF/CSV/Excel) funcione, no los datos.
+export const fetchAdminCreditTransactions = async () => ({ data: [], total: 0 });
+
+// Permisos del usuario (usePermissions los pide al montar el panel). Todos
+// concedidos: la prueba mira la exportación, no el control de acceso.
+export const getMyPermissions = async () =>
+  new Proxy({}, { get: () => ({ can_view: true, can_edit: true, can_approve: true, can_delete: true }) });

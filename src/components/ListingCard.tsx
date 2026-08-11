@@ -153,9 +153,13 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
       <div className="absolute top-3 left-3 z-10 flex flex-col items-start gap-1.5 w-fit max-w-[calc(100%-8.5rem)]">
         {badgeChips}
       </div>
-      <span className="absolute top-3 right-12 z-10 inline-flex items-center gap-1 px-2.5 py-1 bg-white/95 backdrop-blur-sm text-primary text-[10px] font-bold uppercase tracking-wider shadow-sm">
-        <ShieldCheck size={10} /> Verificado
-      </span>
+      {/* Solo si el equipo de administración verificó al anunciante. Antes salía
+          en todas las tarjetas sin condición: decoración con pinta de dato. */}
+      {listing.advertiserVerified && (
+        <span className="absolute top-3 right-12 z-10 inline-flex items-center gap-1 px-2.5 py-1 bg-white/95 backdrop-blur-sm text-primary text-[10px] font-bold uppercase tracking-wider shadow-sm">
+          <ShieldCheck size={10} /> Verificado
+        </span>
+      )}
       <button
         onClick={handleFav}
         /* El cuadro sigue midiendo 32px, pero el pseudo-elemento amplía la zona

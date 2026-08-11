@@ -209,16 +209,8 @@
   }
 }
 
-/* Mapa que convive con el scroll de la página (ficha del aviso, MOB-10).
-   Leaflet fija `touch-action: none` en cuanto el arrastre y el zoom táctil
-   están activos, y entonces el dedo queda atrapado por el mapa: la página no
-   se movía. Con `pan-y` el navegador se queda el desplazamiento vertical y le
-   entrega a Leaflet el resto: arrastre horizontal con un dedo, y pan + zoom
-   con dos. Va fuera de @layer para ganarle en especificidad al CSS de Leaflet,
-   que se importa desde el propio componente. */
-.map-pan-y .leaflet-container,
-.map-pan-y .leaflet-container.leaflet-touch-drag,
-.map-pan-y .leaflet-container.leaflet-touch-zoom,
-.map-pan-y .leaflet-container.leaflet-touch-drag.leaflet-touch-zoom {
-  touch-action: pan-y;
-}
+/* Aquí vivía `.map-pan-y`, que peleaba con el `touch-action: none` que Leaflet
+   ponía en el mapa de la ficha para que la página pudiera seguir scrolleando
+   (MOB-10). Con Google ese apaño sobra: `gestureHandling: "cooperative"` hace
+   lo mismo de serie —un dedo scrollea la página, dos mueven el mapa— y además
+   se lo explica al usuario. Ver src/components/ListingLocationMap.tsx. */

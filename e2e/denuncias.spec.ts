@@ -21,7 +21,7 @@ const html = () =>
 const abrirDenuncia = async (page: import("@playwright/test").Page) => {
   await page.setContent(await html());
   await page.getByRole("button", { name: /Ana García → Luis Paz/ }).click();
-  await expect(page.getByText("Detalle de la denuncia")).toBeVisible();
+  await expect(page.getByText("Detalle del reclamo")).toBeVisible();
 };
 
 test('"Ver aviso" muestra el aviso sin navegar a ninguna parte', async ({ page }) => {
@@ -43,7 +43,7 @@ test('"Ver aviso" muestra el aviso sin navegar a ninguna parte', async ({ page }
 
   // Y la denuncia sigue debajo al cerrar.
   await page.keyboard.press("Escape");
-  await expect(page.getByText("Detalle de la denuncia")).toBeVisible();
+  await expect(page.getByText("Detalle del reclamo")).toBeVisible();
 });
 
 test('"Marcar en revisión" no admite un segundo clic mientras trabaja', async ({ page }) => {

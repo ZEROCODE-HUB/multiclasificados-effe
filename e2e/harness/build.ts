@@ -23,11 +23,19 @@ export interface HarnessOpts {
   entry?: string;
   stubs?: string;
   stubbed?: string[];
+  /**
+   * Variables de entorno visibles para el componente (`import.meta.env`).
+   *
+   * Normalmente no hace falta ninguna. Los mapas sí las necesitan: sin llave el
+   * componente ni intenta cargar el SDK, así que la prueba no vería un mapa
+   * sino el cartel de "no está configurado". Ver e2e/harness/googleEnv.ts.
+   */
+  env?: Record<string, string>;
 }
 
 const cached = new Map<string, Promise<string>>();
 
-const build = async ({ entry = "main.tsx", stubs = STUBS, stubbed }: HarnessOpts): Promise<string> => {
+const build = async ({ entry = "main.tsx", stubs = STUBS, stubbed, env }: HarnessOpts): Promise<string> => {
   const corta = stubbed ? new Set(stubbed) : STUBBED;
   const bundle = await esbuild.build({
     entryPoints: [path.join(DIR, entry)],
@@ -39,10 +47,15 @@ const build = async ({ entry = "main.tsx", stubs = STUBS, stubbed }: HarnessOpts
     // Con un componente que importa CSS hay más de una salida, y esbuild exige
     // outdir para nombrarlas. No se escribe nada en disco (write: false).
     outdir: path.join(ROOT, ".harness-out"),
-    // El CSS de Leaflet referencia sus PNG de marcador: van embebidos, así la
-    // página sigue siendo autocontenida.
+    // Las imágenes que referencie un componente van embebidas, así la página
+    // sigue siendo autocontenida.
     loader: { ".png": "dataurl", ".svg": "dataurl" },
-    define: { "process.env.NODE_ENV": '"production"' },
+    define: {
+      "process.env.NODE_ENV": '"production"',
+      // Vite sustituye `import.meta.env` al compilar; esbuild a secas no, y sin
+      // esto el módulo que lee la llave se encuentra un `undefined`.
+      "import.meta.env": JSON.stringify(env ?? {}),
+    },
     plugins: [
       {
         name: "alias-src",
@@ -66,17 +79,16 @@ const build = async ({ entry = "main.tsx", stubs = STUBS, stubbed }: HarnessOpts
     "-i", path.join(SRC, "index.css"), "-o", cssFile, "--minify",
   ], { cwd: ROOT, stdio: "pipe" });
 
-  // Un componente puede importar su propio CSS (el mapa trae el de Leaflet):
-  // esbuild lo emite como archivo aparte, así que hay que buscar el JS por
-  // extensión en vez de dar por hecho que es el primero.
+  // Un componente puede importar su propio CSS: esbuild lo emite como archivo
+  // aparte, así que hay que buscar el JS por extensión en vez de dar por hecho
+  // que es el primero.
   const js = bundle.outputFiles.find((f) => f.path.endsWith(".js"))!.text;
   const bundledCss = bundle.outputFiles
     .filter((f) => f.path.endsWith(".css"))
     .map((f) => f.text)
     .join("\n");
 
-  // El CSS del componente va PRIMERO: el de la app debe poder pisarlo (la regla
-  // .map-pan-y le gana al touch-action de Leaflet).
+  // El CSS del componente va PRIMERO: el de la app debe poder pisarlo.
   return `<style>${bundledCss}</style>`
     + `<style>${fs.readFileSync(cssFile, "utf8")}</style>`
     + `<div id="root"></div>`
@@ -85,7 +97,9 @@ const build = async ({ entry = "main.tsx", stubs = STUBS, stubbed }: HarnessOpts
 
 /** Cacheado por proceso y por entrada: cada worker compila cada harness una vez. */
 export const harnessHtml = (opts: HarnessOpts = {}) => {
-  const key = opts.entry ?? "main.tsx";
+  // El entorno entra en la clave: el mismo componente compilado con llave y sin
+  // ella son dos páginas distintas, y sin esto la segunda reutilizaría la primera.
+  const key = `${opts.entry ?? "main.tsx"}|${JSON.stringify(opts.env ?? {})}`;
   if (!cached.has(key)) cached.set(key, build(opts));
   return cached.get(key)!;
 };

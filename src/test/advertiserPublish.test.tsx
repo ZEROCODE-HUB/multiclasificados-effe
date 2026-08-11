@@ -274,3 +274,49 @@ describe("AdvertiserPublish — un solo modal de confirmación (sin verificació
     await screen.findByText(/aviso publicado/i);
   });
 });
+
+// La foto dejó de ser obligatoria: quien no sube ninguna publica igual y su
+// aviso sale con la imagen de la marca. Era el motivo más tonto por el que un
+// anunciante abandonaba a mitad del formulario.
+describe("AdvertiserPublish — publicar sin foto", () => {
+  it("el botón de publicar NO espera a que se suba una imagen", async () => {
+    getCreditBalance.mockResolvedValue(1000);
+    seedDraft();
+    render(<AdvertiserPublish />);
+    await screen.findByDisplayValue("Casa bonita");
+
+    // Sin llamar a uploadMainPhoto().
+    expect(screen.getByRole("button", { name: /publicar aviso/i })).toBeEnabled();
+  });
+
+  it("publica de verdad, y le dice a la capa de datos que no hay portada", async () => {
+    getCreditBalance.mockResolvedValue(1000);
+    seedDraft();
+    render(<AdvertiserPublish />);
+    await screen.findByDisplayValue("Casa bonita");
+
+    await clickPublish();
+
+    await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
+    expect(createAndPublishListing.mock.calls[0][0].mainPhoto).toBeNull();
+    await screen.findByText(/aviso publicado/i);
+  });
+
+  it("avisa en el formulario de que la imagen es opcional", async () => {
+    getCreditBalance.mockResolvedValue(1000);
+    seedDraft();
+    render(<AdvertiserPublish />);
+    await screen.findByDisplayValue("Casa bonita");
+    // Si no se dice, el anunciante supone que sin foto no puede seguir.
+    expect(screen.getByText(/saldrá con la imagen de eFFe/i)).toBeInTheDocument();
+  });
+
+  it("el medidor de avance no penaliza por no tener foto", async () => {
+    getCreditBalance.mockResolvedValue(1000);
+    seedDraft(); // borrador con TODO lo obligatorio relleno
+    render(<AdvertiserPublish />);
+    await screen.findByDisplayValue("Casa bonita");
+    // Antes se quedaba en 83% para siempre y parecía que faltaba algo.
+    expect(screen.getByText("100%")).toBeInTheDocument();
+  });
+});

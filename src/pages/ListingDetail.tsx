@@ -530,9 +530,12 @@ export default function ListingDetail() {
                       </span>
                     ))}
                   </div>
-                  <span className="inline-flex shrink-0 items-center gap-1 px-3 py-1.5 bg-white/95 backdrop-blur-sm text-primary text-[10px] font-bold uppercase tracking-wider shadow-sm">
-                    <ShieldCheck size={11} /> Verificado eFFe
-                  </span>
+                  {/* Igual que en la tarjeta: solo con el sello del equipo. */}
+                  {listing.advertiserVerified && (
+                    <span className="inline-flex shrink-0 items-center gap-1 px-3 py-1.5 bg-white/95 backdrop-blur-sm text-primary text-[10px] font-bold uppercase tracking-wider shadow-sm">
+                      <ShieldCheck size={11} /> Verificado eFFe
+                    </span>
+                  )}
                 </div>
                 <div className="absolute bottom-4 right-4 px-3 py-1 bg-black/60 text-white text-xs font-semibold rounded-full">
                   {activeImg + 1} / {gallery.length}
@@ -793,7 +796,11 @@ export default function ListingDetail() {
             </div>
 
             <div className="pt-4 border-t border-border space-y-2 text-xs text-muted-foreground">
-              <p className="flex items-start gap-2"><ShieldCheck size={14} className="text-secondary mt-0.5 shrink-0" /> Anunciante verificado y avalado por eFFe.</p>
+              {/* Afirmar esto de todo el mundo es justo lo que vacía de sentido
+                  al sello: solo se dice de quien el equipo verificó. */}
+              {listing.advertiserVerified && (
+                <p className="flex items-start gap-2"><ShieldCheck size={14} className="text-secondary mt-0.5 shrink-0" /> Anunciante verificado y avalado por eFFe.</p>
+              )}
               <p className="flex items-start gap-2"><CheckCircle2 size={14} className="text-secondary mt-0.5 shrink-0" /> Pagos protegidos y sin comisión para el comprador.</p>
             </div>
           </div>
@@ -810,7 +817,9 @@ export default function ListingDetail() {
               <div className="min-w-0">
                 <p className="font-bold text-foreground truncate flex items-center gap-1.5">
                   {advertiserName}
-                  <ShieldCheck size={14} className="text-secondary shrink-0" />
+                  {listing.advertiserVerified && (
+                    <ShieldCheck size={14} className="text-secondary shrink-0" aria-label="Anunciante verificado" />
+                  )}
                 </p>
                 <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                   <Building2 size={11} /> {listing.location || "—"}

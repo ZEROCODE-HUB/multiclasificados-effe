@@ -61,7 +61,12 @@ export interface MyIdentity {
   docType: DocKind | null;
   docNumber: string | null;
   name: string;      // nombre / razón social verificado por Factiliza
-  verified: boolean;
+  /**
+   * El documento del perfil pasó por Factiliza. NO es el sello de confianza:
+   * ese lo pone el equipo de administración (profiles.verified) y es el que se
+   * enseña en las tarjetas de aviso.
+   */
+  docVerified: boolean;
 }
 
 // Lee la identidad verificada del perfil del usuario actual.
@@ -72,7 +77,7 @@ export async function fetchMyIdentity(): Promise<MyIdentity | null> {
     if (!user) return null;
     const { data } = await supabase
       .from("profiles")
-      .select("doc_type, doc_number, legal_name, company_name, full_name, verified")
+      .select("doc_type, doc_number, legal_name, company_name, full_name")
       .eq("id", user.id)
       .maybeSingle();
     if (!data) return null;
@@ -82,11 +87,14 @@ export async function fetchMyIdentity(): Promise<MyIdentity | null> {
       (docType === "ruc" ? (data as any).company_name : null) ||
       (data as any).full_name ||
       "";
+    const docNumber = ((data as any).doc_number as string | null) ?? null;
     return {
       docType,
-      docNumber: (data as any).doc_number ?? null,
+      docNumber,
       name,
-      verified: !!(data as any).verified,
+      // El número solo se guarda tras una consulta correcta a Factiliza, así que
+      // tenerlo ES la prueba de que el documento se validó.
+      docVerified: !!docNumber,
     };
   } catch {
     return null;

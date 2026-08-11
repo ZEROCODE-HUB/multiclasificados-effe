@@ -10,7 +10,8 @@ import { Navbar } from "@/components/Navbar";
 import { type Listing } from "@/data/mockData";
 import { useCategories } from "@/hooks/useCategories";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { searchListings, fetchListingsByOwner, type SortKey } from "@/lib/listings";
+import { useGridColumns } from "@/hooks/useFittingCount";
+import { searchListings, fetchListingsByOwner, topeAlcanzado, type SortKey } from "@/lib/listings";
 import { useSession } from "@/hooks/useSession";
 import { useFavorites } from "@/hooks/useFavorites";
 import { createSavedSearch, DUPLICATE_SEARCH_MSG } from "@/lib/savedSearches";
@@ -33,10 +34,11 @@ import {
   ChevronRight,
 } from "lucide-react";
 
-// El mapa se carga solo al abrir la vista "Mapa". Con el import estático,
-// leaflet (199 KB de JS + 16 KB de CSS bloqueante) entraba en el bundle inicial
-// de TODA la app —incluida la portada, que no tiene mapa— porque esta página se
-// importa sin lazy en App.tsx (IT3-004/007).
+// El mapa se carga solo al abrir la vista "Mapa". Con el import estático, el
+// SDK de mapas entraba en el bundle inicial de TODA la app —incluida la
+// portada— porque esta página se importa sin lazy en App.tsx (IT3-004/007).
+// Sigue valiendo con Google: el SDK se descarga al montar el componente, así
+// que quien no abre el mapa no lo paga ni en bytes ni en cargas facturables.
 const ListingsMap = lazy(() =>
   import("@/components/ListingsMap").then((m) => ({ default: m.ListingsMap })),
 );
@@ -49,6 +51,21 @@ type Layout = "grid" | "list";
 // continua; ahora también pagina para no volcar cientos de avisos de golpe.
 const WEB_PAGE_SIZE = 20;
 const MOBILE_PAGE_SIZE = 10;
+
+/**
+ * Cuántos avisos poner en una página para que no quede una fila a medias.
+ *
+ * Con un número fijo, la última fila se rompe casi siempre: 20 avisos en una
+ * rejilla de 6 columnas son 3 filas llenas y 2 sueltos, con cuatro huecos al
+ * final de la página. Se redondea al múltiplo del número de columnas más
+ * cercano al objetivo, así que la página cuadra a cualquier ancho.
+ *
+ * Nunca devuelve 0: con más columnas que el objetivo, sale una fila completa.
+ */
+export function pageSizeParaColumnas(objetivo: number, columnas: number): number {
+  const cols = Math.max(1, Math.floor(columnas));
+  return cols * Math.max(1, Math.round(objetivo / cols));
+}
 
 // Números de página a mostrar, con "…" cuando hay muchas. Siempre incluye la
 // primera, la última y una ventana alrededor de la actual.
@@ -268,10 +285,17 @@ export default function SearchPage() {
   // Al cambiar la búsqueda o los filtros, vuelve a la primera página.
   useEffect(() => { setPage(1); }, [q, category, priceMin, priceMax, currency, sort, owner, departamento, geo]);
 
+  // Cuántas columnas está pintando la rejilla ahora mismo (1 en la vista de
+  // lista). Manda el ancho real, no el de la ventana.
+  const rejilla = useGridColumns();
+  const cols = rejilla.cols;
+
   // Porción visible de resultados según la página actual (clamp por si la lista
   // encogió tras filtrar y la página quedó fuera de rango). 20 por página en
   // escritorio, 10 en móvil (< 768px, incluido el APK).
-  const pageSize = isMobile ? MOBILE_PAGE_SIZE : WEB_PAGE_SIZE;
+  // El tamaño de página se ajusta a las columnas que haya en pantalla, para que
+  // ninguna página acabe con una fila rota.
+  const pageSize = pageSizeParaColumnas(isMobile ? MOBILE_PAGE_SIZE : WEB_PAGE_SIZE, cols);
   const totalPages = Math.max(1, Math.ceil(listings.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const pageListings = listings.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -570,7 +594,13 @@ export default function SearchPage() {
             <h1 className="text-base md:text-lg font-extrabold text-foreground flex items-baseline gap-2 min-w-0">
               <span className="text-[11px] uppercase tracking-[0.18em] font-bold text-secondary shrink-0">Resultados</span>
               <span className="text-muted-foreground/50">·</span>
-              <span className="truncate">{listings.length} avisos disponibles</span>
+              {/* Con el tope alcanzado el número deja de ser el total real, así
+                  que no se enseña como si lo fuera. */}
+              <span className="truncate">
+                {topeAlcanzado(listings.length)
+                  ? `más de ${listings.length} avisos — afina los filtros`
+                  : `${listings.length} avisos disponibles`}
+              </span>
             </h1>
             <div className="hidden md:flex gap-1 border border-border p-0.5 shrink-0">
               <Button
@@ -607,6 +637,7 @@ export default function SearchPage() {
               ) : (
                 <>
                   <div
+                    ref={rejilla.ref}
                     className={
                       layout === "grid"
                         ? "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6 gap-3"

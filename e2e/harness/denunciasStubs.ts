@@ -65,3 +65,9 @@ export const supabase = { auth: { getUser: async () => ({ data: { user: { id: MO
 // --- @/hooks/use-toast
 export const toast = () => {};
 export const useToast = () => ({ toast, dismiss: () => {}, toasts: [] });
+
+// Permisos del usuario. Los pide usePermissions al montar el panel; sin este
+// export el bundle del harness no compila. Se conceden todos: lo que la prueba
+// mira es el comportamiento de las denuncias, no el control de acceso.
+export const getMyPermissions = async () =>
+  new Proxy({}, { get: () => ({ can_view: true, can_edit: true, can_approve: true, can_delete: true }) });

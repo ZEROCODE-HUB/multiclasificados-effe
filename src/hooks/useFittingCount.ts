@@ -52,3 +52,40 @@ export function useFittingCount(minWidth: number, gap: number, fallback: number)
 
   return { ref, count };
 }
+
+/**
+ * Cuántas columnas tiene de verdad una rejilla ya pintada.
+ *
+ * Se diferencia de `useFittingCount` en que NO supone `auto-fill`: el buscador
+ * fija sus columnas por breakpoint (`md:grid-cols-3 … 2xl:grid-cols-6`), así que
+ * repetir aquí la cuenta del ancho daría un número distinto del real. En vez de
+ * eso se le pregunta al navegador, que es quien lo ha decidido; si mañana
+ * cambian esas clases, esto sigue diciendo la verdad sin tocarlo.
+ *
+ * Devuelve 1 cuando el contenedor no es una rejilla (la vista de lista, donde
+ * cada aviso ocupa su propia fila) y mientras no se pueda medir (jsdom).
+ */
+export function useGridColumns() {
+  const [nodo, setNodo] = useState<HTMLDivElement | null>(null);
+  const ref = useCallback((el: HTMLDivElement | null) => setNodo(el), []);
+  const [cols, setCols] = useState(1);
+
+  useLayoutEffect(() => {
+    if (!nodo || typeof getComputedStyle !== "function") return;
+
+    const medir = () => {
+      // "none" en la vista de lista y en jsdom (sin CSS real): una por fila.
+      const pistas = getComputedStyle(nodo).gridTemplateColumns;
+      if (!pistas || pistas === "none") { setCols(1); return; }
+      setCols(Math.max(1, pistas.split(" ").filter(Boolean).length));
+    };
+    medir();
+
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(medir);
+    ro.observe(nodo);
+    return () => ro.disconnect();
+  }, [nodo]);
+
+  return { ref, cols };
+}

@@ -20,6 +20,12 @@ export interface Listing {
   urgent?: boolean;
   confidential?: boolean;
   advertiser: string;
+  /**
+   * El anunciante lleva el sello de confianza que pone el equipo de
+   * administración (profiles.verified). No es "validó su DNI": eso lo hace
+   * cualquiera al publicar. Solo con esto la tarjeta muestra "Verificado".
+   */
+  advertiserVerified?: boolean;
   views: number;
   lat?: number | null;
   lng?: number | null;

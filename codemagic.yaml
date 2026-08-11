@@ -53,8 +53,13 @@ workflows:
                     -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/"
           }
 
+          # Las de Google Maps son imprescindibles desde que los cuatro mapas son
+          # suyos: sin la llave no se carga el SDK y sin el Map ID no se dibuja
+          # ni un pin. Las dos fallan EN SILENCIO —mapa en blanco, sin error
+          # visible— y el build llegaría a la App Store así. Mejor no compilar.
           faltan=""
-          for v in VITE_SUPABASE_URL VITE_SUPABASE_ANON_KEY VITE_PUBLIC_SITE_URL; do
+          for v in VITE_SUPABASE_URL VITE_SUPABASE_ANON_KEY VITE_PUBLIC_SITE_URL \
+                   VITE_GOOGLE_MAPS_API_KEY VITE_GOOGLE_MAPS_MAP_ID; do
             eval "valor=\$$v"
             [ -z "$(limpiar "$valor")" ] && faltan="$faltan $v"
           done

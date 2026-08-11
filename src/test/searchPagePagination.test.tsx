@@ -23,6 +23,9 @@ const searchListings = vi.fn().mockResolvedValue(LISTINGS);
 vi.mock("@/lib/listings", () => ({
   searchListings: (...a: unknown[]) => searchListings(...a),
   fetchListingsByOwner: vi.fn().mockResolvedValue([]),
+  // Estas pruebas trabajan con listas muy por debajo del tope, así que aquí
+  // nunca se recorta nada.
+  topeAlcanzado: () => false,
 }));
 
 // Escritorio: 20 por página.
