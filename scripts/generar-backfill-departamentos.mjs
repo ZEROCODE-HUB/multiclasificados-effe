@@ -1,6 +1,16 @@
-// Genera supabase/migrations/0086_backfill_listing_department.sql
+// Genera la migración que le pone departamento a los avisos que no lo tienen.
 //
-//   node scripts/generar-backfill-departamentos.mjs
+//   node scripts/generar-backfill-departamentos.mjs 0089
+//
+// El número de la migración va como argumento porque esto se ejecuta más de una
+// vez: cada vez que una tanda de avisos se publica con la app sin poder deducir
+// su departamento (por ejemplo con la llave de Google mal configurada), quedan
+// invisibles en las búsquedas por ubicación y hay que rescatarlos. La 0086 fue
+// la primera; puede haber más.
+//
+// Solo se consultan los avisos SIN departamento: los que ya lo tienen no se
+// vuelven a geocodificar. Es más barato, más rápido, y sobre todo no pisa un
+// departamento correcto por un error de una consulta nueva.
 //
 // Por qué existe
 // ──────────────
@@ -38,7 +48,17 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const SALIDA = path.join(RAIZ, "supabase/migrations/0086_backfill_listing_department.sql");
+
+const NUMERO = process.argv[2];
+if (!/^\d{4}$/.test(NUMERO ?? "")) {
+  console.error("\n✖ Falta el número de la migración.\n  Uso: node scripts/generar-backfill-departamentos.mjs 0089\n");
+  process.exit(1);
+}
+const SALIDA = path.join(RAIZ, `supabase/migrations/${NUMERO}_backfill_listing_department.sql`);
+if (fs.existsSync(SALIDA)) {
+  console.error(`\n✖ Ya existe ${path.relative(RAIZ, SALIDA)}.\n  Usa otro número; una migración aplicada no se reescribe.\n`);
+  process.exit(1);
+}
 
 // ─── Configuración ────────────────────────────────────────────────────────────
 const env = Object.fromEntries(
@@ -79,13 +99,19 @@ await esbuild.build({
 const { departamentoDeTexto } = await import(`file:///${tmp.replace(/\\/g, "/")}`);
 
 // ─── Los avisos ───────────────────────────────────────────────────────────────
+// Solo los que NO tienen departamento: son los invisibles en las búsquedas por
+// ubicación, y los únicos que hay que resolver.
 const res = await fetch(
-  `${SUPABASE}/rest/v1/listing_cards?select=id,title,location,lat,lng&limit=2000`,
+  `${SUPABASE}/rest/v1/listing_cards?select=id,title,location,lat,lng&department=is.null&limit=2000`,
   { headers: { apikey: ANON, Authorization: `Bearer ${ANON}` } },
 );
 if (!res.ok) abortar(`Supabase respondió ${res.status}: ${await res.text()}`);
 const avisos = await res.json();
-console.log(`Avisos activos: ${avisos.length}`);
+console.log(`Avisos activos SIN departamento: ${avisos.length}`);
+if (avisos.length === 0) {
+  console.log("\n✔ No hay nada que rescatar: todos los avisos activos tienen departamento.");
+  process.exit(0);
+}
 
 const sinPunto = avisos.filter((a) => a.lat == null || a.lng == null);
 const conPunto = avisos.filter((a) => a.lat != null && a.lng != null);
@@ -162,29 +188,28 @@ if (sinResolver.length) {
 // ─── El SQL ───────────────────────────────────────────────────────────────────
 const hoy = new Date().toISOString().slice(0, 10);
 const sql = `-- =====================================================================
--- 0086_backfill_listing_department.sql — departamento de los avisos que ya
--- estaban publicados, deducido de su punto en el mapa.
+-- ${NUMERO}_backfill_listing_department.sql — rescata los avisos activos que se
+-- quedaron sin departamento, deduciéndolo de su punto en el mapa.
 --
 -- GENERADO por scripts/generar-backfill-departamentos.mjs el ${hoy}.
--- No editar a mano: volver a ejecutar el script.
+-- No editar a mano: volver a ejecutar el script con otro número.
 --
--- Por qué hace falta además de la 0084: aquella deduce el departamento del
--- texto que escribió el anunciante, y la mayoría no nombra su departamento
--- ("Chancay", "Laredo", "Nuevo Chimbote"). Un aviso sin departamento no sale en
--- ningún filtro de ubicación, así que se quedarían invisibles.
+-- Un aviso sin departamento no aparece en NINGUNA búsqueda por ubicación. No es
+-- un fallo visible: el aviso existe, se ve en su enlace y su dueño lo tiene en
+-- "Mis avisos", pero nadie que filtre por su región lo encuentra. Por eso hay
+-- que ir a buscarlos.
 --
 -- De dónde sale el dato: de preguntarle a Google a qué región pertenece el
 -- punto que marcó cada anunciante — la misma consulta que hace la app al
--- publicar. No se adivina nada a partir del nombre.
+-- publicar. No se adivina nada a partir del nombre del sitio.
 --
--- Alcance: los ${filas.length} avisos ACTIVOS que tenían punto en el mapa. Los
--- pausados, vencidos o en borrador no se tocan: recuperan su departamento
--- cuando su dueño los vuelve a publicar.
+-- Alcance: los ${filas.length} avisos ACTIVOS que no tenían departamento y sí punto en
+-- el mapa. A los que ya lo tenían no se les toca. Los pausados, vencidos o en
+-- borrador tampoco: recuperan el suyo cuando su dueño los vuelve a publicar.
 --
--- Va DESPUÉS de la 0084, que es la que crea la columna y hace el primer intento
--- por texto. Donde las dos no coinciden MANDA ESTA: el punto es un dato y el
--- texto una redacción. Sin esto, "San Martín de Porres" (un distrito de Lima)
--- se quedaría archivado en el departamento de San Martín, a 700 km.
+-- Donde el punto y el texto discrepan MANDA EL PUNTO: es un dato, y el texto una
+-- redacción. Sin eso, "San Martín de Porres" (un distrito de Lima) acabaría
+-- archivado en el departamento de San Martín, a 700 km.
 --
 -- Idempotente: al segundo pase no hay nada que cambiar.
 -- =====================================================================
