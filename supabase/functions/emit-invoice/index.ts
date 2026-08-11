@@ -40,9 +40,20 @@ const SITE_URL = Deno.env.get("PUBLIC_SITE_URL") ?? "https://multiclasificados-e
 // ─── Factiliza ────────────────────────────────────────────────────────────────
 // El mismo token que ya usa verify-doc para consultar DNI/RUC.
 const FACTILIZA_TOKEN = Deno.env.get("FACTILIZA_TOKEN") ?? "";
-// Por defecto el entorno de PRUEBAS: emitir de verdad tiene que ser una decisión
-// explícita, no lo que pasa por olvidarse de configurar una variable. La URL de
-// producción no está publicada en su documentación; la da su soporte.
+// Por defecto el entorno de PRUEBAS que publica su documentación. Emitir de
+// verdad tiene que ser una decisión explícita, no lo que pasa por olvidarse de
+// configurar una variable.
+//
+// ⚠️ Comprobado el 2026-08-11: ese host de QA responde 404 —también en su raíz—,
+// o sea que no está en pie. El endpoint que SÍ existe es el de producción,
+// `https://apife.factiliza.com/api/v1/invoice/send`, que contesta 401 sin token.
+//
+// Se deja el de pruebas como valor por defecto A PROPÓSITO: si nadie configura
+// nada, la emisión FALLA en vez de mandar un documento fiscal de verdad sin
+// querer. Fallar cerrado. Antes de apuntar a producción hay que preguntarle a su
+// soporte si la cuenta está en modo demo (sus respuestas de ejemplo empiezan por
+// "DEMO - …", así que parece haber un interruptor por cuenta) o cuál es la URL
+// de pruebas vigente.
 const FACTILIZA_URL = Deno.env.get("FACTILIZA_INVOICE_URL")
   ?? "https://apife-qa.factiliza.com/api/v1/invoice/send";
 

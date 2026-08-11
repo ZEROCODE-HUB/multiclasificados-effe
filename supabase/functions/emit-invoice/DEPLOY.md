@@ -63,10 +63,25 @@ supabase secrets set EMISOR_NOMBRE="Razón social"
 
 # Entorno. Por defecto apunta a PRUEBAS: emitir de verdad tiene que ser
 # deliberado, no lo que pasa por olvidar una variable.
-#   pruebas    https://apife-qa.factiliza.com/api/v1/invoice/send   (por defecto)
-#   producción la da su soporte; no está en la documentación pública
 supabase secrets set FACTILIZA_INVOICE_URL="https://apife-qa.factiliza.com/api/v1/invoice/send"
 ```
+
+> ⚠️ **El entorno de pruebas de su documentación no está en pie.** Comprobado el
+> 2026-08-11 con un envío real desde esta función:
+>
+> | URL | Respuesta |
+> |---|---|
+> | `apife-qa.factiliza.com/api/v1/invoice/send` (la documentada) | **404** — y su raíz también |
+> | `apife.factiliza.com/api/v1/invoice/send` | **401** — existe y pide token |
+>
+> O sea que el único endpoint vivo es el de **producción**, donde un envío
+> aceptado es un documento fiscal de verdad. Antes de apuntar ahí hay que
+> preguntar a su soporte **si la cuenta está en modo demo** (sus respuestas de
+> ejemplo empiezan por `"DEMO - …"`, así que parece haber un interruptor por
+> cuenta) o **cuál es la URL de pruebas vigente**.
+>
+> Mientras tanto el valor por defecto se deja en el de QA aunque falle: así la
+> emisión **falla cerrada** en vez de emitir sin querer.
 
 ### Probar en el entorno de pruebas
 
