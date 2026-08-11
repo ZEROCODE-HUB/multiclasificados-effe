@@ -66,22 +66,64 @@ supabase secrets set EMISOR_NOMBRE="Razón social"
 supabase secrets set FACTILIZA_INVOICE_URL="https://apife-qa.factiliza.com/api/v1/invoice/send"
 ```
 
-> ⚠️ **El entorno de pruebas de su documentación no está en pie.** Comprobado el
-> 2026-08-11 con un envío real desde esta función:
->
-> | URL | Respuesta |
-> |---|---|
-> | `apife-qa.factiliza.com/api/v1/invoice/send` (la documentada) | **404** — y su raíz también |
-> | `apife.factiliza.com/api/v1/invoice/send` | **401** — existe y pide token |
->
-> O sea que el único endpoint vivo es el de **producción**, donde un envío
-> aceptado es un documento fiscal de verdad. Antes de apuntar ahí hay que
-> preguntar a su soporte **si la cuenta está en modo demo** (sus respuestas de
-> ejemplo empiezan por `"DEMO - …"`, así que parece haber un interruptor por
-> cuenta) o **cuál es la URL de pruebas vigente**.
->
-> Mientras tanto el valor por defecto se deja en el de QA aunque falle: así la
-> emisión **falla cerrada** en vez de emitir sin querer.
+### ⚠️ Lo que bloquea hoy la emisión (comprobado el 2026-08-11)
+
+**1. El token que tenemos no cubre facturación.** Factiliza vende dos productos
+distintos con tokens distintos, y `FACTILIZA_TOKEN` es el de *consultas*. Medido
+con la sonda de abajo, el mismo token contra las dos APIs:
+
+| API | Endpoint | Respuesta |
+|---|---|---|
+| Consultas (DNI/RUC) | `api.factiliza.com/v1/ruc/info/…` | **200 OK** |
+| Facturación | `apife.factiliza.com/api/v1/invoice/cdr` | **401** |
+
+No está caducado —la primera responde— simplemente no sirve para emitir. **Hay
+que pedirle a Factiliza el token de la API de facturación.**
+
+**2. El entorno de pruebas de su documentación no está sirviendo.** Todas sus
+rutas devuelven 404, incluida `/health`, y contesta Cloudflare sin llegar al
+origen; el otro host responde 401 (o sea, la aplicación está detrás):
+
+| Host | Cualquier ruta | Quién contesta |
+|---|---|---|
+| `apife-qa.factiliza.com` | **404** | `Server: cloudflare` |
+| `apife.factiliza.com` | **401** | `Server: Kestrel` |
+
+Así que al pedir el token de facturación conviene preguntar también **con qué
+URL se prueba**, porque la documentada no está en pie y la que responde es la de
+producción, donde un envío aceptado es un documento fiscal de verdad.
+
+Mientras tanto el valor por defecto se deja en el de QA **aunque falle**: así la
+emisión falla **cerrada** en vez de emitir sin querer.
+
+### Comprobar credenciales sin emitir nada
+
+La función trae una sonda de solo lectura: consulta un comprobante y devuelve lo
+que conteste Factiliza. No pone en circulación ningún documento ni consume
+correlativo.
+
+```bash
+curl -X POST "$SUPABASE_URL/functions/v1/emit-invoice" \
+  -H "x-worker-secret: $INVOICE_WORKER_SECRET" \
+  -H "Content-Type: application/json" -d '{"probe":true}'
+```
+
+Devuelve el código de las dos APIs y un diagnóstico, porque un 401 en
+facturación significa cosas distintas según lo que conteste la de consultas:
+si esta va bien, el token no cubre facturación; si fallan las dos, el token no
+vale.
+
+### Lo que dice su documentación, y que ya está resuelto en el código
+
+- **Las boletas van una a una.** Su API no tiene ningún endpoint de resumen
+  diario: el apartado de facturación son `send`, `pdf`, `xml` y `cdr` (más notas
+  de crédito/débito y guías). El resumen ante SUNAT lo gestiona Factiliza por su
+  cuenta, no nosotros.
+- **Sí hay consulta por serie y correlativo.** `POST /invoice/cdr`, `/invoice/pdf`
+  y `/invoice/xml` reciben `{empresa_Ruc, tipo_Doc, serie, correlativo}`. Es lo
+  que usa la comprobación previa antes de reenviar: si el documento ya existe, no
+  se emite otra vez. (En la API de consultas hay además `POST /sunat/cpe`, que
+  valida un comprobante suelto.)
 
 ### Probar en el entorno de pruebas
 

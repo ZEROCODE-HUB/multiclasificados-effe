@@ -249,6 +249,38 @@ export function construirComprobante(d: DatosDelComprobante): Record<string, unk
   };
 }
 
+// ─── Consultar un comprobante ya enviado ──────────────────────────────────────
+
+/**
+ * El cuerpo para preguntar por un comprobante concreto.
+ *
+ * Sirve a dos cosas distintas y las dos importan:
+ *
+ *   1. **Comprobación previa antes de reenviar.** Si un envío se cortó después
+ *      de llegar a Factiliza pero antes de que guardáramos la respuesta, el
+ *      documento YA existe. Reenviarlo sería emitirlo dos veces, que es un
+ *      problema fiscal serio. Preguntando primero se sabe.
+ *   2. **Comprobar credenciales sin emitir.** Es una lectura: se puede lanzar
+ *      para verificar que el token vale para la API de facturación sin poner en
+ *      circulación ningún documento.
+ *
+ * Los tres endpoints de la API de facturación que reciben esto son
+ * `/invoice/cdr`, `/invoice/pdf` y `/invoice/xml`.
+ */
+export function consultaDeComprobante(
+  emisorRuc: string,
+  tipo: "boleta" | "factura",
+  serie: string,
+  correlativo: number | string,
+): Record<string, string> {
+  return {
+    empresa_Ruc: emisorRuc,
+    tipo_Doc: TIPO_DOC[tipo],
+    serie,
+    correlativo: String(correlativo),
+  };
+}
+
 // ─── Lectura de la respuesta ──────────────────────────────────────────────────
 
 export type Desenlace = "aceptado" | "observado" | "rechazado" | "error";

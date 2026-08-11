@@ -23,7 +23,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { renderComprobantePDF, toBase64 } from "../_shared/comprobante-pdf.ts";
 import {
-  construirComprobante, leerRespuesta, ComprobanteInvalido,
+  construirComprobante, leerRespuesta, consultaDeComprobante, ComprobanteInvalido,
 } from "../_shared/factiliza.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -148,6 +148,37 @@ function htmlCorreo(inv: Record<string, unknown>, declarado: boolean): string {
         </p>
       </div>
     </div></body></html>`;
+}
+
+/** La misma base que el envío, cambiando el último tramo. */
+const urlDeFactiliza = (recurso: "send" | "cdr" | "pdf" | "xml") =>
+  FACTILIZA_URL.replace(/\/send$/, `/${recurso}`);
+
+/**
+ * Pregunta a Factiliza si un comprobante ya existe. Es una LECTURA: no emite
+ * nada, no consume correlativo y se puede lanzar sin miedo.
+ *
+ * Se usa para dos cosas: comprobar credenciales sin poner en circulación ningún
+ * documento, y —antes de reenviar— saber si el anterior llegó de verdad. Un
+ * envío que se cortó después de llegar a Factiliza pero antes de que
+ * guardáramos su respuesta deja un documento emitido que nosotros creemos
+ * pendiente; reenviarlo lo emitiría dos veces.
+ */
+async function consultarEnFactiliza(
+  tipo: "boleta" | "factura", serie: string, correlativo: number | string,
+): Promise<{ http: number; cuerpo: unknown }> {
+  const res = await fetch(urlDeFactiliza("cdr"), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${FACTILIZA_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(consultaDeComprobante(EMISOR_RUC, tipo, serie, correlativo)),
+  });
+  const texto = await res.text();
+  let cuerpo: unknown = texto;
+  try { cuerpo = JSON.parse(texto); } catch { /* puede devolver el fichero en crudo */ }
+  return { http: res.status, cuerpo };
 }
 
 /**
@@ -355,11 +386,54 @@ Deno.serve(async (req) => {
     return json({ error: "Función sin configurar." }, 503);
   }
 
-  let body: { invoice_id?: string; sweep?: boolean; limit?: number } = {};
+  let body: {
+    invoice_id?: string; sweep?: boolean; limit?: number;
+    probe?: boolean; serie?: string; correlativo?: string | number; tipo?: "boleta" | "factura";
+  } = {};
   try {
     body = await req.json();
   } catch {
     return json({ error: "Cuerpo inválido." }, 400);
+  }
+
+  // Comprobación de credenciales SIN emitir nada. Consulta un comprobante y
+  // devuelve tal cual lo que conteste Factiliza, para poder verificar que el
+  // token vale para la API de facturación antes de encender nada.
+  if (body.probe) {
+    if (!FACTILIZA_TOKEN) return json({ ok: false, error: "Falta FACTILIZA_TOKEN." });
+    if (!EMISOR_RUC) return json({ ok: false, error: "Falta EMISOR_RUC." });
+    // Se prueban las DOS APIs con el MISMO token, porque un 401 en facturación
+    // significa cosas muy distintas según lo que conteste la de consultas:
+    //   · consultas OK  + facturación 401 → el token no cubre facturación
+    //   · las dos 401                     → el token no vale (caducado o mal)
+    const facturacion = await consultarEnFactiliza(
+      body.tipo === "factura" ? "factura" : "boleta",
+      body.serie ?? "B001",
+      body.correlativo ?? 1,
+    ).catch((e) => ({ http: 0, cuerpo: String(e) }));
+
+    let consultas: { http: number; ok: boolean } = { http: 0, ok: false };
+    try {
+      const r = await fetch(`https://api.factiliza.com/v1/ruc/info/${EMISOR_RUC}`, {
+        headers: { Authorization: `Bearer ${FACTILIZA_TOKEN}`, Accept: "application/json" },
+      });
+      consultas = { http: r.status, ok: r.ok };
+    } catch { /* se queda en 0 */ }
+
+    return json({
+      ok: true,
+      emisor: EMISOR_RUC,
+      facturacion: { url: urlDeFactiliza("cdr"), ...facturacion },
+      consultas: { url: "https://api.factiliza.com/v1/ruc/info/…", ...consultas },
+      diagnostico:
+        consultas.ok && facturacion.http === 401
+          ? "El token vale para consultas pero NO para facturación: son productos distintos."
+          : !consultas.ok && facturacion.http === 401
+            ? "El token no vale en ninguna de las dos: caducado o incorrecto."
+            : facturacion.http === 404
+              ? "La ruta de facturación no existe en esa URL."
+              : "Ver los códigos de arriba.",
+    });
   }
 
   // Barrido: la base decide qué toca y vuelve a avisar de cada uno.

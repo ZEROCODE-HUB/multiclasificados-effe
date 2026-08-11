@@ -311,6 +311,36 @@ describe("interpretar lo que contesta Factiliza", () => {
   });
 });
 
+/**
+ * Consultar un comprobante ya enviado. Los tres endpoints de su API que reciben
+ * esto (/invoice/cdr, /invoice/pdf, /invoice/xml) piden lo mismo.
+ *
+ * Es lo que evita el peor error posible: emitir dos veces el mismo documento
+ * porque un envío se cortó después de llegar a Factiliza pero antes de que
+ * guardáramos su respuesta.
+ */
+describe("consulta de un comprobante por serie y correlativo", () => {
+  it("lleva exactamente los cuatro campos que pide su API", async () => {
+    const { consultaDeComprobante } = await import("../../supabase/functions/_shared/factiliza.ts");
+    expect(consultaDeComprobante("20616009061", "boleta", "B001", 82)).toEqual({
+      empresa_Ruc: "20616009061",
+      tipo_Doc: "03",
+      serie: "B001",
+      correlativo: "82",
+    });
+  });
+
+  it("una factura va con su tipo, no con el de boleta", async () => {
+    const { consultaDeComprobante } = await import("../../supabase/functions/_shared/factiliza.ts");
+    expect(consultaDeComprobante("20616009061", "factura", "F001", 5).tipo_Doc).toBe("01");
+  });
+
+  it("el correlativo viaja como texto, igual que al emitir", async () => {
+    const { consultaDeComprobante } = await import("../../supabase/functions/_shared/factiliza.ts");
+    expect(consultaDeComprobante("20616009061", "boleta", "B001", 7).correlativo).toBe("7");
+  });
+});
+
 describe("campos que exige su API", () => {
   it("lleva el tipo de operación, el estado y el modo", () => {
     const c = construir() as Record<string, unknown>;
