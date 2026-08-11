@@ -43,15 +43,72 @@ update public.system_settings
  where key = 'invoice_worker_secret';
 ```
 
+## Emisión ante SUNAT (Factiliza)
+
+Va **apagada** por defecto. Encenderla es una decisión explícita:
+
+```sql
+update public.system_settings set value = 'true'::jsonb
+ where key = 'invoice_emission_enabled';
+```
+
+Mientras esté apagada, cada comprobante nace como `sunat_status = 'omitido'` con
+el motivo escrito, se ve en la app como documento interno y el correo sale igual.
+
+```bash
+# El token es el MISMO que usa verify-doc para consultar DNI/RUC.
+supabase secrets set FACTILIZA_TOKEN="..."          # normalmente ya está puesto
+supabase secrets set EMISOR_RUC="20123456789"       # el RUC dado de alta en Factiliza
+supabase secrets set EMISOR_NOMBRE="Razón social"
+
+# Entorno. Por defecto apunta a PRUEBAS: emitir de verdad tiene que ser
+# deliberado, no lo que pasa por olvidar una variable.
+#   pruebas    https://apife-qa.factiliza.com/api/v1/invoice/send   (por defecto)
+#   producción la da su soporte; no está en la documentación pública
+supabase secrets set FACTILIZA_INVOICE_URL="https://apife-qa.factiliza.com/api/v1/invoice/send"
+```
+
+### Probar en el entorno de pruebas
+
+1. Enciende el interruptor de arriba.
+2. Haz una compra (hoy, con `simulate-payment`). Eso crea el comprobante en
+   estado `pendiente` y avisa a esta función.
+3. Mira cómo fue, sin adivinar — cada intento queda con su petición y su
+   respuesta completas:
+
+```sql
+select i.number, i.sunat_status, i.sunat_error_code, i.sunat_last_error,
+       a.http_status, a.response
+  from public.invoices i
+  left join public.invoice_emission_attempts a on a.invoice_id = i.id and a.step = 'sunat'
+ order by i.issued_at desc limit 5;
+```
+
+4. Para reintentar uno a mano: botón **Reintentar** del panel, o
+   `select public.retry_invoice_emission('<id>');`
+
+### Lo que NO se reintenta solo
+
+Un **rechazo** de SUNAT (datos mal) queda con `needs_review = true` y no se
+reenvía: repetirlo daría el mismo resultado y quemaría otro correlativo. Un
+comprobante que pasa más de **5 días** en cola pasa a `vencido`, también para
+revisión: SUNAT rechaza los documentos fuera de plazo y la fecha de emisión se
+congela en el primer intento, así que no se puede enviar un mes después con la
+fecha vieja.
+
 ## Qué pasa si falta algo
 
 | Falta | Consecuencia |
 |---|---|
 | `RESEND_API_KEY` | El comprobante se marca `email_status = 'omitido'`. Se genera y se ve en la app; no se envía. |
 | `INVOICE_WORKER_SECRET` o el de la BD | La base no puede avisar: los comprobantes se quedan en cola y se ven como pendientes en el panel. Nada se pierde. |
-| `EMISOR_RUC` / `EMISOR_NOMBRE` | El PDF sale con el nombre por defecto y sin RUC. |
+| `EMISOR_RUC` / `EMISOR_NOMBRE` | El PDF sale con el nombre por defecto y sin RUC. Y si la emisión ante SUNAT está encendida, el comprobante queda `omitido` con el motivo escrito: no se emite nada a medias. |
+| `FACTILIZA_TOKEN` | Igual: `omitido` con el motivo. |
 
-Ninguna de estas ausencias rompe una compra.
+Ninguna de estas ausencias rompe una compra. Es el principio que gobierna todo
+el diseño: **la emisión nunca bloquea la acreditación de créditos.** El usuario
+ya pagó; si Factiliza, SUNAT o el correo fallan, su saldo entra igual y el
+comprobante se reintenta aparte.
 
 ## ⚠️ Antes de que un cliente reciba nada
 

@@ -22,6 +22,9 @@
 // =====================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { renderComprobantePDF, toBase64 } from "../_shared/comprobante-pdf.ts";
+import {
+  construirComprobante, leerRespuesta, ComprobanteInvalido,
+} from "../_shared/factiliza.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -33,6 +36,26 @@ const EMAIL_FROM = Deno.env.get("INVOICE_EMAIL_FROM")
 const EMISOR_NOMBRE = Deno.env.get("EMISOR_NOMBRE") ?? "eFFe Multiclasificados";
 const EMISOR_RUC = Deno.env.get("EMISOR_RUC") ?? "";
 const SITE_URL = Deno.env.get("PUBLIC_SITE_URL") ?? "https://multiclasificados-effe.vercel.app";
+
+// ─── Factiliza ────────────────────────────────────────────────────────────────
+// El mismo token que ya usa verify-doc para consultar DNI/RUC.
+const FACTILIZA_TOKEN = Deno.env.get("FACTILIZA_TOKEN") ?? "";
+// Por defecto el entorno de PRUEBAS: emitir de verdad tiene que ser una decisión
+// explícita, no lo que pasa por olvidarse de configurar una variable. La URL de
+// producción no está publicada en su documentación; la da su soporte.
+const FACTILIZA_URL = Deno.env.get("FACTILIZA_INVOICE_URL")
+  ?? "https://apife-qa.factiliza.com/api/v1/invoice/send";
+
+/**
+ * Días que puede pasar un comprobante en cola antes de dejar de intentarlo.
+ *
+ * SUNAT rechaza los comprobantes fuera de plazo, y la fecha de emisión se
+ * congela en el primer intento (la fija la BD, ver 0083). Un comprobante que se
+ * quedó atascado porque faltaba configuración NO puede enviarse un mes después
+ * con la fecha vieja: pasa a revisión y lo resuelve contabilidad. Sin esto, el
+ * día que se enciendan los secrets se dispararía una avalancha de rechazos.
+ */
+const DIAS_DE_PLAZO = 5;
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -114,6 +137,128 @@ function htmlCorreo(inv: Record<string, unknown>, declarado: boolean): string {
         </p>
       </div>
     </div></body></html>`;
+}
+
+/**
+ * Emite el comprobante ante SUNAT a través de Factiliza.
+ *
+ * Nunca lanza y nunca bloquea nada: si no se puede emitir, el comprobante queda
+ * marcado y el correo sale igual, como documento interno. El usuario ya pagó.
+ *
+ * Devuelve el desenlace, o null si no había nada que emitir (que es el caso
+ * normal mientras la emisión esté apagada).
+ */
+async function emitirEnSunat(invoiceId: string): Promise<string | null> {
+  const { data: claim, error } = await admin.rpc("claim_invoice_emission", {
+    p_invoice_id: invoiceId,
+    p_lease_seconds: 300,
+  });
+  if (error) {
+    console.error("[emit-invoice] no se pudo reclamar la emisión:", error.message);
+    return null;
+  }
+  const inv = (Array.isArray(claim) ? claim[0] : claim) as Record<string, unknown> | null;
+  if (!inv) return null; // no toca: ya emitido, omitido, o reclamado por otro
+
+  const id = String(inv.o_id);
+  const claimId = String(inv.o_claim_id);
+  const intento = Number(inv.o_attempts ?? 1);
+
+  const rendirse = async (motivo: string) => {
+    await admin.rpc("mark_invoice_skipped", { p_invoice_id: id, p_reason: motivo });
+    return "omitido";
+  };
+
+  if (!FACTILIZA_TOKEN) return await rendirse("Falta FACTILIZA_TOKEN en la función");
+  if (!EMISOR_RUC) return await rendirse("Falta el RUC del emisor (EMISOR_RUC)");
+
+  // Plazo: la fecha se congeló en el primer intento y no se recalcula.
+  const emitida = new Date(String(inv.o_fecha_emision ?? Date.now()));
+  const dias = (Date.now() - emitida.getTime()) / 86_400_000;
+  if (dias > DIAS_DE_PLAZO) {
+    await admin.rpc("finish_invoice_emission", {
+      p_invoice_id: id, p_claim_id: claimId, p_status: "vencido",
+      p_error_message: `Fuera de plazo: la fecha de emisión es de hace ${Math.floor(dias)} días`,
+      p_needs_review: true,
+    });
+    return "vencido";
+  }
+
+  // La dirección fiscal, si Factiliza la devolvió al verificar el documento.
+  const ficha = (inv.o_factiliza_data ?? {}) as Record<string, unknown>;
+  const direccion = [ficha.direccion, ficha.direccion_completa, ficha.domicilio_fiscal]
+    .find((v) => typeof v === "string" && v.trim()) as string | undefined;
+
+  let cuerpo: Record<string, unknown>;
+  try {
+    cuerpo = construirComprobante({
+      tipo: inv.o_type === "factura" ? "factura" : "boleta",
+      serie: String(inv.o_serie),
+      correlativo: Number(inv.o_correlativo),
+      fechaEmision: emitida,
+      emisorRuc: EMISOR_RUC,
+      clienteDocTipo: (inv.o_doc_type as "dni" | "ruc" | null) ?? null,
+      clienteDocNumero: (inv.o_doc_number as string) ?? null,
+      clienteNombre: String(inv.o_advertiser_name ?? ""),
+      clienteDireccion: direccion ?? null,
+      descripcion: String(inv.o_detail ?? "Compra de saldo"),
+      total: Number(inv.o_amount ?? 0),
+      subtotal: Number(inv.o_subtotal ?? 0),
+      igv: Number(inv.o_igv ?? 0),
+      idBaseDato: id,
+    });
+  } catch (e) {
+    // Los datos no dan un documento válido. No se gasta un envío: esto no se
+    // arregla reintentando, lo tiene que mirar alguien.
+    const motivo = e instanceof ComprobanteInvalido ? e.message : "No se pudo construir el comprobante";
+    await admin.rpc("finish_invoice_emission", {
+      p_invoice_id: id, p_claim_id: claimId, p_status: "rechazado",
+      p_error_code: "LOCAL", p_error_message: motivo, p_needs_review: true,
+    });
+    return "rechazado";
+  }
+
+  let httpStatus = 0;
+  let respuesta: unknown = null;
+  try {
+    const res = await fetch(FACTILIZA_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${FACTILIZA_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(cuerpo),
+    });
+    httpStatus = res.status;
+    respuesta = await res.json().catch(() => null);
+  } catch (e) {
+    respuesta = { message: e instanceof Error ? e.message : "fallo de red" };
+  }
+
+  const r = leerRespuesta(httpStatus, respuesta);
+
+  await admin.rpc("log_invoice_attempt", {
+    p_invoice_id: id, p_step: "sunat", p_attempt: intento,
+    p_http_status: httpStatus, p_ok: r.desenlace === "aceptado" || r.desenlace === "observado",
+    // El cuerpo enviado queda guardado: sin él, reconstruir por qué SUNAT
+    // rechazó un comprobante de hace tres semanas es adivinar.
+    p_request: cuerpo,
+    p_response: (respuesta ?? { message: r.mensaje }) as Record<string, unknown>,
+  });
+
+  await admin.rpc("finish_invoice_emission", {
+    p_invoice_id: id,
+    p_claim_id: claimId,
+    p_status: r.desenlace,
+    p_hash: r.hash,
+    p_cdr: r.cdr,
+    p_cdr_zip: r.cdrZip,
+    p_error_code: r.codigo,
+    p_error_message: r.desenlace === "aceptado" ? null : r.mensaje,
+    p_needs_review: r.desenlace === "rechazado" || r.desenlace === "observado",
+  });
+
+  return r.desenlace;
 }
 
 /** Envía el comprobante por correo. Devuelve el resultado, nunca lanza. */
@@ -216,8 +361,13 @@ Deno.serve(async (req) => {
 
   if (!body.invoice_id) return json({ error: "Falta invoice_id." }, 400);
 
-  // Paso correo. La emisión ante SUNAT entra aquí en la siguiente fase; hasta
-  // entonces el comprobante viaja como interno y el correo sale igual.
+  // Paso 1 — emisión ante SUNAT. Va DELANTE del correo para que, cuando el
+  // comprobante sea fiscal, el PDF que se adjunta ya lo diga. Si la emisión está
+  // apagada esto no hace nada y el comprobante viaja como interno.
+  const sunat = await emitirEnSunat(body.invoice_id);
+
+  // Paso 2 — correo. Sale pase lo que pase con SUNAT: el usuario ya pagó y tiene
+  // derecho a su comprobante aunque la emisión fiscal esté atascada.
   const { data: claim, error } = await admin.rpc("claim_invoice_email", {
     p_invoice_id: body.invoice_id,
     p_lease_seconds: 300,
@@ -227,8 +377,8 @@ Deno.serve(async (req) => {
     return json({ ok: false, error: error.message });
   }
   const inv = Array.isArray(claim) ? claim[0] : claim;
-  if (!inv) return json({ ok: true, claimed: false });
+  if (!inv) return json({ ok: true, claimed: false, sunat });
 
   const resultado = await enviarCorreo(inv as Record<string, unknown>);
-  return json({ ok: true, invoice: inv.o_number, ...resultado });
+  return json({ ok: true, invoice: inv.o_number, sunat, ...resultado });
 });
