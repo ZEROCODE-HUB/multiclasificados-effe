@@ -299,6 +299,65 @@ describe("interpretar lo que contesta Factiliza", () => {
     expect(r.reintentable).toBe(true);
   });
 
+  // Las dos respuestas LITERALES de su documentación (factiliza.gitbook.io).
+  // Copiadas tal cual, para que nuestro lector quede atado a su contrato y no a
+  // lo que yo supusiera que devuelven.
+  describe("las respuestas de su documentación, copiadas literalmente", () => {
+    const ACEPTADO_DOC = {
+      status: 200,
+      success: true,
+      message: "DEMO - El documento fue registrado en el sistema y se encuentra declarado correctamente validado en la sunat!",
+      data: {
+        hash: "AeOqQVd8d5kfPS+CmeCMF+NNMpI=",
+        sunatResponse: {
+          success: true,
+          cdrZip: "UEsDBBQAAgAIALpqtlgAAAAAAgAAAAAAAAAGAAAAZHVtbXkvAwBQSwME",
+          cdrResponse: {
+            id: "BV01-000022",
+            code: "0",
+            description: "La Boleta numero BV01-000022, ha sido aceptada",
+            notes: [],
+          },
+        },
+      },
+    };
+
+    const RECHAZADO_DOC = {
+      status: 400,
+      success: false,
+      message: "DEMO - El documento ah sido rechzado, por favor revise los datos para mas detalle",
+    };
+
+    it("el ejemplo de ACEPTADO se lee como aceptado, con hash, CDR y zip", () => {
+      const r = leerRespuesta(200, ACEPTADO_DOC);
+      expect(r.desenlace).toBe("aceptado");
+      expect(r.hash).toBe("AeOqQVd8d5kfPS+CmeCMF+NNMpI=");
+      expect(r.codigo).toBe("0");
+      expect(r.mensaje).toContain("ha sido aceptada");
+      expect(r.cdrZip).toBeTruthy();
+      expect(r.reintentable).toBe(false);
+    });
+
+    it("el ejemplo de RECHAZADO llega con HTTP 400 y NO se reintenta", () => {
+      // Lo que importa aquí: un rechazo por datos viaja con 400, que es el
+      // código típico de un error de red pasajero. Si se tratara como tal, el
+      // barrido reenviaría el mismo documento malo una y otra vez, quemando un
+      // correlativo en cada intento.
+      const r = leerRespuesta(400, RECHAZADO_DOC);
+      expect(r.desenlace).toBe("rechazado");
+      expect(r.reintentable).toBe(false);
+      expect(r.mensaje).toContain("rechzado");
+    });
+
+    it("da igual que el rechazo llegue con 200 o con 400: es rechazo", () => {
+      // Su documentación enseña 400, pero el cuerpo lleva su propio `status`.
+      // Se decide por `success`, no por el HTTP, para no depender de cuál manden.
+      for (const http of [200, 400, 422]) {
+        expect(leerRespuesta(http, RECHAZADO_DOC).desenlace, `HTTP ${http}`).toBe("rechazado");
+      }
+    });
+  });
+
   it("una respuesta ilegible no se da por buena", () => {
     for (const cuerpo of [null, "<html>502 Bad Gateway</html>", undefined]) {
       const r = leerRespuesta(502, cuerpo);
