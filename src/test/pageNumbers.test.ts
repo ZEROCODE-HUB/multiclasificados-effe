@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { pageNumbers } from "@/pages/SearchPage";
+import { pageNumbers } from "@/lib/paginacion";
 
 // Los números de página: con pocas se muestran todas; con muchas se recorta con
 // "…" pero siempre se ven la primera, la última y la actual.

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 interface CountUpProps {
   value: string;
@@ -7,7 +7,9 @@ interface CountUpProps {
 
 // Parses a string like "8,200+", "150K+", "24/7", "98%" and animates the numeric part.
 export function CountUp({ value, duration = 1600 }: CountUpProps) {
-  const match = value.match(/^([^\d]*)([\d,.]+)([^\d]*)$/);
+  // useMemo, no una constante suelta: el efecto la usa, y sin memoizar sería
+  // un objeto nuevo en cada render (la dependencia obligaría a re-animar).
+  const match = useMemo(() => value.match(/^([^\d]*)([\d,.]+)([^\d]*)$/), [value]);
   const ref = useRef<HTMLSpanElement>(null);
   const [display, setDisplay] = useState(match ? `${match[1]}0${match[3]}` : value);
 
@@ -57,7 +59,7 @@ export function CountUp({ value, duration = 1600 }: CountUpProps) {
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [value, duration]);
+  }, [match, value, duration]);
 
   return <span ref={ref}>{display}</span>;
 }

@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { pageNumbers, pageSizeParaColumnas } from "@/lib/paginacion";
+import { useCallback, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { imgUrl, imgSrcSet } from "@/lib/imageUrl";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -52,34 +53,6 @@ type Layout = "grid" | "list";
 const WEB_PAGE_SIZE = 20;
 const MOBILE_PAGE_SIZE = 10;
 
-/**
- * Cuántos avisos poner en una página para que no quede una fila a medias.
- *
- * Con un número fijo, la última fila se rompe casi siempre: 20 avisos en una
- * rejilla de 6 columnas son 3 filas llenas y 2 sueltos, con cuatro huecos al
- * final de la página. Se redondea al múltiplo del número de columnas más
- * cercano al objetivo, así que la página cuadra a cualquier ancho.
- *
- * Nunca devuelve 0: con más columnas que el objetivo, sale una fila completa.
- */
-export function pageSizeParaColumnas(objetivo: number, columnas: number): number {
-  const cols = Math.max(1, Math.floor(columnas));
-  return cols * Math.max(1, Math.round(objetivo / cols));
-}
-
-// Números de página a mostrar, con "…" cuando hay muchas. Siempre incluye la
-// primera, la última y una ventana alrededor de la actual.
-export function pageNumbers(current: number, total: number): (number | "…")[] {
-  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
-  const out: (number | "…")[] = [1];
-  const from = Math.max(2, current - 1);
-  const to = Math.min(total - 1, current + 1);
-  if (from > 2) out.push("…");
-  for (let p = from; p <= to; p++) out.push(p);
-  if (to < total - 1) out.push("…");
-  out.push(total);
-  return out;
-}
 
 const formatPrice = (price: number, currency: string) =>
   currency === "USD" ? `US$ ${(price / 1000).toFixed(0)}K` : `S/ ${price.toLocaleString()}`;
@@ -326,15 +299,20 @@ export default function SearchPage() {
     setGeo(null);
   };
 
-  const switchView = (v: ViewMode) => {
+  // useCallback porque ViewToggle lo memoiza: sin estabilizarlo se recrearía en
+  // cada render y el memo no ahorraría nada.
+  const switchView = useCallback((v: ViewMode) => {
     setView(v);
     const next = new URLSearchParams(params);
     if (v === "map") next.set("view", "map");
     else next.delete("view");
     setParams(next, { replace: true });
-  };
+  }, [params, setParams]);
 
-  const ViewToggle = (
+  // Memoizado por lo que de verdad usa: `view` para marcar el botón activo y
+  // `params` porque switchView reescribe la URL a partir de ellos. Así puede
+  // entrar como dependencia del encabezado sin recrearlo en cada render.
+  const ViewToggle = useMemo(() => (
     <div className="flex items-center gap-1 border border-border rounded-full p-0.5 shrink-0">
       <button
         onClick={() => switchView("list")}
@@ -353,7 +331,7 @@ export default function SearchPage() {
         <MapIcon size={12} className="inline mr-1" /> Mapa
       </button>
     </div>
-  );
+  ), [view, switchView]);
 
   const FilterBar = useMemo(
     () => (
@@ -414,7 +392,7 @@ export default function SearchPage() {
         </div>
       </div>
     ),
-    [view, params, category, categories]
+    [category, categories, ViewToggle]
   );
 
 

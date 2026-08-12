@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { pageSizeParaColumnas } from "@/pages/SearchPage";
+import { pageSizeParaColumnas } from "@/lib/paginacion";
 
 /**
  * Que ninguna página del buscador acabe con una fila rota.

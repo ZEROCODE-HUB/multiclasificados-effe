@@ -5,6 +5,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
+// Excepción razonada a `only-export-components`: el hook calcula lo que pinta
+// el componente de abajo y siempre se usan juntos. Separarlos por una regla de
+// recarga en caliente rompería esa unidad sin ganar nada.
+// eslint-disable-next-line react-refresh/only-export-components
 export function usePagination<T>(items: T[], pageSize = 10, resetKey?: unknown) {
   const [page, setPage] = useState(1);
 

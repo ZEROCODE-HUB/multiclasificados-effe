@@ -26,4 +26,20 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": "off",
     },
   },
+  {
+    // `src/components/ui` son los componentes de shadcn, copiados tal cual de la
+    // librería. Casi todos exportan además sus variantes (`buttonVariants`…),
+    // que es justo lo que la regla desaconseja — pero la regla habla de que la
+    // recarga en caliente funcione fino, no de que el código esté mal, y
+    // reescribir código vendorizado por eso no compensa.
+    //
+    // Lo mismo vale para `e2e/harness`, que son andamios de prueba: ahí no hay
+    // recarga en caliente que preservar.
+    //
+    // Se apaga AQUÍ y solo aquí para que la lista de avisos quede vacía: una
+    // lista con 39 avisos que nadie mira no avisa de nada, y el día que salga
+    // uno de verdad pasaría desapercibido.
+    files: ["src/components/ui/**", "e2e/harness/**"],
+    rules: { "react-refresh/only-export-components": "off" },
+  },
 );

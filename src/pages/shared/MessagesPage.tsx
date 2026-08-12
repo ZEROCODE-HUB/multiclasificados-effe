@@ -121,7 +121,6 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
       }
     );
     return () => { active = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
   // Auto-scroll al final cuando llegan mensajes.

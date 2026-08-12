@@ -142,7 +142,6 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
     if (!yaEncuadrado.current) { yaEncuadrado.current = true; return; }
     const p = points.find((x) => x.id === active);
     if (p) mapa.panTo({ lat: p.lat, lng: p.lng });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, mapa, points]);
 
   /** Abre (o reutiliza) la tarjetita del aviso sobre su pin. */

@@ -38,7 +38,7 @@ vi.mock("@/lib/googleMaps", async () => {
   return {
     useMapaDeGoogle: (_o: unknown, alCrear?: (m: unknown, l: unknown) => void) => {
       const contenedor = React.useRef<HTMLDivElement | null>(null);
-      const libs = { marker: { AdvancedMarkerElement: marcadorFalso } };
+      const libs = React.useMemo(() => ({ marker: { AdvancedMarkerElement: marcadorFalso } }), []);
       const m = React.useMemo(() => ({
         addListener: (evento: string, cb: (e: unknown) => void) => {
           if (evento === "click") mapa.click = cb as never;
@@ -48,7 +48,9 @@ vi.mock("@/lib/googleMaps", async () => {
         getZoom: () => 16,
         setZoom: () => {},
       }), []);
-      React.useEffect(() => { alCrear?.(m, libs); }, []);
+      // Se avisa UNA vez, al montar: el doble del mapa no cambia. Las
+      // dependencias van escritas para que la regla no tenga que adivinarlo.
+      React.useEffect(() => { alCrear?.(m, libs); }, [alCrear, m, libs]);
       return { contenedor, mapa: m, libs, estado: "listo" as const };
     },
     textoDeEstadoDelMapa: () => null,

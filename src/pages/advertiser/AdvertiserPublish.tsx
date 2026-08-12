@@ -15,7 +15,7 @@ import {
   Wallet, Loader2, Percent, Save,
 } from "lucide-react";
 import { useCategories } from "@/hooks/useCategories";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSession } from "@/hooks/useSession";
 import { toast } from "@/hooks/use-toast";
@@ -293,7 +293,10 @@ const AdvertiserPublish = () => {
 
   // Tope por adicional: "Imagen adicional" hasta MAX_EXTRA_IMAGES; el resto a la
   // cantidad de avisos (aquí siempre 1: un aviso por publicación).
-  const maxForExtra = (key: ExtraKey) => (key === "img500" ? MAX_EXTRA_IMAGES : quantity);
+  const maxForExtra = useCallback(
+    (key: ExtraKey) => (key === "img500" ? MAX_EXTRA_IMAGES : quantity),
+    [quantity],
+  );
 
   // Los adicionales se activan desde el paso 05 (abajo del todo), pero los
   // campos que habilitan —el PDF y las imágenes extra— viven en el paso 02
@@ -327,7 +330,7 @@ const AdvertiserPublish = () => {
       });
       return next;
     });
-  }, [quantity]);
+  }, [quantity, maxForExtra]);
 
   // Cuántos slots de imagen adicional mostrar (según el adicional comprado).
   const extraImageCount = Math.min(extras.img500 ?? 0, MAX_EXTRA_IMAGES);

@@ -53,4 +53,9 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// Excepción razonada a `only-export-components`: el proveedor y su hook en el
+// mismo archivo son EL patrón de contexto de React, y separarlos solo para que
+// la recarga en caliente sea más fina empeoraría la cohesión y tocaría los 11
+// archivos que lo usan.
+// eslint-disable-next-line react-refresh/only-export-components
 export const useFavorites = () => useContext(FavoritesContext);
