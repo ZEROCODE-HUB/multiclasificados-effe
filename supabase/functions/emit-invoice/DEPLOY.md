@@ -234,10 +234,17 @@ vale.
 
 ### Lo que dice su documentación, y que ya está resuelto en el código
 
-- **Las boletas van una a una.** Su API no tiene ningún endpoint de resumen
-  diario: el apartado de facturación son `send`, `pdf`, `xml` y `cdr` (más notas
-  de crédito/débito y guías). El resumen ante SUNAT lo gestiona Factiliza por su
-  cuenta, no nosotros.
+- **⚠️ CORRECCIÓN (2026-08-12).** Aquí decía que su API no tenía endpoint de
+  resumen diario. **Era falso**: lo saqué de `docs.factiliza.com/llms.txt`, que
+  es una web suya distinta y más pobre. En la buena
+  (`factiliza.gitbook.io/api-docs`) sí existe:
+  `POST /api/v1/summary/send` («Declarar en resumen»).
+
+  Lo que su documentación **no** dice es si para las boletas es obligatorio o
+  alternativo a `/invoice/send`. Y nos importa mucho, porque casi todas nuestras
+  ventas serán boletas a personas naturales. **Hay que preguntárselo.** A favor
+  de que baste con `/invoice/send`: su propio ejemplo de respuesta aceptada es
+  el CDR de una BOLETA («La Boleta numero BV01-000022, ha sido aceptada»).
 - **Sí hay consulta por serie y correlativo.** `POST /invoice/cdr`, `/invoice/pdf`
   y `/invoice/xml` reciben `{empresa_Ruc, tipo_Doc, serie, correlativo}`. Es lo
   que usa la comprobación previa antes de reenviar: si el documento ya existe, no

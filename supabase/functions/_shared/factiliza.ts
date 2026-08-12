@@ -334,12 +334,29 @@ export function leerRespuesta(httpStatus: number, cuerpo: unknown): Resultado {
   if (b.success !== true) {
     // Aquí es donde importa no mirar el HTTP: esto llega con 200.
     const esDeDatos = httpStatus === 200 || httpStatus === 400 || httpStatus === 422;
+
+    // El MOTIVO de verdad viene en `data.error`, no en `message`. El `message`
+    // de un rechazo es "revise el portal para más detalles", que no sirve para
+    // arreglar nada; `data.error` trae el código de SUNAT (p. ej. 3027) y el
+    // nodo exacto del XML que falla. Sin esto, quien tenga que corregir el
+    // comprobante se queda sin saber qué corregir.
+    const datos = (b.data ?? {}) as Record<string, unknown>;
+    const err = (datos.error ?? null) as Record<string, unknown> | null;
+    const codigoSunat = err?.code != null ? String(err.code) : null;
+    const detalle = String(err?.message ?? "").trim();
+
     return {
       ...base,
       desenlace: esDeDatos ? "rechazado" : "error",
       reintentable: !esDeDatos,
-      codigo: b.status != null ? String(b.status) : null,
-      mensaje: mensaje || "Factiliza rechazó el documento sin dar motivo",
+      // El hash llega incluso en el rechazo: identifica el documento en su
+      // sistema y es lo que hay que darles al reclamar.
+      hash: (datos.hash as string) ?? null,
+      // El código de SUNAT manda sobre el `status` del cuerpo, que en un
+      // rechazo vale 200 y no dice nada.
+      codigo: codigoSunat ?? (b.status != null ? String(b.status) : null),
+      mensaje: [mensaje, detalle].filter(Boolean).join(" — ")
+        || "Factiliza rechazó el documento sin dar motivo",
     };
   }
 

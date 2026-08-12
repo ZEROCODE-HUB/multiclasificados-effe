@@ -322,11 +322,28 @@ describe("interpretar lo que contesta Factiliza", () => {
       },
     };
 
+    // Su documentación tiene DOS formas de rechazo. Esta es la importante: el
+    // motivo real no está en `message` sino en `data.error`.
+    const RECHAZADO_SUNAT = {
+      status: 200,
+      success: false,
+      message: "DEMO - El documento fue registrado en el sistema, pero hubo un problema con la SUNAT, por favor, revise el portal para más detalles",
+      data: {
+        hash: "41LY8PaVD0ppQS/AVgchx0tsxas=",
+        error: {
+          code: "3027",
+          message: "El valor del atributo no se encuentra en el catálogo - Detalle: xxx.xxx.xxx value='ticket: 1716398432225 error: : 3027: Valor no se encuentra en el catalogo: 52 (nodo: \"cbc:Note/languageLocaleID\" valor: \"\")'",
+        },
+      },
+    };
+
     const RECHAZADO_DOC = {
       status: 400,
       success: false,
       message: "DEMO - El documento ah sido rechzado, por favor revise los datos para mas detalle",
     };
+
+    const CAIDO_DOC = { status: 500, message: "Servicio no disponible" };
 
     it("el ejemplo de ACEPTADO se lee como aceptado, con hash, CDR y zip", () => {
       const r = leerRespuesta(200, ACEPTADO_DOC);
@@ -347,6 +364,32 @@ describe("interpretar lo que contesta Factiliza", () => {
       expect(r.desenlace).toBe("rechazado");
       expect(r.reintentable).toBe(false);
       expect(r.mensaje).toContain("rechzado");
+    });
+
+    it("🔴 del rechazo de SUNAT se guarda el CÓDIGO y el nodo que falla", () => {
+      // Sin esto se guardaba "revise el portal para más detalles", que no le
+      // dice a nadie qué corregir. El comprobante ya está rechazado y hay que
+      // arreglarlo a mano: el 3027 y el nodo del XML son justo lo que hace
+      // falta para saber dónde mirar.
+      const r = leerRespuesta(200, RECHAZADO_SUNAT);
+      expect(r.desenlace).toBe("rechazado");
+      expect(r.codigo).toBe("3027");
+      expect(r.mensaje).toContain("cbc:Note/languageLocaleID");
+      expect(r.reintentable).toBe(false);
+    });
+
+    it("del rechazo también se guarda el hash, que identifica el documento", () => {
+      // Es lo que hay que darles a ellos al reclamar por un rechazo.
+      expect(leerRespuesta(200, RECHAZADO_SUNAT).hash).toBe("41LY8PaVD0ppQS/AVgchx0tsxas=");
+    });
+
+    it("el ejemplo de 500 SÍ se reintenta: es su servicio, no nuestro documento", () => {
+      // Ojo con la diferencia: un rechazo no se reintenta nunca (quemaría un
+      // correlativo cada vez), pero un "servicio no disponible" sí, porque el
+      // documento está bien y solo hay que esperar.
+      const r = leerRespuesta(500, CAIDO_DOC);
+      expect(r.desenlace).toBe("error");
+      expect(r.reintentable).toBe(true);
     });
 
     it("da igual que el rechazo llegue con 200 o con 400: es rechazo", () => {
