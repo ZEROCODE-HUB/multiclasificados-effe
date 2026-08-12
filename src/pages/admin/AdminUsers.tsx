@@ -16,6 +16,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { supabase } from "@/lib/supabase";
 import { formatCredits } from "@/lib/pricing";
 import { toast } from "@/hooks/use-toast";
+import { mensajeDeError } from "@/lib/errores";
 
 // Mapa estado real (BD) -> etiqueta y color del diseño existente.
 const statusMeta: Record<string, { label: string; color: string }> = {
@@ -86,8 +87,8 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
       await fn();
       toast({ title: label, description: `${u.full_name} · ${u.email}` });
       load();
-    } catch (e: any) {
-      toast({ title: "No se pudo completar", description: e?.message ?? "Error", variant: "destructive" });
+    } catch (e) {
+      toast({ title: "No se pudo completar", description: mensajeDeError(e, "Error"), variant: "destructive" });
     }
   };
 
@@ -113,7 +114,7 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
         }
       })
       .catch((e) =>
-        toast({ title: "No se pudo generar el enlace", description: e?.message ?? "Error", variant: "destructive" }),
+        toast({ title: "No se pudo generar el enlace", description: mensajeDeError(e, "Error"), variant: "destructive" }),
       )
       .finally(() => setResetLoading(false));
   };
@@ -175,7 +176,8 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
   };
 
   const renderActions = (u: AdminUser, compact = false) => {
-    const Btn = compact ? "outline" : "ghost";
+    // Tipado como la variante que espera <Button>, en vez de colarlo con `as any`.
+    const Btn: "outline" | "ghost" = compact ? "outline" : "ghost";
     const size: "icon" | "sm" = compact ? "sm" : "icon";
     const iconSize = compact ? 14 : 16;
     // Un solo botón que alterna según el estado: si está suspendido permite
@@ -189,7 +191,7 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
           <AlertDialogTrigger asChild>
             <Button
               size={size}
-              variant={Btn as any}
+              variant={Btn}
               className={isSuspended ? "text-success" : "text-destructive"}
               title={isSuspended ? "Reactivar" : "Suspender"}
             >
@@ -225,7 +227,7 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
         {canApprove && (
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button size={size} variant={Btn as any} className={u.verified ? "text-secondary" : "text-muted-foreground"} title={u.verified ? "Quitar verificación" : "Verificar"}><BadgeCheck size={iconSize} /></Button>
+            <Button size={size} variant={Btn} className={u.verified ? "text-secondary" : "text-muted-foreground"} title={u.verified ? "Quitar verificación" : "Verificar"}><BadgeCheck size={iconSize} /></Button>
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
@@ -248,7 +250,7 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
         <>
         <Button
           size={size}
-          variant={Btn as any}
+          variant={Btn}
           className="text-primary"
           title="Restablecer contraseña"
           onClick={() => openReset(u)}
@@ -258,7 +260,7 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
 
         <Button
           size={size}
-          variant={Btn as any}
+          variant={Btn}
           className="text-secondary"
           title="Otorgar saldo"
           onClick={() => { setGrantFor(u); setGrantAmount(""); }}
@@ -271,7 +273,7 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
         {canDelete && (
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button size={size} variant={Btn as any} className="text-destructive" title="Eliminar"><Trash2 size={iconSize} /></Button>
+            <Button size={size} variant={Btn} className="text-destructive" title="Eliminar"><Trash2 size={iconSize} /></Button>
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>

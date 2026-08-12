@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { prepararDom } from "./domPolyfills";
 
 // En la pestaña "Reportados" el moderador solo veía el título y el motivo, y ya
 // tenía que decidir si deshabilitar el aviso. Sin verlo.
 
 beforeEach(() => {
-  (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver =
-    class { observe() {} unobserve() {} disconnect() {} };
+  prepararDom();
   if (!window.matchMedia) {
     (window as unknown as { matchMedia: unknown }).matchMedia = () => ({
       matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {},

@@ -10,6 +10,7 @@ import { fetchReports, assignReport, resolveReport, fetchConversationBetween, ty
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
+import { mensajeDeError } from "@/lib/errores";
 
 // Mapa estado real (BD) -> etiqueta + color del diseño existente.
 const statusMeta: Record<string, { label: string; color: string }> = {
@@ -80,8 +81,8 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
       await fn();
       toast({ title: label });
       await load();
-    } catch (e: any) {
-      toast({ title: "No se pudo completar", description: e?.message ?? "Error", variant: "destructive" });
+    } catch (e) {
+      toast({ title: "No se pudo completar", description: mensajeDeError(e, "Error"), variant: "destructive" });
     } finally {
       setBusy(false);
     }

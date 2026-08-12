@@ -1,14 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { prepararDom } from "./domPolyfills";
 
 // Polyfills para Radix (AlertDialog) en jsdom.
-beforeEach(() => {
-  (globalThis as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
-  if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
-  if (!Element.prototype.hasPointerCapture) (Element.prototype as any).hasPointerCapture = () => false;
-  if (!Element.prototype.releasePointerCapture) (Element.prototype as any).releasePointerCapture = () => {};
-  if (!window.matchMedia) (window as any).matchMedia = () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
-});
+beforeEach(prepararDom);
 
 const USER = {
   id: "24d479cf-52ce-40f4-b634-886eae34a7df",
@@ -43,7 +38,10 @@ beforeEach(() => {
     data: { ok: true, email: "ana@correo.com", link: "https://multiclasificados-effe.vercel.app/reset-password?token_hash=abc123&type=recovery" },
     error: null,
   });
-  (navigator as any).clipboard = { writeText: vi.fn().mockResolvedValue(undefined) };
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText: vi.fn().mockResolvedValue(undefined) },
+  });
 });
 
 describe("AdminUsers — enlace seguro de restablecimiento", () => {
@@ -73,7 +71,7 @@ describe("AdminUsers — enlace seguro de restablecimiento", () => {
 
     fireEvent.click(screen.getAllByTitle("Copiar enlace")[0]);
     await waitFor(() =>
-      expect((navigator as any).clipboard.writeText).toHaveBeenCalledWith(
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
         expect.stringContaining("token_hash=abc123"),
       ),
     );

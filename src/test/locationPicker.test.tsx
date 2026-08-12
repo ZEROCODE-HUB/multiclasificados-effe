@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, act, within, fireEvent } from "@testing-library/react";
 import { useRef, useState } from "react";
+import { prepararDom } from "./domPolyfills";
 
 /**
  * Publicar tiene que ser marcar un punto en el mapa y nada más.
@@ -10,10 +11,7 @@ import { useRef, useState } from "react";
  * rellenar para decir una sola, y encima la única exacta era la que no se pedía.
  */
 
-beforeEach(() => {
-  (globalThis as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
-  if (!window.matchMedia) (window as any).matchMedia = () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
-});
+beforeEach(prepararDom);
 
 /**
  * El mapa de Google no se puede montar en jsdom (no hay medidas ni lienzo), así

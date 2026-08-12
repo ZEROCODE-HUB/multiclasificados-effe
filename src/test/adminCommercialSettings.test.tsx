@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { prepararDom } from "./domPolyfills";
 
 /**
  * "Variables del sistema" mostraba cosas que no le tocan:
@@ -12,8 +13,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
  */
 
 beforeEach(() => {
-  (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver =
-    class { observe() {} unobserve() {} disconnect() {} };
+  prepararDom();
   if (!window.matchMedia) {
     (window as unknown as { matchMedia: unknown }).matchMedia = () => ({
       matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {},

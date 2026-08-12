@@ -21,6 +21,7 @@ import { fetchAdminListings, setListingStatus, setListingPublishedAt, fetchRepor
 import { usePermissions } from "@/hooks/usePermissions";
 import { fetchListingImages } from "@/lib/listings";
 import { ListingPreviewDialog } from "@/components/ListingPreviewDialog";
+import { mensajeDeError } from "@/lib/errores";
 
 const statusColor: Record<AdminListingStatus, string> = {
   Pendiente: "bg-warning/15 text-warning border-warning/30",
@@ -160,10 +161,10 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
         if (disableTarget.reportId && isUuid(disableTarget.reportId)) {
           try {
             await resolveReport(disableTarget.reportId, "remove", reason);
-          } catch (e: any) {
+          } catch (e) {
             toast({
               title: "Aviso deshabilitado, pero la denuncia sigue abierta",
-              description: e?.message ?? "Vuelve a intentarlo desde la pestaña Reportados.",
+              description: mensajeDeError(e, "Vuelve a intentarlo desde la pestaña Reportados."),
               variant: "destructive",
             });
           }
@@ -178,8 +179,8 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
         title: "Aviso deshabilitado",
         description: `Notificación enviada a ${disableTarget.advertiser}: "${reason}"`,
       });
-    } catch (e: any) {
-      toast({ title: "No se pudo deshabilitar", description: e?.message ?? "Error", variant: "destructive" });
+    } catch (e) {
+      toast({ title: "No se pudo deshabilitar", description: mensajeDeError(e, "Error"), variant: "destructive" });
     }
     setDisableTarget(null);
     setDisableReason("");
@@ -201,8 +202,8 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
       await setListingStatus(l.id, "active");
       await Promise.all([load(), loadReportedListings()]);
       toast({ title: "Aviso habilitado", description: `"${l.title}" vuelve a estar visible.` });
-    } catch (e: any) {
-      toast({ title: "No se pudo habilitar", description: e?.message ?? "Error", variant: "destructive" });
+    } catch (e) {
+      toast({ title: "No se pudo habilitar", description: mensajeDeError(e, "Error"), variant: "destructive" });
     }
   };
 
@@ -247,8 +248,8 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
       });
       setDateTarget(null);
       setDateValue("");
-    } catch (e: any) {
-      toast({ title: "No se pudo actualizar", description: e?.message ?? "Error", variant: "destructive" });
+    } catch (e) {
+      toast({ title: "No se pudo actualizar", description: mensajeDeError(e, "Error"), variant: "destructive" });
     } finally {
       setSavingDate(false);
     }

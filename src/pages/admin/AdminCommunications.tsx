@@ -17,6 +17,7 @@ import {
   fetchAudienceCount, sendIndividualMessage, broadcastMessage, fetchCommStats,
   fetchAdminUsers, type CommStats, type AdminUser, type AudienciaMasiva,
 } from "@/lib/admin";
+import { mensajeDeError } from "@/lib/errores";
 
 const timeAgo = (iso: string) => {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000;
@@ -155,8 +156,8 @@ const AdminCommunications = ({ role }: { role: AdminRole }) => {
       toast({ title: "Mensaje enviado", description: `${recipient}${indEmail ? " · in-app + email" : " · in-app"}` });
       clearSelectedUser(); setIndSubject(""); setIndBody(""); setIndEmail(false);
       loadStats();
-    } catch (e: any) {
-      toast({ title: "No se pudo enviar", description: e?.message ?? "Error", variant: "destructive" });
+    } catch (e) {
+      toast({ title: "No se pudo enviar", description: mensajeDeError(e, "Error"), variant: "destructive" });
     } finally {
       setSendingInd(false);
     }
@@ -175,8 +176,8 @@ const AdminCommunications = ({ role }: { role: AdminRole }) => {
       toast({ title: "Envío realizado", description: `${n.toLocaleString()} destinatarios${massEmail ? " · in-app + email" : " · in-app"}` });
       setMassSubject(""); setMassBody("");
       loadStats();
-    } catch (e: any) {
-      toast({ title: "No se pudo enviar", description: e?.message ?? "Error", variant: "destructive" });
+    } catch (e) {
+      toast({ title: "No se pudo enviar", description: mensajeDeError(e, "Error"), variant: "destructive" });
     } finally {
       setSendingMass(false);
     }

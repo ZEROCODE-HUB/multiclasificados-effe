@@ -39,6 +39,7 @@ import {
   uploadCategoryImage,
   type AdminInvoice, type AdminCategory,
 } from "@/lib/admin";
+import { mensajeDeError } from "@/lib/errores";
 
 // Foto que se ve en la tarjeta nº `index` cuando la categoría no tiene una
 // propia: la misma de reserva que pinta la portada, para que el panel enseñe
@@ -220,9 +221,9 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
       await reorderCategories(next.map((c) => c.id));
       await invalidateCategories(); // refresca el resto de la plataforma
       toast({ title: "Orden actualizado", description: "Se aplicó en toda la plataforma." });
-    } catch (e: any) {
+    } catch (e) {
       setCats(previous);
-      toast({ title: "No se pudo guardar el orden", description: e?.message ?? "Error", variant: "destructive" });
+      toast({ title: "No se pudo guardar el orden", description: mensajeDeError(e, "Error"), variant: "destructive" });
     }
     setSavingOrder(false);
   };
@@ -263,12 +264,12 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
           try {
             const url = await uploadCategoryImage(id, catFile);
             await updateCategory(id, { image_url: url });
-          } catch (e: any) {
+          } catch (e) {
             // La categoría ya está creada: no se revierte, solo se avisa. Hasta
             // que suban una foto, la portada usará una de reserva.
             toast({
               title: "Categoría creada, pero sin imagen",
-              description: e?.message ?? "No se pudo subir la foto. Vuelve a intentarlo desde Editar.",
+              description: mensajeDeError(e, "No se pudo subir la foto. Vuelve a intentarlo desde Editar."),
               variant: "destructive",
             });
           }
@@ -278,8 +279,8 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
       setCatDialog({ open: false, editing: null });
       loadCats();
       void invalidateCategories();
-    } catch (e: any) {
-      toast({ title: "No se pudo guardar", description: e?.message ?? "Error", variant: "destructive" });
+    } catch (e) {
+      toast({ title: "No se pudo guardar", description: mensajeDeError(e, "Error"), variant: "destructive" });
     }
     setSavingCat(false);
   };
@@ -299,8 +300,8 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
       toast({ title: "Categoría eliminada", description: c.name });
       loadCats();
       void invalidateCategories();
-    } catch (e: any) {
-      toast({ title: "No se pudo eliminar", description: e?.message ?? "Error", variant: "destructive" });
+    } catch (e) {
+      toast({ title: "No se pudo eliminar", description: mensajeDeError(e, "Error"), variant: "destructive" });
     }
   };
 
@@ -315,7 +316,11 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
     maintenance_mode: "Modo mantenimiento",
   } as const;
   type SettingKey = keyof typeof SETTING_KEYS;
-  const [settings, setSettings] = useState<Record<SettingKey, any>>({
+  // Cada ajuste tiene SU tipo: los dos primeros van a un <Input type="number">
+  // y el tercero a un interruptor. Como `Record<SettingKey, any>` esto no se
+  // comprobaba y un booleano podía acabar en un campo numérico.
+  interface Ajustes { commission_pct: number; free_listings_limit: number; maintenance_mode: boolean }
+  const [settings, setSettings] = useState<Ajustes>({
     commission_pct: 0, free_listings_limit: 0, maintenance_mode: false,
   });
   const [savingSettings, setSavingSettings] = useState(false);
@@ -331,7 +336,12 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
       if (!rows.length) return;
       setSettings((prev) => {
         const next = { ...prev };
-        rows.forEach((s) => { if (s.key in next) (next as any)[s.key] = s.value; });
+        // El valor llega como jsonb: se convierte al tipo que espera cada campo.
+        rows.forEach((s) => {
+          if (s.key === "commission_pct") next.commission_pct = Number(s.value) || 0;
+          else if (s.key === "free_listings_limit") next.free_listings_limit = Number(s.value) || 0;
+          else if (s.key === "maintenance_mode") next.maintenance_mode = s.value === true || s.value === "true";
+        });
         return next;
       });
     });
@@ -364,8 +374,8 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
         ),
       );
       toast({ title: "Configuración guardada", description: "Las variables del sistema se actualizaron." });
-    } catch (e: any) {
-      toast({ title: "No se pudo guardar", description: e?.message ?? "Error", variant: "destructive" });
+    } catch (e) {
+      toast({ title: "No se pudo guardar", description: mensajeDeError(e, "Error"), variant: "destructive" });
     }
     setSavingSettings(false);
   };

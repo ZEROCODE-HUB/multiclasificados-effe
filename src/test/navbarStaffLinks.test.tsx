@@ -2,11 +2,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import type { Session, SessionRole } from "@/hooks/useSession";
+import { prepararDom } from "./domPolyfills";
 
-beforeEach(() => {
-  (globalThis as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
-  if (!window.matchMedia) (window as any).matchMedia = () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
-});
+beforeEach(prepararDom);
 
 const { sessionRef, navigateSpy, signOutMock } = vi.hoisted(() => ({
   sessionRef: { current: null as Session | null },

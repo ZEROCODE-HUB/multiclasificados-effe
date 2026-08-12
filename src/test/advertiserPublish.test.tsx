@@ -1,15 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { EnlaceFalso } from "./routerStubs";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { prepararDom } from "./domPolyfills";
 
 // --- Polyfills que Radix (Dialog) y la subida de foto necesitan en jsdom ---
-beforeEach(() => {
-  (globalThis as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
-  if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
-  if (!Element.prototype.hasPointerCapture) (Element.prototype as any).hasPointerCapture = () => false;
-  if (!Element.prototype.releasePointerCapture) (Element.prototype as any).releasePointerCapture = () => {};
-  (URL as any).createObjectURL = () => "blob:mock";
-  if (!window.matchMedia) (window as any).matchMedia = () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
-});
+beforeEach(prepararDom);
 
 // --- Mocks de la capa de datos y del entorno ---
 const getCreditBalance = vi.fn();
@@ -76,7 +71,7 @@ vi.mock("react-router-dom", async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>);
   // Stub de Link: los tests no montan un <Router>, así que el <Link> real (de un
   // hijo del wizard) reventaba al leer el contexto de router. Con un <a> basta.
-  return { ...actual, useNavigate: () => navigate, Link: ({ children, to, ...rest }: any) => <a href={typeof to === "string" ? to : undefined} {...rest}>{children}</a> };
+  return { ...actual, useNavigate: () => navigate, Link: EnlaceFalso };
 });
 
 vi.mock("@/hooks/useSession", () => ({

@@ -83,11 +83,26 @@ export interface GrowthPoint {
   postulaciones: number;
 }
 
+// ------------------------------------------------------------------ Filas de la BD
+// Lo que devuelven los RPC y las consultas, escrito. Antes iba como `any`, que
+// además de apagar el comprobador no dejaba por escrito qué trae cada consulta.
+interface FilaActor { full_name?: string | null; email?: string | null }
+// PostgREST devuelve las relaciones como objeto o como array según la
+// cardinalidad, y con `any` esto pasaba desapercibido: `a.actor?.email` sobre un
+// array es `undefined`, así que el nombre del staff se habría perdido en
+// silencio. Igual que ya se hace más abajo con las relaciones de los pedidos.
+const actorDe = (a: { actor?: FilaActor | FilaActor[] | null }): FilaActor =>
+  (Array.isArray(a.actor) ? a.actor[0] : a.actor) ?? {};
+interface FilaAuditoria {
+  id?: string | number; action: string; entity_type?: string | null; entity_id?: string | null;
+  created_at?: string | null; ip?: string | null; actor?: FilaActor | FilaActor[] | null;
+}
+
 export async function fetchGrowthSeries(range: GrowthRange = "6m"): Promise<GrowthPoint[]> {
   try {
     const { data, error } = await supabase.rpc("admin_growth_series", { p_range: range });
     if (error) throw error;
-    if (data?.length) return (data as any[]).map((r) => ({
+    if (data?.length) return (data as Array<{ mes: string; ingresos: number; usuarios: number; avisos: number; postulaciones: number }>).map((r) => ({
       mes: r.mes,
       ingresos: Number(r.ingresos) || 0,
       usuarios: Number(r.usuarios) || 0,
@@ -142,7 +157,12 @@ export async function fetchAdminCreditTransactions(opts: {
       p_offset: (page - 1) * CREDIT_TX_PAGE_SIZE,
     });
     if (error) throw error;
-    const rows = (data ?? []) as any[];
+    // `total_count` viaja en cada fila (el RPC pagina en el servidor).
+    const rows = (data ?? []) as Array<{
+      id: string; user_id: string; full_name: string | null; email: string | null;
+      type: "purchase" | "spend"; credits: number; description: string | null;
+      listing_title: string | null; created_at: string; total_count: number;
+    }>;
     const total = rows.length ? Number(rows[0].total_count) || 0 : 0;
     return {
       data: rows.map((r): AdminCreditTx => ({
@@ -285,8 +305,11 @@ export async function fetchCategories(): Promise<{ data: AdminCategory[]; real: 
     if (cats && (cats.length || (await isAuthed()))) {
       const { data: ls } = await supabase.from("listings").select("category_id");
       const counts: Record<string, number> = {};
-      (ls ?? []).forEach((r: any) => { counts[r.category_id] = (counts[r.category_id] ?? 0) + 1; });
-      const rows: AdminCategory[] = (cats as any[]).map((c) => ({
+      (ls ?? []).forEach((r: { category_id: string }) => { counts[r.category_id] = (counts[r.category_id] ?? 0) + 1; });
+      const rows: AdminCategory[] = (cats as Array<{
+        id: string; name: string; icon: string; sort_order: number; active: boolean;
+        condition_enabled?: boolean | null; image_url?: string | null;
+      }>).map((c) => ({
         id: c.id, name: c.name, icon: c.icon, sort_order: c.sort_order, active: c.active,
         condition_enabled: c.condition_enabled !== false,
         image_url: c.image_url ?? null,
@@ -414,11 +437,12 @@ async function resolveEntityNames(
 
   if (userIds.length) {
     const { data } = await supabase.from("profiles").select("id, full_name, email").in("id", userIds);
-    (data ?? []).forEach((u: any) => users.set(u.id, u.email || u.full_name || u.id));
+    (data ?? []).forEach((u: { id: string; email?: string | null; full_name?: string | null }) =>
+      users.set(u.id, u.email || u.full_name || u.id));
   }
   if (listingIds.length) {
     const { data } = await supabase.from("listings").select("id, title").in("id", listingIds);
-    (data ?? []).forEach((l: any) => listings.set(l.id, l.title || l.id));
+    (data ?? []).forEach((l: { id: string; title?: string | null }) => listings.set(l.id, l.title || l.id));
   }
   return { users, listings };
 }
@@ -435,7 +459,7 @@ export async function fetchRecentActivity(): Promise<{ data: ActivityItem[]; rea
     const { data: listings } = await supabase.rpc("admin_list_listings", {
       p_search: null, p_status: null, p_limit: 8, p_offset: 0,
     });
-    (listings ?? []).forEach((l: any) => items.push({
+    (listings ?? []).forEach((l: { id: string; title: string; advertiser?: string | null; created_at: string }) => items.push({
       who: l.advertiser ?? "Anunciante", action: "publicó el aviso", target: l.title,
       at: l.created_at, time: relativeTime(l.created_at),
       entityType: "listing", entityId: l.id,
@@ -448,11 +472,11 @@ export async function fetchRecentActivity(): Promise<{ data: ActivityItem[]; rea
     // Mismas etiquetas que "Auditoría y registros": nada de `set_role_permission`
     // ni de IDs crudos en la actividad reciente.
     const names = await resolveEntityNames(logs ?? []);
-    (logs ?? []).forEach((a: any) => {
+    (logs ?? []).forEach((a: FilaAuditoria) => {
       const type = a.entity_type ?? null;
       const id = a.entity_id ?? null;
       items.push({
-        who: a.actor?.email || a.actor?.full_name || "Staff",
+        who: actorDe(a).email || actorDe(a).full_name || "Staff",
         action: auditActionLabel(a.action),
         // Sin ID que resolver, el tipo traducido es lo más informativo que hay.
         target: auditEntityName(type, id, names) || (type ? auditEntityLabel(type) : ""),
@@ -479,7 +503,7 @@ export async function fetchCategoryDistribution() {
   try {
     const { data, error } = await supabase.rpc("admin_category_distribution");
     if (error) throw error;
-    if (data?.length) return (data as any[]).map((r) => ({ name: r.name, value: Number(r.value) || 0 }));
+    if (data?.length) return (data as Array<{ name: string; value: number }>).map((r) => ({ name: r.name, value: Number(r.value) || 0 }));
   } catch { /* fallback */ }
   return mockCats;
 }
@@ -492,7 +516,7 @@ export async function fetchCategoryRevenue(range?: ReportDateRange) {
   try {
     const { data, error } = await supabase.rpc("admin_category_revenue", rangeArgs(range));
     if (error) throw error;
-    return ((data as any[]) ?? []).map((r) => ({ cat: r.cat, avisos: Number(r.avisos) || 0, monto: Number(r.monto) || 0 }));
+    return ((data as Array<{ cat: string; avisos: number; monto: number }>) ?? []).map((r) => ({ cat: r.cat, avisos: Number(r.avisos) || 0, monto: Number(r.monto) || 0 }));
   } catch { return []; }
 }
 
@@ -501,7 +525,7 @@ export async function fetchRegionDistribution(range?: ReportDateRange) {
   try {
     const { data, error } = await supabase.rpc("admin_region_distribution", rangeArgs(range));
     if (error) throw error;
-    return ((data as any[]) ?? []).map((r) => ({ reg: r.reg, avisos: Number(r.avisos) || 0, monto: Number(r.monto) || 0 }));
+    return ((data as Array<{ reg: string; avisos: number; monto: number }>) ?? []).map((r) => ({ reg: r.reg, avisos: Number(r.avisos) || 0, monto: Number(r.monto) || 0 }));
   } catch { return []; }
 }
 
@@ -513,12 +537,12 @@ export async function fetchClaimsSummary(range?: ReportDateRange): Promise<Claim
   try {
     const { data, error } = await supabase.rpc("admin_claims_summary", rangeArgs(range));
     if (error) throw error;
-    const d = data as any;
+    const d = data as { recibidos?: number; pendientes?: number; solucionados?: number; trend?: Array<{ mes: string; recibidos: number; solucionados: number }> } | null;
     return {
       recibidos: Number(d?.recibidos) || 0,
       pendientes: Number(d?.pendientes) || 0,
       solucionados: Number(d?.solucionados) || 0,
-      trend: ((d?.trend as any[]) ?? []).map((t) => ({ mes: t.mes, recibidos: Number(t.recibidos) || 0, solucionados: Number(t.solucionados) || 0 })),
+      trend: (d?.trend ?? []).map((t) => ({ mes: t.mes, recibidos: Number(t.recibidos) || 0, solucionados: Number(t.solucionados) || 0 })),
     };
   } catch {
     return { recibidos: 0, pendientes: 0, solucionados: 0, trend: [] };
@@ -744,9 +768,9 @@ export async function fetchAuditLogs(range?: ReportDateRange): Promise<{ data: A
       const logs = data ?? [];
       const names = await resolveEntityNames(logs);
 
-      const rows: AuditRow[] = logs.map((l: any) => ({
+      const rows: AuditRow[] = (logs as FilaAuditoria[]).map((l) => ({
         id: `L-${l.id}`,
-        actor: l.actor?.email || l.actor?.full_name || "sistema",
+        actor: actorDe(l).email || actorDe(l).full_name || "sistema",
         action: auditActionLabel(l.action),
         entity: auditEntityDescription(l.entity_type ?? null, l.entity_id ?? null, names),
         ip: l.ip || "—",
@@ -777,7 +801,7 @@ export async function fetchRoleCounts(): Promise<Record<string, number>> {
     const { data, error } = await supabase.rpc("admin_role_counts");
     if (error) throw error;
     const out: Record<string, number> = {};
-    (data as any[])?.forEach((r) => { out[r.role] = Number(r.total) || 0; });
+    (data as Array<{ role: string; total: number }>)?.forEach((r) => { out[r.role] = Number(r.total) || 0; });
     return out;
   } catch { return {}; }
 }
@@ -817,7 +841,8 @@ export async function removeRole(userId: string, role: string) {
 }
 
 // ------------------------------------------------------------------ Configuración
-export interface SystemSetting { key: string; value: any; label: string | null; updated_at: string }
+// `value` es un jsonb: puede ser texto, número, booleano u objeto según la clave.
+export interface SystemSetting { key: string; value: unknown; label: string | null; updated_at: string }
 
 export async function fetchSettings(): Promise<SystemSetting[]> {
   try {
@@ -827,7 +852,7 @@ export async function fetchSettings(): Promise<SystemSetting[]> {
   } catch { return []; }
 }
 
-export async function setSetting(key: string, value: any, label?: string) {
+export async function setSetting(key: string, value: unknown, label?: string) {
   const { error } = await supabase.rpc("set_setting", { p_key: key, p_value: value, p_label: label || null });
   if (error) throw error;
 }

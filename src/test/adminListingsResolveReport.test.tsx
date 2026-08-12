@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { prepararDom } from "./domPolyfills";
 
 // Deshabilitar un aviso denunciado no cerraba la denuncia en la BD: el
 // "Resuelto" que se veía era un estado derivado del aviso, así que volvía a
 // "pendiente" al rehabilitarlo (IT3-020). Aquí se fija el contrato nuevo.
 
 beforeEach(() => {
-  (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver =
-    class { observe() {} unobserve() {} disconnect() {} };
+  prepararDom();
   if (!window.matchMedia) {
     (window as unknown as { matchMedia: unknown }).matchMedia = () => ({
       matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {},

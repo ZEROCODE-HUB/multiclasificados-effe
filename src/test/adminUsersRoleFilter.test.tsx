@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { prepararDom } from "./domPolyfills";
 
 // "Anunciante" se retiró del filtro y del selector de rol: todo buscador puede
 // publicar, así que la distinción no existía. Lo delicado no es esconder la
@@ -7,10 +8,8 @@ import { render, screen, fireEvent, waitFor, within } from "@testing-library/rea
 // guardado en la BD sigan siendo visibles y filtrables como "Buscador".
 
 beforeEach(() => {
+  prepararDom();
   globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
-  if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
-  if (!Element.prototype.hasPointerCapture) Element.prototype.hasPointerCapture = () => false;
-  if (!Element.prototype.releasePointerCapture) Element.prototype.releasePointerCapture = () => {};
 });
 
 const base = {

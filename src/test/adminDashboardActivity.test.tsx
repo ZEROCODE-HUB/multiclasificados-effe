@@ -1,14 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { prepararDom } from "./domPolyfills";
 
 // Polyfills para Radix (Dialog) y recharts en jsdom.
-beforeEach(() => {
-  (globalThis as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
-  if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
-  if (!Element.prototype.hasPointerCapture) (Element.prototype as any).hasPointerCapture = () => false;
-  if (!Element.prototype.releasePointerCapture) (Element.prototype as any).releasePointerCapture = () => {};
-  if (!window.matchMedia) (window as any).matchMedia = () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
-});
+beforeEach(prepararDom);
 
 // `vi.mock` se iza al tope del archivo: las constantes que usa su factory deben
 // crearse con `vi.hoisted` para existir antes.

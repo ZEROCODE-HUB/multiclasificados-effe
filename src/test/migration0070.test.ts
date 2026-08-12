@@ -54,7 +54,7 @@ beforeEach(async () => {
 describe("EFFE-039: notificar al dueño ante una postulación nueva (0070)", () => {
   it("una postulación nueva crea notificación 'new_application' para el DUEÑO", async () => {
     await q(`insert into public.job_applications (listing_id, applicant_id) values ('${LISTING}', '${APPLICANT}')`);
-    const rows = await q<{ user_id: string; type: string; payload: any }>(
+    const rows = await q<{ user_id: string; type: string; payload: Record<string, unknown> }>(
       `select user_id, type, payload from public.notifications`);
     expect(rows).toHaveLength(1);
     expect(rows[0].user_id).toBe(OWNER);

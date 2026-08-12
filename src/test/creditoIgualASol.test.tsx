@@ -1,16 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { prepararDom } from "./domPolyfills";
 
 // Internamente el saldo se lleva en créditos con conversión 1 sol = 1 crédito,
 // pero en la UI TODO se muestra como dinero, con la sigla "S/" ("S/ 16.14").
 // Ya no aparece la palabra "créditos" de cara al usuario.
 
-beforeEach(() => {
-  (globalThis as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
-  if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
-  if (!Element.prototype.hasPointerCapture) (Element.prototype as any).hasPointerCapture = () => false;
-  if (!Element.prototype.releasePointerCapture) (Element.prototype as any).releasePointerCapture = () => {};
-});
+beforeEach(prepararDom);
 
 const createPayment = vi.fn().mockResolvedValue({ orderId: "ord-1", formToken: "tok", publicKey: "pk-1" });
 vi.mock("@/lib/payments", () => ({

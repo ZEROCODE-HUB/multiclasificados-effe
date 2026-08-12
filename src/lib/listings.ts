@@ -332,10 +332,26 @@ export async function fetchMyListings(): Promise<MyListing[]> {
       .eq("owner_id", user.id)
       .order("created_at", { ascending: false });
     if (error) throw error;
-    return (data ?? []).map((r: any): MyListing => {
+    // La fila tal como la devuelve la consulta de arriba, con las imágenes
+    // anidadas. Estaba como `any`, que además de apagar los tipos no dejaba por
+    // escrito qué columnas se piden.
+    interface FilaImagen { url: string; sort_order?: number | null }
+    interface FilaAviso {
+      id: string; title: string; description?: string | null;
+      price?: number | string | null; currency?: string | null; category_id: string;
+      condition?: string | null; location?: string | null;
+      lat?: number | string | null; lng?: number | string | null;
+      featured?: boolean | null; urgent?: boolean | null; confidential?: boolean | null;
+      views?: number | null; status: string; rejection_reason?: string | null;
+      published_at?: string | null; expires_at?: string | null; created_at?: string | null;
+      plan_duration_days?: number | null; plan_quantity?: number | null;
+      plan_extras?: Record<string, number | boolean> | null;
+      listing_images?: FilaImagen[] | null;
+    }
+    return (data as unknown as FilaAviso[] ?? []).map((r): MyListing => {
       const imgs = (r.listing_images ?? [])
         .slice()
-        .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+        .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
       return {
         id: r.id,
         title: r.title,

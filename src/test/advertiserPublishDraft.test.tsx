@@ -1,17 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { EnlaceFalso } from "./routerStubs";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { prepararDom } from "./domPolyfills";
 
 // "Guardar en mis borradores": persiste el aviso en la BD sin cobrar ni pedir
 // identidad, y publicar después reutiliza ESE aviso en vez de crear otro.
 
-beforeEach(() => {
-  (globalThis as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
-  if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
-  if (!Element.prototype.hasPointerCapture) (Element.prototype as any).hasPointerCapture = () => false;
-  if (!Element.prototype.releasePointerCapture) (Element.prototype as any).releasePointerCapture = () => {};
-  (URL as any).createObjectURL = () => "blob:mock";
-  if (!window.matchMedia) (window as any).matchMedia = () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
-});
+beforeEach(prepararDom);
 
 const getCreditBalance = vi.fn().mockResolvedValue(1000);
 vi.mock("@/lib/credits", () => ({
@@ -55,7 +50,7 @@ vi.mock("react-router-dom", async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>);
   // Stub de Link: los tests no montan un <Router>, así que el <Link> real (de un
   // hijo del wizard) reventaba al leer el contexto de router. Con un <a> basta.
-  return { ...actual, useNavigate: () => navigate, Link: ({ children, to, ...rest }: any) => <a href={typeof to === "string" ? to : undefined} {...rest}>{children}</a> };
+  return { ...actual, useNavigate: () => navigate, Link: EnlaceFalso };
 });
 
 let sessionValue: unknown = { role: "anunciante", name: "Test", initials: "T", supabase: true };

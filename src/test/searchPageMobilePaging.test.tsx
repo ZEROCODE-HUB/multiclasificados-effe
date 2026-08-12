@@ -1,16 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { prepararDom } from "./domPolyfills";
 
 // /buscar en MÓVIL (pantalla < 768px, incluido el APK) pagina de 10 en 10.
 // Antes el APK mostraba la lista continua; ahora también pagina.
 
-beforeEach(() => {
-  (globalThis as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
-  if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
-  if (!Element.prototype.hasPointerCapture) (Element.prototype as any).hasPointerCapture = () => false;
-  if (!window.matchMedia) (window as any).matchMedia = () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
-});
+beforeEach(prepararDom);
 
 // 23 avisos → 3 páginas en móvil (10 + 10 + 3). vi.mock se iza al tope, así que
 // LISTINGS debe existir antes vía vi.hoisted.

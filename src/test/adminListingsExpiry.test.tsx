@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { prepararDom } from "./domPolyfills";
 
 // Herramienta de PRUEBA (superadmin): cambiar la fecha de publicación de un
 // aviso para testear su caducidad. Solo debe verla el superadmin, y "Simular
 // vencimiento" debe mandar una fecha que deje el aviso ya vencido.
 
 beforeEach(() => {
-  (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver =
-    class { observe() {} unobserve() {} disconnect() {} };
+  prepararDom();
   if (!window.matchMedia) {
     (window as unknown as { matchMedia: unknown }).matchMedia = () => ({
       matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {},

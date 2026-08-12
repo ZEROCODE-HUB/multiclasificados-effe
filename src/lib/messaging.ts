@@ -90,6 +90,18 @@ export async function hasConversationWithSeller(
 }
 
 // Lista las conversaciones del usuario actual con nombre del otro y no leídos.
+// Fila de `conversations` con el aviso unido. La relación llega como objeto o
+// como array según la cardinalidad; con `any` el caso array caía en silencio al
+// texto por defecto.
+interface RelAviso { title?: string | null; category_id?: string | null }
+interface FilaConversacion {
+  id: string; listing_id: string; buyer_id: string; seller_id: string;
+  last_message: string | null; last_message_at: string | null;
+  listings?: RelAviso | RelAviso[] | null;
+}
+const avisoDe = (rel: FilaConversacion["listings"]): RelAviso =>
+  (Array.isArray(rel) ? rel[0] : rel) ?? {};
+
 export async function fetchConversations(): Promise<Conversation[]> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
@@ -99,11 +111,11 @@ export async function fetchConversations(): Promise<Conversation[]> {
       .select("id, listing_id, buyer_id, seller_id, last_message, last_message_at, listings(title, category_id)")
       .order("last_message_at", { ascending: false, nullsFirst: false });
     if (error) throw error;
-    const rows = data ?? [];
+    const rows = (data ?? []) as unknown as FilaConversacion[];
     if (rows.length === 0) return [];
 
     // Nombres del otro participante.
-    const others = [...new Set(rows.map((r: any) => (r.buyer_id === user.id ? r.seller_id : r.buyer_id)))];
+    const others = [...new Set(rows.map((r: FilaConversacion) => (r.buyer_id === user.id ? r.seller_id : r.buyer_id)))];
     const names = new Map<string, string>();
     if (others.length) {
       const { data: profs } = await supabase
@@ -134,7 +146,7 @@ export async function fetchConversations(): Promise<Conversation[]> {
       unreadByConv.set(m.conversation_id, (unreadByConv.get(m.conversation_id) ?? 0) + 1);
     });
 
-    return rows.map((r: any): Conversation => {
+    return rows.map((r): Conversation => {
       const counterpartId = r.buyer_id === user.id ? r.seller_id : r.buyer_id;
       const confidentialEmail = emailByConv.get(r.id);
       return {
@@ -144,8 +156,8 @@ export async function fetchConversations(): Promise<Conversation[]> {
         seller_id: r.seller_id,
         last_message: r.last_message,
         last_message_at: r.last_message_at,
-        listing_title: r.listings?.title ?? "Aviso",
-        listing_category: r.listings?.category_id ?? "",
+        listing_title: avisoDe(r.listings).title ?? "Aviso",
+        listing_category: avisoDe(r.listings).category_id ?? "",
         counterpart_id: counterpartId,
         counterpart_name: confidentialEmail ?? names.get(counterpartId) ?? "Usuario",
         counterpart_is_email: !!confidentialEmail,

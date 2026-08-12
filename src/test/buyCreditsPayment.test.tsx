@@ -1,13 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { prepararDom } from "./domPolyfills";
 
 // Polyfills para Radix Dialog en jsdom.
 beforeEach(() => {
+  prepararDom();
   (globalThis as Record<string, unknown>).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
-  if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
-  if (!Element.prototype.hasPointerCapture) (Element.prototype as Record<string, unknown>).hasPointerCapture = () => false;
-  if (!Element.prototype.releasePointerCapture) (Element.prototype as Record<string, unknown>).releasePointerCapture = () => {};
-  if (!window.matchMedia) (window as Record<string, unknown>).matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} });
 });
 
 vi.mock("@/lib/pricingRemote", () => ({ fetchPricingSettings: () => new Promise(() => {}) }));

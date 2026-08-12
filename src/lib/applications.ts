@@ -102,6 +102,23 @@ export async function fetchMyApplication(listingId: string): Promise<Application
   return (data?.status as ApplicationStatus) ?? null;
 }
 
+// Fila de `job_applications` con el aviso unido. PostgREST devuelve la relación
+// como objeto o como array según la cardinalidad; leerla sin más (`r.listings
+// ?.title`) fallaba en silencio en el caso array y devolvía "Aviso".
+interface FilaPostulacion {
+  id: string;
+  listing_id: string;
+  applicant_id: string;
+  message?: string | null;
+  cv_url?: string | null;
+  status: ApplicationStatus;
+  created_at: string;
+  listings?: { title?: string | null } | Array<{ title?: string | null }> | null;
+}
+
+const tituloDelAviso = (rel: FilaPostulacion["listings"]): string =>
+  (Array.isArray(rel) ? rel[0]?.title : rel?.title) || "Aviso";
+
 export interface OwnerApplication {
   id: string;
   listing_id: string;
@@ -146,7 +163,7 @@ export async function fetchApplicationsForOwner(): Promise<OwnerApplication[]> {
       (profs ?? []).forEach((p: { id: string; full_name: string }) => names.set(p.id, p.full_name));
     }
 
-    return rows.map((r: any) => ({
+    return (rows as FilaPostulacion[]).map((r) => ({
       id: r.id,
       listing_id: r.listing_id,
       applicant_id: r.applicant_id,
@@ -154,7 +171,7 @@ export async function fetchApplicationsForOwner(): Promise<OwnerApplication[]> {
       cv_url: r.cv_url,
       status: r.status,
       created_at: r.created_at,
-      listing_title: r.listings?.title ?? "Aviso",
+      listing_title: tituloDelAviso(r.listings),
       applicant_name: names.get(r.applicant_id) ?? "Postulante",
     }));
   } catch {
@@ -186,12 +203,12 @@ export async function fetchMyApplications(): Promise<MyApplication[]> {
       .eq("applicant_id", user.id)
       .order("created_at", { ascending: false });
     if (error) throw error;
-    return (data ?? []).map((r: any) => ({
+    return (data as unknown as FilaPostulacion[] ?? []).map((r) => ({
       id: r.id,
       listing_id: r.listing_id,
       status: r.status,
       created_at: r.created_at,
-      listing_title: r.listings?.title ?? "Aviso",
+      listing_title: tituloDelAviso(r.listings),
     }));
   } catch {
     return [];

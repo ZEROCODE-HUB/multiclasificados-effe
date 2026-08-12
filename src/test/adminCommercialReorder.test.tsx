@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
+import { prepararDom } from "./domPolyfills";
 
 // Arrastra una tarjeta de categoría de verdad (por el sensor de teclado de
 // dnd-kit, que recorre el mismo camino que el ratón: dragStart → dragOver →
@@ -66,6 +67,7 @@ const visibleOrder = (container: HTMLElement) =>
   Array.from(container.querySelectorAll("p.font-semibold.text-sm")).map((p) => p.textContent);
 
 beforeEach(() => {
+  prepararDom();
   reorderCategories.mockClear();
   reorderCategories.mockResolvedValue(undefined);
   invalidateCategories.mockClear();
@@ -73,7 +75,6 @@ beforeEach(() => {
   globalThis.ResizeObserver = class {
     observe() {} unobserve() {} disconnect() {}
   };
-  if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
 });
 
 describe("AdminCommercial — reordenar categorías arrastrando", () => {

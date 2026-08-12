@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { ReactNode } from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { prepararDom } from "./domPolyfills";
 
 // Al hacer clic en una notificación:
 //  - si lleva a otra pantalla (mensaje → chat) → redirige (ya existía).
@@ -7,10 +9,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 //    su contenido, sin sacar al usuario de donde está.
 
 beforeEach(() => {
-  (globalThis as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
-  if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
-  if (!Element.prototype.hasPointerCapture) (Element.prototype as any).hasPointerCapture = () => false;
-  if (!Element.prototype.releasePointerCapture) (Element.prototype as any).releasePointerCapture = () => {};
+  prepararDom();
   vi.clearAllMocks();
 });
 
@@ -40,9 +39,9 @@ vi.mock("@/lib/notifications", async (orig) => {
 // lo renderizamos inline para poder clicar las notificaciones directamente.
 // El MODAL de detalle sigue siendo el Dialog real (lo que queremos verificar).
 vi.mock("@/components/ui/dropdown-menu", () => ({
-  DropdownMenu: ({ children }: any) => <div>{children}</div>,
-  DropdownMenuTrigger: ({ children }: any) => <div>{children}</div>,
-  DropdownMenuContent: ({ children }: any) => <div>{children}</div>,
+  DropdownMenu: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  DropdownMenuTrigger: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  DropdownMenuContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
 }));
 
 vi.mock("@/hooks/useSession", () => ({

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
+import { prepararDom } from "./domPolyfills";
 
 /**
  * La ficha de un aviso es PÚBLICA.
@@ -17,9 +18,9 @@ import { MemoryRouter, Routes, Route } from "react-router-dom";
  */
 
 beforeEach(() => {
+  prepararDom();
   (globalThis as never as { ResizeObserver: unknown }).ResizeObserver =
     class { observe() {} unobserve() {} disconnect() {} };
-  if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
   window.scrollTo = () => {};
 });
 

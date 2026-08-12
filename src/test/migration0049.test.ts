@@ -35,7 +35,7 @@ const run = async () => {
 };
 
 const notifs = async () => {
-  const { rows } = await db.query<{ type: string; channel: string; title: string; payload: any }>(
+  const { rows } = await db.query<{ type: string; channel: string; title: string; payload: Record<string, unknown> }>(
     "select type, channel, title, payload from public.notifications order by channel",
   );
   return rows;

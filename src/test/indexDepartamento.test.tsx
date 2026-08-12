@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { prepararDom } from "./domPolyfills";
 
 /**
  * La portada entera respeta el departamento elegido.
@@ -13,11 +14,7 @@ import { MemoryRouter } from "react-router-dom";
  */
 
 beforeEach(() => {
-  (globalThis as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
-  if (!window.matchMedia) (window as any).matchMedia = () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
-  if (!window.IntersectionObserver) {
-    (window as any).IntersectionObserver = class { observe() {} unobserve() {} disconnect() {} };
-  }
+  prepararDom();
   localStorage.clear();
   llamadas.length = 0;
 });

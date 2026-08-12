@@ -57,7 +57,6 @@ export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEd
           loading="lazy"
           decoding="async"
           alt={listing.title}
-          loading="lazy"
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
         />
         <Badge className={`absolute top-2 left-2 ${statusStyles[status]} shadow-md`}>{status}</Badge>

@@ -1,13 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { EnlaceFalso } from "./routerStubs";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { prepararDom } from "./domPolyfills";
 
 // --- Polyfills que Radix (Dialog/Select) necesita en jsdom ---
-beforeEach(() => {
-  (globalThis as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
-  if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
-  if (!Element.prototype.hasPointerCapture) (Element.prototype as any).hasPointerCapture = () => false;
-  if (!Element.prototype.releasePointerCapture) (Element.prototype as any).releasePointerCapture = () => {};
-});
+beforeEach(prepararDom);
 
 // --- Mocks de la capa de datos y del entorno ---
 const updateListing = vi.fn().mockResolvedValue(undefined);
@@ -42,7 +39,7 @@ vi.mock("react-router-dom", async (orig) => {
     ...actual,
     useNavigate: () => navigate,
     useSearchParams: () => [new URLSearchParams(), vi.fn()],
-    Link: ({ children, ...p }: any) => <a {...p}>{children}</a>,
+    Link: EnlaceFalso,
   };
 });
 

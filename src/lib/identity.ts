@@ -81,13 +81,17 @@ export async function fetchMyIdentity(): Promise<MyIdentity | null> {
       .eq("id", user.id)
       .maybeSingle();
     if (!data) return null;
-    const docType = ((data as any).doc_type as DocKind | null) ?? null;
+    const perfil = data as {
+      doc_type?: DocKind | null; doc_number?: string | null;
+      legal_name?: string | null; company_name?: string | null; full_name?: string | null;
+    };
+    const docType = perfil.doc_type ?? null;
     const name =
-      (data as any).legal_name ||
-      (docType === "ruc" ? (data as any).company_name : null) ||
-      (data as any).full_name ||
+      perfil.legal_name ||
+      (docType === "ruc" ? perfil.company_name : null) ||
+      perfil.full_name ||
       "";
-    const docNumber = ((data as any).doc_number as string | null) ?? null;
+    const docNumber = perfil.doc_number ?? null;
     return {
       docType,
       docNumber,

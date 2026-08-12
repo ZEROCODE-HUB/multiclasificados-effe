@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { prepararDom } from "./domPolyfills";
 
 // El pie de la portada llevaba a sitios que no existían o no aportaban:
 // "Acerca de" era un ancla a la propia página, "Contacto" abría el gestor de
@@ -8,11 +9,7 @@ import { MemoryRouter } from "react-router-dom";
 // login. Los dos enlaces legales, además, abrían el mismo diálogo (IT3-010).
 
 beforeEach(() => {
-  (globalThis as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
-  if (!window.matchMedia) (window as any).matchMedia = () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
-  if (!window.IntersectionObserver) {
-    (window as any).IntersectionObserver = class { observe() {} unobserve() {} disconnect() {} };
-  }
+  prepararDom();
 });
 
 vi.mock("@/lib/listings", () => ({ fetchListings: async () => [] }));

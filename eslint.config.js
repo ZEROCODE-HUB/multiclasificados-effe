@@ -5,7 +5,10 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist"] },
+  // Artefactos de compilación: no son código nuestro. `android/app/build` lo
+  // genera Gradle y trae su propio `native-bridge.js` de Capacitor, que salía en
+  // el informe con errores que no se pueden arreglar (ni tiene sentido).
+  { ignores: ["dist", "android/app/build", "ios/App/build", "coverage"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],

@@ -22,6 +22,7 @@ import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { Capacitor } from "@capacitor/core";
+import { mensajeDeError } from "@/lib/errores";
 
 // Versión instalada, para confirmar que se está en la build correcta. En el
 // APK/IPA muestra versionName + versionCode (App.getInfo); en web, el modo.
@@ -52,7 +53,6 @@ function AppVersion() {
     </p>
   );
 }
-import { Capacitor } from "@capacitor/core";
 import { Keyboard } from "@capacitor/keyboard";
 
 // Palabra que el usuario debe escribir para confirmar el borrado irreversible.
@@ -124,8 +124,8 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
       const url = await uploadMyAvatar(file);
       setAvatarUrl(url);
       toast({ title: "Foto actualizada", description: "Tu foto de perfil se guardó correctamente." });
-    } catch (e: any) {
-      toast({ title: "No se pudo subir la foto", description: e?.message ?? "Error", variant: "destructive" });
+    } catch (e) {
+      toast({ title: "No se pudo subir la foto", description: mensajeDeError(e, "Error"), variant: "destructive" });
     }
     setUploadingPhoto(false);
   };
@@ -159,8 +159,8 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
       if (error) throw error;
       toast({ title: "Contraseña actualizada", description: "Tu nueva contraseña ya está activa." });
       setCurPwd(""); setNewPwd(""); setConfPwd("");
-    } catch (e: any) {
-      toast({ title: "No se pudo actualizar la contraseña", description: e?.message ?? "Error", variant: "destructive" });
+    } catch (e) {
+      toast({ title: "No se pudo actualizar la contraseña", description: mensajeDeError(e, "Error"), variant: "destructive" });
     } finally {
       setChangingPwd(false);
     }
@@ -177,7 +177,7 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
       await saveNotificationPref(event, next);
     } catch (e) {
       setNotifPrefs((m) => ({ ...m, [event]: current }));
-      toast({ title: "No se pudo guardar", description: e instanceof Error ? e.message : "Error", variant: "destructive" });
+      toast({ title: "No se pudo guardar", description: e instanceof Error ? mensajeDeError(e) : "Error", variant: "destructive" });
     } finally {
       setNotifSaving(null);
     }
@@ -223,8 +223,8 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
         ...(role === "anunciante" ? { company_name: companyName.trim(), company_ruc: companyRuc.trim() } : {}),
       });
       toast({ title: "Cambios guardados", description: "Tu información se actualizó correctamente." });
-    } catch (e: any) {
-      toast({ title: "No se pudo guardar", description: e?.message ?? "Error", variant: "destructive" });
+    } catch (e) {
+      toast({ title: "No se pudo guardar", description: mensajeDeError(e, "Error"), variant: "destructive" });
     }
     setSaving(false);
   };
@@ -239,8 +239,8 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
       toast({ title: "Cuenta eliminada", description: "Tu cuenta y tus datos se eliminaron." });
       setDeleteOpen(false);
       navigate("/", { replace: true });
-    } catch (e: any) {
-      toast({ title: "No se pudo eliminar la cuenta", description: e?.message ?? "Inténtalo de nuevo.", variant: "destructive" });
+    } catch (e) {
+      toast({ title: "No se pudo eliminar la cuenta", description: mensajeDeError(e, "Inténtalo de nuevo."), variant: "destructive" });
     } finally {
       setDeleting(false);
     }

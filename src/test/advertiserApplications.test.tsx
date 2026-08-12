@@ -1,13 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { ReactNode } from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { prepararDom } from "./domPolyfills";
 
-beforeEach(() => {
-  (globalThis as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
-  if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
-  if (!Element.prototype.hasPointerCapture) (Element.prototype as any).hasPointerCapture = () => false;
-  if (!Element.prototype.releasePointerCapture) (Element.prototype as any).releasePointerCapture = () => {};
-  if (!window.matchMedia) (window as any).matchMedia = () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
-});
+beforeEach(prepararDom);
 
 // DashboardLayout como passthrough para no arrastrar router/sesión.
 vi.mock("@/components/DashboardLayout", () => ({
@@ -44,7 +40,7 @@ beforeEach(() => {
   fetchApplicationsForOwner.mockResolvedValue([{ ...APP }]);
   updateApplicationStatus.mockResolvedValue(undefined);
   getCvSignedUrl.mockResolvedValue("https://signed/cv.pdf");
-  (window as any).open = vi.fn();
+  window.open = vi.fn();
 });
 
 describe("AdvertiserApplications — panel del anunciante (receptor)", () => {
@@ -61,7 +57,7 @@ describe("AdvertiserApplications — panel del anunciante (receptor)", () => {
     await screen.findByText("Ana Pérez");
     fireEvent.click(screen.getByRole("button", { name: /Ver CV/i }));
     await waitFor(() => expect(getCvSignedUrl).toHaveBeenCalledWith("p1/L1-1.pdf"));
-    await waitFor(() => expect((window as any).open).toHaveBeenCalledWith("https://signed/cv.pdf", "_blank", "noopener"));
+    await waitFor(() => expect(window.open).toHaveBeenCalledWith("https://signed/cv.pdf", "_blank", "noopener"));
   });
 
   it("cambia el estado a 'En entrevista' (requisito clave del empleador)", async () => {

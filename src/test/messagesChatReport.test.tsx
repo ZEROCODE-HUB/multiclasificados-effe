@@ -1,15 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { ReactNode } from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { prepararDom } from "./domPolyfills";
 
 // Polyfills para Radix (Dialog / Select) en jsdom.
 beforeEach(() => {
-  (globalThis as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
-  if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
-  if (!Element.prototype.hasPointerCapture) (Element.prototype as any).hasPointerCapture = () => false;
-  if (!Element.prototype.releasePointerCapture) (Element.prototype as any).releasePointerCapture = () => {};
-  if (!Element.prototype.scrollTo) (Element.prototype as any).scrollTo = () => {};
-  if (!window.matchMedia) (window as any).matchMedia = () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
+  prepararDom();
+  if (!Element.prototype.scrollTo) {
+  (Element.prototype as Element & { scrollTo: () => void }).scrollTo = () => {};
+}
 });
 
 const { CONV } = vi.hoisted(() => ({

@@ -1,17 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { EnlaceFalso } from "./routerStubs";
 import { render, screen, waitFor } from "@testing-library/react";
+import { prepararDom } from "./domPolyfills";
 
 // El saldo del formulario de publicar se redondeaba con Math.round, así que no
 // coincidía con el de la barra superior y, al redondear hacia arriba, daba por
 // bueno un saldo que en realidad no alcanzaba (IT3-016).
 
-beforeEach(() => {
-  (globalThis as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
-  if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
-  if (!Element.prototype.hasPointerCapture) (Element.prototype as any).hasPointerCapture = () => false;
-  (URL as any).createObjectURL = () => "blob:mock";
-  if (!window.matchMedia) (window as any).matchMedia = () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
-});
+beforeEach(prepararDom);
 
 const getCreditBalance = vi.fn();
 vi.mock("@/lib/credits", () => ({
@@ -43,7 +39,7 @@ vi.mock("@/components/DashboardLayout", () => ({
 }));
 vi.mock("react-router-dom", async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>);
-  return { ...actual, useNavigate: () => vi.fn(), Link: ({ children, to, ...rest }: any) => <a href={typeof to === "string" ? to : undefined} {...rest}>{children}</a> };
+  return { ...actual, useNavigate: () => vi.fn(), Link: EnlaceFalso };
 });
 vi.mock("@/hooks/useSession", () => ({
   useSession: () => ({ role: "anunciante", name: "Test", initials: "T", supabase: true }),

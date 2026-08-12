@@ -1,16 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { prepararDom } from "./domPolyfills";
 
 // /buscar en ESCRITORIO (web) muestra 20 avisos por página y pagina el resto,
 // en vez de volcar todos los resultados de golpe.
 
-beforeEach(() => {
-  (globalThis as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
-  if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
-  if (!Element.prototype.hasPointerCapture) (Element.prototype as any).hasPointerCapture = () => false;
-  if (!window.matchMedia) (window as any).matchMedia = () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
-});
+beforeEach(prepararDom);
 
 // 45 avisos → 3 páginas en web (20 + 20 + 5).
 const LISTINGS = Array.from({ length: 45 }, (_, i) => ({
