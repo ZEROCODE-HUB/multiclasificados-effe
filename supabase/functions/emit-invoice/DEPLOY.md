@@ -110,8 +110,32 @@ no emiten nada):
 | Token nuevo → `api.factiliza.com/v1/ruc/info/…` (consultas) | **401** |
 | `apife-test`, `apifeqa`, `apidemo`, `apife-dev` | el DNS no resuelve |
 
-**El token no autentica en ningún host que responda, y el único host que
-documentan no está sirviendo.**
+**Matiz importante, medido después:** ese 401 es contra el host de PRODUCCIÓN, y
+las credenciales son explícitamente de PRUEBAS. Que un token de pruebas no valga
+en producción es lo esperable, así que **no prueba que el token esté mal**. Lo
+que sí está probado es que el entorno de pruebas no existe en ningún sitio
+alcanzable:
+
+| Medida | Resultado |
+|---|---|
+| DNS de `apife-qa.factiliza.com` | **172.67.188.47** → un rango de Cloudflare |
+| DNS de `apife.factiliza.com` y `api.factiliza.com` | **178.128.157.236** → su servidor real |
+| Cualquier ruta de `apife-qa` vía Cloudflare | **404**, cuerpo vacío |
+| Su servidor real con `Host: apife-qa.factiliza.com` (saltándose Cloudflare) | **404** |
+
+Es decir: el nombre de QA apunta a Cloudflare, Cloudflare no tiene origen
+configurado para él, y la aplicación tampoco atiende ese nombre en el servidor
+donde sí viven los otros dos. **La aplicación de QA no está desplegada.**
+
+Y que el problema no es de cabeceras se comprobó mandando el token de seis
+formas distintas (`Bearer`, sin prefijo, `x-api-key`, `apikey`, `Token`, y sin
+cabecera): las seis dan lo mismo.
+
+Que la ruta existe y la petición llega también está medido: con el cuerpo vacío
+la API responde **400 con la lista de campos que faltan**
+(`DCImprimirDTO ... missing required properties: tipo_Doc, serie, correlativo,
+empresa_Ruc`), mientras que una ruta inventada da 404. La validación corre antes
+que la autenticación.
 
 Dos datos más, por si ayudan a que lo resuelvan de su lado:
 
@@ -124,10 +148,20 @@ Dos datos más, por si ayudan a que lo resuelvan de su lado:
 
 **Qué pedirles, en concreto:**
 
-> El token que nos pasaron da 401 tanto en `apife.factiliza.com/api/v1/invoice/cdr`
-> como en `api.factiliza.com`. Y `apife-qa.factiliza.com`, que es el host de su
-> documentación, devuelve 404 en todas sus rutas (contesta Cloudflare, no llega
-> al origen). ¿Nos confirman un token que autentique y **un host que responda**?
+> No podemos probar las credenciales porque **el entorno de pruebas no responde**.
+>
+> `apife-qa.factiliza.com` resuelve a Cloudflare (172.67.188.47) y devuelve 404 en
+> todas sus rutas, incluida la de su documentación
+> (`/api/v1/invoice/send`). Fuimos también directos a su servidor
+> (178.128.157.236) con la cabecera `Host: apife-qa.factiliza.com`, saltándonos
+> Cloudflare, y **también da 404**: la aplicación de QA no atiende ese nombre.
+>
+> El mismo token contra `apife.factiliza.com` da 401, pero eso es lo esperable
+> siendo credenciales de pruebas contra producción, así que no nos dice nada.
+>
+> ¿Pueden **levantar el entorno de pruebas**, o darnos la URL que esté operativa?
+> Todo lo demás lo tenemos listo: el comprobante que generamos ya cuadra campo por
+> campo con su documentación.
 
 ### Lo que YA está listo para el día que funcione
 
