@@ -23,11 +23,12 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
   const { isFavorite, toggle } = useFavorites();
   const fav = isFavorite(listing.id);
 
-  // Solo los usuarios con sesión real pueden ver el detalle.
   const isAuthed = !!session?.supabase;
-  // Destino del aviso. Si no hay sesión, se pasa por el login conservando el
-  // redirect. Se usa tanto en el enlace real de la card (EFFE-014) como en el CTA.
-  const detailUrl = isAuthed ? `/aviso/${listing.id}` : `/auth?redirect=/aviso/${listing.id}`;
+  // El aviso es PÚBLICO: la tarjeta lleva directo a la ficha, con o sin sesión.
+  // Antes pasaba por el login, lo que dejaba el escaparate a la vista y la
+  // puerta cerrada. Las acciones (contactar, teléfono, guardar…) siguen pidiendo
+  // cuenta cada una por su lado, dentro de la ficha.
+  const detailUrl = `/aviso/${listing.id}`;
   const goToDetail = () => navigate(detailUrl);
 
   const handleFav = async (e: React.MouseEvent) => {

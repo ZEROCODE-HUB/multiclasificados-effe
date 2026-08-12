@@ -693,7 +693,7 @@ export default function SearchPage() {
                 listings={listings}
                 active={active}
                 onActive={setActive}
-                hrefFor={(id) => (session?.supabase ? `/aviso/${id}` : `/auth?redirect=/aviso/${id}`)}
+                hrefFor={(id) => `/aviso/${id}`}
               />
             </Suspense>
           </div>
@@ -710,7 +710,7 @@ export default function SearchPage() {
               {listings.map((l) => (
                 <Link
                   key={l.id}
-                  to={session?.supabase ? `/aviso/${l.id}` : `/auth?redirect=/aviso/${l.id}`}
+                  to={`/aviso/${l.id}`}
                   onMouseEnter={() => setActive(l.id)}
                   className={`flex gap-3 lg:gap-4 p-3 lg:p-4 transition-colors ${
                     active === l.id ? "bg-muted/60" : "hover:bg-muted/40"

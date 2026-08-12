@@ -150,3 +150,39 @@ describe("un visitante SIN cuenta abre un aviso compartido", () => {
     expect(screen.queryByText(/9\d{2}\s?\d{3}\s?\d{3}/)).toBeNull();
   });
 });
+
+/**
+ * Y el camino HASTA la ficha.
+ *
+ * Se quitó el guardián de dentro del detalle, pero los enlaces que llevan a él
+ * —la tarjeta del aviso y los resultados del mapa— seguían mandando al login a
+ * quien no tenía cuenta. O sea que el aviso era público por enlace compartido,
+ * pero navegando por el sitio seguía el muro: justo el escaparate a la vista y
+ * la puerta cerrada que se quería quitar.
+ */
+describe("los enlaces al aviso no pasan por el login", () => {
+  const fuentes = [
+    ["ListingCard", "src/components/ListingCard.tsx"],
+    ["SearchPage", "src/pages/SearchPage.tsx"],
+  ] as const;
+
+  it.each(fuentes)("%s enlaza directo a /aviso/:id", async (_nombre, ruta) => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const src = fs.readFileSync(path.resolve(__dirname, "../..", ruta), "utf8");
+    expect(src).not.toContain("auth?redirect=/aviso");
+  });
+
+  it("en el detalle SÍ se conserva, pero solo para las acciones", async () => {
+    // Al pulsar "Enviar mensaje" o "Mostrar teléfono" sin cuenta hay que llevar
+    // al login y volver al aviso. Eso no es el muro: es la acción pidiendo
+    // sesión, que es lo acordado.
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const src = fs.readFileSync(path.resolve(__dirname, "../../src/pages/ListingDetail.tsx"), "utf8");
+    expect(src).toContain("auth?redirect=/aviso");
+    // Y está dentro de requireAuthOrRun, no en un efecto que corra al entrar.
+    const i = src.indexOf("auth?redirect=/aviso");
+    expect(src.slice(Math.max(0, i - 400), i)).toContain("requireAuthOrRun");
+  });
+});
