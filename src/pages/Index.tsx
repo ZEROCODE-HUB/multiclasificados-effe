@@ -313,10 +313,13 @@ const Index = () => {
 
 
       {/* Categories */}
-      <section className="container mx-auto px-4 py-12 md:py-16">
-        <div className="text-center max-w-2xl mx-auto mb-8 md:mb-10">
+      {/* Los márgenes de escritorio bajan (py-16 → py-10, mb-10 → mb-6) por lo
+          mismo que se apaisaron las tarjetas: la sección se comía una pantalla
+          entera. En móvil no cambia nada. */}
+      <section className="container mx-auto px-4 py-12 md:py-10">
+        <div className="text-center max-w-2xl mx-auto mb-8 md:mb-6">
           <p className="text-xs uppercase tracking-widest font-bold text-secondary mb-2">Explora por categoría</p>
-          <h2 className="text-2xl md:text-4xl font-bold text-foreground">¿Qué estás buscando hoy?</h2>
+          <h2 className="text-2xl md:text-3xl font-bold text-foreground">¿Qué estás buscando hoy?</h2>
         </div>
         <CategoryGrid />
       </section>

@@ -96,6 +96,67 @@ producción, donde un envío aceptado es un documento fiscal de verdad.
 Mientras tanto el valor por defecto se deja en el de QA **aunque falle**: así la
 emisión falla **cerrada** en vez de emitir sin querer.
 
+### Segundo intento: las credenciales del 2026-08-12 tampoco sirven
+
+Factiliza mandó unas credenciales nuevas «del API de Facturación», con RUC
+`10749283781`, series recomendadas F066/B066 y la misma URL de pruebas. Se
+probaron con consultas de **solo lectura** (preguntan si un comprobante existe;
+no emiten nada):
+
+| Prueba | Resultado |
+|---|---|
+| Token nuevo → `apife-qa.factiliza.com/api/v1/invoice/cdr` (el de su documentación) | **404** — Cloudflare, sin llegar al origen |
+| Token nuevo → `apife.factiliza.com/api/v1/invoice/cdr` (el que sí responde) | **401** |
+| Token nuevo → `api.factiliza.com/v1/ruc/info/…` (consultas) | **401** |
+| `apife-test`, `apifeqa`, `apidemo`, `apife-dev` | el DNS no resuelve |
+
+**El token no autentica en ningún host que responda, y el único host que
+documentan no está sirviendo.**
+
+Dos datos más, por si ayudan a que lo resuelvan de su lado:
+
+- El token es un JWT y su contenido se lee sin secreto. Dentro pone
+  `name: AD360`, `email: licencias@autodeal360.com` y **`role: consultor`**:
+  parece de otro cliente y con rol de consultas, no de emisión.
+- El RUC `10749283781` es de persona natural y no es el de Coleffe
+  (`20616009061`). Encaja con un entorno de pruebas compartido, pero conviene
+  confirmarlo.
+
+**Qué pedirles, en concreto:**
+
+> El token que nos pasaron da 401 tanto en `apife.factiliza.com/api/v1/invoice/cdr`
+> como en `api.factiliza.com`. Y `apife-qa.factiliza.com`, que es el host de su
+> documentación, devuelve 404 en todas sus rutas (contesta Cloudflare, no llega
+> al origen). ¿Nos confirman un token que autentique y **un host que responda**?
+
+### Lo que YA está listo para el día que funcione
+
+Su documentación nueva (`factiliza.gitbook.io/api-docs/apis/api-sunat-facturacion`)
+confirma que el comprobante que construimos **ya es correcto**: comparado campo
+por campo con su ejemplo, `construirComprobante` emite `tipo_Operacion`,
+`estado_Documento`, `manual`, `id_Base_Dato`, `detalle` con `factor_Icbper`,
+`forma_pago` y `legend` con el código 1000. **No hay que tocar código.**
+
+Las series que recomiendan tampoco son código: viven en una tabla. Para el
+entorno de pruebas basta con esto (y volver a B001/F001 al pasar a producción):
+
+```sql
+-- Series del entorno de pruebas de Factiliza.
+update public.invoice_series set serie = 'F066' where id = 'factura';
+update public.invoice_series set serie = 'B066' where id = 'boleta';
+```
+
+Y el RUC emisor de pruebas va por secreto, sin desplegar nada:
+
+```bash
+supabase secrets set EMISOR_RUC="10749283781"      # solo para pruebas
+supabase secrets set FACTILIZA_TOKEN="<el que funcione>"
+supabase secrets set FACTILIZA_INVOICE_URL="<el host que responda>/api/v1/invoice/send"
+```
+
+Con eso puesto, la sonda de abajo (`{"probe":true}`) dice en un segundo si ya se
+puede emitir, **sin poner ningún documento en circulación**.
+
 ### Comprobar credenciales sin emitir nada
 
 La función trae una sonda de solo lectura: consulta un comprobante y devuelve lo

@@ -385,6 +385,49 @@ export async function uploadCategoryImage(
   return pub.publicUrl; // sin `?t=`: el nombre ya es único
 }
 
+// ------------------------------------------------------------------ Imagen por defecto de los avisos
+const SITE_BUCKET = "site-assets";
+const SITE_PUBLIC_SEG = `/storage/v1/object/public/${SITE_BUCKET}/`;
+
+function siteAssetPath(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const i = url.indexOf(SITE_PUBLIC_SEG);
+  return i === -1 ? null : decodeURIComponent(url.slice(i + SITE_PUBLIC_SEG.length).split("?")[0]);
+}
+
+/**
+ * Sube la imagen que verán los avisos sin foto y devuelve su URL pública.
+ *
+ * Mismo procedimiento que la imagen de categoría: se comprime a WebP, el nombre
+ * lleva la marca de tiempo (con nombre fijo el CDN seguiría sirviendo la vieja
+ * hasta 30 días) y se borra la anterior para no dejar basura en el bucket.
+ */
+export async function uploadDefaultListingImage(file: File, previousUrl?: string | null): Promise<string> {
+  const compressed = await compressImage(file);
+  const ext = (compressed.type.split("/")[1] || "webp").replace(/[^a-z0-9]/g, "") || "webp";
+  const path = `aviso-sin-imagen/${Date.now()}.${ext}`;
+
+  const { error } = await supabase.storage.from(SITE_BUCKET).upload(path, compressed, {
+    upsert: true, cacheControl: "2592000", contentType: compressed.type || undefined,
+  });
+  if (error) throw error;
+
+  const old = siteAssetPath(previousUrl);
+  if (old && old !== path) {
+    try { await supabase.storage.from(SITE_BUCKET).remove([old]); } catch { /* un huérfano no rompe nada */ }
+  }
+
+  const { data: pub } = supabase.storage.from(SITE_BUCKET).getPublicUrl(path);
+  return pub.publicUrl;
+}
+
+/** Borra del bucket la imagen por defecto al quitarla desde el panel. */
+export async function removeDefaultListingImage(url: string | null | undefined): Promise<void> {
+  const path = siteAssetPath(url);
+  if (!path) return;
+  try { await supabase.storage.from(SITE_BUCKET).remove([path]); } catch { /* idem */ }
+}
+
 export async function deleteCategory(id: string) {
   // Las fotos de la categoría se van con ella; si falla, manda el borrado.
   try {

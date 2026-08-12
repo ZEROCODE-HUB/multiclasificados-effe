@@ -7,6 +7,7 @@ import { BootError } from "@/components/BootError";
 import { BootErrorBoundary } from "@/components/BootErrorBoundary";
 import { ConnectionGate } from "@/components/ConnectionGate";
 import { vigilarPrecargas } from "@/lib/cargaDiferida";
+import { cargarImagenPorDefecto } from "@/lib/imagenPorDefecto";
 
 // Promueve el preload de la fuente Montserrat a stylesheet. Antes esto se hacía
 // con un `onload` inline en el <link> del index.html, pero un manejador en línea
@@ -25,6 +26,14 @@ if (fontLink) fontLink.rel = "stylesheet";
 // module" al entrar en cualquier sección del panel. Esto la recarga una vez para
 // coger la versión nueva; el mismo cuidado está en cada ruta diferida.
 vigilarPrecargas();
+
+// Imagen de los avisos sin foto, configurable desde el panel. Se pide una vez al
+// arrancar y se guarda en el navegador, así que a partir de la segunda visita
+// está disponible desde el primer render. En la primerísima visita las tarjetas
+// pueden salir con la imagen del bundle hasta que responda: es un cambio de una
+// imagen de marca por otra, no un hueco vacío, y no compensa retrasar el
+// arranque de toda la app por eso.
+void cargarImagenPorDefecto();
 
 const root = createRoot(document.getElementById("root")!);
 

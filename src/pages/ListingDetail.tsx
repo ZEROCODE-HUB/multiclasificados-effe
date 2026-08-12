@@ -58,6 +58,7 @@ import { loadSold, markSold, unmarkSold } from "@/lib/pricing";
 import { reportListing, reportUser, LISTING_REPORT_REASONS, USER_REPORT_REASONS } from "@/lib/reports";
 import { ShareMenuItems, ShareFab } from "@/components/ShareListing";
 import { codigoDeAviso } from "@/lib/listingCode";
+import { FALLBACK_IMG, imagenPorDefecto } from "@/lib/imagenPorDefecto";
 import { ACTION_ROW, ACTION_BTN, ACTION_BTN_SAVE } from "@/pages/listingActions.styles";
 import {
   DropdownMenu,
@@ -222,6 +223,9 @@ export default function ListingDetail() {
 
   const [gallery, setGallery] = useState<string[]>([listing.imageUrl]);
   const [activeImg, setActiveImg] = useState(0);
+  // El aviso no tiene fotos propias: lo que se ve es la imagen de reserva (la
+  // del bundle o la que haya puesto el panel).
+  const sinFoto = gallery[activeImg] === imagenPorDefecto() || gallery[activeImg] === FALLBACK_IMG;
 
   // Carga las imágenes REALES del aviso; cae a demo solo si es un aviso mock.
   useEffect(() => {
@@ -499,9 +503,16 @@ export default function ListingDetail() {
                 400 px se come el espacio) y un alto fijo dejaría la foto casi
                 cuadrada, así que ahí seguimos con 4/3. */}
             <div className="grid grid-cols-1 md:grid-cols-[1fr_140px] xl:grid-cols-[1fr_200px] gap-3 xl:h-[560px]">
-              <div className={`relative bg-muted overflow-hidden aspect-[4/3] xl:aspect-auto xl:h-full ${listing.featured ? "ring-2 ring-amber-400" : ""}`}>
-                {/* `contain` y no `cover`: la foto se ve COMPLETA, sin recortar.
-                    El fondo neutro rellena lo que sobra según la proporción. */}
+              <div className={`relative overflow-hidden aspect-[4/3] xl:aspect-auto xl:h-full ${sinFoto ? "bg-white" : "bg-muted"} ${listing.featured ? "ring-2 ring-amber-400" : ""}`}>
+                {/* `contain` y no `cover` para las fotos DE VERDAD: se ven
+                    completas, sin recortar, y el fondo neutro rellena lo que
+                    sobra según la proporción.
+                    Con la imagen de "sin foto" eso quedaba fatal: es una imagen
+                    de marca sobre blanco, así que en pantallas anchas salía un
+                    rectángulo blanco flotando dentro de uno gris — el "borde"
+                    que se veía. Ahí se rellena el hueco y el fondo va en blanco,
+                    así que no hay marco que ver. Recortar no importa: lo que se
+                    recorta es blanco. */}
                 {/* Se sirve TAL CUAL, sin transformar: las fotos ya se guardan
                     comprimidas (~1600px WebP) al subirlas, así que no re-procesamos
                     al mostrar y se ve con la calidad original. */}
@@ -509,7 +520,7 @@ export default function ListingDetail() {
                   src={gallery[activeImg]}
                   alt={listing.title}
                   decoding="async"
-                  className="absolute inset-0 w-full h-full object-contain"
+                  className={`absolute inset-0 w-full h-full ${sinFoto ? "object-cover" : "object-contain"}`}
                 />
                 {/* Una sola fila para TODAS las insignias. Antes las de la
                     izquierda crecían con `max-w-[70%]` y "Verificado eFFe"

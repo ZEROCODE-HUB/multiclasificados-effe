@@ -27,7 +27,7 @@ import { createAndPublishListing, saveListingDraft, SaldoInsuficiente } from "@/
 import { urgenteAllowedFor, URGENTE_MAX_DAYS } from "@/lib/listingBadges";
 import { ListingCard } from "@/components/ListingCard";
 import { InfoHint } from "@/components/InfoHint";
-import { FALLBACK_IMG } from "@/lib/listings";
+import { imagenPorDefecto } from "@/lib/imagenPorDefecto";
 import type { Listing } from "@/data/mockData";
 import { type PersonType } from "@/components/VerifyIdentityDialog";
 import { fetchMyIdentity } from "@/lib/identity";
@@ -360,7 +360,7 @@ const AdvertiserPublish = () => {
     currency: form.currency || "PEN",
     category: form.category || "categoría",
     location: form.location || "Ubicación",
-    imageUrl: mainPhoto?.url || FALLBACK_IMG,
+    imageUrl: mainPhoto?.url || imagenPorDefecto(),
     date: new Date().toISOString().slice(0, 10),
     featured: (extras.destacado ?? 0) > 0,
     urgent: (extras.urgente ?? 0) > 0,

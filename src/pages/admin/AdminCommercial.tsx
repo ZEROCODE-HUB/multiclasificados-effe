@@ -36,9 +36,10 @@ import { imgUrlCover } from "@/lib/imageUrl";
 import {
   fetchSettings, setSetting, fetchAllInvoices,
   fetchCategories, createCategory, updateCategory, deleteCategory, reorderCategories,
-  uploadCategoryImage,
+  uploadCategoryImage, uploadDefaultListingImage, removeDefaultListingImage,
   type AdminInvoice, type AdminCategory,
 } from "@/lib/admin";
+import { FALLBACK_IMG, invalidarImagenPorDefecto } from "@/lib/imagenPorDefecto";
 import { mensajeDeError } from "@/lib/errores";
 
 // Foto que se ve en la tarjeta nº `index` cuando la categoría no tiene una
@@ -314,15 +315,51 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
     commission_pct: "Comisión por transacción (%)",
     free_listings_limit: "Límite de publicaciones gratis",
     maintenance_mode: "Modo mantenimiento",
+    default_listing_image: "Imagen de los avisos sin foto",
   } as const;
   type SettingKey = keyof typeof SETTING_KEYS;
   // Cada ajuste tiene SU tipo: los dos primeros van a un <Input type="number">
   // y el tercero a un interruptor. Como `Record<SettingKey, any>` esto no se
   // comprobaba y un booleano podía acabar en un campo numérico.
-  interface Ajustes { commission_pct: number; free_listings_limit: number; maintenance_mode: boolean }
+  interface Ajustes {
+    commission_pct: number; free_listings_limit: number; maintenance_mode: boolean;
+    // URL de la imagen para avisos sin foto. null = usar la del bundle.
+    default_listing_image: string | null;
+  }
   const [settings, setSettings] = useState<Ajustes>({
     commission_pct: 0, free_listings_limit: 0, maintenance_mode: false,
+    default_listing_image: null,
   });
+
+  // Imagen por defecto: archivo elegido pendiente de subir + su vista previa.
+  const [imgFile, setImgFile] = useState<File | null>(null);
+  const [imgPreview, setImgPreview] = useState<string | null>(null);
+  const imgFileRef = useRef<HTMLInputElement>(null);
+  useEffect(() => () => { if (imgPreview) URL.revokeObjectURL(imgPreview); }, [imgPreview]);
+
+  const onPickDefaultImage = (file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Archivo no válido", description: "Selecciona una imagen (JPG, PNG o WebP).", variant: "destructive" });
+      return;
+    }
+    // 8 MB antes de comprimir; `compressImage` la deja muy por debajo del tope
+    // de 5 MB del bucket.
+    if (file.size > 8 * 1024 * 1024) {
+      toast({ title: "Imagen muy pesada", description: "La imagen no debe superar 8 MB.", variant: "destructive" });
+      return;
+    }
+    setImgFile(file);
+    setImgPreview(URL.createObjectURL(file));
+  };
+
+  // "Quitar" solo marca la intención: el borrado real se hace al guardar, para
+  // no dejar la portada sin imagen si el usuario se arrepiente y no guarda.
+  const quitarImagenPorDefecto = () => {
+    setImgFile(null);
+    setImgPreview(null);
+    setSettings((s) => ({ ...s, default_listing_image: null }));
+  };
   const [savingSettings, setSavingSettings] = useState(false);
 
   // ===== Boletas y facturas (todos los anunciantes, desde la BD) =====
@@ -341,6 +378,7 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
           if (s.key === "commission_pct") next.commission_pct = Number(s.value) || 0;
           else if (s.key === "free_listings_limit") next.free_listings_limit = Number(s.value) || 0;
           else if (s.key === "maintenance_mode") next.maintenance_mode = s.value === true || s.value === "true";
+          else if (s.key === "default_listing_image") next.default_listing_image = typeof s.value === "string" && s.value ? s.value : null;
         });
         return next;
       });
@@ -367,12 +405,32 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
 
   const saveSettings = async () => {
     setSavingSettings(true);
+    const anterior = settings.default_listing_image;
     try {
+      // La imagen se sube ANTES de guardar los ajustes: si la subida falla no se
+      // escribe una URL que no existe.
+      const imagen = imgFile
+        ? await uploadDefaultListingImage(imgFile, anterior)
+        : settings.default_listing_image;
+
+      const aGuardar: Ajustes = { ...settings, default_listing_image: imagen };
       await Promise.all(
         (Object.keys(SETTING_KEYS) as SettingKey[]).map((k) =>
-          setSetting(k, settings[k], SETTING_KEYS[k]),
+          setSetting(k, aGuardar[k], SETTING_KEYS[k]),
         ),
       );
+
+      // Solo cuando la base de datos aceptó el cambio se borra la imagen vieja
+      // del bucket. Al revés, un guardado fallido dejaría la portada apuntando a
+      // un archivo ya borrado.
+      if (anterior && anterior !== imagen) await removeDefaultListingImage(anterior);
+
+      setSettings(aGuardar);
+      setImgFile(null);
+      setImgPreview(null);
+      // Que el resto de la app coja la imagen nueva sin recargar.
+      void invalidarImagenPorDefecto();
+
       toast({ title: "Configuración guardada", description: "Las variables del sistema se actualizaron." });
     } catch (e) {
       toast({ title: "No se pudo guardar", description: mensajeDeError(e, "Error"), variant: "destructive" });
@@ -564,6 +622,53 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
                   </div>
                   <Switch checked={!!settings.maintenance_mode}
                     onCheckedChange={(v) => setSettings((s) => ({ ...s, maintenance_mode: v }))} />
+                </div>
+              </div>
+
+              {/* Imagen de los avisos sin foto. Antes era una constante del
+                  código y había que desplegar para cambiarla. */}
+              <div className="space-y-2 border-t pt-5">
+                <Label>Imagen de los avisos sin foto</Label>
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="relative aspect-[4/3] w-full sm:w-56 shrink-0 overflow-hidden rounded-lg border bg-muted">
+                    <img
+                      src={imgPreview ?? settings.default_listing_image ?? FALLBACK_IMG}
+                      alt="Imagen que verán los avisos sin foto"
+                      className="absolute inset-0 w-full h-full object-cover"
+                    />
+                    {!settings.default_listing_image && !imgPreview && (
+                      <span className="absolute bottom-2 left-2 rounded bg-background/85 px-2 py-0.5 text-[10px] text-muted-foreground">
+                        Imagen de fábrica
+                      </span>
+                    )}
+                  </div>
+                  <div className="space-y-2 min-w-0">
+                    <div className="flex gap-2">
+                      <Button type="button" variant="outline" size="sm" className="gap-1.5"
+                        onClick={() => imgFileRef.current?.click()} disabled={savingSettings || !isSuper}>
+                        <Upload size={14} /> {settings.default_listing_image || imgPreview ? "Cambiar imagen" : "Subir imagen"}
+                      </Button>
+                      {(settings.default_listing_image || imgPreview) && (
+                        <Button type="button" variant="ghost" size="sm" className="text-destructive"
+                          disabled={savingSettings || !isSuper}
+                          onClick={quitarImagenPorDefecto}>
+                          Quitar
+                        </Button>
+                      )}
+                    </div>
+                    <input
+                      ref={imgFileRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => { onPickDefaultImage(e.target.files?.[0]); e.target.value = ""; }}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Es lo que se ve en un aviso publicado sin fotos, en la portada, la búsqueda y su ficha.
+                      Usa una imagen horizontal (4:3), mínimo 800×600; se comprime automáticamente.
+                      Si la quitas, vuelve la imagen de fábrica.
+                    </p>
+                  </div>
                 </div>
               </div>
 

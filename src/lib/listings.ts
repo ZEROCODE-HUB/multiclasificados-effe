@@ -6,19 +6,11 @@ import { supabase } from "@/lib/supabase";
 import { compressImage } from "@/lib/compressImage";
 import type { Listing } from "@/data/mockData";
 
-/**
- * La imagen de un aviso publicado sin foto.
- *
- * Subir foto es opcional, así que esto no es un caso raro: es lo que verá
- * cualquiera que publique deprisa. Antes era una foto de archivo de un edificio
- * de oficinas traída de Unsplash, que además de no decir nada dependía de un
- * servidor ajeno; ahora es la marca, servida desde el propio dominio.
- *
- * El archivo se genera con scripts/generar-imagen-por-defecto.mjs, que le deja
- * márgenes a propósito: los huecos de imagen usan `object-cover` y sin margen el
- * recorte se comía el logo. No sustituirlo por el original sin márgenes.
- */
-export const FALLBACK_IMG = "/aviso-sin-imagen.jpg";
+// La imagen de reserva vive en @/lib/imagenPorDefecto (donde está también la
+// configurable que la puede sustituir). Se reexporta desde aquí porque es donde
+// la busca medio repositorio.
+export { FALLBACK_IMG } from "@/lib/imagenPorDefecto";
+import { imagenPorDefecto } from "@/lib/imagenPorDefecto";
 
 const isUuid = (v: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
@@ -63,7 +55,7 @@ export function mapCard(r: CardRow): Listing {
     lng: r.lng != null ? Number(r.lng) : null,
     // `||` y no `??`: una cadena vacía también significa "sin imagen", y con
     // `??` se colaría hasta el <img>, que pintaría el icono de imagen rota.
-    imageUrl: r.image_url || FALLBACK_IMG,
+    imageUrl: r.image_url || imagenPorDefecto(),
     date: (r.published_at ?? r.created_at ?? new Date().toISOString()).slice(0, 10),
     featured: !!r.featured,
     urgent: !!r.urgent,
@@ -362,7 +354,7 @@ export async function fetchMyListings(): Promise<MyListing[]> {
         location: r.location ?? "",
         lat: r.lat != null ? Number(r.lat) : null,
         lng: r.lng != null ? Number(r.lng) : null,
-        imageUrl: imgs[0]?.url || FALLBACK_IMG,
+        imageUrl: imgs[0]?.url || imagenPorDefecto(),
         date: (r.published_at ?? r.created_at ?? new Date().toISOString()).slice(0, 10),
         featured: !!r.featured,
         urgent: !!r.urgent,

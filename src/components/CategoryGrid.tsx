@@ -28,7 +28,13 @@ export function CategoryGrid() {
   }, []);
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-px bg-border border border-border overflow-hidden shadow-sm">
+    // En escritorio la rejilla se quedaba en 4 columnas con tarjetas 4:3: a
+    // 1920px cada una medía ~472×354 y las 12 categorías ocupaban una pantalla
+    // entera. Se añaden dos escalones más y las tarjetas se apaisan, PERO solo
+    // con prefijo: la sección no tiene versión aparte para móvil (es el mismo
+    // DOM), así que tocar una clase base cambiaría también el teléfono, donde
+    // está bien como está.
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-px bg-border border border-border overflow-hidden shadow-sm">
       {categories.map((cat, i) => {
         // La foto la define el staff en el panel; si la categoría no tiene una
         // propia, `categoryPhoto` devuelve una de reserva (nunca queda vacía).
@@ -41,11 +47,16 @@ export function CategoryGrid() {
           to={`/buscar?cat=${cat.id}`}
           className="group relative bg-card hover:bg-card transition-colors cursor-pointer overflow-hidden"
         >
-          <div className="relative aspect-[4/3] overflow-hidden">
+          <div className="relative aspect-[4/3] md:aspect-[16/9] overflow-hidden">
             <img
               src={imgUrlCover(photo, 300, 0.75, GRID_QUALITY)}
               srcSet={imgSrcSetCover(photo, GRID_WIDTHS, 0.75, GRID_QUALITY)}
-              sizes="(min-width: 1024px) 25vw, (min-width: 768px) 33vw, 50vw"
+              // Un tramo por cada número de columnas, de mayor a menor. Sin los
+              // dos primeros, en un monitor grande el navegador seguiría
+              // creyendo que la tarjeta ocupa el 25% del ancho y se bajaría una
+              // imagen bastante más pesada de la que hace falta — justo lo
+              // contrario de compactar.
+              sizes="(min-width: 1536px) 17vw, (min-width: 1280px) 20vw, (min-width: 1024px) 25vw, (min-width: 768px) 33vw, 50vw"
               width={300}
               height={225}
               alt={cat.name}
@@ -67,7 +78,7 @@ export function CategoryGrid() {
             </div>
             {/* Footer info. El rótulo "Categoría" con su icono se quitó: era
                 obvio por contexto y le robaba sitio al nombre. */}
-            <div className="absolute bottom-0 left-0 right-0 p-4 text-primary-foreground">
+            <div className="absolute bottom-0 left-0 right-0 p-4 md:p-3 text-primary-foreground">
               {/* La caja de altura fija va en el DIV y el recorte en el H3: el
                   `line-clamp` no puede convivir con `flex` en el mismo elemento
                   (usa display:-webkit-box y el flex lo pisa), y por eso los
@@ -75,10 +86,10 @@ export function CategoryGrid() {
                   salían de la tarjeta en vez de cortarse con puntos suspensivos.
                   El min-height mantiene alineados los títulos de una y dos
                   líneas entre tarjetas vecinas (IT2-033). */}
-              <div className="flex items-end min-h-[2.8rem] md:min-h-[3.1rem]">
-                <h3 className="text-lg md:text-xl font-extrabold tracking-tight leading-tight line-clamp-2">{cat.name}</h3>
+              <div className="flex items-end min-h-[2.8rem] md:min-h-[2.6rem]">
+                <h3 className="text-lg md:text-base xl:text-sm font-extrabold tracking-tight leading-tight line-clamp-2">{cat.name}</h3>
               </div>
-              <p className="text-[11px] text-primary-foreground/70 mt-1">{(counts[cat.id] ?? 0).toLocaleString()} avisos activos</p>
+              <p className="text-[11px] md:text-[10px] text-primary-foreground/70 mt-1 md:mt-0.5">{(counts[cat.id] ?? 0).toLocaleString()} avisos activos</p>
             </div>
           </div>
         </Link>
