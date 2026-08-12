@@ -17,10 +17,8 @@ beforeEach(() => {
 });
 
 const getCreditBalance = vi.fn();
-const spendCredits = vi.fn();
 vi.mock("@/lib/credits", () => ({
   getCreditBalance: (...a: unknown[]) => getCreditBalance(...a),
-  spendCredits: (...a: unknown[]) => spendCredits(...a),
 }));
 
 // Pasarela de pago (Izipay) simulada: createPayment → formToken; el formulario
@@ -41,6 +39,9 @@ vi.mock("@/components/PaymentForm", () => ({
 const createAndPublishListing = vi.fn();
 vi.mock("@/lib/publish", () => ({
   createAndPublishListing: (...a: unknown[]) => createAndPublishListing(...a),
+  SaldoInsuficiente: class SaldoInsuficiente extends Error {
+    listingId?: string;
+  },
 }));
 
 vi.mock("@/lib/verifyDoc", async (orig) => ({
@@ -118,7 +119,6 @@ const publishConfirmed = async () => {
 beforeEach(() => {
   localStorage.clear();
   getCreditBalance.mockReset().mockResolvedValue(1000);
-  spendCredits.mockReset().mockResolvedValue(true);
   createPayment.mockReset().mockResolvedValue({ orderId: "o1", formToken: "tok", publicKey: "pk" });
   pollOrderStatus.mockReset().mockResolvedValue("paid");
   getPurchaseResult.mockReset().mockResolvedValue({ balance: 1000, invoiceNumber: "B001-000100" });
@@ -142,7 +142,6 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
 
     await screen.findByText(/aviso publicado/i);
     expect(createAndPublishListing).toHaveBeenCalledTimes(1);
-    expect(spendCredits).toHaveBeenCalledTimes(1);
 
     // El usuario cierra la ventanita con Esc (no con los botones que navegan).
     fireEvent.keyDown(document.body, { key: "Escape", code: "Escape" });
@@ -155,7 +154,6 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     fireEvent.click(publishButton());
     await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: "Completa los datos requeridos" })));
     expect(createAndPublishListing).toHaveBeenCalledTimes(1);
-    expect(spendCredits).toHaveBeenCalledTimes(1);
   });
 
   it("DOBLE TOQUE rápido en 'Confirmar' publica una sola vez y cobra una sola vez", async () => {
@@ -183,7 +181,6 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
 
     await screen.findByText(/aviso publicado/i);
     expect(createAndPublishListing).toHaveBeenCalledTimes(1);
-    expect(spendCredits).toHaveBeenCalledTimes(1);
   });
 
   it("DOBLE TOQUE en 'Publicar': abre el modal de confirmación y NO publica", async () => {
@@ -199,7 +196,6 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     // Solo abre el modal de confirmación; no publica hasta confirmar.
     await screen.findByText(/confirmar publicación/i);
     expect(createAndPublishListing).not.toHaveBeenCalled();
-    expect(spendCredits).not.toHaveBeenCalled();
   });
 
   it("MIENTRAS PUBLICA el botón queda deshabilitado y muestra 'Publicando…'", async () => {
@@ -224,9 +220,16 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     await screen.findByText(/aviso publicado/i);
   });
 
-  it("SI FALLA EL COBRO: al pagar el saldo se cobra el aviso ya publicado, no se republica", async () => {
-    // El aviso se publica, pero el saldo cambió y spend_credits devuelve false.
-    spendCredits.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+  it("SI FALTA SALDO: tras comprar, publica el MISMO aviso y no crea otro", async () => {
+    // Antes esto era "el aviso se publicó pero el cobro falló", un estado que
+    // ya no existe: desde la migración 0091 publicar y cobrar van juntos, así
+    // que sin saldo no pasa ninguna de las dos cosas. Lo que SÍ sigue en pie es
+    // el riesgo de duplicar: el aviso ya se creó como borrador (con sus fotos
+    // subidas), y al reintentar hay que publicar ESE.
+    const { SaldoInsuficiente } = await import("@/lib/publish");
+    const falta = new SaldoInsuficiente("Tu saldo no alcanza para publicar este aviso.");
+    falta.listingId = "L1";
+    createAndPublishListing.mockRejectedValueOnce(falta);
 
     seedDraft();
     render(<AdvertiserPublish />);
@@ -236,10 +239,10 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
 
     await publishConfirmed();
 
-    // Publicó una vez, no cobró, y abrió el configurador de compra.
+    // Ni publicado ni cobrado: se abre el configurador de compra.
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
     await screen.findByText(/saldo a comprar/i);
-    // No se anuncia un pago que no ocurrió.
+    // Y no se anuncia un éxito que no ocurrió.
     expect(screen.queryByText(/aviso publicado/i)).toBeNull();
 
     fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "12345678" } });
@@ -251,9 +254,8 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     await waitFor(() => expect(createPayment).toHaveBeenCalledTimes(1));
     await screen.findByText(/aviso publicado/i);
 
-    // Clave: el aviso NO se volvió a crear; solo se cobró el que ya existía.
-    expect(createAndPublishListing).toHaveBeenCalledTimes(1);
-    expect(spendCredits).toHaveBeenCalledTimes(2);
-    expect(spendCredits).toHaveBeenNthCalledWith(2, COST_CREDITS, "L1");
+    // Clave: el segundo intento reutiliza el aviso que ya existía.
+    expect(createAndPublishListing).toHaveBeenCalledTimes(2);
+    expect(createAndPublishListing).toHaveBeenNthCalledWith(2, expect.objectContaining({ draftId: "L1" }));
   });
 });

@@ -16,8 +16,11 @@ import { Save, Calculator, RotateCcw, Plus, Pencil, Trash2, Tag, Percent, Loader
 import {
   DEFAULT_SETTINGS,
   PricingSettings,
+  DURATION_OPTIONS,
   buildMatrix,
+  extrasTotal,
   loadSettings,
+  priceForDuration,
   saveSettings,
   formatSoles,
 } from "@/lib/pricing";
@@ -45,6 +48,17 @@ const fromLocalInput = (local: string): string => (local ? new Date(local).toISO
 // donde el % en la fila N representa el descuento vs. el nivel N-1.
 const QUANTITY_ROWS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const DURATION_ROWS: Array<7 | 15 | 30 | 60 | 90> = [7, 15, 30, 60, 90];
+
+// Los adicionales que el panel deja editar. `img100`/`pdf100` van incluidos en
+// el precio base y no se ofrecen aquí. La lista se usa dos veces: la tabla de
+// tarifas y la previsualización de lo que costarán.
+const EXTRAS_EDITABLES = [
+  ["img500", "Segunda imagen (hasta 500 KB)"],
+  ["pdf500", "PDF adjunto (hasta 500 KB)"],
+  ["urgente", "Urgente"],
+  ["destacado", "Destacado"],
+  ["confidencial", "Confidencial"],
+] as const;
 
 const AdminPricing = ({ role }: { role: AdminRole }) => {
   // Editar tarifas/promos/paquetes exige 'Pagos y planes' · Editar (edit); el
@@ -365,8 +379,12 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
               <CardTitle className="text-base flex items-center gap-2">
                 <Tag size={16} className="text-secondary" /> Precios de adicionales
               </CardTitle>
+              {/* Decía "valores fijos, independientes de los descuentos por
+                  cantidad o duración", que desde que el adicional se cobra por
+                  día es justo lo contrario. */}
               <CardDescription className="text-xs">
-                Valores fijos editables, independientes de los descuentos por cantidad o duración.
+                <strong className="text-foreground">Es una tarifa DIARIA</strong>: se multiplica por los días que dure el aviso.
+                Un adicional de S/ 5 en un aviso de 30 días son S/ 150.
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-5">
@@ -375,17 +393,11 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Adicional</TableHead>
-                      <TableHead className="w-40">Precio (S/)</TableHead>
+                      <TableHead className="w-40">Precio por día (S/)</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {([
-                      ["img500", "Segunda imagen (hasta 500 KB)"],
-                      ["pdf500", "PDF adjunto (hasta 500 KB)"],
-                      ["urgente", "Urgente"],
-                      ["destacado", "Destacado"],
-                      ["confidencial", "Confidencial"],
-                    ] as const).map(([key, label]) => (
+                    {EXTRAS_EDITABLES.map(([key, label]) => (
                       <TableRow key={key}>
                         <TableCell className="font-medium">{label}</TableCell>
                         <TableCell>
@@ -393,6 +405,7 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
                             type="number"
                             step="0.01"
                             value={s.extras[key]}
+                            disabled={!canEdit}
                             onChange={(e) => setS({ ...s, extras: { ...s.extras, [key]: parseFloat(e.target.value) || 0 } })}
                           />
                         </TableCell>
@@ -403,7 +416,49 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
               </div>
             </CardContent>
           </Card>
-          <Button onClick={save} className="gap-2"><Save size={14} /> Guardar cambios</Button>
+
+          {/* Lo que de verdad va a pagar el usuario. Sin esto es fácil dejar un
+              S/ 5 creyendo que es el precio total del adicional. */}
+          <Card>
+            <CardHeader className="border-b">
+              <CardTitle className="text-base">Lo que costará cada adicional</CardTitle>
+              <CardDescription className="text-xs">
+                Con las tarifas de arriba, según la duración que elija el anunciante.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-5">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Adicional</TableHead>
+                      {DURATION_OPTIONS.map((d) => (
+                        <TableHead key={d} className="text-right">{d} días</TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {EXTRAS_EDITABLES.map(([key, label]) => (
+                      <TableRow key={key}>
+                        <TableCell className="font-medium whitespace-nowrap">{label}</TableCell>
+                        {DURATION_OPTIONS.map((d) => (
+                          <TableCell key={d} className="text-right tabular-nums">
+                            {formatSoles(extrasTotal({ [key]: 1 }, d, s))}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-3">
+                Como referencia, el aviso solo (sin adicionales) cuesta{" "}
+                {DURATION_OPTIONS.map((d) => `${formatSoles(priceForDuration(1, d, s))} a ${d} días`).join(" · ")}.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Button onClick={save} disabled={!canEdit} className="gap-2"><Save size={14} /> Guardar cambios</Button>
         </TabsContent>
 
         {/* ===== Ofertas y Descuentos ===== */}

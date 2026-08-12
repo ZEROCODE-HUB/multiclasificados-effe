@@ -125,17 +125,24 @@ export interface ExtrasSelection {
   confidencial?: boolean | number;
 }
 
-export function extrasTotal(sel: ExtrasSelection, s: PricingSettings = loadSettings()): number {
+// El adicional se cobra POR DÍA PUBLICADO: el precio de la tarifa es diario.
+// Un "Destacado" en un aviso de 30 días cuesta 30 veces su tarifa, porque ocupa
+// el sitio privilegiado durante 30 días; antes costaba lo mismo que en uno de 3.
+//
+// `dias` va en medio y SIN valor por defecto a propósito: así cualquier sitio
+// que no se actualice deja de compilar, en vez de seguir cobrando de menos sin
+// que nadie se entere.
+export function extrasTotal(sel: ExtrasSelection, dias: DurationDays, s: PricingSettings = loadSettings()): number {
   let total = 0;
   (Object.keys(s.extras) as Array<keyof ExtraPrices>).forEach((k) => {
     // Number(true) = 1, Number(3) = 3, Number(undefined) = NaN → 0.
-    total += s.extras[k] * (Number(sel[k]) || 0);
+    total += s.extras[k] * (Number(sel[k]) || 0) * dias;
   });
   return Math.round(total * 100) / 100;
 }
 
 export function totalPrice(n: number, dias: DurationDays, sel: ExtrasSelection, s: PricingSettings = loadSettings()): number {
-  return Math.round((priceForDuration(n, dias, s) + extrasTotal(sel, s)) * 100) / 100;
+  return Math.round((priceForDuration(n, dias, s) + extrasTotal(sel, dias, s)) * 100) / 100;
 }
 
 // ─── Créditos (1 crédito = 1 sol) ──────────────────────────────────────────

@@ -146,7 +146,8 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
     () => priceForDuration(quantity, duration, settings),
     [quantity, duration, settings],
   );
-  const extrasSum = useMemo(() => extrasTotal(extras, settings), [extras, settings]);
+  // Los adicionales se cobran por día publicado, así que la duración entra aquí.
+  const extrasSum = useMemo(() => extrasTotal(extras, duration, settings), [extras, duration, settings]);
   // Precio en soles (dinero real, para la boleta).
   const solesTotal = Math.round((packageBase + extrasSum) * 100) / 100;
   // Créditos a comprar (enteros): soles × multiplicador.
@@ -333,6 +334,11 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
             {/* Adicionales */}
             <div className="space-y-2">
               <Label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Características extra</Label>
+              {/* Su precio es por día: el importe que se enseña en cada tarjeta
+                  ya viene multiplicado por la duración elegida arriba. */}
+              <p className="text-[11px] text-muted-foreground">
+                Se cobran por día, así que su costo ya incluye los {duration} días.
+              </p>
               <div className="grid grid-cols-2 gap-2">
                 {EXTRA_DEFS.map((d) => {
                   const unit = settings.extras[d.key] ?? 0;
@@ -343,7 +349,7 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
                       className={`relative p-3 border text-left transition-all ${isSel ? "border-secondary bg-secondary/10 ring-2 ring-secondary/30" : "border-border hover:bg-muted/50"}`}>
                       <p className="font-bold text-xs">{d.label}</p>
                       <p className="text-[10px] text-muted-foreground">{d.sub}</p>
-                      <p className="text-xs font-semibold text-secondary mt-1">+{formatCredits(solesToCredits(unit))}</p>
+                      <p className="text-xs font-semibold text-secondary mt-1">+{formatCredits(solesToCredits(unit * duration))}</p>
                       {isSel && <Check size={14} className="absolute top-2 right-2 text-secondary" />}
                     </button>
                   );
@@ -359,7 +365,7 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
               </div>
               {extrasSum > 0 && (
                 <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Adicionales</span>
+                  <span className="text-muted-foreground">Adicionales × {duration} días</span>
                   <span className="font-semibold">{formatCredits(solesToCredits(extrasSum))}</span>
                 </div>
               )}

@@ -43,15 +43,21 @@ describe("Excel — parámetros base (Supuestos)", () => {
     expect(splitIgv(16.14)).toEqual({ subtotal: 13.68, igv: 2.46 });
   });
   it("adicionales del Excel: 500KB/Urgente/Destacado = 5; 100KB y Confidencial = gratis", () => {
+    // OJO con la unidad: las cifras del Excel se leen como TARIFA DIARIA, no
+    // como precio total del adicional. Es una decisión de negocio tomada el
+    // 2026-08-12, no un error de transcripción: el adicional pasó a cobrarse
+    // por cada día publicado. Las cifras en sí no cambian; lo que cambia es
+    // por cuánto se multiplican.
     expect(DEFAULT_SETTINGS.extras).toMatchObject({
       img100: 0, pdf100: 0, img500: 5, pdf500: 5, urgente: 5, destacado: 5, confidencial: 0,
     });
-    // Un adicional de pago suma 5 soles = 5 créditos.
-    expect(extrasTotal({ urgente: true }, DEFAULT_SETTINGS)).toBe(5);
+    // Un adicional de pago suma 5 soles = 5 créditos POR DÍA.
+    expect(extrasTotal({ urgente: true }, 3, DEFAULT_SETTINGS)).toBe(15);
+    expect(extrasTotal({ urgente: true }, 7, DEFAULT_SETTINGS)).toBe(35);
     expect(solesToCredits(5)).toBe(5);
-    // "Imagen adicional" cobra por cantidad: 3 imágenes × S/5 = S/15.
-    expect(extrasTotal({ img500: 1 }, DEFAULT_SETTINGS)).toBe(5);
-    expect(extrasTotal({ img500: 3 }, DEFAULT_SETTINGS)).toBe(15);
+    // "Imagen adicional" cobra por cantidad Y por día: 3 imágenes × S/5 × 7 días.
+    expect(extrasTotal({ img500: 1 }, 7, DEFAULT_SETTINGS)).toBe(35);
+    expect(extrasTotal({ img500: 3 }, 7, DEFAULT_SETTINGS)).toBe(105);
   });
 });
 

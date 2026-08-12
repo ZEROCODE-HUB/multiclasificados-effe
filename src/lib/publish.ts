@@ -178,6 +178,27 @@ export interface FinalizeInput {
   docNumber?: string;
 }
 
+/**
+ * El aviso NO se publicó porque al anunciante no le alcanza el saldo.
+ *
+ * Desde la migración 0091 publicar y cobrar son una sola operación, así que
+ * este caso deja el aviso como estaba (borrador o vencido) y sin cobrar nada.
+ * Antes el aviso quedaba publicado y el cobro se perdía.
+ */
+export class SaldoInsuficiente extends Error {
+  /**
+   * El aviso que se quedó sin publicar. Ya existe en la base de datos como
+   * borrador (las imágenes se subieron), así que quien reintente TIENE que
+   * reutilizarlo: volver a llamar sin él dejaría un aviso duplicado.
+   */
+  listingId?: string;
+
+  constructor(message = "Tu saldo no alcanza para publicar este aviso.") {
+    super(message);
+    this.name = "SaldoInsuficiente";
+  }
+}
+
 export async function createAndPublishListing(
   input: PublishInput
 ): Promise<{ listingId: string; published: boolean }> {
@@ -185,8 +206,15 @@ export async function createAndPublishListing(
   //    reutiliza ese borrador: publicar tras haber pulsado "Guardar en mis
   //    borradores" no debe dejar DOS avisos.
   const listingId = await saveListingDraft(input);
-  const r = await finalizeListingPublication(listingId, input);
-  return { listingId, ...r };
+  try {
+    const r = await finalizeListingPublication(listingId, input);
+    return { listingId, ...r };
+  } catch (e) {
+    // Si faltó saldo, el aviso ya está creado como borrador. Se devuelve su id
+    // con el error para que el reintento publique ESE y no cree otro.
+    if (e instanceof SaldoInsuficiente) e.listingId = listingId;
+    throw e;
+  }
 }
 
 // Orden + comprobante + activación de un aviso existente. Lo comparten la
@@ -218,15 +246,24 @@ export async function finalizeListingPublication(
     if (pfErr) console.error("[publish] No se pudo guardar el documento en el perfil:", pfErr.message);
   }
 
-  // Publicar: estado active + vigencia (published_at / expires_at). NO se crea
-  // orden ni comprobante: el cobro real y la boleta ocurren al COMPRAR créditos.
-  // Publicar solo descuenta saldo (lo hace el llamador con spendCredits, que ya
-  // registra el listing_id en credit_transactions).
+  // Publicar: estado active + vigencia (published_at / expires_at) Y cobro del
+  // saldo, todo dentro de la misma transacción (migración 0091). El importe lo
+  // calcula el servidor a partir de la duración y de `plan_extras`; el navegador
+  // ya no decide cuánto se paga. NO se crea orden ni comprobante: la boleta se
+  // emite al COMPRAR créditos.
   const { error: pErr } = await supabase.rpc("publish_listing", {
     p_listing: listingId,
     p_duration_days: input.duration,
   });
-  if (pErr) console.error("[publish] No se pudo activar el aviso:", pErr.message);
+  if (pErr) {
+    // Si no alcanza el saldo, la base de datos aborta la operación entera: el
+    // aviso NO queda publicado y no se cobra nada. Eso hay que contarlo, no
+    // solo registrarlo, porque el usuario tiene que ir a comprar saldo.
+    if (pErr.code === "EF001" || /saldo insuficiente/i.test(pErr.message)) {
+      throw new SaldoInsuficiente();
+    }
+    console.error("[publish] No se pudo activar el aviso:", pErr.message);
+  }
 
   return { published: !pErr };
 }

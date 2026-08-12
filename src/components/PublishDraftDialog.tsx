@@ -15,8 +15,8 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { VerifyIdentityDialog, type ConfirmedIdentity } from "@/components/VerifyIdentityDialog";
 import { BuyCreditsModal } from "@/components/BuyCreditsModal";
-import { finalizeListingPublication } from "@/lib/publish";
-import { getCreditBalance, spendCredits } from "@/lib/credits";
+import { finalizeListingPublication, SaldoInsuficiente } from "@/lib/publish";
+import { getCreditBalance } from "@/lib/credits";
 import {
   priceForDuration, extrasTotal, formatSoles, formatCredits, solesToCredits, loadSettings,
   type DurationDays, type PricingSettings,
@@ -68,7 +68,9 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
   const quantity = draft?.planQuantity ?? 1;
 
   const baseSoles = useMemo(
-    () => Math.round((priceForDuration(quantity, duration, settings) + extrasTotal(extras, settings)) * 100) / 100,
+    // Los adicionales van por día publicado: al cambiar la duración aquí, su
+    // costo se mueve con ella.
+    () => Math.round((priceForDuration(quantity, duration, settings) + extrasTotal(extras, duration, settings)) * 100) / 100,
     [quantity, duration, extras, settings],
   );
   const promo = draft ? bestPromoForCategory(promos, draft.category) : null;
@@ -76,25 +78,13 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
   const totalCredits = solesToCredits(totalSoles);
   const enoughCredits = balance !== null && balance >= totalCredits;
 
-  // Cobra y activa el borrador. `finalizeListingPublication` NO crea el aviso ni
-  // emite comprobante: solo descuenta saldo (spendCredits) y activa el aviso.
+  // Activa el borrador. `finalizeListingPublication` NO crea el aviso ni emite
+  // comprobante: activa el aviso y descuenta el saldo, las dos cosas dentro de
+  // la misma transacción de la base de datos (migración 0091).
   const publish = async (confirmed: ConfirmedIdentity) => {
     if (!draft || publishing) return;
     setPublishing(true);
     try {
-      const spent = await spendCredits(totalCredits, draft.id);
-      const newBalance = await getCreditBalance();
-      setBalance(newBalance);
-      if (!spent) {
-        toast({
-          title: "No se pudo descontar el saldo",
-          description: "Tu saldo cambió y ya no alcanza. Compra saldo para completar.",
-          variant: "destructive",
-        });
-        setBuyOpen(true);
-        return;
-      }
-
       const { published } = await finalizeListingPublication(draft.id, {
         quantity, duration, extras, total: totalSoles,
         receiptType: confirmed.docType === "ruc" ? "factura" : "boleta",
@@ -103,12 +93,12 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
         docType: confirmed.docType,
         docNumber: confirmed.docNumber,
       });
+      setBalance(await getCreditBalance());
 
       if (!published) {
-        // El saldo ya se descontó: no lo escondemos detrás de un "publicado" falso.
         toast({
-          title: "Se descontó el saldo pero el aviso no se activó",
-          description: "Escribe a soporte con los datos del aviso. No vuelvas a publicarlo.",
+          title: "El aviso no se activó",
+          description: "Escribe a soporte con los datos del aviso. No se te ha cobrado nada.",
           variant: "destructive",
         });
         return;
@@ -120,6 +110,18 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
       onPublished();
       onClose();
     } catch (err: unknown) {
+      // Sin saldo la base de datos deshace la operación entera: el borrador
+      // sigue intacto y no se ha cobrado nada.
+      if (err instanceof SaldoInsuficiente) {
+        setBalance(await getCreditBalance());
+        toast({
+          title: "Te falta saldo",
+          description: "Tu aviso sigue en borradores. Compra saldo y vuelve a intentarlo.",
+          variant: "destructive",
+        });
+        setBuyOpen(true);
+        return;
+      }
       toast({
         title: "No se pudo publicar",
         description: err instanceof Error ? err.message : "Inténtalo de nuevo.",

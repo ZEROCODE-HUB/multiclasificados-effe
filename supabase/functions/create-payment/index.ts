@@ -126,7 +126,8 @@ Deno.serve(async (req) => {
 
     const settings = settingsFromRow(pricingRow);
     const base = priceForDuration(quantity, duration, settings);
-    const extrasSum = extrasTotal(extras, settings);
+    // Los adicionales se cobran por día publicado: la duración entra en la cuenta.
+    const extrasSum = extrasTotal(extras, duration, settings);
     const total = Math.round((base + extrasSum) * 100) / 100;
     if (!(total > 0)) return json({ success: false, error: "El importe a pagar es inválido." });
 

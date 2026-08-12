@@ -96,16 +96,17 @@ export function priceForDuration(n: number, dias: DurationDays, s: PricingSettin
   return priceFor(n, dias, s);
 }
 
-export function extrasTotal(sel: ExtrasSelection, s: PricingSettings): number {
+// El adicional se cobra POR DÍA PUBLICADO: la tarifa es diaria.
+export function extrasTotal(sel: ExtrasSelection, dias: DurationDays, s: PricingSettings): number {
   let total = 0;
   (Object.keys(s.extras) as Array<keyof ExtraPrices>).forEach((k) => {
-    total += s.extras[k] * (Number(sel[k]) || 0);
+    total += s.extras[k] * (Number(sel[k]) || 0) * dias;
   });
   return Math.round(total * 100) / 100;
 }
 
 export function totalPrice(n: number, dias: DurationDays, sel: ExtrasSelection, s: PricingSettings): number {
-  return Math.round((priceForDuration(n, dias, s) + extrasTotal(sel, s)) * 100) / 100;
+  return Math.round((priceForDuration(n, dias, s) + extrasTotal(sel, dias, s)) * 100) / 100;
 }
 
 // Separa un total (con IGV) en subtotal + IGV. Fuente única para comprobantes.

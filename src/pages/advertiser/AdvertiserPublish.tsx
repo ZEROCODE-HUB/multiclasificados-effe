@@ -20,10 +20,10 @@ import { useNavigate } from "react-router-dom";
 import { useSession } from "@/hooks/useSession";
 import { toast } from "@/hooks/use-toast";
 import {
-  loadSettings, priceForDuration, formatSoles, formatCredits, avisosBreakdown, solesToCredits,
+  loadSettings, priceForDuration, extrasTotal, formatSoles, formatCredits, avisosBreakdown, solesToCredits,
   type DurationDays, type PricingSettings, type ExtraPrices,
 } from "@/lib/pricing";
-import { createAndPublishListing, saveListingDraft } from "@/lib/publish";
+import { createAndPublishListing, saveListingDraft, SaldoInsuficiente } from "@/lib/publish";
 import { urgenteAllowedFor, URGENTE_MAX_DAYS } from "@/lib/listingBadges";
 import { ListingCard } from "@/components/ListingCard";
 import { InfoHint } from "@/components/InfoHint";
@@ -31,7 +31,7 @@ import { FALLBACK_IMG } from "@/lib/listings";
 import type { Listing } from "@/data/mockData";
 import { type PersonType } from "@/components/VerifyIdentityDialog";
 import { fetchMyIdentity } from "@/lib/identity";
-import { getCreditBalance, spendCredits } from "@/lib/credits";
+import { getCreditBalance } from "@/lib/credits";
 import { fetchActivePromotions, bestPromoForCategory, applyDiscount, type Promotion } from "@/lib/promotions";
 import { fetchPricingSettings } from "@/lib/pricingRemote";
 import { BuyCreditsModal } from "@/components/BuyCreditsModal";
@@ -171,10 +171,6 @@ const AdvertiserPublish = () => {
   const [savingDraft, setSavingDraft] = useState(false);
   const savingDraftRef = useRef(false);
   const draftListingId = useRef<string | null>(null);
-  // Aviso YA publicado al que solo le faltó el cobro (spend_credits devolvió
-  // false porque el saldo cambió). Al comprar créditos hay que cobrar ESTE
-  // aviso, no publicar uno nuevo: eso creaba un duplicado.
-  const pendingChargeListingId = useRef<string | null>(null);
   const [successOpen, setSuccessOpen] = useState<{ open: boolean; number: string; email: string }>({ open: false, number: "", email: "" });
   // Único modal al publicar: confirmar la publicación (la identidad ya viene del
   // perfil; NO se pide verificación aquí).
@@ -228,10 +224,11 @@ const AdvertiserPublish = () => {
   }, []);
 
   const packageBase = priceForDuration(quantity, duration, settings);
-  const extrasSum = EXTRA_DEFS.reduce((acc, def) => {
-    const c = extras[def.key] ?? 0;
-    return acc + c * (settings.extras[def.key as keyof ExtraPrices] ?? 0);
-  }, 0);
+  // Se llama a `extrasTotal` en vez de rehacer la suma aquí: esta pantalla la
+  // recalculaba a mano sobre EXTRA_DEFS, que solo tiene 5 de los 7 adicionales,
+  // así que con una tarifa que cobre img100/pdf100 (como la sembrada en la BD)
+  // las dos cuentas ya daban distinto.
+  const extrasSum = extrasTotal(extras, duration, settings);
   const baseTotal = Math.round((packageBase + extrasSum) * 100) / 100;
   // Promoción vigente para la categoría elegida (si la hay).
   const activePromo = bestPromoForCategory(promos, form.category);
@@ -522,33 +519,10 @@ const AdvertiserPublish = () => {
     }
   };
 
-  // Cobra un aviso que ya quedó publicado pero cuyo descuento de créditos falló.
-  // Publicar de nuevo crearía un aviso duplicado; aquí solo se descuenta.
-  const chargePendingListing = async (listingId: string) => {
-    if (publishingRef.current) return;
-    publishingRef.current = true;
-    setPublishing(true);
-    const email = userEmail || "anunciante@effe.pe";
-    try {
-      const spent = await spendCredits(totalCredits, listingId);
-      const newBalance = await getCreditBalance();
-      setCreditBalance(newBalance);
-      if (!spent) {
-        toast({
-          title: "No se pudo descontar el saldo",
-          description: "Tu saldo sigue sin alcanzar para este aviso.",
-          variant: "destructive",
-        });
-        return;
-      }
-      pendingChargeListingId.current = null;
-      setSuccessOpen({ open: true, number: "", email });
-      resetPublishForm();
-    } finally {
-      publishingRef.current = false;
-      setPublishing(false);
-    }
-  };
+  // Aquí vivía `chargePendingListing`, para cobrar un aviso que había quedado
+  // publicado pero cuyo descuento falló. Ese estado ya no existe: desde la
+  // migración 0091 publicar y cobrar son una sola operación, así que o pasan
+  // las dos cosas o no pasa ninguna.
 
   const doPublish = async () => {
     // Ref, no state: cierra la ventana entre dos clics dentro del mismo render.
@@ -587,24 +561,9 @@ const AdvertiserPublish = () => {
         docNumber: docNumber || undefined,
       });
 
-      // 2) Descontar créditos del saldo (según el costo del aviso)
-      const spent = await spendCredits(totalCredits, listingId);
-      const newBalance = await getCreditBalance();
-      setCreditBalance(newBalance);
-      if (!spent) {
-        // El saldo cambió y ya no alcanza. El aviso YA está publicado: lo dejamos
-        // anotado para cobrarlo tras la compra (sin republicarlo) y no mostramos
-        // "¡Pago confirmado!" por algo que todavía no se cobró.
-        pendingChargeListingId.current = listingId;
-        toast({
-          title: "No se pudo descontar el saldo",
-          description: "Tu saldo cambió y ya no alcanza. Compra saldo para completar.",
-          variant: "destructive",
-        });
-        setBuyCreditsOpen(true);
-        return;
-      }
-      pendingChargeListingId.current = null;
+      // 2) El saldo ya se descontó dentro de `publish_listing`, con un importe
+      //    calculado en el servidor. Aquí solo se refresca lo que se enseña.
+      setCreditBalance(await getCreditBalance());
 
       // 3) Publicado y saldo descontado. NO se emite boleta al publicar: el
       //    comprobante ya se emitió al comprar los créditos. Confirmamos y
@@ -618,6 +577,21 @@ const AdvertiserPublish = () => {
         });
       }
     } catch (e) {
+      // Sin saldo no se publicó NI se cobró, y el aviso sigue guardado como
+      // borrador: se ofrece comprar saldo y desde ahí se publica.
+      if (e instanceof SaldoInsuficiente) {
+        // El aviso ya existe (con sus fotos subidas): al reintentar hay que
+        // publicar ESE. Sin esto, comprar saldo y volver a publicar dejaría dos.
+        if (e.listingId) draftListingId.current = e.listingId;
+        setCreditBalance(await getCreditBalance());
+        toast({
+          title: "Te falta saldo para publicar",
+          description: "Tu aviso quedó guardado en borradores. Compra saldo y publícalo desde ahí.",
+          variant: "destructive",
+        });
+        setBuyCreditsOpen(true);
+        return;
+      }
       toast({
         title: "No se pudo publicar",
         description: e instanceof Error ? e.message : "Intenta nuevamente.",
@@ -997,8 +971,10 @@ const AdvertiserPublish = () => {
                 {/* Adicionales opcionales */}
                 <div>
                   <Label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Adicionales opcionales</Label>
+                  {/* El precio del adicional es POR DÍA, así que hay que decirlo
+                      donde se decide y no dejar que se descubra en el total. */}
                   <p className="text-[11px] text-muted-foreground mt-1 mb-2">
-                    Actívalos con “+”. Se aplican a tu aviso.
+                    Actívalos con “+”. <strong className="font-semibold text-foreground">El precio de cada adicional es por día</strong>, así que se multiplica por los {duration} días que dura tu aviso.
                   </p>
                   {!urgenteAllowed && (
                     <p className="text-[11px] text-muted-foreground mb-2 flex items-center gap-1.5">
@@ -1019,8 +995,15 @@ const AdvertiserPublish = () => {
                               <InfoHint label={`Qué incluye: ${label}`}>{help}</InfoHint>
                             </p>
                             {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
+                            {/* La cuenta, escrita: sin esto el importe de la
+                                derecha parece un precio y no un total. */}
+                            {count > 0 && unit > 0 && (
+                              <p className="text-[11px] text-secondary font-semibold">
+                                {count} × {formatSoles(unit)} × {duration} días
+                              </p>
+                            )}
                           </div>
-                          <span className="text-xs font-bold text-muted-foreground hidden sm:inline">{formatSoles(unit)} c/u</span>
+                          <span className="text-xs font-bold text-muted-foreground hidden sm:inline">{formatSoles(unit)} por día</span>
                           <div className="flex items-center border">
                             <button type="button" aria-label={`Quitar ${label}`} onClick={() => setExtraCount(key, count - 1)} className="w-8 h-8 flex items-center justify-center hover:bg-muted disabled:opacity-30" disabled={count <= 0}>
                               <Minus size={12} />
@@ -1030,7 +1013,7 @@ const AdvertiserPublish = () => {
                               <Plus size={12} />
                             </button>
                           </div>
-                          <span className="text-xs font-bold text-foreground w-16 text-right">{formatSoles(count * unit)}</span>
+                          <span className="text-xs font-bold text-foreground w-20 text-right">{formatSoles(count * unit * duration)}</span>
                         </div>
                       );
                     })}
@@ -1047,7 +1030,7 @@ const AdvertiserPublish = () => {
                         <span className="font-bold">{formatCredits(solesToCredits(packageBase))}</span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Adicionales</span>
+                        <span className="text-muted-foreground">Adicionales ({duration} días)</span>
                         <span className="font-bold">{formatCredits(solesToCredits(extrasSum))}</span>
                       </div>
                       <div className="border-t pt-2 flex items-baseline justify-between">
@@ -1088,7 +1071,7 @@ const AdvertiserPublish = () => {
                       <span className="font-bold">{formatCredits(solesToCredits(packageBase))}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Adicionales</span>
+                      <span className="text-muted-foreground">Adicionales · {duration} días</span>
                       <span className="font-bold">{formatCredits(solesToCredits(extrasSum))}</span>
                     </div>
                     {promoPct > 0 && (
@@ -1212,12 +1195,12 @@ const AdvertiserPublish = () => {
           setCreditBalance(newBalance);
           setBuyCreditsOpen(false);
           // Tras comprar, si ya alcanza, se publica de inmediato y se descuenta.
+          // Aquí había que distinguir el caso "ya publicado, solo faltaba el
+          // cobro" para no duplicar el aviso; ese estado ya no existe, porque
+          // publicar y cobrar van juntos, y `draftListingId` hace que se
+          // reutilice el mismo aviso en vez de crear otro.
           if (Math.round(newBalance) >= totalCredits) {
-            // Si el aviso ya se publicó y solo faltaba el cobro, se cobra ese
-            // aviso. Llamar a doPublish() aquí publicaría un duplicado.
-            const pending = pendingChargeListingId.current;
-            if (pending) chargePendingListing(pending);
-            else doPublish();
+            doPublish();
           } else {
             toast({
               title: "Saldo añadido",
@@ -1249,6 +1232,14 @@ const AdvertiserPublish = () => {
                 <span className="text-muted-foreground">Duración</span>
                 <span className="font-medium">{duration} días</span>
               </div>
+              {/* Este es el último punto antes de cobrar: si los adicionales no
+                  se desglosan aquí, su costo por día se descubre en el total. */}
+              {extrasSum > 0 && (
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Adicionales ({duration} días)</span>
+                  <span className="font-medium">{formatSoles(extrasSum)}</span>
+                </div>
+              )}
               <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">Total</span>
                 <span className="font-extrabold text-primary">{formatSoles(total)}</span>

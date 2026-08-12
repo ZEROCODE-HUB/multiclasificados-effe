@@ -13,10 +13,8 @@ beforeEach(() => {
 
 // --- Mocks de la capa de datos y del entorno ---
 const getCreditBalance = vi.fn();
-const spendCredits = vi.fn().mockResolvedValue(true);
 vi.mock("@/lib/credits", () => ({
   getCreditBalance: (...a: unknown[]) => getCreditBalance(...a),
-  spendCredits: (...a: unknown[]) => spendCredits(...a),
 }));
 
 // Pasarela de pago (Izipay). El pago se simula: createPayment devuelve un
@@ -34,9 +32,14 @@ vi.mock("@/components/PaymentForm", () => ({
   PaymentForm: ({ onPaid }: { onPaid: () => void }) => <button onClick={onPaid}>SIMULAR_PAGO</button>,
 }));
 
+// Desde la migración 0091 el cobro ocurre DENTRO de `publish_listing`, en la
+// base de datos. Estas pruebas ya no pueden comprobar cuánto se cobró —de eso
+// se encarga src/test/migration0091.test.ts, contra un Postgres de verdad—;
+// aquí se comprueba el precio que la pantalla calcula y arrastra.
 const createAndPublishListing = vi.fn();
 vi.mock("@/lib/publish", () => ({
   createAndPublishListing: (...a: unknown[]) => createAndPublishListing(...a),
+  SaldoInsuficiente: class SaldoInsuficiente extends Error {},
 }));
 
 // Verificación de documento contra Factiliza (RENIEC/SUNAT). Por defecto el
@@ -117,7 +120,6 @@ const clickPublish = async () => {
 beforeEach(() => {
   localStorage.clear();
   getCreditBalance.mockReset();
-  spendCredits.mockClear().mockResolvedValue(true);
   createPayment.mockReset().mockResolvedValue({ orderId: "o1", formToken: "tok", publicKey: "pk" });
   pollOrderStatus.mockReset().mockResolvedValue("paid");
   getPurchaseResult.mockReset().mockResolvedValue({ balance: 1000, invoiceNumber: "B001-000100" });
@@ -145,7 +147,7 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
 
     // Publica directo: crea el aviso y descuenta el costo en créditos.
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
-    expect(spendCredits).toHaveBeenCalledWith(COST_CREDITS, "L1");
+    expect(createAndPublishListing).toHaveBeenCalledWith(expect.objectContaining({ total: COST_SOLES }));
 
     // Muestra el éxito y NO abre el configurador de compra.
     await screen.findByText(/aviso publicado/i);
@@ -168,9 +170,9 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
 
     // La duración que llega a la publicación es la elegida (90), no la del borrador (7).
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
-    expect(createAndPublishListing).toHaveBeenCalledWith(expect.objectContaining({ duration: 90 }));
-    // Y el costo cobrado corresponde a 90 días (S/ 113.49), no a 7 (S/ 16.14).
-    expect(spendCredits).toHaveBeenCalledWith(113.49, "L1");
+    expect(createAndPublishListing).toHaveBeenCalledWith(
+      expect.objectContaining({ duration: 90, total: 113.49 }),
+    );
   });
 
   it("SIN CRÉDITOS: al pulsar Publicar abre el configurador y NO publica", async () => {
@@ -187,9 +189,8 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     expect(screen.getByText(/arma tu compra/i)).toBeTruthy();
     expect(screen.getByRole("button", { name: /continuar al pago/i })).toBeTruthy();
 
-    // No se publicó ni se descontó nada.
+    // No se publicó nada (y como el cobro va dentro, tampoco se cobró).
     expect(createAndPublishListing).not.toHaveBeenCalled();
-    expect(spendCredits).not.toHaveBeenCalled();
   });
 
   it("CON PROMOCIÓN: aplica el descuento al costo al publicar (50% → 8.07)", async () => {
@@ -207,8 +208,7 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     await clickPublish();
 
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
-    // Dinero: 16.14 × (1 − 0.50) = 8.07 soles. Créditos: round(8.07 × 10) = 81.
-    expect(spendCredits).toHaveBeenCalledWith(8.07, "L1");
+    // Dinero: 16.14 × (1 − 0.50) = 8.07 soles.
     expect(createAndPublishListing).toHaveBeenCalledWith(expect.objectContaining({ total: 8.07 }));
   });
 
@@ -236,7 +236,7 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     // Al acreditarse y cubrir el costo, publica automáticamente y descuenta.
     await waitFor(() => expect(createPayment).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
-    expect(spendCredits).toHaveBeenCalledWith(COST_CREDITS, "L1");
+    expect(createAndPublishListing).toHaveBeenCalledWith(expect.objectContaining({ total: COST_SOLES }));
     await screen.findByText(/aviso publicado/i);
   });
 });
@@ -256,7 +256,6 @@ describe("AdvertiserPublish — un solo modal de confirmación (sin verificació
     expect(screen.queryByText(/verifica tu identidad/i)).toBeNull();
     // Aún no publica: espera la confirmación explícita.
     expect(createAndPublishListing).not.toHaveBeenCalled();
-    expect(spendCredits).not.toHaveBeenCalled();
   });
 
   it("al confirmar en el modal, recién publica y descuenta", async () => {
@@ -270,7 +269,7 @@ describe("AdvertiserPublish — un solo modal de confirmación (sin verificació
     fireEvent.click(await screen.findByRole("button", { name: /confirmar y publicar/i }));
 
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
-    expect(spendCredits).toHaveBeenCalledWith(COST_CREDITS, "L1");
+    expect(createAndPublishListing).toHaveBeenCalledWith(expect.objectContaining({ total: COST_SOLES }));
     await screen.findByText(/aviso publicado/i);
   });
 });

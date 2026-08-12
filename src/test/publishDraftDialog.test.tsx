@@ -14,19 +14,22 @@ beforeEach(() => {
 });
 
 const getCreditBalance = vi.fn();
-const spendCredits = vi.fn();
 vi.mock("@/lib/credits", () => ({
   getCreditBalance: (...a: unknown[]) => getCreditBalance(...a),
-  spendCredits: (...a: unknown[]) => spendCredits(...a),
   purchaseCredits: vi.fn(),
 }));
 
 const finalizeListingPublication = vi.fn();
 const createAndPublishListing = vi.fn();
+// El cobro ya no lo hace el cliente: desde la migración 0091 ocurre dentro de
+// `publish_listing`, a la que llama `finalizeListingPublication`.
 vi.mock("@/lib/publish", () => ({
   finalizeListingPublication: (...a: unknown[]) => finalizeListingPublication(...a),
   createAndPublishListing: (...a: unknown[]) => createAndPublishListing(...a),
   saveListingDraft: vi.fn(),
+  SaldoInsuficiente: class SaldoInsuficiente extends Error {
+    listingId?: string;
+  },
 }));
 
 const verifyDocument = vi.fn();
@@ -85,7 +88,6 @@ const confirmIdentity = async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   getCreditBalance.mockResolvedValue(1000);
-  spendCredits.mockResolvedValue(true);
   verifyDocument.mockResolvedValue({ ok: true, nombre: "JUAN PEREZ", data: {} });
   finalizeListingPublication.mockResolvedValue({ published: true });
 });
@@ -105,7 +107,6 @@ describe("PublishDraftDialog — publicar un borrador guardado", () => {
     fireEvent.click(screen.getByRole("button", { name: /publicar por/i }));
 
     await screen.findByText(/verifica tu identidad/i);
-    expect(spendCredits).not.toHaveBeenCalled();
     expect(finalizeListingPublication).not.toHaveBeenCalled();
   });
 
@@ -116,9 +117,8 @@ describe("PublishDraftDialog — publicar un borrador guardado", () => {
     await confirmIdentity();
 
     await waitFor(() => expect(finalizeListingPublication).toHaveBeenCalledTimes(1));
-    expect(spendCredits).toHaveBeenCalledWith(COST_CREDITS, "L-DRAFT");
     expect(finalizeListingPublication).toHaveBeenCalledWith("L-DRAFT", expect.objectContaining({
-      duration: 7, docType: "dni", docNumber: "12345678", advertiserName: "JUAN PEREZ",
+      duration: 7, total: COST_CREDITS, docType: "dni", docNumber: "12345678", advertiserName: "JUAN PEREZ",
     }));
 
     // Clave: NO se crea un aviso nuevo.
@@ -136,9 +136,10 @@ describe("PublishDraftDialog — publicar un borrador guardado", () => {
     await confirmIdentity();
 
     await waitFor(() => expect(finalizeListingPublication).toHaveBeenCalledTimes(1));
-    // Publica por 90 días y cobra el costo de 90 (S/ 113.49), no el de 7.
-    expect(finalizeListingPublication).toHaveBeenCalledWith("L-DRAFT", expect.objectContaining({ duration: 90 }));
-    expect(spendCredits).toHaveBeenCalledWith(113.49, "L-DRAFT");
+    // Publica por 90 días y con el costo de 90 (S/ 113.49), no el de 7.
+    expect(finalizeListingPublication).toHaveBeenCalledWith(
+      "L-DRAFT", expect.objectContaining({ duration: 90, total: 113.49 }),
+    );
   });
 
   it("DNI falso: no cobra ni publica", async () => {
@@ -152,7 +153,6 @@ describe("PublishDraftDialog — publicar un borrador guardado", () => {
     await screen.findByText(/no se encontró el documento/i);
 
     expect(screen.getByRole("button", { name: /confirmar y continuar/i })).toBeDisabled();
-    expect(spendCredits).not.toHaveBeenCalled();
     expect(finalizeListingPublication).not.toHaveBeenCalled();
   });
 
@@ -165,23 +165,27 @@ describe("PublishDraftDialog — publicar un borrador guardado", () => {
     fireEvent.click(btn);
 
     await screen.findByText(/saldo a comprar/i);
-    expect(spendCredits).not.toHaveBeenCalled();
+    expect(finalizeListingPublication).not.toHaveBeenCalled();
     expect(finalizeListingPublication).not.toHaveBeenCalled();
   });
 
-  it("si el cobro falla, NO activa el aviso y abre la compra", async () => {
-    spendCredits.mockResolvedValue(false);
+  it("si falta saldo, ni publica ni cobra, y ofrece comprar", async () => {
+    // El saldo pudo cambiar entre que se abrió el diálogo y se confirmó. La
+    // base de datos deshace la operación entera, así que el borrador queda
+    // intacto: antes el aviso podía quedar activo sin haberse cobrado.
+    const { SaldoInsuficiente } = await import("@/lib/publish");
+    finalizeListingPublication.mockRejectedValue(new SaldoInsuficiente("Tu saldo no alcanza."));
     renderDialog();
     await screen.findAllByText(`S/ ${COST_CREDITS}`);
     fireEvent.click(screen.getByRole("button", { name: /publicar por/i }));
     await confirmIdentity();
 
-    await waitFor(() => expect(spendCredits).toHaveBeenCalled());
-    expect(finalizeListingPublication).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: "Te falta saldo" })));
     expect(onPublished).not.toHaveBeenCalled();
   });
 
-  it("si se cobró pero el RPC no activó el aviso, lo dice en vez de fingir éxito", async () => {
+  it("si el aviso no se activa, lo dice en vez de fingir éxito", async () => {
     finalizeListingPublication.mockResolvedValue({ published: false });
     renderDialog();
     await screen.findAllByText(`S/ ${COST_CREDITS}`);
@@ -189,7 +193,7 @@ describe("PublishDraftDialog — publicar un borrador guardado", () => {
     await confirmIdentity();
 
     await waitFor(() =>
-      expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: "Se descontó el saldo pero el aviso no se activó" })));
+      expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: "El aviso no se activó" })));
     expect(onPublished).not.toHaveBeenCalled();
   });
 });

@@ -84,15 +84,18 @@ describe("cuadre para todos los precios que la plataforma puede cobrar", () => {
   const extras = [
     {}, { destacado: 1 }, { urgente: 1 }, { confidencial: 1 },
     { destacado: 1, urgente: 1 }, { destacado: 1, urgente: 1, confidencial: 1 },
-    { imagenAdicional: 3 },
+    // Era `imagenAdicional`, que no es una clave de la tarifa: ese combo no
+    // sumaba nada y el `as never` de abajo lo tapaba. La clave real es img500.
+    { img500: 3 },
   ];
 
   const totales = new Set<number>();
   for (const n of cantidades) {
     for (const d of duraciones) {
       for (const e of extras) {
+        // Los adicionales se cobran por día, así que la duración entra aquí.
         const t = Math.round((priceForDuration(n, d, DEFAULT_SETTINGS)
-          + extrasTotal(e as never, DEFAULT_SETTINGS)) * 100) / 100;
+          + extrasTotal(e as never, d, DEFAULT_SETTINGS)) * 100) / 100;
         if (t > 0) totales.add(t);
       }
     }

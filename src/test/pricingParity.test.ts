@@ -31,8 +31,12 @@ describe("paridad front (src/lib/pricing) ↔ shared (_shared/pricing)", () => {
       { destacado: true, urgente: true, img500: true },
       { img500: 3 },
     ];
+    // El adicional se cobra por día, así que la duración forma parte de la
+    // paridad: no basta con que coincidan a 7 días.
     for (const sel of combos) {
-      expect(shared.extrasTotal(sel, settings)).toBe(front.extrasTotal(sel, settings));
+      for (const d of DURATIONS) {
+        expect(shared.extrasTotal(sel, d, settings)).toBe(front.extrasTotal(sel, d, settings));
+      }
     }
   });
 

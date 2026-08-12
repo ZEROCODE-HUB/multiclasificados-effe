@@ -53,22 +53,11 @@ export async function getCreditTransactions(): Promise<CreditTransaction[]> {
 }
 
 // ─── Gasto de créditos al publicar ────────────────────────────────────────
-
-export async function spendCredits(
-  credits: number,
-  listingId: string,
-): Promise<boolean> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return false;
-  const { data, error } = await supabase.rpc("spend_credits", {
-    p_user_id: user.id,
-    p_credits: credits,
-    p_listing_id: listingId,
-  });
-  if (error) {
-    console.error("[credits] spend_credits error:", error.message);
-    return false;
-  }
-  return Boolean(data);
-}
+//
+// Aquí vivía `spendCredits`, que llamaba al RPC `spend_credits` con el importe
+// que había calculado el navegador. Eso hacía que el precio lo decidiera el
+// cliente: bastaba con publicar y luego descontarse un céntimo. Desde la
+// migración 0091 publicar cobra solo, dentro de `publish_listing` y en la misma
+// transacción, con un costo calculado en el servidor. `spend_credits` ya no es
+// invocable desde el navegador.
 
