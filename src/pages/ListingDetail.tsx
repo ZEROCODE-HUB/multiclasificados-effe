@@ -26,8 +26,7 @@ import {
   Building2,
   Users,
   Copy,
-  MessageCircle,
-  Link2,
+  Info,
   Send,
   ClipboardCheck,
   FileText,
@@ -57,12 +56,12 @@ import { applyToListing, fetchMyApplication, STATUS_LABEL, type ApplicationStatu
 import { Checkbox } from "@/components/ui/checkbox";
 import { loadSold, markSold, unmarkSold } from "@/lib/pricing";
 import { reportListing, reportUser, LISTING_REPORT_REASONS, USER_REPORT_REASONS } from "@/lib/reports";
-import { shareListingWhatsApp, copyListingLink, shareListingSystem, canSystemShare } from "@/lib/share";
+import { ShareMenuItems, ShareFab } from "@/components/ShareListing";
+import { codigoDeAviso } from "@/lib/listingCode";
 import { ACTION_ROW, ACTION_BTN, ACTION_BTN_SAVE } from "@/pages/listingActions.styles";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -434,17 +433,28 @@ export default function ListingDetail() {
       ? [{ label: "Condición", value: CONDITION_LABEL[listing.condition ?? "na"] ?? "No aplica" }]
       : []),
     { label: "Ubicación", value: listing.location },
-    { label: "Publicado", value: new Date(listing.date).toLocaleDateString("es-PE", { day: "2-digit", month: "long", year: "numeric" }) },
-    { label: "Código de aviso", value: `EFFE-${listing.id.padStart(6, "0")}` },
-    { label: "Vistas", value: `${listing.views.toLocaleString()} visualizaciones` },
+    // Fecha corta ("07 ago 2026") y las vistas sin la palabra "visualizaciones":
+    // la etiqueta de al lado ya dice "Vistas", y así además desaparece el
+    // "1 visualizaciones" mal concordado.
+    { label: "Publicado", value: new Date(listing.date).toLocaleDateString("es-PE", { day: "2-digit", month: "short", year: "numeric" }) },
+    { label: "Código de aviso", value: codigoDeAviso(listing.id) },
+    { label: "Vistas", value: listing.views.toLocaleString() },
   ];
 
-  const features = [
-    "Garantía verificada por eFFe",
-    "Anunciante validado con RUC",
-    "Pago seguro a través de la plataforma",
-    "Soporte 24/7 durante la transacción",
-    "Devolución dentro de 7 días",
+  // Lo que la plataforma HACE de verdad por quien mira el aviso. Antes esta
+  // lista prometía a todo el mundo pago por la plataforma, devoluciones a 7
+  // días, soporte 24/7 y RUC validado: nada de eso existe, y prometerlo en un
+  // sitio donde la gente decide si fiarse es peor que no decir nada.
+  //
+  // Lo del anunciante verificado NO se repite aquí: ya lo dice la nota que hay
+  // justo encima, bajo la descripción, y otra vez en el panel de precio. Tres
+  // veces en la misma pantalla suena a insistir, no a informar.
+  const garantias = [
+    confidential
+      ? "Aviso confidencial: el contacto es solo por el chat interno de eFFe."
+      : "Puedes contactar por el chat interno de eFFe, sin dar tus datos personales.",
+    "eFFe no interviene en el pago: acuérdalo directamente con el anunciante.",
+    "Si algo no cuadra, repórtalo: el equipo revisa cada denuncia.",
   ];
 
 
@@ -608,33 +618,7 @@ export default function ListingDetail() {
                   <Button variant="outline" size="sm" className={ACTION_BTN}><Share2 size={14} /> Compartir</Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-52">
-                  <DropdownMenuItem
-                    className="gap-2"
-                    onClick={() => shareListingWhatsApp(listing.title, listing.id)}
-                  >
-                    <MessageCircle size={16} className="text-[#25D366]" /> WhatsApp
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="gap-2"
-                    onClick={async () => {
-                      const ok = await copyListingLink(listing.id);
-                      toast({
-                        title: ok ? "Enlace copiado" : "No se pudo copiar",
-                        description: ok ? "Ya puedes pegarlo donde quieras." : "Inténtalo de nuevo.",
-                        variant: ok ? undefined : "destructive",
-                      });
-                    }}
-                  >
-                    <Link2 size={16} /> Copiar enlace
-                  </DropdownMenuItem>
-                  {canSystemShare() && (
-                    <DropdownMenuItem
-                      className="gap-2"
-                      onClick={() => shareListingSystem(listing.title, listing.id)}
-                    >
-                      <Share2 size={16} /> Más opciones…
-                    </DropdownMenuItem>
-                  )}
+                  <ShareMenuItems title={listing.title} listingId={listing.id} />
                 </DropdownMenuContent>
               </DropdownMenu>
               <Button variant="outline" size="sm" className={ACTION_BTN} onClick={() => requireAuthOrRun(() => setReportOpen(true))}>
@@ -647,12 +631,32 @@ export default function ListingDetail() {
           <section>
             <h2 className="text-xs uppercase tracking-[0.2em] font-bold text-secondary mb-3">Descripción</h2>
             <h3 className="text-2xl font-bold text-foreground mb-4">Sobre este aviso</h3>
-            <p className="text-foreground/85 leading-[1.75] text-base">
-              {listing.description} Esta oportunidad ha sido revisada y aprobada por el equipo de eFFe Multiclasificados para garantizar la transparencia de la información, la verificación del anunciante y la disponibilidad del producto o servicio. El anunciante responde dentro de las primeras 4 horas en promedio.
+            {/* `whitespace-pre-line`: los saltos de línea que escribe el
+                anunciante se respetan, igual que en la vista previa al publicar
+                (ListingPreviewDialog). Sin esto veía su texto bien formateado
+                al revisarlo y luego salía como un ladrillo en la ficha. */}
+            <p className="text-foreground/85 leading-[1.75] text-base whitespace-pre-line">
+              {listing.description}
             </p>
-            <p className="text-foreground/85 leading-[1.75] text-base mt-4">
-              Si necesitas más fotografías, ficha técnica, ubicación exacta o coordinar una visita / videollamada, utiliza el panel lateral para enviar un mensaje directo.
-            </p>
+
+            {/* Aquí había un párrafo pegado a la descripción —dentro del mismo
+                <p>, así que parecía escrito por el anunciante— que afirmaba en
+                TODOS los avisos que el equipo los había revisado y aprobado y
+                verificado al anunciante, y que este respondía "en 4 horas en
+                promedio" (dato que no se mide en ninguna parte). Solo se dice
+                lo que de verdad se comprueba; al resto se le da un consejo
+                útil en vez de una promesa. */}
+            {listing.advertiserVerified ? (
+              <p className="mt-4 flex items-start gap-2 border border-secondary/40 bg-secondary/5 px-3 py-2.5 text-xs leading-relaxed text-secondary">
+                <ShieldCheck size={14} className="mt-0.5 shrink-0" />
+                <span>Anunciante verificado por el equipo de eFFe: comprobamos su identidad y sus datos de contacto.</span>
+              </p>
+            ) : (
+              <p className="mt-4 flex items-start gap-2 border border-border bg-muted/40 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
+                <Info size={14} className="mt-0.5 shrink-0" />
+                <span>Coordina siempre por el chat de eFFe y revisa el producto antes de pagar.</span>
+              </p>
+            )}
 
             {/* PDF adjunto por el anunciante (adicional). Enlace firmado temporal. */}
             {docUrl && (
@@ -670,26 +674,32 @@ export default function ListingDetail() {
           {/* Spec table */}
           <section>
             <h2 className="text-xs uppercase tracking-[0.2em] font-bold text-secondary mb-3">Detalles</h2>
-            <h3 className="text-2xl font-bold text-foreground mb-6">Información del aviso</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 border-t border-border">
+            <h3 className="text-2xl font-bold text-foreground mb-4">Información del aviso</h3>
+            {/* Etiqueta y valor en la MISMA línea. Apilados con `py-4` estos
+                seis datos cortos ocupaban casi 400px en móvil.
+                Las columnas se separan con `gap-x-10` en vez del truco de
+                `nth-child(odd/even)` que había: como "Condición" no se muestra
+                en Servicios ni Empleos, la paridad se invertía y el reparto
+                salía al revés en esas categorías. */}
+            <dl className="grid grid-cols-1 sm:grid-cols-2 sm:gap-x-10 border-t border-border">
               {specs.map((s) => (
-                <div key={s.label} className="flex flex-col gap-1 py-4 border-b border-border sm:[&:nth-child(odd)]:pr-6 sm:[&:nth-child(even)]:pl-6 sm:[&:nth-child(even)]:border-l">
-                  <span className="text-[11px] uppercase tracking-wider font-bold text-muted-foreground">{s.label}</span>
-                  <span className="text-sm font-semibold text-foreground">{s.value}</span>
+                <div key={s.label} className="flex items-baseline justify-between gap-4 py-2 border-b border-border">
+                  <dt className="text-[11px] uppercase tracking-wider font-bold text-muted-foreground shrink-0">{s.label}</dt>
+                  <dd className="text-sm font-semibold text-foreground text-right min-w-0 break-words">{s.value}</dd>
                 </div>
               ))}
-            </div>
+            </dl>
           </section>
 
           {/* What's included */}
           <section>
-            <h2 className="text-xs uppercase tracking-[0.2em] font-bold text-secondary mb-3">Garantías</h2>
-            <h3 className="text-2xl font-bold text-foreground mb-6">Lo que incluye este aviso</h3>
+            <h2 className="text-xs uppercase tracking-[0.2em] font-bold text-secondary mb-3">Seguridad</h2>
+            <h3 className="text-2xl font-bold text-foreground mb-4">Antes de contactar</h3>
             <ul className="grid grid-cols-1 md:grid-cols-2 gap-y-3 gap-x-6">
-              {features.map((f) => (
-                <li key={f} className="flex items-start gap-3 text-sm text-foreground/85">
+              {garantias.map((g) => (
+                <li key={g} className="flex items-start gap-3 text-sm text-foreground/85">
                   <CheckCircle2 size={18} className="text-secondary shrink-0 mt-0.5" />
-                  {f}
+                  {g}
                 </li>
               ))}
             </ul>
@@ -801,7 +811,11 @@ export default function ListingDetail() {
               {listing.advertiserVerified && (
                 <p className="flex items-start gap-2"><ShieldCheck size={14} className="text-secondary mt-0.5 shrink-0" /> Anunciante verificado y avalado por eFFe.</p>
               )}
-              <p className="flex items-start gap-2"><CheckCircle2 size={14} className="text-secondary mt-0.5 shrink-0" /> Pagos protegidos y sin comisión para el comprador.</p>
+              {/* Decía "Pagos protegidos y sin comisión para el comprador",
+                  pero no hay ningún pago por la plataforma: los créditos solo
+                  los gasta el anunciante al publicar. Esto sí es cierto y es
+                  justo lo que quien mira el precio quiere saber. */}
+              <p className="flex items-start gap-2"><CheckCircle2 size={14} className="text-secondary mt-0.5 shrink-0" /> Contactar al anunciante y postular no tiene ningún costo para ti.</p>
             </div>
           </div>
 
@@ -974,7 +988,7 @@ export default function ListingDetail() {
               {advertiserName}
             </p>
             <p className="text-2xl font-extrabold text-primary tracking-tight">{phoneLabel}</p>
-            <p className="text-xs text-muted-foreground">Código de aviso: EFFE-{listing.id.padStart(6, "0")}</p>
+            <p className="text-xs text-muted-foreground">Código de aviso: {codigoDeAviso(listing.id)}</p>
           </div>
           {/* Sin número no hay nada que copiar ni a quién llamar: los botones se
               desactivan en vez de ofrecer un tel: vacío. */}
@@ -1136,6 +1150,10 @@ export default function ListingDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Compartir, siempre a mano: el botón de la fila de acciones se pierde
+          en cuanto se baja a las fotos, al mapa o al precio. */}
+      <ShareFab title={listing.title} listingId={listing.id} />
     </div>
   );
 }
