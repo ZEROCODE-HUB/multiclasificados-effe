@@ -163,6 +163,30 @@ Dos datos más, por si ayudan a que lo resuelvan de su lado:
 > Todo lo demás lo tenemos listo: el comprobante que generamos ya cuadra campo por
 > campo con su documentación.
 
+### ✅ Nuestro comprobante YA lo acepta su API (verificado el 2026-08-12)
+
+No se quedó en comparar con la documentación: se mandó el comprobante que genera
+`construirComprobante` a su API de facturación **de verdad**.
+
+Se puede hacer sin riesgo porque su API **valida el cuerpo ANTES de comprobar el
+token**, así que con un token que no vale es imposible emitir nada: la petición
+muere en el 401 sin llegar a procesarse.
+
+Y que la prueba discrimina está comprobado con dos controles:
+
+| Enviado a `POST /api/v1/invoice/send` | Respuesta |
+|---|---|
+| Nuestro comprobante **sin `detalle`** | **400** — «One or more validation errors occurred» |
+| Nuestro comprobante **sin `serie` ni `correlativo`** | **400** — ídem |
+| **Nuestro comprobante íntegro** | **401** — pasó la validación, solo falta el token |
+
+O sea: si la forma estuviera mal, responderían 400 diciendo qué campo falla. Dan
+401, que en este orden significa **«te entendí, pero no te conozco»**.
+
+Queda una sola incógnita, y no es de forma sino de contenido: que SUNAT acepte
+los importes y la firma. Eso solo se sabe emitiendo de verdad, con un token
+bueno y en un entorno de pruebas que responda.
+
 ### Lo que YA está listo para el día que funcione
 
 Su documentación nueva (`factiliza.gitbook.io/api-docs/apis/api-sunat-facturacion`)
