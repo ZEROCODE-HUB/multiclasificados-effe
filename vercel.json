@@ -1,7 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "//": "SPA: cualquier ruta la resuelve el router del cliente. Pero NO /assets: si un archivo de código no existe (pasa tras cada despliegue con las pestañas ya abiertas), reescribirlo a index.html devolvía el HTML de la app con código 200, y el navegador intentaba ejecutar HTML como JavaScript -> 'Failed to fetch dynamically imported module'. Excluyéndolo, un archivo que falta es un 404 honesto.",
+      "source": "/((?!assets/).*)",
+      "destination": "/index.html"
+    }
   ],
   "headers": [
     {

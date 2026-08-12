@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { Suspense } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate, Outlet } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -12,6 +12,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { StaffHomeRedirect } from "@/components/StaffHomeRedirect";
 import { IosSwipeBack } from "@/components/IosSwipeBack";
 import { AdminShell } from "@/components/AdminLayout";
+import { cargaDiferida } from "@/lib/cargaDiferida";
 
 // Páginas críticas (primer render): se cargan de inmediato.
 import Index from "./pages/Index.tsx";
@@ -21,31 +22,35 @@ import SearchPage from "./pages/SearchPage.tsx";
 import ListingDetail from "./pages/ListingDetail.tsx";
 
 // Resto (panel, admin, gráficas) → carga diferida para aligerar el arranque.
-const AdminPricing = lazy(() => import("./pages/admin/AdminPricing.tsx"));
-const AdvertiserInvoices = lazy(() => import("./pages/advertiser/AdvertiserInvoices.tsx"));
-const AdvertiserDashboard = lazy(() => import("./pages/AdvertiserDashboard.tsx"));
-const SeekerDashboard = lazy(() => import("./pages/SeekerDashboard.tsx"));
-const AdvertiserPublish = lazy(() => import("./pages/advertiser/AdvertiserPublish.tsx"));
-const AdvertiserListings = lazy(() => import("./pages/advertiser/AdvertiserListings.tsx"));
-const AdvertiserApplications = lazy(() => import("./pages/advertiser/AdvertiserApplications.tsx"));
-const AdvertiserStats = lazy(() => import("./pages/advertiser/AdvertiserStats.tsx"));
-const SeekerFavorites = lazy(() => import("./pages/seeker/SeekerFavorites.tsx"));
-const SeekerSearches = lazy(() => import("./pages/seeker/SeekerSearches.tsx"));
-const SeekerApplications = lazy(() => import("./pages/SeekerApplications.tsx"));
-const MessagesPage = lazy(() => import("./pages/shared/MessagesPage.tsx"));
-const SettingsPage = lazy(() => import("./pages/shared/SettingsPage.tsx"));
-const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard.tsx"));
-const AdminListings = lazy(() => import("./pages/admin/AdminListings.tsx"));
-const AdminUsers = lazy(() => import("./pages/admin/AdminUsers.tsx"));
-const AdminCommunications = lazy(() => import("./pages/admin/AdminCommunications.tsx"));
-const AdminCommercial = lazy(() => import("./pages/admin/AdminCommercial.tsx"));
-const AdminReports = lazy(() => import("./pages/admin/AdminReports.tsx"));
-const SuperRoles = lazy(() => import("./pages/superadmin/SuperRoles.tsx"));
-const SuperAudit = lazy(() => import("./pages/superadmin/SuperAudit.tsx"));
-const SuperConversations = lazy(() => import("./pages/superadmin/SuperConversations.tsx"));
-const NotFound = lazy(() => import("./pages/NotFound.tsx"));
-const ResetPassword = lazy(() => import("./pages/ResetPassword.tsx"));
-const PaymentPage = lazy(() => import("./pages/PaymentPage.tsx"));
+// `cargaDiferida` en vez de `lazy` a secas: tras un despliegue los archivos del
+// build anterior desaparecen, y quien tuviera la app abierta se quedaba con un
+// "Failed to fetch dynamically imported module" al entrar aquí. Ver
+// src/lib/cargaDiferida.ts.
+const AdminPricing = cargaDiferida(() => import("./pages/admin/AdminPricing.tsx"));
+const AdvertiserInvoices = cargaDiferida(() => import("./pages/advertiser/AdvertiserInvoices.tsx"));
+const AdvertiserDashboard = cargaDiferida(() => import("./pages/AdvertiserDashboard.tsx"));
+const SeekerDashboard = cargaDiferida(() => import("./pages/SeekerDashboard.tsx"));
+const AdvertiserPublish = cargaDiferida(() => import("./pages/advertiser/AdvertiserPublish.tsx"));
+const AdvertiserListings = cargaDiferida(() => import("./pages/advertiser/AdvertiserListings.tsx"));
+const AdvertiserApplications = cargaDiferida(() => import("./pages/advertiser/AdvertiserApplications.tsx"));
+const AdvertiserStats = cargaDiferida(() => import("./pages/advertiser/AdvertiserStats.tsx"));
+const SeekerFavorites = cargaDiferida(() => import("./pages/seeker/SeekerFavorites.tsx"));
+const SeekerSearches = cargaDiferida(() => import("./pages/seeker/SeekerSearches.tsx"));
+const SeekerApplications = cargaDiferida(() => import("./pages/SeekerApplications.tsx"));
+const MessagesPage = cargaDiferida(() => import("./pages/shared/MessagesPage.tsx"));
+const SettingsPage = cargaDiferida(() => import("./pages/shared/SettingsPage.tsx"));
+const AdminDashboard = cargaDiferida(() => import("./pages/admin/AdminDashboard.tsx"));
+const AdminListings = cargaDiferida(() => import("./pages/admin/AdminListings.tsx"));
+const AdminUsers = cargaDiferida(() => import("./pages/admin/AdminUsers.tsx"));
+const AdminCommunications = cargaDiferida(() => import("./pages/admin/AdminCommunications.tsx"));
+const AdminCommercial = cargaDiferida(() => import("./pages/admin/AdminCommercial.tsx"));
+const AdminReports = cargaDiferida(() => import("./pages/admin/AdminReports.tsx"));
+const SuperRoles = cargaDiferida(() => import("./pages/superadmin/SuperRoles.tsx"));
+const SuperAudit = cargaDiferida(() => import("./pages/superadmin/SuperAudit.tsx"));
+const SuperConversations = cargaDiferida(() => import("./pages/superadmin/SuperConversations.tsx"));
+const NotFound = cargaDiferida(() => import("./pages/NotFound.tsx"));
+const ResetPassword = cargaDiferida(() => import("./pages/ResetPassword.tsx"));
+const PaymentPage = cargaDiferida(() => import("./pages/PaymentPage.tsx"));
 
 const queryClient = new QueryClient();
 

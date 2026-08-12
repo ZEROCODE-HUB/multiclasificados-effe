@@ -6,6 +6,7 @@ import { supabaseConfigError } from "@/lib/supabase";
 import { BootError } from "@/components/BootError";
 import { BootErrorBoundary } from "@/components/BootErrorBoundary";
 import { ConnectionGate } from "@/components/ConnectionGate";
+import { vigilarPrecargas } from "@/lib/cargaDiferida";
 
 // Promueve el preload de la fuente Montserrat a stylesheet. Antes esto se hacía
 // con un `onload` inline en el <link> del index.html, pero un manejador en línea
@@ -18,6 +19,12 @@ if (fontLink) fontLink.rel = "stylesheet";
 // (public/boot-watchdog.js) NO muestre su pantalla de "no cargó". A partir de
 // aquí, cualquier fallo lo diagnostican las capas de React (BootError / boundary).
 (window as unknown as { __EFFE_BOOTED__?: boolean }).__EFFE_BOOTED__ = true;
+
+// Tras un despliegue, los trozos de código del build anterior desaparecen. Quien
+// tuviera la app abierta se quedaba con un "Failed to fetch dynamically imported
+// module" al entrar en cualquier sección del panel. Esto la recarga una vez para
+// coger la versión nueva; el mismo cuidado está en cada ruta diferida.
+vigilarPrecargas();
 
 const root = createRoot(document.getElementById("root")!);
 
