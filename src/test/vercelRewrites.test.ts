@@ -34,12 +34,30 @@ describe("vercel.json — la reescritura SPA no se traga los assets", () => {
     for (const ruta of [
       "/",
       "/buscar",
-      "/aviso/01e6d187-aa3f-448d-802f-a69c17900d0c",
       "/dashboard/anunciante/configuracion",
       "/dashboard/admin/tarifas",
     ]) {
       expect(coincide(ruta), ruta).toBe(true);
     }
+  });
+
+  it("la ficha de un aviso va a la función de vista previa, y ANTES que la regla general", () => {
+    // El orden importa: Vercel aplica la primera regla que coincide. Si la
+    // general fuera antes, la función nunca se ejecutaría y los enlaces
+    // compartidos volverían a la tarjeta genérica.
+    const iFicha = vercel.rewrites.findIndex((r) => r.destination.startsWith("/api/og-aviso"));
+    const iSpa = vercel.rewrites.findIndex((r) => r.destination === "/index.html");
+    expect(iFicha).toBeGreaterThanOrEqual(0);
+    expect(iFicha).toBeLessThan(iSpa);
+
+    const ficha = vercel.rewrites[iFicha];
+    expect(new RegExp(`^${ficha.source}$`).test("/aviso/01e6d187-aa3f-448d-802f-a69c17900d0c")).toBe(true);
+    // Pero no se traga el listado ni otras rutas.
+    expect(new RegExp(`^${ficha.source}$`).test("/buscar")).toBe(false);
+  });
+
+  it("las rutas de /api tampoco se reescriben, o la función se llamaría a sí misma", () => {
+    expect(coincide("/api/og-aviso")).toBe(false);
   });
 
   it("los archivos de /assets NO se reescriben: si faltan, deben dar 404", () => {

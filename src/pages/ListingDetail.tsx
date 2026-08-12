@@ -144,20 +144,14 @@ export default function ListingDetail() {
   };
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  // Guardia: el detalle del aviso solo es visible con sesión iniciada.
-  const [authChecked, setAuthChecked] = useState(false);
-  useEffect(() => {
-    let active = true;
-    supabase.auth.getSession().then(({ data }) => {
-      if (!active) return;
-      if (!data.session) {
-        navigate(`/auth?redirect=/aviso/${id ?? ""}`, { replace: true });
-      } else {
-        setAuthChecked(true);
-      }
-    });
-    return () => { active = false; };
-  }, [id, navigate]);
+
+  // El aviso es PÚBLICO: quien llega por un enlace compartido lo ve entero, sin
+  // cuenta. Aquí había un redirect a /auth que lo tapiaba, y era una segunda
+  // cerradura sobre una puerta ya cerrada: la base de datos solo deja leer los
+  // avisos activos (`listings_select_public`) y cada acción —contactar, ver el
+  // teléfono, postular, guardar, reportar— pide sesión por su cuenta con
+  // `requireAuthOrRun`. Lo único que conseguía era que un enlace de WhatsApp
+  // llevara a una pantalla de login, con la búsqueda siendo pública ya.
 
   const loadReviewMeta = () => {
     if (!id) return;
@@ -240,6 +234,11 @@ export default function ListingDetail() {
       else setGallery([listing.imageUrl]);
       setActiveImg(0);
     });
+    // Sin esta limpieza `mounted` nunca pasaba a false, así que la guarda de
+    // arriba no hacía nada: al saltar de un aviso a otro desde "Sigue
+    // explorando", si la carga del primero terminaba tarde pintaba SUS fotos
+    // sobre el aviso nuevo.
+    return () => { mounted = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, listing.imageUrl]);
 
@@ -457,18 +456,6 @@ export default function ListingDetail() {
     "Si algo no cuadra, repórtalo: el equipo revisa cada denuncia.",
   ];
 
-
-  // Mientras se verifica la sesión (o se redirige al login) no mostramos el detalle.
-  if (!authChecked) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Navbar />
-        <div className="container mx-auto px-4 py-24 text-center text-muted-foreground text-sm">
-          Verificando tu sesión…
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-background">
