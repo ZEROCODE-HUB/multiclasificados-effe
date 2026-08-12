@@ -12,7 +12,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // `vi.hoisted` porque `vi.mock` se sube al principio del fichero y si no el
 // espía todavía no existiría cuando se construye el módulo simulado.
-const { rpc } = vi.hoisted(() => ({ rpc: vi.fn(async () => ({ data: [], error: null })) }));
+const { rpc } = vi.hoisted(() => ({
+  rpc: vi.fn(async (_nombre: string, _args: Record<string, number>) => ({ data: [], error: null })),
+}));
 vi.mock("@/lib/supabase", () => ({ supabase: { rpc } }));
 
 import { searchListings, TOPE_RESULTADOS, topeAlcanzado } from "@/lib/listings";

@@ -7,7 +7,7 @@ vi.mock("@capacitor/core", () => ({
 }));
 
 // Navegador nativo de Capacitor (solo se usa en el APK).
-const browserOpen = vi.fn(() => Promise.resolve());
+const browserOpen = vi.fn((_opts: { url: string }) => Promise.resolve());
 vi.mock("@capacitor/browser", () => ({ Browser: { open: browserOpen } }));
 
 const BASE = "https://effe.test";

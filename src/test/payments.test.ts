@@ -1,15 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Mock del cliente Supabase: controlamos functions.invoke y from().select()...
-const invoke = vi.fn();
+const invoke = vi.fn<(nombre: string, opts: { body: Record<string, unknown> }) => unknown>();
 const maybeSingle = vi.fn();
 const eq = vi.fn(() => ({ maybeSingle }));
 const select = vi.fn(() => ({ eq }));
-const from = vi.fn(() => ({ select }));
+const from = vi.fn((..._a: unknown[]) => ({ select }));
 vi.mock("@/lib/supabase", () => ({
   supabase: {
-    functions: { invoke: (...a: unknown[]) => invoke(...a) },
-    from: (...a: unknown[]) => from(...a),
+    functions: { invoke: (...a: Parameters<typeof invoke>) => invoke(...a) },
+    from: (...a: Parameters<typeof from>) => from(...a),
   },
 }));
 

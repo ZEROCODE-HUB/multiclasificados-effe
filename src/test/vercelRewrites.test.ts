@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
-import { getTransformedRoutes, normalizeRoutes } from "@vercel/routing-utils";
+import { getTransformedRoutes, normalizeRoutes, type Header } from "@vercel/routing-utils";
 import path from "node:path";
 
 /**
@@ -22,7 +22,7 @@ const CRUDO = fs.readFileSync(path.resolve(__dirname, "../../vercel.json"), "utf
 const vercel = JSON.parse(CRUDO) as {
   rewrites: Array<{ source: string; destination: string }>;
   redirects?: unknown[];
-  headers?: Array<Record<string, unknown>>;
+  headers?: Header[];
 };
 
 // Se comprueba contra las rutas COMPILADAS por Vercel, no contra el texto de
