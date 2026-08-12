@@ -17,9 +17,12 @@ import path from "node:path";
  * Un 404 honesto habría dicho lo que pasaba a la primera.
  */
 
-const vercel = JSON.parse(
-  fs.readFileSync(path.resolve(__dirname, "../../vercel.json"), "utf8"),
-) as { rewrites: Array<{ source: string; destination: string }> };
+const CRUDO = fs.readFileSync(path.resolve(__dirname, "../../vercel.json"), "utf8");
+const vercel = JSON.parse(CRUDO) as {
+  rewrites: Array<{ source: string; destination: string }>;
+  redirects?: unknown[];
+  headers?: Array<Record<string, unknown>>;
+};
 
 const reglaSpa = vercel.rewrites.find((r) => r.destination === "/index.html")!;
 // Vercel resuelve `source` como expresión regular anclada a la ruta completa.
@@ -74,5 +77,47 @@ describe("vercel.json — la reescritura SPA no se traga los assets", () => {
     // Que la exclusión no se pase de lista y rompa rutas legítimas.
     expect(coincide("/assetsxyz")).toBe(true);
     expect(coincide("/mis-assets/foo")).toBe(true);
+  });
+});
+
+/**
+ * Y que el archivo siga siendo VÁLIDO para Vercel.
+ *
+ * Esto costó caro: se le pusieron claves `"//"` a las reglas a modo de
+ * comentario (JSON no tiene comentarios). El esquema de Vercel declara
+ * `additionalProperties: false`, así que rechazó el vercel.json entero y con él
+ * TODOS los despliegues — durante tres commits, en silencio: GitHub aceptaba el
+ * push, la web seguía en pie sirviendo la versión anterior, y nada avisaba.
+ *
+ * La lección no es "no pongas comentarios": es que un fallo de configuración que
+ * no rompe nada visible es el que más tarda en descubrirse. Por eso se comprueba
+ * aquí, donde sí se ve.
+ */
+describe("vercel.json — el archivo es válido para Vercel", () => {
+  // Del esquema oficial (openapi.vercel.sh/vercel.json).
+  const CLAVES = {
+    rewrites: ["source", "destination", "has", "missing", "statusCode"],
+    redirects: ["source", "destination", "permanent", "statusCode", "has", "missing", "env"],
+    headers: ["source", "headers", "has", "missing"],
+  } as const;
+
+  it.each(Object.keys(CLAVES) as Array<keyof typeof CLAVES>)(
+    "ninguna regla de `%s` lleva claves que Vercel no conozca",
+    (seccion) => {
+      const entradas = (vercel[seccion] ?? []) as Array<Record<string, unknown>>;
+      for (const entrada of entradas) {
+        const sobran = Object.keys(entrada).filter((k) => !CLAVES[seccion].includes(k as never));
+        expect(sobran, `regla de ${seccion} con claves no válidas`).toEqual([]);
+      }
+    },
+  );
+
+  it("no hay comentarios `//` colados como clave en ningún sitio", () => {
+    // Se mira el texto crudo, no el objeto: es la forma de pillarlo esté donde esté.
+    expect(CRUDO).not.toMatch(/"\/\/"\s*:/);
+  });
+
+  it("es JSON válido de verdad (sin comas colgando ni comentarios)", () => {
+    expect(() => JSON.parse(CRUDO)).not.toThrow();
   });
 });

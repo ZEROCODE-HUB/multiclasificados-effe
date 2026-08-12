@@ -2,12 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
-      "//": "La ficha de un aviso la sirve una función que rellena las etiquetas de vista previa (og:) con la foto y el título de ESE aviso. WhatsApp y Facebook no ejecutan JavaScript: sin esto, todos los enlaces compartidos enseñaban la misma tarjeta genérica. Devuelve el mismo index.html de siempre, solo con la cabecera cambiada. Va ANTES de la regla general.",
       "source": "/aviso/(?<id>[^/]+)",
       "destination": "/api/og-aviso?id=$id"
     },
     {
-      "//": "SPA: cualquier ruta la resuelve el router del cliente. Pero NO /assets: si un archivo de código no existe (pasa tras cada despliegue con las pestañas ya abiertas), reescribirlo a index.html devolvía el HTML de la app con código 200, y el navegador intentaba ejecutar HTML como JavaScript -> 'Failed to fetch dynamically imported module'. Excluyéndolo, un archivo que falta es un 404 honesto.",
       "source": "/((?!assets/|api/).*)",
       "destination": "/index.html"
     }
@@ -16,14 +14,26 @@
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "X-Frame-Options", "value": "DENY" },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
         {
           "key": "Content-Security-Policy",
           "value": "script-src 'self' https://static.micuentaweb.pe https://js.hcaptcha.com https://newassets.hcaptcha.com https://maps.googleapis.com https://maps.gstatic.com; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'"
         },
-        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin-allow-popups" },
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        {
+          "key": "Cross-Origin-Opener-Policy",
+          "value": "same-origin-allow-popups"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
         {
           "key": "Permissions-Policy",
           "value": "camera=(), microphone=(), payment=(), usb=(), geolocation=(self)"
