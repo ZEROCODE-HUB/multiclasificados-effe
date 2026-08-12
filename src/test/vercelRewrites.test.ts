@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
+import { getTransformedRoutes, normalizeRoutes } from "@vercel/routing-utils";
 import path from "node:path";
 
 /**
@@ -24,9 +25,24 @@ const vercel = JSON.parse(CRUDO) as {
   headers?: Array<Record<string, unknown>>;
 };
 
+// Se comprueba contra las rutas COMPILADAS por Vercel, no contra el texto de
+// `source`: los `rewrites` se escriben en path-to-regexp (`/aviso/:id`), que no
+// es una expresión regular. Tratarlo como tal daba resultados falsos.
+// Si el archivo no es válido no se lanza aquí: reventar al cargar el módulo
+// deja la suite en "no tests", que no dice nada. Se devuelve vacío y es la
+// prueba del validador, más abajo, la que informa con el mensaje de Vercel.
+const transformadas = getTransformedRoutes({ rewrites: vercel.rewrites, headers: vercel.headers });
+const rutas = (transformadas.routes ?? []).filter((r) => r.dest);
+
+/** A qué destino manda Vercel una ruta dada (la primera regla que casa). */
+const destinoDe = (ruta: string): string | null => {
+  for (const r of rutas) {
+    if (new RegExp(r.src!).test(ruta)) return String(r.dest);
+  }
+  return null;
+};
+const coincide = (ruta: string) => destinoDe(ruta) === "/index.html";
 const reglaSpa = vercel.rewrites.find((r) => r.destination === "/index.html")!;
-// Vercel resuelve `source` como expresión regular anclada a la ruta completa.
-const coincide = (ruta: string) => new RegExp(`^${reglaSpa.source}$`).test(ruta);
 
 describe("vercel.json — la reescritura SPA no se traga los assets", () => {
   it("existe una regla que manda al index.html", () => {
@@ -45,18 +61,12 @@ describe("vercel.json — la reescritura SPA no se traga los assets", () => {
   });
 
   it("la ficha de un aviso va a la función de vista previa, y ANTES que la regla general", () => {
-    // El orden importa: Vercel aplica la primera regla que coincide. Si la
-    // general fuera antes, la función nunca se ejecutaría y los enlaces
-    // compartidos volverían a la tarjeta genérica.
-    const iFicha = vercel.rewrites.findIndex((r) => r.destination.startsWith("/api/og-aviso"));
-    const iSpa = vercel.rewrites.findIndex((r) => r.destination === "/index.html");
-    expect(iFicha).toBeGreaterThanOrEqual(0);
-    expect(iFicha).toBeLessThan(iSpa);
-
-    const ficha = vercel.rewrites[iFicha];
-    expect(new RegExp(`^${ficha.source}$`).test("/aviso/01e6d187-aa3f-448d-802f-a69c17900d0c")).toBe(true);
+    // El orden importa: Vercel aplica la primera regla que casa. Si la general
+    // fuera antes, la función nunca se ejecutaría y los enlaces compartidos
+    // volverían a la tarjeta genérica.
+    expect(destinoDe("/aviso/01e6d187-aa3f-448d-802f-a69c17900d0c")).toContain("og-aviso");
     // Pero no se traga el listado ni otras rutas.
-    expect(new RegExp(`^${ficha.source}$`).test("/buscar")).toBe(false);
+    expect(destinoDe("/buscar")).toBe("/index.html");
   });
 
   it("las rutas de /api tampoco se reescriben, o la función se llamaría a sí misma", () => {
@@ -83,41 +93,54 @@ describe("vercel.json — la reescritura SPA no se traga los assets", () => {
 /**
  * Y que el archivo siga siendo VÁLIDO para Vercel.
  *
- * Esto costó caro: se le pusieron claves `"//"` a las reglas a modo de
- * comentario (JSON no tiene comentarios). El esquema de Vercel declara
- * `additionalProperties: false`, así que rechazó el vercel.json entero y con él
- * TODOS los despliegues — durante tres commits, en silencio: GitHub aceptaba el
- * push, la web seguía en pie sirviendo la versión anterior, y nada avisaba.
+ * Esto costó tres commits sin desplegar, y en silencio: GitHub aceptaba el push,
+ * la web seguía en pie sirviendo la versión anterior y nada avisaba. Fueron DOS
+ * fallos encadenados, y el segundo solo apareció al arreglar el primero:
  *
- * La lección no es "no pongas comentarios": es que un fallo de configuración que
- * no rompe nada visible es el que más tarda en descubrirse. Por eso se comprueba
- * aquí, donde sí se ve.
+ *  1. Claves `"//"` metidas en las reglas a modo de comentario (JSON no tiene
+ *     comentarios). El esquema de vercel.json declara `additionalProperties:
+ *     false` y rechaza el archivo entero.
+ *  2. Un `source` con grupo de captura con nombre — `/aviso/(?<id>[^/]+)` —, que
+ *     es sintaxis de expresión regular. Los `rewrites` usan path-to-regexp:
+ *     `/aviso/:id`, y el parámetro se referencia como `:id` en el destino (con
+ *     `$id` se queda literal y no sustituye nada).
+ *
+ * Por eso aquí ya no se comprueba a ojo: se pasa por `@vercel/routing-utils`,
+ * que es el paquete que usa la propia Vercel para transformar y validar las
+ * rutas. Lo que pase esto, pasa el despliegue.
  */
 describe("vercel.json — el archivo es válido para Vercel", () => {
-  // Del esquema oficial (openapi.vercel.sh/vercel.json).
-  const CLAVES = {
-    rewrites: ["source", "destination", "has", "missing", "statusCode"],
-    redirects: ["source", "destination", "permanent", "statusCode", "has", "missing", "env"],
-    headers: ["source", "headers", "has", "missing"],
-  } as const;
+  it("las rutas pasan el validador de la propia Vercel", () => {
+    expect(transformadas.error?.message, "Vercel rechazaría este vercel.json").toBeUndefined();
+    const n = normalizeRoutes(transformadas.routes ?? []);
+    expect(n.error?.message).toBeUndefined();
+  });
 
-  it.each(Object.keys(CLAVES) as Array<keyof typeof CLAVES>)(
-    "ninguna regla de `%s` lleva claves que Vercel no conozca",
-    (seccion) => {
-      const entradas = (vercel[seccion] ?? []) as Array<Record<string, unknown>>;
-      for (const entrada of entradas) {
+  it("el parámetro del aviso se sustituye de verdad en el destino", () => {
+    // Con `$id` en vez de `:id` el destino se quedaba tal cual y la función
+    // recibía la cadena "$id" en lugar del identificador.
+    const ruta = rutas.find((r) => String(r.dest).includes("og-aviso"))!;
+    expect(ruta.dest).toMatch(/id=\$\d+$/);
+    expect(ruta.dest).not.toContain("$id");
+  });
+
+  it("ninguna regla lleva claves que el esquema no conozca", () => {
+    // `routing-utils` transforma rutas pero NO valida el esquema del archivo:
+    // acepta un `"//"` que Vercel rechaza. Por eso esta comprobación sigue.
+    const CLAVES = {
+      rewrites: ["source", "destination", "has", "missing", "statusCode"],
+      redirects: ["source", "destination", "permanent", "statusCode", "has", "missing", "env"],
+      headers: ["source", "headers", "has", "missing"],
+    } as const;
+    for (const seccion of Object.keys(CLAVES) as Array<keyof typeof CLAVES>) {
+      for (const entrada of (vercel[seccion] ?? []) as Array<Record<string, unknown>>) {
         const sobran = Object.keys(entrada).filter((k) => !CLAVES[seccion].includes(k as never));
         expect(sobran, `regla de ${seccion} con claves no válidas`).toEqual([]);
       }
-    },
-  );
-
-  it("no hay comentarios `//` colados como clave en ningún sitio", () => {
-    // Se mira el texto crudo, no el objeto: es la forma de pillarlo esté donde esté.
-    expect(CRUDO).not.toMatch(/"\/\/"\s*:/);
+    }
   });
 
-  it("es JSON válido de verdad (sin comas colgando ni comentarios)", () => {
-    expect(() => JSON.parse(CRUDO)).not.toThrow();
+  it("no hay comentarios `//` colados como clave", () => {
+    expect(CRUDO).not.toMatch(/"\/\/"\s*:/);
   });
 });
