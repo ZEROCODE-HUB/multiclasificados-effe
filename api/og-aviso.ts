@@ -16,6 +16,13 @@
 // Se cachea en el CDN de Vercel, así que un aviso muy compartido se resuelve
 // sin volver a consultar la base de datos.
 
+// Runtime Edge: es el que usa las APIs web estándar (`Request`/`Response`),
+// que es como está escrito este manejador. En el runtime de Node por defecto
+// Vercel esperaba otra firma y la función reventaba en cada llamada
+// (FUNCTION_INVOCATION_FAILED), tumbando TODAS las fichas de aviso.
+// Además encaja: esto solo hace un fetch y manipula texto.
+export const config = { runtime: "edge" };
+
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL ?? "";
 const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY ?? "";
 

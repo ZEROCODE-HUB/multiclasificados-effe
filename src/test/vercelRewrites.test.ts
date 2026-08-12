@@ -60,12 +60,18 @@ describe("vercel.json — la reescritura SPA no se traga los assets", () => {
     }
   });
 
-  it("la ficha de un aviso va a la función de vista previa, y ANTES que la regla general", () => {
-    // El orden importa: Vercel aplica la primera regla que casa. Si la general
-    // fuera antes, la función nunca se ejecutaría y los enlaces compartidos
-    // volverían a la tarjeta genérica.
-    expect(destinoDe("/aviso/01e6d187-aa3f-448d-802f-a69c17900d0c")).toContain("og-aviso");
-    // Pero no se traga el listado ni otras rutas.
+  it("si la ficha va a la función de vista previa, va ANTES que la regla general", () => {
+    // Condicional a propósito: la regla está RETIRADA mientras se comprueba que
+    // la función responde. Se dejó puesta con la función fallando y cada ficha
+    // de aviso devolvía 500 — peor que no tener vista previa. Cuando se vuelva
+    // a poner, esta comprobación protege el invariante: Vercel aplica la
+    // primera regla que casa, así que si la general fuera antes, la función no
+    // se ejecutaría nunca.
+    const destino = destinoDe("/aviso/01e6d187-aa3f-448d-802f-a69c17900d0c");
+    const hayFuncion = vercel.rewrites.some((r) => r.destination.includes("og-aviso"));
+    if (hayFuncion) expect(destino).toContain("og-aviso");
+    else expect(destino).toBe("/index.html");
+    // En cualquier caso, el listado no se lo traga nadie.
     expect(destinoDe("/buscar")).toBe("/index.html");
   });
 
@@ -118,8 +124,10 @@ describe("vercel.json — el archivo es válido para Vercel", () => {
 
   it("el parámetro del aviso se sustituye de verdad en el destino", () => {
     // Con `$id` en vez de `:id` el destino se quedaba tal cual y la función
-    // recibía la cadena "$id" en lugar del identificador.
-    const ruta = rutas.find((r) => String(r.dest).includes("og-aviso"))!;
+    // recibía la cadena "$id" en lugar del identificador. Solo aplica si la
+    // regla está puesta (ver arriba).
+    const ruta = rutas.find((r) => String(r.dest).includes("og-aviso"));
+    if (!ruta) return;
     expect(ruta.dest).toMatch(/id=\$\d+$/);
     expect(ruta.dest).not.toContain("$id");
   });
