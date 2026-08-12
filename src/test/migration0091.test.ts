@@ -186,6 +186,54 @@ describe("0091 · el SQL y el TypeScript cobran lo mismo", () => {
     expect(sql).toBe(applyDiscount(base, 30));
   });
 
+  // Hay DOS ramas en el descuento por volumen: con tabla `desc_cantidad` (nivel
+  // a nivel) y sin ella (un único % elevado a n−1). La suite solo comparaba la
+  // primera, porque es la que tiene la fila de producción; la segunda se activa
+  // si alguien vacía esa tabla en el panel, y estaba sin comparar.
+  //
+  // Ojo con el detalle que casi cuela esta prueba en falso: con la tarifa por
+  // defecto las dos ramas dan EXACTAMENTE lo mismo, porque todos los niveles de
+  // la tabla valen 0.06 y el porcentaje único también. Para que la comparación
+  // signifique algo, aquí el porcentaje único es distinto (10%).
+  const SIN_TABLA = { ...DEFAULT_SETTINGS, descPorAviso: 0.1, descCantidad: undefined };
+  const restaurarDescuentos = () =>
+    db.exec(`update public.pricing_settings set
+      desc_por_aviso = ${DEFAULT_SETTINGS.descPorAviso},
+      desc_cantidad  = '${JSON.stringify(DEFAULT_SETTINGS.descCantidad)}'::jsonb;`);
+
+  it("la rama sin tabla de descuentos es de verdad otra rama", () => {
+    // Si esto fallara, las dos pruebas de abajo estarían verdes sin comparar nada.
+    expect(priceForDuration(3, 7, SIN_TABLA)).not.toBe(priceForDuration(3, 7, DEFAULT_SETTINGS));
+  });
+
+  it("también coinciden SIN tabla de descuentos por cantidad", async () => {
+    await comoSuper();
+    await db.exec(`update public.pricing_settings set desc_cantidad = null, desc_por_aviso = 0.1;`);
+    try {
+      for (let n = 1; n <= 10; n++) {
+        for (const d of DURATION_OPTIONS) {
+          const sql = await num(`select public.effe_price_for_duration(${n}, ${d}, public.effe_pricing())`);
+          expect(sql, `${n} avisos × ${d} días sin desc_cantidad`).toBe(priceForDuration(n, d, SIN_TABLA));
+        }
+      }
+    } finally {
+      await restaurarDescuentos();
+    }
+  });
+
+  it("una tabla de descuentos VACÍA se trata igual que ausente", async () => {
+    await comoSuper();
+    await db.exec(`update public.pricing_settings set desc_cantidad = '[]'::jsonb, desc_por_aviso = 0.1;`);
+    try {
+      for (const n of [2, 5, 10]) {
+        const sql = await num(`select public.effe_price_for_duration(${n}, 30, public.effe_pricing())`);
+        expect(sql, `${n} avisos`).toBe(priceForDuration(n, 30, { ...SIN_TABLA, descCantidad: [] }));
+      }
+    } finally {
+      await restaurarDescuentos();
+    }
+  });
+
   it("una promoción caducada no descuenta nada", async () => {
     await borrador({ destacado: 1 });
     await db.exec(`
@@ -304,5 +352,86 @@ describe("0091 · publicar cobra lo que cuesta, no lo que diga el cliente", () =
     await como(YO);
     await expect(q(`select public.spend_credits('${YO}', 0.01, null, 'trampa')`))
       .rejects.toThrow(/permission denied/i);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+describe("0091 · el panel de administración sigue mandando sobre el precio", () => {
+  // El motor de precios se duplicó en SQL, así que hay que demostrar que sigue
+  // LEYENDO la tarifa que edita el administrador y no unos valores fijos
+  // escritos en la migración. Si se rompiera esto, tocar el panel no cambiaría
+  // nada de lo que se cobra.
+  const tarifa = (sql: string) => db.exec(`update public.pricing_settings set ${sql};`);
+  const restaurar = () => {
+    const s = DEFAULT_SETTINGS;
+    return db.exec(`update public.pricing_settings set
+      base = ${s.base},
+      saltos = '${JSON.stringify(s.saltos)}'::jsonb,
+      extras = '${JSON.stringify(s.extras)}'::jsonb;`);
+  };
+
+  it("cambiar el precio de un adicional cambia lo que se cobra", async () => {
+    await comoSuper();
+    await borrador({ destacado: 1 });
+    const antes = await num(`select public.effe_listing_cost('${AVISO}', 30)`);
+
+    // El administrador sube "Destacado" de 5 a 9 al día.
+    await tarifa(`extras = extras || '{"destacado": 9}'::jsonb`);
+    try {
+      const despues = await num(`select public.effe_listing_cost('${AVISO}', 30)`);
+      expect(despues - antes).toBeCloseTo((9 - 5) * 30, 2);
+    } finally {
+      await restaurar();
+    }
+  });
+
+  it("cambiar el precio base cambia el precio del aviso", async () => {
+    await comoSuper();
+    await tarifa(`base = 20`);
+    try {
+      const sql = await num(`select public.effe_price_for_duration(1, 7, public.effe_pricing())`);
+      expect(sql).toBe(20);
+    } finally {
+      await restaurar();
+    }
+  });
+
+  it("cambiar un descuento por duración cambia el precio de ese tramo", async () => {
+    await comoSuper();
+    await tarifa(`saltos = saltos || '{"15": 0.5}'::jsonb`);
+    try {
+      // 15 días = base × 2 × (1 − 0.5) = base.
+      const sql = await num(`select public.effe_price_for_duration(1, 15, public.effe_pricing())`);
+      expect(sql).toBe(DEFAULT_SETTINGS.base);
+    } finally {
+      await restaurar();
+    }
+  });
+
+  it("un adicional puesto a 0 en el panel deja de cobrarse, dure lo que dure", async () => {
+    await comoSuper();
+    await tarifa(`extras = extras || '{"destacado": 0}'::jsonb`);
+    try {
+      for (const d of DURATION_OPTIONS) {
+        const sql = await num(
+          `select public.effe_extras_total('{"destacado":1}'::jsonb, ${d}, public.effe_pricing())`,
+        );
+        expect(sql, `${d} días`).toBe(0);
+      }
+    } finally {
+      await restaurar();
+    }
+  });
+
+  it("sin ninguna fila de tarifa, se usan los valores por defecto del código", async () => {
+    // El panel podría dejar la tabla vacía; el cobro no puede quedarse en cero.
+    await comoSuper();
+    await db.exec(`update public.pricing_settings set is_active = false;`);
+    try {
+      const sql = await num(`select public.effe_price_for_duration(1, 7, public.effe_pricing())`);
+      expect(sql).toBe(DEFAULT_SETTINGS.base);
+    } finally {
+      await db.exec(`update public.pricing_settings set is_active = true;`);
+    }
   });
 });

@@ -15,10 +15,12 @@ beforeEach(() => {
 
 vi.mock("@/lib/credits", () => ({
   getCreditBalance: vi.fn().mockResolvedValue(1000),
-  spendCredits: vi.fn().mockResolvedValue(true),
   purchaseCredits: vi.fn(),
 }));
-vi.mock("@/lib/publish", () => ({ createAndPublishListing: vi.fn(), saveListingDraft: vi.fn() }));
+vi.mock("@/lib/publish", () => ({
+  createAndPublishListing: vi.fn(), saveListingDraft: vi.fn(),
+  SaldoInsuficiente: class SaldoInsuficiente extends Error {},
+}));
 vi.mock("@/lib/promotions", async (orig) => ({
   ...(await (orig() as Promise<Record<string, unknown>>)),
   fetchActivePromotions: vi.fn().mockResolvedValue([]),

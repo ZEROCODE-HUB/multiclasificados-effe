@@ -1,0 +1,28 @@
+-- =====================================================================
+-- 0092 — Se elimina `spend_credits`.
+--
+-- La 0091 le revocó el EXECUTE a `authenticated` porque era la puerta por la que
+-- el navegador decidía cuánto pagar: publicar y cobrar pasaron a ser una sola
+-- operación dentro de `publish_listing`.
+--
+-- Pero un revoke no es una protección estable. Basta con que una migración
+-- futura haga DROP + CREATE de la función (no `create or replace`, que sí
+-- conserva los permisos) para que vuelva el EXECUTE que Postgres concede a
+-- PUBLIC por defecto, y el agujero reaparece sin que nadie lo note. Es
+-- exactamente lo que pasó con `settle_paid_order`, que llevaba desde la 0061
+-- abierta a cualquiera con la anon key hasta que se arregló en la 0090.
+--
+-- La función ya no tiene NINGÚN llamador: ni el cliente (se quitó `spendCredits`
+-- de src/lib/credits.ts), ni ninguna función SQL (`settle_paid_order` acredita
+-- con `add_credits`, que es otra). Código muerto que solo puede hacer daño.
+--
+-- Así que en vez de custodiar un permiso, se quita la función. Lo que no existe
+-- no se puede volver a exponer por descuido.
+--
+-- Si algún día hiciera falta descontar créditos fuera de una publicación (por
+-- ejemplo, un ajuste manual desde el panel), se crea una función NUEVA para ese
+-- caso concreto, con su propio guard y sin EXECUTE para `authenticated`. No se
+-- resucita esta.
+-- =====================================================================
+
+drop function if exists public.spend_credits(uuid, numeric, uuid, text);

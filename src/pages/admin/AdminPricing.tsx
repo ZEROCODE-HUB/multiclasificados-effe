@@ -141,7 +141,6 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
     const avg = arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : s.descPorAviso * 100;
     const next: PricingSettings = { ...s, descCantidad, descPorAviso: avg / 100 };
     setS(next);
-    saveSettings(next);
 
     // Persistir en Supabase pricing_settings (actualiza la MISMA fila, sin duplicar).
     const { data: { user } } = await supabase.auth.getUser();
@@ -166,6 +165,13 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
       return;
     }
     if (saved?.id) setSettingsId(saved.id);
+
+    // El caché local se actualiza SOLO si la base de datos aceptó el cambio.
+    // Antes se escribía primero: si el guardado fallaba, el navegador se quedaba
+    // enseñando la tarifa nueva mientras la BD seguía con la vieja. Daba igual
+    // cuando el precio lo calculaba el cliente; ahora que cobra el servidor, eso
+    // es enseñar un precio y cobrar otro.
+    saveSettings(next);
 
     toast({ title: "Tarifas actualizadas", description: "Guardado en la base de datos." });
   };

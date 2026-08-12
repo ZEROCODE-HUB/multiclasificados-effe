@@ -16,14 +16,16 @@ beforeEach(() => {
 const getCreditBalance = vi.fn();
 vi.mock("@/lib/credits", () => ({
   getCreditBalance: (...a: unknown[]) => getCreditBalance(...a),
-  spendCredits: vi.fn().mockResolvedValue(true),
 }));
 vi.mock("@/lib/payments", () => ({
   createPayment: vi.fn(), pollOrderStatus: vi.fn(), getPurchaseResult: vi.fn(),
   hostedPaymentUrl: () => "https://x/pay",
 }));
 vi.mock("@/components/PaymentForm", () => ({ PaymentForm: () => null }));
-vi.mock("@/lib/publish", () => ({ createAndPublishListing: vi.fn() }));
+vi.mock("@/lib/publish", () => ({
+  createAndPublishListing: vi.fn(),
+  SaldoInsuficiente: class SaldoInsuficiente extends Error {},
+}));
 vi.mock("@/lib/promotions", async (orig) => ({
   ...(await (orig() as Promise<Record<string, unknown>>)),
   fetchActivePromotions: vi.fn().mockResolvedValue([]),

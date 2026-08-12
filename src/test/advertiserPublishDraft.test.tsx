@@ -14,10 +14,8 @@ beforeEach(() => {
 });
 
 const getCreditBalance = vi.fn().mockResolvedValue(1000);
-const spendCredits = vi.fn().mockResolvedValue(true);
 vi.mock("@/lib/credits", () => ({
   getCreditBalance: (...a: unknown[]) => getCreditBalance(...a),
-  spendCredits: (...a: unknown[]) => spendCredits(...a),
   purchaseCredits: vi.fn(),
 }));
 
@@ -26,6 +24,7 @@ const saveListingDraft = vi.fn();
 vi.mock("@/lib/publish", () => ({
   createAndPublishListing: (...a: unknown[]) => createAndPublishListing(...a),
   saveListingDraft: (...a: unknown[]) => saveListingDraft(...a),
+  SaldoInsuficiente: class SaldoInsuficiente extends Error {},
 }));
 
 vi.mock("@/lib/verifyDoc", async (orig) => ({
@@ -88,7 +87,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   sessionValue = { role: "anunciante", name: "Test", initials: "T", supabase: true };
   getCreditBalance.mockResolvedValue(1000);
-  spendCredits.mockResolvedValue(true);
   saveListingDraft.mockResolvedValue("L-DRAFT");
   createAndPublishListing.mockResolvedValue({
     listingId: "L-DRAFT", published: true,
@@ -112,7 +110,6 @@ describe("AdvertiserPublish — Guardar en mis borradores", () => {
     }));
 
     // Guardar es gratis y no exige documento.
-    expect(spendCredits).not.toHaveBeenCalled();
     expect(screen.queryByText(/verifica tu identidad/i)).toBeNull();
     await waitFor(() =>
       expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: "Guardado en tus borradores" })));
