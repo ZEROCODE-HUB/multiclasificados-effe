@@ -6,7 +6,7 @@ import { ListingLocationMap } from "@/components/ListingLocationMap";
 createRoot(document.getElementById("root")!).render(
   <div style={{ width: 390 }}>
     <div style={{ height: 600 }} />
-    <div className="relative h-72 bg-muted overflow-hidden border border-border">
+    <div className="relative h-56 md:h-80 bg-muted overflow-hidden border border-border">
       <ListingLocationMap lat={-12.0464} lng={-77.0428} price={185000} currency="USD" />
     </div>
     <div style={{ height: 600 }} />

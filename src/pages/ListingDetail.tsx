@@ -34,7 +34,7 @@ import {
   X,
   Loader2,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -81,6 +81,15 @@ function membershipLabel(iso: string | null): string {
   if (months < 12) return `${months} ${months === 1 ? "mes" : "meses"}`;
   const years = Math.floor(months / 12);
   return `${years} ${years === 1 ? "año" : "años"}`;
+}
+
+// Rótulo de sección. Cada sección llevaba DOS títulos —un rótulo naranja y un
+// h3 grande que decía casi lo mismo ("Descripción" + "Sobre este aviso")—: unos
+// 76px por sección, 300px de la ficha gastados en repetirse. Se queda uno solo,
+// el que más informa. Vive aquí y no en components/ porque sus cuatro usos
+// están en este archivo; si otra ficha lo necesita, entonces se sube.
+function TituloSeccion({ children }: { children: React.ReactNode }) {
+  return <h2 className="text-xs uppercase tracking-[0.2em] font-bold text-secondary mb-2">{children}</h2>;
 }
 
 export default function ListingDetail() {
@@ -259,6 +268,21 @@ export default function ListingDetail() {
   const advertiserName = advertiserDisplayName(listing.advertiser, confidential);
   const advertiserFirstName = confidential ? "" : (listing.advertiser.split(" ")[0] || "");
 
+  // Descripción recortada con `line-clamp` (CSS): el texto sigue ENTERO en el
+  // DOM, solo se deja de pintar. Cortarlo con .slice() lo sacaría del documento
+  // —malo para el buscador y para quien copia el texto—. El botón se pinta solo
+  // si de verdad sobra texto, así que en avisos cortos no aparece.
+  const descRef = useRef<HTMLParagraphElement>(null);
+  const [descAbierta, setDescAbierta] = useState(false);
+  const [descRecortada, setDescRecortada] = useState(false);
+  useEffect(() => {
+    const el = descRef.current;
+    if (!el) return;
+    // Al cambiar de aviso vuelve a estar plegada, y se remide.
+    setDescAbierta(false);
+    setDescRecortada(el.scrollHeight > el.clientHeight + 4);
+  }, [listing.description]);
+
   const [messageOpen, setMessageOpen] = useState(false);
   const [phoneOpen, setPhoneOpen] = useState(false);
   const [phoneRevealed, setPhoneRevealed] = useState(false);
@@ -435,13 +459,10 @@ export default function ListingDetail() {
     ...(showCondition
       ? [{ label: "Condición", value: CONDITION_LABEL[listing.condition ?? "na"] ?? "No aplica" }]
       : []),
-    { label: "Ubicación", value: listing.location },
-    // Fecha corta ("07 ago 2026") y las vistas sin la palabra "visualizaciones":
-    // la etiqueta de al lado ya dice "Vistas", y así además desaparece el
-    // "1 visualizaciones" mal concordado.
-    { label: "Publicado", value: new Date(listing.date).toLocaleDateString("es-PE", { day: "2-digit", month: "short", year: "numeric" }) },
-    { label: "Código de aviso", value: codigoDeAviso(listing.id) },
-    { label: "Vistas", value: listing.views.toLocaleString() },
+    // Ubicación, fecha y vistas salían TAMBIÉN aquí, y ya están en la línea de
+    // datos que hay bajo el título: eran tres filas (~110px en móvil) que no
+    // añadían nada. Repetir un dato no es informar dos veces, es hacer scroll.
+    { label: "Código", value: codigoDeAviso(listing.id) },
   ];
 
   // Lo que la plataforma HACE de verdad por quien mira el aviso. Antes esta
@@ -452,11 +473,16 @@ export default function ListingDetail() {
   // Lo del anunciante verificado NO se repite aquí: ya lo dice la nota que hay
   // justo encima, bajo la descripción, y otra vez en el panel de precio. Tres
   // veces en la misma pantalla suena a insistir, no a informar.
+  //
+  // Las dos últimas vienen de la tarjeta "Consejos de seguridad" que había en el
+  // panel derecho: eran dos bloques distintos diciendo lo mismo en la misma
+  // pantalla. Se fusionaron aquí para no repetir el consejo ni el espacio.
   const garantias = [
     confidential
-      ? "Aviso confidencial: el contacto es solo por el chat interno de eFFe."
-      : "Puedes contactar por el chat interno de eFFe, sin dar tus datos personales.",
-    "eFFe no interviene en el pago: acuérdalo directamente con el anunciante.",
+      ? "Contacta solo por el chat interno de eFFe."
+      : "Contacta por el chat de eFFe, sin dar tus datos personales.",
+    "eFFe no interviene en el pago: acuérdalo con el anunciante.",
+    "Coordina en lugares públicos y revisa antes de pagar.",
     "Si algo no cuadra, repórtalo: el equipo revisa cada denuncia.",
   ];
 
@@ -467,7 +493,7 @@ export default function ListingDetail() {
 
       {/* Breadcrumbs */}
       <div className="border-b bg-muted/30">
-        <div className="container mx-auto px-4 md:px-6 py-3 flex items-center gap-2 text-xs text-muted-foreground overflow-x-auto whitespace-nowrap">
+        <div className="container mx-auto px-4 md:px-6 py-2 flex items-center gap-2 text-xs text-muted-foreground overflow-x-auto no-scrollbar whitespace-nowrap">
           <Link to="/" className="hover:text-foreground">Inicio</Link>
           <ChevronRight size={12} />
           <Link to="/buscar" className="hover:text-foreground">Explorar</Link>
@@ -479,7 +505,7 @@ export default function ListingDetail() {
       </div>
 
       {/* Back link */}
-      <div className="container mx-auto max-w-[1500px] px-4 md:px-6 pt-6">
+      <div className="container mx-auto max-w-[1500px] px-4 md:px-6 pt-3">
         <button
           onClick={() => navigate(-1)}
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -490,9 +516,9 @@ export default function ListingDetail() {
 
       {/* `max-w`: el .container del proyecto es fluido (sin tope), y sin límite la
           foto principal se estiraba hasta 2.4:1 en monitores anchos. */}
-      <div className="container mx-auto max-w-[1500px] px-4 md:px-6 py-6 md:py-8 grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-8 lg:gap-12">
-        {/* LEFT — Gallery + Content */}
-        <div className="min-w-0 space-y-10">
+      <div className="container mx-auto max-w-[1500px] px-4 md:px-6 py-4 md:py-6 grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-6 lg:gap-10">
+        {/* Fotos + título: lo primero, en móvil y en escritorio */}
+        <div className="min-w-0 space-y-4 lg:col-start-1 lg:row-start-1">
           {/* Gallery */}
           <section>
             {/* Desde xl mandamos por ALTURA fija, no por proporción: así la foto
@@ -502,7 +528,7 @@ export default function ListingDetail() {
                 Por debajo de xl la columna izquierda es estrecha (el aside fijo de
                 400 px se come el espacio) y un alto fijo dejaría la foto casi
                 cuadrada, así que ahí seguimos con 4/3. */}
-            <div className="grid grid-cols-1 md:grid-cols-[1fr_140px] xl:grid-cols-[1fr_200px] gap-3 xl:h-[560px]">
+            <div className={`grid grid-cols-1 gap-2 xl:h-[460px] ${gallery.length > 1 ? "md:grid-cols-[1fr_140px] xl:grid-cols-[1fr_200px]" : ""}`}>
               <div className={`relative overflow-hidden aspect-[4/3] xl:aspect-auto xl:h-full ${sinFoto ? "bg-white" : "bg-muted"} ${listing.featured ? "ring-2 ring-amber-400" : ""}`}>
                 {/* `contain` y no `cover` para las fotos DE VERDAD: se ven
                     completas, sin recortar, y el fondo neutro rellena lo que
@@ -555,7 +581,11 @@ export default function ListingDetail() {
                   entera (`contain`) y dejar que cada una tomara su forma, pero con
                   fotos verticales quedaban como tiras finas. La foto completa se ve
                   en la grande, que sí usa `contain`. */}
-              <div className="flex md:flex-col gap-3 overflow-x-auto md:overflow-y-auto md:h-full">
+              {/* Con una sola foto la tira era una miniatura suelta de la MISMA
+                  imagen: 84px de scroll en móvil para no ofrecer nada. El
+                  contador "1 / N" de la esquina ya dice cuántas hay. */}
+              {gallery.length > 1 && (
+              <div className="flex md:flex-col gap-2 overflow-x-auto no-scrollbar md:overflow-y-auto md:h-full">
                 {gallery.map((src, i) => (
                   <button
                     key={i}
@@ -573,22 +603,20 @@ export default function ListingDetail() {
                   </button>
                 ))}
               </div>
+              )}
             </div>
           </section>
 
           {/* Title + actions */}
-          <section className="space-y-4">
+          <section className="space-y-2">
             <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-secondary">{category?.name ?? listing.category}</span>
-            <h1 className="text-3xl md:text-4xl font-extrabold text-foreground tracking-tight leading-tight">{listing.title}</h1>
-            <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+            <h1 className="text-2xl md:text-3xl font-extrabold text-foreground tracking-tight leading-tight">{listing.title}</h1>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs md:text-sm text-muted-foreground">
               <span className="flex items-center gap-1.5"><MapPin size={14} className="text-secondary" /> {listing.location}</span>
               <span className="flex items-center gap-1.5"><Eye size={14} /> {listing.views.toLocaleString()} vistas</span>
-              <span className="flex items-center gap-1.5"><Calendar size={14} /> Publicado el {new Date(listing.date).toLocaleDateString("es-PE")}</span>
-              {urgent && !urgent.expired && (
-                <span className="flex items-center gap-1.5 font-semibold text-red-600">
-                  <Clock size={14} /> Urgente · quedan {urgent.long}
-                </span>
-              )}
+              <span className="flex items-center gap-1.5"><Calendar size={14} /> {new Date(listing.date).toLocaleDateString("es-PE", { day: "2-digit", month: "short", year: "numeric" })}</span>
+              {/* La cuenta atrás ya va en la insignia sobre la foto, que es donde
+                  se mira primero: aquí gastaba una línea entera para repetirla. */}
             </div>
             {/* Tres columnas iguales en móvil para que la fila no salte a dos
                 líneas al marcar favorito (MOB-03). Las clases están en
@@ -625,131 +653,26 @@ export default function ListingDetail() {
             </div>
           </section>
 
-          {/* Description */}
-          <section>
-            <h2 className="text-xs uppercase tracking-[0.2em] font-bold text-secondary mb-3">Descripción</h2>
-            <h3 className="text-2xl font-bold text-foreground mb-4">Sobre este aviso</h3>
-            {/* `whitespace-pre-line`: los saltos de línea que escribe el
-                anunciante se respetan, igual que en la vista previa al publicar
-                (ListingPreviewDialog). Sin esto veía su texto bien formateado
-                al revisarlo y luego salía como un ladrillo en la ficha. */}
-            <p className="text-foreground/85 leading-[1.75] text-base whitespace-pre-line">
-              {listing.description}
-            </p>
-
-            {/* Aquí había un párrafo pegado a la descripción —dentro del mismo
-                <p>, así que parecía escrito por el anunciante— que afirmaba en
-                TODOS los avisos que el equipo los había revisado y aprobado y
-                verificado al anunciante, y que este respondía "en 4 horas en
-                promedio" (dato que no se mide en ninguna parte). Solo se dice
-                lo que de verdad se comprueba; al resto se le da un consejo
-                útil en vez de una promesa. */}
-            {listing.advertiserVerified ? (
-              <p className="mt-4 flex items-start gap-2 border border-secondary/40 bg-secondary/5 px-3 py-2.5 text-xs leading-relaxed text-secondary">
-                <ShieldCheck size={14} className="mt-0.5 shrink-0" />
-                <span>Anunciante verificado por el equipo de eFFe: comprobamos su identidad y sus datos de contacto.</span>
-              </p>
-            ) : (
-              <p className="mt-4 flex items-start gap-2 border border-border bg-muted/40 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
-                <Info size={14} className="mt-0.5 shrink-0" />
-                <span>Coordina siempre por el chat de eFFe y revisa el producto antes de pagar.</span>
-              </p>
-            )}
-
-            {/* PDF adjunto por el anunciante (adicional). Enlace firmado temporal. */}
-            {docUrl && (
-              <a
-                href={docUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-5 inline-flex items-center gap-2 px-4 py-2.5 border border-secondary/40 bg-secondary/5 text-secondary font-semibold text-sm hover:bg-secondary hover:text-secondary-foreground transition-colors"
-              >
-                <FileText size={16} /> Ver documento (PDF)
-              </a>
-            )}
-          </section>
-
-          {/* Spec table */}
-          <section>
-            <h2 className="text-xs uppercase tracking-[0.2em] font-bold text-secondary mb-3">Detalles</h2>
-            <h3 className="text-2xl font-bold text-foreground mb-4">Información del aviso</h3>
-            {/* Etiqueta y valor en la MISMA línea. Apilados con `py-4` estos
-                seis datos cortos ocupaban casi 400px en móvil.
-                Las columnas se separan con `gap-x-10` en vez del truco de
-                `nth-child(odd/even)` que había: como "Condición" no se muestra
-                en Servicios ni Empleos, la paridad se invertía y el reparto
-                salía al revés en esas categorías. */}
-            <dl className="grid grid-cols-1 sm:grid-cols-2 sm:gap-x-10 border-t border-border">
-              {specs.map((s) => (
-                <div key={s.label} className="flex items-baseline justify-between gap-4 py-2 border-b border-border">
-                  <dt className="text-[11px] uppercase tracking-wider font-bold text-muted-foreground shrink-0">{s.label}</dt>
-                  <dd className="text-sm font-semibold text-foreground text-right min-w-0 break-words">{s.value}</dd>
-                </div>
-              ))}
-            </dl>
-          </section>
-
-          {/* What's included */}
-          <section>
-            <h2 className="text-xs uppercase tracking-[0.2em] font-bold text-secondary mb-3">Seguridad</h2>
-            <h3 className="text-2xl font-bold text-foreground mb-4">Antes de contactar</h3>
-            <ul className="grid grid-cols-1 md:grid-cols-2 gap-y-3 gap-x-6">
-              {garantias.map((g) => (
-                <li key={g} className="flex items-start gap-3 text-sm text-foreground/85">
-                  <CheckCircle2 size={18} className="text-secondary shrink-0 mt-0.5" />
-                  {g}
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          {/* Ubicación */}
-          <section>
-            <h2 className="text-xs uppercase tracking-[0.2em] font-bold text-secondary mb-3">Ubicación</h2>
-            <h3 className="text-2xl font-bold text-foreground mb-6">{listing.location}</h3>
-            {/* Antes llevaba `isolate [transform:translateZ(0)]` para que el
-                recorte atrapara los overlays absolutos que iban sobre el iframe
-                de OSM. Con Leaflet el pin es un Marker dentro del mapa, así que
-                sobran; y forzar una capa de composición propia era, muy
-                probablemente, lo que impedía pintar los tiles aquí. */}
-            <div className="relative h-72 md:h-96 bg-muted overflow-hidden border border-border">
-              {typeof listing.lat === "number" && typeof listing.lng === "number" ? (
-                <ListingLocationMap lat={listing.lat} lng={listing.lng} price={listing.price} currency={listing.currency} />
-              ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center px-4">
-                  <div className="w-12 h-12 rounded-full bg-secondary text-secondary-foreground flex items-center justify-center shadow-2xl ring-8 ring-secondary/20">
-                    <MapPin size={20} />
-                  </div>
-                  <span className="px-3 py-1 bg-primary text-primary-foreground text-xs font-bold rounded-full shadow-lg">
-                    {listing.location}
-                  </span>
-                  <p className="text-xs text-muted-foreground mt-1">Este aviso aún no tiene una ubicación exacta en el mapa.</p>
-                </div>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground mt-3">Ubicación aproximada por seguridad. La dirección exacta se comparte tras coordinar con el anunciante.</p>
-          </section>
-
-          {/* Reseñas (REQ-07): ocultas por ahora (decisión 15-jul). El componente
-              ListingReviews sigue existiendo; para reactivarlas, volver a montarlo
-              aquí con `{isJobs && listing.id && (...)}`. `loadReviewMeta` sigue
-              cargando el ownerId que usa isOwner. */}
         </div>
 
-        {/* RIGHT — Sticky purchase / contact panel */}
-        <aside className="lg:sticky lg:top-24 self-start space-y-4">
+        {/* PRECIO Y CONTACTO. Va aquí en el DOM a propósito: en móvil, donde todo
+                    se apila, el botón de contactar quedaba DESPUÉS del mapa, al final de
+                    la ficha entera. Desde lg vuelve a la columna derecha y abarca las dos
+                    filas, así que el diseño de escritorio no cambia. Se mueve en el DOM y
+                    no con order-*: así el orden que se lee es el mismo que se ve. */}
+                <aside className="space-y-3 self-start lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:sticky lg:top-[calc(var(--nav-top)+1rem)]">
           {/* Price card */}
-          <div className="bg-card border border-border p-6 space-y-5 shadow-sm">
+          <div className="bg-card border border-border p-4 space-y-3 shadow-sm">
             <div className="flex items-center gap-2">
               <Tag size={14} className="text-secondary" />
               <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-secondary">Precio</span>
             </div>
             <div>
-              <p className="text-4xl font-extrabold text-primary tracking-tight">{formatPrice(listing.price, listing.currency)}</p>
-              <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5"><Clock size={12} /> Precio vigente</p>
+              <p className="text-3xl font-extrabold text-primary tracking-tight">{formatPrice(listing.price, listing.currency)}</p>
+              <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5"><Clock size={12} /> Precio vigente</p>
             </div>
 
-            <div className="flex flex-col gap-2 pt-2">
+            <div className="flex flex-col gap-2 pt-1">
               {isOwner && (
                 <div className="w-full h-12 flex items-center justify-center gap-2 border border-secondary/40 bg-secondary/5 text-xs font-bold uppercase tracking-wider text-secondary">
                   <ShieldCheck size={16} /> Este es tu aviso
@@ -803,7 +726,7 @@ export default function ListingDetail() {
               )}
             </div>
 
-            <div className="pt-4 border-t border-border space-y-2 text-xs text-muted-foreground">
+            <div className="pt-3 border-t border-border space-y-1.5 text-xs text-muted-foreground">
               {/* Afirmar esto de todo el mundo es justo lo que vacía de sentido
                   al sello: solo se dice de quien el equipo verificó. */}
               {listing.advertiserVerified && (
@@ -818,10 +741,10 @@ export default function ListingDetail() {
           </div>
 
           {/* Seller card */}
-          <div className="bg-card border border-border p-6 space-y-4 shadow-sm">
+          <div className="bg-card border border-border p-4 space-y-3 shadow-sm">
             <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-secondary">Publicado por</span>
             <div className="flex items-center gap-3">
-              <div className="w-14 h-14 rounded-full gradient-secondary text-secondary-foreground flex items-center justify-center font-extrabold text-lg">
+              <div className="w-12 h-12 rounded-full gradient-secondary text-secondary-foreground flex items-center justify-center font-extrabold text-lg">
                 {confidential
                   ? <EyeOff size={20} />
                   : listing.advertiser.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
@@ -833,9 +756,7 @@ export default function ListingDetail() {
                     <ShieldCheck size={14} className="text-secondary shrink-0" aria-label="Anunciante verificado" />
                   )}
                 </p>
-                <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                  <Building2 size={11} /> {listing.location || "—"}
-                </p>
+                {/* La ubicación salía aquí por cuarta vez en la misma ficha. */}
               </div>
             </div>
             {/* En un aviso confidencial estas cifras identifican al anunciante
@@ -880,7 +801,7 @@ export default function ListingDetail() {
               Solo lo ve el comprador que ya tiene chat con el vendedor por este
               aviso; el vendedor confirma desde su propio chat, no desde aquí. */}
           {!isJobs && !isOwner && hasChatWithSeller && (
-            <div className="bg-card border border-border p-5 space-y-3">
+            <div className="bg-card border border-border p-4 space-y-2">
               <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-secondary">Cierre de venta</p>
               <p className="text-xs text-muted-foreground">Marca si concretaron la transacción. Ambos lados pueden confirmar.</p>
               <label className="flex items-center gap-2 text-sm cursor-pointer">
@@ -899,25 +820,151 @@ export default function ListingDetail() {
             </div>
           )}
 
-          {/* Safety tips */}
-          <div className="bg-muted/30 border border-border p-5 text-xs text-muted-foreground space-y-2">
-            <p className="font-bold uppercase tracking-wider text-[10px] text-foreground">Consejos de seguridad</p>
-            <ul className="space-y-1.5 leading-relaxed">
-              <li>· Coordina visitas en lugares públicos.</li>
-              <li>· No realices pagos por adelantado fuera de la plataforma.</li>
-              <li>· Verifica documentos y comprobantes antes de cerrar.</li>
-            </ul>
-          </div>
+          {/* Aquí había una tarjeta de "Consejos de seguridad" que decía lo mismo
+              que la sección "Antes de contactar" de la izquierda, en la misma
+              pantalla. Sus tres consejos se fusionaron en `garantias`. */}
         </aside>
+
+        {/* Resto de la ficha. Ojo: toda sección nueva va DENTRO de este div,
+            no como hijo suelto del grid, o se descolocará la rejilla. */}
+        <div className="min-w-0 space-y-6 lg:space-y-8 lg:col-start-1 lg:row-start-2">
+
+          {/* Description */}
+          <section>
+            <TituloSeccion>Descripción</TituloSeccion>
+            {/* `whitespace-pre-line`: los saltos de línea que escribe el
+                anunciante se respetan, igual que en la vista previa al publicar
+                (ListingPreviewDialog). Sin esto veía su texto bien formateado
+                al revisarlo y luego salía como un ladrillo en la ficha. */}
+            <p
+              ref={descRef}
+              className={`text-foreground/85 leading-[1.7] text-base whitespace-pre-line ${
+                descAbierta ? "" : "line-clamp-[7] md:line-clamp-6"
+              }`}
+            >
+              {listing.description}
+            </p>
+            {descRecortada && (
+              <button
+                type="button"
+                onClick={() => setDescAbierta((v) => !v)}
+                aria-expanded={descAbierta}
+                className="mt-1.5 text-sm font-bold text-secondary hover:underline"
+              >
+                {descAbierta ? "Ver menos" : "Ver más"}
+              </button>
+            )}
+
+            {/* Aquí había un párrafo pegado a la descripción —dentro del mismo
+                <p>, así que parecía escrito por el anunciante— que afirmaba en
+                TODOS los avisos que el equipo los había revisado y aprobado y
+                verificado al anunciante, y que este respondía "en 4 horas en
+                promedio" (dato que no se mide en ninguna parte). Solo se dice
+                lo que de verdad se comprueba; al resto se le da un consejo
+                útil en vez de una promesa. */}
+            {listing.advertiserVerified ? (
+              <p className="mt-3 flex items-start gap-2 border border-secondary/40 bg-secondary/5 px-3 py-2 text-xs leading-relaxed text-secondary">
+                <ShieldCheck size={14} className="mt-0.5 shrink-0" />
+                <span>Anunciante verificado por el equipo de eFFe: comprobamos su identidad y sus datos de contacto.</span>
+              </p>
+            ) : (
+              <p className="mt-3 flex items-start gap-2 border border-border bg-muted/40 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+                <Info size={14} className="mt-0.5 shrink-0" />
+                <span>Coordina siempre por el chat de eFFe y revisa el producto antes de pagar.</span>
+              </p>
+            )}
+
+            {/* PDF adjunto por el anunciante (adicional). Enlace firmado temporal. */}
+            {docUrl && (
+              <a
+                href={docUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 inline-flex items-center gap-2 px-4 py-2 border border-secondary/40 bg-secondary/5 text-secondary font-semibold text-sm hover:bg-secondary hover:text-secondary-foreground transition-colors"
+              >
+                <FileText size={16} /> Ver documento (PDF)
+              </a>
+            )}
+          </section>
+
+          {/* Spec table */}
+          <section>
+            <TituloSeccion>Detalles del aviso</TituloSeccion>
+            {/* Etiqueta y valor en la MISMA línea. Apilados con `py-4` estos
+                seis datos cortos ocupaban casi 400px en móvil.
+                Las columnas se separan con `gap-x-10` en vez del truco de
+                `nth-child(odd/even)` que había: como "Condición" no se muestra
+                en Servicios ni Empleos, la paridad se invertía y el reparto
+                salía al revés en esas categorías. */}
+            <dl className="grid grid-cols-2 gap-x-4 sm:gap-x-10 border-t border-border">
+              {specs.map((s) => (
+                <div key={s.label} className="flex items-baseline justify-between gap-2 sm:gap-4 py-1.5 border-b border-border">
+                  <dt className="text-[11px] uppercase tracking-wider font-bold text-muted-foreground shrink-0">{s.label}</dt>
+                  <dd className="text-sm font-semibold text-foreground text-right min-w-0 break-words">{s.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+
+          {/* What's included */}
+          <section>
+            <TituloSeccion>Antes de contactar</TituloSeccion>
+            {/* Una línea por consejo: son avisos que se leen de reojo, no un
+                texto que haya que estudiar. Antes ocupaban 216px en móvil. */}
+            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-y-1 gap-x-6">
+              {garantias.map((g) => (
+                <li key={g} className="flex items-start gap-1.5 text-xs leading-snug text-muted-foreground">
+                  <CheckCircle2 size={12} className="text-secondary shrink-0 mt-[3px]" />
+                  {g}
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          {/* Ubicación */}
+          <section>
+            {/* El h3 repetía aquí la ubicación, que ya sale bajo el título. */}
+            <TituloSeccion>Ubicación</TituloSeccion>
+            {/* Antes llevaba `isolate [transform:translateZ(0)]` para que el
+                recorte atrapara los overlays absolutos que iban sobre el iframe
+                de OSM. Con Leaflet el pin es un Marker dentro del mapa, así que
+                sobran; y forzar una capa de composición propia era, muy
+                probablemente, lo que impedía pintar los tiles aquí. */}
+            <div className="relative h-56 md:h-80 bg-muted overflow-hidden border border-border">
+              {typeof listing.lat === "number" && typeof listing.lng === "number" ? (
+                <ListingLocationMap lat={listing.lat} lng={listing.lng} price={listing.price} currency={listing.currency} />
+              ) : (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center px-4">
+                  <div className="w-12 h-12 rounded-full bg-secondary text-secondary-foreground flex items-center justify-center shadow-2xl ring-8 ring-secondary/20">
+                    <MapPin size={20} />
+                  </div>
+                  <span className="px-3 py-1 bg-primary text-primary-foreground text-xs font-bold rounded-full shadow-lg">
+                    {listing.location}
+                  </span>
+                  <p className="text-xs text-muted-foreground mt-1">Este aviso aún no tiene una ubicación exacta en el mapa.</p>
+                </div>
+              )}
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-2">Ubicación aproximada por seguridad. La dirección exacta se comparte tras coordinar con el anunciante.</p>
+          </section>
+
+          {/* Reseñas (REQ-07): ocultas por ahora (decisión 15-jul). El componente
+              ListingReviews sigue existiendo; para reactivarlas, volver a montarlo
+              aquí con `{isJobs && listing.id && (...)}`. `loadReviewMeta` sigue
+              cargando el ownerId que usa isOwner. */}
+        </div>
 
       </div>
 
       {/* Related */}
-      <section className="container mx-auto px-4 md:px-6 pt-14 md:pt-20 pb-28 md:pb-20 border-t">
-        <div className="flex items-end justify-between mb-8 gap-4 flex-wrap">
+      {/* `pb` con --nav-bottom: reserva el alto REAL de la barra inferior (más
+          el inset del iPhone) en vez del pb-28 a ojo que había. En lg la
+          variable es solo el inset y quedan los ~80px de siempre. */}
+      <section className="container mx-auto px-4 md:px-6 pt-8 md:pt-12 pb-[calc(var(--nav-bottom)+5rem)] border-t">
+        <div className="flex items-end justify-between mb-5 gap-4 flex-wrap">
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] font-bold text-secondary mb-2">Sigue explorando</p>
-            <h2 className="text-2xl md:text-4xl font-extrabold text-foreground tracking-tight">Avisos similares</h2>
+            <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-secondary mb-1">Sigue explorando</p>
+            <h2 className="text-xl md:text-3xl font-extrabold text-foreground tracking-tight">Avisos similares</h2>
           </div>
           <Link to="/buscar" className="text-xs font-bold uppercase tracking-[0.2em] text-primary border-b-2 border-secondary pb-1 hover:text-secondary transition-colors">
             Ver más →
@@ -928,9 +975,17 @@ export default function ListingDetail() {
             <p className="text-muted-foreground text-sm">Aún no hay otros avisos para mostrar.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 3xl:grid-cols-5 4xl:grid-cols-6 5xl:grid-cols-8 gap-x-6 gap-y-10">
+          /* Móvil: carril horizontal con enganche. Las cuatro tarjetas seguían
+             apiladas en UNA columna, unos 1.800px de scroll al final de la
+             ficha. Deslizando ocupan lo que una. Desde `sm` vuelve a ser el
+             grid de siempre.
+             El `-mx-4 px-4` tiene que igualar EXACTAMENTE el padding de la
+             sección: si sobra, la página entera scrollea en horizontal. */
+          <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory no-scrollbar -mx-4 px-4 py-1 sm:mx-0 sm:px-0 sm:py-0 sm:overflow-visible sm:grid sm:grid-cols-2 lg:grid-cols-4 3xl:grid-cols-5 4xl:grid-cols-6 5xl:grid-cols-8 sm:gap-x-6 sm:gap-y-8">
             {related.map((l) => (
-              <ListingCard key={l.id} listing={l} />
+              <div key={l.id} className="w-[72%] shrink-0 snap-start sm:w-auto sm:shrink">
+                <ListingCard listing={l} />
+              </div>
             ))}
           </div>
         )}
