@@ -1,6 +1,6 @@
 // Capa de datos del Libro de Reclamaciones.
 // Envía el reclamo a la Edge Function `send-reclamo`, que lo guarda en la BD
-// y despacha el correo a reclamos@coleffe.com y soporte@coleffe.com vía Resend.
+// y despacha el correo a avisos@coleffe.com (secret RECLAMOS_TO) vía Resend.
 import { supabase } from "@/lib/supabase";
 
 export type ComplaintKind = "reclamo" | "queja";

@@ -32,9 +32,9 @@ npx supabase secrets set RECLAMOS_TO=oscarmijael7w7@gmail.com --project-ref prhb
 # Quita el override de prueba para usar los correos oficiales por defecto:
 npx supabase secrets unset RECLAMOS_TO --project-ref prhbgniwymaaevnisyov
 # Remitente con el dominio verificado:
-npx supabase secrets set RECLAMOS_FROM="eFFe Reclamos <reclamos@coleffe.com>" --project-ref prhbgniwymaaevnisyov
+npx supabase secrets set RECLAMOS_FROM="Libro de Reclamaciones <avisos@coleffe.com>" --project-ref prhbgniwymaaevnisyov
 ```
-> Por defecto el correo va a `reclamos@coleffe.com` y `soporte@coleffe.com`.
+> Por defecto el correo va a `avisos@coleffe.com` (buzón real del cPanel).
 
 ## 3. Desplegar la función
 

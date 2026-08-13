@@ -1,16 +1,17 @@
 // Edge Function: send-reclamo (Libro de Reclamaciones)
 // Recibe el reclamo desde la página principal, lo guarda en la tabla
 // `public.complaints` (con service_role) y envía el correo a los destinatarios
-// reclamos@coleffe.com y soporte@coleffe.com usando Resend.
+// avisos@coleffe.com (configurable con RECLAMOS_TO) usando Resend.
 //
 // Secrets requeridos (Supabase → Edge Functions → Secrets):
 //   - SUPABASE_URL                (lo provee Supabase)
 //   - SUPABASE_SERVICE_ROLE_KEY   (lo provee Supabase)
 //   - RESEND_API_KEY              (API key de https://resend.com)
-//   - RECLAMOS_FROM (opcional)    remitente verificado, ej. "eFFe <reclamos@coleffe.com>".
+//   - RECLAMOS_FROM (opcional)    remitente de un dominio verificado en Resend.
 //                                 Sin dominio verificado, dejar "onboarding@resend.dev".
 //   - RECLAMOS_TO (opcional)      destinatarios separados por coma. Por defecto:
-//                                 reclamos@coleffe.com,soporte@coleffe.com.
+//                                 avisos@coleffe.com (buzón real del cPanel; ojo,
+//                                 reclamos@/soporte@ NO existen como buzones).
 //                                 En modo PRUEBA (dominio sin verificar) ponlo a TU
 //                                 propio correo de la cuenta Resend para recibir el test.
 //
@@ -32,8 +33,9 @@ const json = (body: unknown, status = 200) =>
   });
 
 // Destinatarios del Libro de Reclamaciones. Configurables vía RECLAMOS_TO
-// (coma-separados); por defecto los correos oficiales de coleffe.com.
-const TO = (Deno.env.get("RECLAMOS_TO") ?? "reclamos@coleffe.com,soporte@coleffe.com")
+// (coma-separados). Usar SIEMPRE buzones que existan de verdad en el cPanel:
+// un destinatario inexistente rebota y el aviso del reclamo se pierde.
+const TO = (Deno.env.get("RECLAMOS_TO") ?? "avisos@coleffe.com")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
@@ -107,7 +109,7 @@ Deno.serve(async (req) => {
     if (dbErr) return json({ error: "No se pudo registrar: " + dbErr.message }, 500);
     const code = row?.code ?? "—";
 
-    // 2) Enviar el correo a reclamos@ y soporte@ vía Resend.
+    // 2) Enviar el aviso a los destinatarios de RECLAMOS_TO vía Resend.
     if (RESEND_API_KEY) {
       const html = `
         <div style="font-family:Arial,Helvetica,sans-serif;color:#1f2937;max-width:640px">
