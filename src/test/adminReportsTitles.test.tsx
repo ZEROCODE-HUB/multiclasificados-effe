@@ -7,6 +7,15 @@ beforeEach(prepararDom);
 
 // --- Mocks de la capa de datos ---
 vi.mock("@/lib/admin", () => ({
+  // El selector de período de las series lo consume al renderizar; sin él en el
+  // mock, el componente revienta antes de pintar ningún título.
+  GROWTH_RANGES: [
+    { value: "7d", label: "Esta semana" },
+    { value: "30d", label: "Últimos 30 días" },
+    { value: "6m", label: "Últimos 6 meses" },
+    { value: "12m", label: "Últimos 12 meses" },
+    { value: "all", label: "Histórico" },
+  ],
   fetchCategoryDistribution: vi.fn().mockResolvedValue([]),
   fetchCategoryRevenue: vi.fn().mockResolvedValue([]),
   fetchRegionDistribution: vi.fn().mockResolvedValue([]),

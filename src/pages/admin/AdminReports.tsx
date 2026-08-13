@@ -17,7 +17,8 @@ import { usePermissions } from "@/hooks/usePermissions";
 import {
   fetchCategoryDistribution, fetchCategoryRevenue, fetchRegionDistribution,
   fetchClaimsSummary, fetchGrowthSeries, fetchAdminCreditTransactions,
-  CREDIT_TX_PAGE_SIZE, type ClaimsSummary, type GrowthPoint, type AdminCreditTx,
+  CREDIT_TX_PAGE_SIZE, GROWTH_RANGES,
+  type ClaimsSummary, type GrowthPoint, type AdminCreditTx, type GrowthRange,
 } from "@/lib/admin";
 import { exportRows } from "@/lib/exportReport";
 import { formatCredits } from "@/lib/pricing";
@@ -95,7 +96,7 @@ function ReportFilters({ filters, setFilters, regions, onExport, show = { dates:
           )}
         </div>
       ) : (
-        <p className="text-xs text-muted-foreground flex-1 self-center">Serie global de la plataforma. Usa el <b>Dashboard en tiempo real</b> para filtrar por fecha, categoría o región.</p>
+        <p className="text-xs text-muted-foreground flex-1 self-center">Serie global de la plataforma; elige el período en el gráfico. Para filtrar por categoría o región usa el <b>Dashboard en tiempo real</b>.</p>
       )}
       <div className="flex gap-2 flex-wrap">
         <Button size="sm" variant="outline" className="gap-1.5" onClick={() => onExport("csv")}><FileSpreadsheet size={14} /> CSV</Button>
@@ -116,6 +117,9 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
   const [allRegion, setAllRegion] = useState<{ reg: string; avisos: number; monto: number }[]>([]);
   const [claims, setClaims] = useState<ClaimsSummary>({ recibidos: 0, pendientes: 0, solucionados: 0, trend: [] });
   const [revenueSeries, setRevenueSeries] = useState<GrowthPoint[]>([]);
+  // Período de las series (Pagos/Avisos/Usuarios/Postulaciones). El RPC ya sabía
+  // responder por 7d/30d/12m/histórico; faltaba el control para pedírselo.
+  const [seriesRange, setSeriesRange] = useState<GrowthRange>("6m");
 
   // Permisos: la pestaña "Transacciones" (dato financiero) exige el toggle
   // 'Reportes'/'edit' (EFFE-054). El superadmin no está sujeto a la matriz.
@@ -136,7 +140,10 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
   }, [filters.from, filters.to]);
 
   useEffect(() => {
-    fetchGrowthSeries().then(setRevenueSeries);
+    fetchGrowthSeries(seriesRange).then(setRevenueSeries);
+  }, [seriesRange]);
+
+  useEffect(() => {
     // Pre-carga distribución por categoría (no usada directamente, pero deja el RPC "caliente").
     fetchCategoryDistribution().then(() => {});
   }, []);
@@ -357,7 +364,17 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
               <TabsContent value={t.value} key={t.value} className="pt-4 space-y-5">
                 <ReportFilters filters={filters} setFilters={setFilters} regions={regionNames} onExport={exp} show={{ dates: false, catRegion: false }} />
                 <Card>
-                  <CardHeader><CardTitle className="text-sm">{t.barLabel} por período</CardTitle></CardHeader>
+                  <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
+                    <CardTitle className="text-sm">{t.barLabel} por período</CardTitle>
+                    <Select value={seriesRange} onValueChange={(v) => setSeriesRange(v as GrowthRange)}>
+                      <SelectTrigger className="h-8 w-44 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {GROWTH_RANGES.map((r) => (
+                          <SelectItem key={r.value} value={r.value} className="text-xs">{r.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </CardHeader>
                   <CardContent className="h-72">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={revenueSeries}>

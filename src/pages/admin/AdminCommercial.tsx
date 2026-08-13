@@ -707,7 +707,11 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
                       <TableHead>Anunciante</TableHead>
                       <TableHead>DNI/RUC</TableHead>
                       <TableHead>Usuario/Empresa</TableHead>
-                      <TableHead>Aviso</TableHead>
+                      {/* No es el título de un aviso: es el concepto de lo que
+                          se cobró ("Compra de saldo: 1 aviso · 7 días"). Se
+                          llamaba "Aviso" y hacía pensar que se emitía un
+                          comprobante por cada publicación. */}
+                      <TableHead>Concepto</TableHead>
                       <TableHead className="text-right">Monto</TableHead>
                       <TableHead className="text-right">Ver</TableHead>
                     </TableRow>
