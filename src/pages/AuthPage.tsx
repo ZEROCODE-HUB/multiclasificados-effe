@@ -152,7 +152,7 @@ const AuthPage = ({ requireCaptcha = false }: { requireCaptcha?: boolean }) => {
       // En web el enlace vuelve al mismo origen; en el APK apunta al sitio web
       // publicado (el WebView corre sobre localhost, que no sirve de destino).
       const redirectTo = Capacitor.isNativePlatform()
-        ? "https://multiclasificados-effe.vercel.app/reset-password"
+        ? "https://www.coleffe.com/reset-password"
         : `${window.location.origin}/reset-password`;
       const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
       if (error) throw error;

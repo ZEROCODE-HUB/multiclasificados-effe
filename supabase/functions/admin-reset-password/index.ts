@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
   const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
   const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const SITE_URL = (Deno.env.get("PUBLIC_SITE_URL") || "https://multiclasificados-effe.vercel.app").replace(/\/$/, "");
+  const SITE_URL = (Deno.env.get("PUBLIC_SITE_URL") || "https://www.coleffe.com").replace(/\/$/, "");
 
   try {
     const authHeader = req.headers.get("Authorization") ?? "";

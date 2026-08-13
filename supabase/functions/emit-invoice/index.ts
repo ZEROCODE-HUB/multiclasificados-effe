@@ -35,7 +35,7 @@ const EMAIL_FROM = Deno.env.get("INVOICE_EMAIL_FROM")
   ?? "eFFe Clasificados <onboarding@resend.dev>";
 const EMISOR_NOMBRE = Deno.env.get("EMISOR_NOMBRE") ?? "eFFe Multiclasificados";
 const EMISOR_RUC = Deno.env.get("EMISOR_RUC") ?? "";
-const SITE_URL = Deno.env.get("PUBLIC_SITE_URL") ?? "https://multiclasificados-effe.vercel.app";
+const SITE_URL = Deno.env.get("PUBLIC_SITE_URL") ?? "https://www.coleffe.com";
 
 // ─── Factiliza ────────────────────────────────────────────────────────────────
 // El mismo token que ya usa verify-doc para consultar DNI/RUC.
