@@ -130,6 +130,8 @@ export interface AdminCreditTx {
   user_id: string;
   full_name: string;
   email: string;
+  /** La cuenta ya no existe: el movimiento se conserva, el usuario no. */
+  deleted: boolean;
   type: "purchase" | "spend";
   credits: number;
   description: string | null;
@@ -168,8 +170,12 @@ export async function fetchAdminCreditTransactions(opts: {
       data: rows.map((r): AdminCreditTx => ({
         id: r.id,
         user_id: r.user_id,
-        full_name: r.full_name ?? "—",
-        email: r.email ?? "",
+        // Si la cuenta se borró, el movimiento sigue en el historial (es un
+        // registro financiero): se identifica por el inicio de su id, que es
+        // lo único que queda para rastrearlo — y por él se puede buscar.
+        full_name: r.full_name ?? "Usuario eliminado",
+        email: r.email ?? `id ${r.user_id.slice(0, 8)}`,
+        deleted: !r.full_name && !r.email,
         type: r.type,
         credits: Number(r.credits) || 0,
         description: r.description ?? null,

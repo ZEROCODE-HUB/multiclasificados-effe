@@ -40,6 +40,23 @@ const SERIES_TABS: { value: string; dataKey: keyof GrowthPoint; barLabel: string
 
 interface Filters { from: string; to: string; cat: string; region: string }
 
+// Rangos rápidos del historial de transacciones: rellenan el "Desde" del filtro
+// de fechas, que antes había que teclear a mano cada vez.
+const TX_RANGES: { value: string; label: string; days: number | null }[] = [
+  { value: "all", label: "Todo el tiempo", days: null },
+  { value: "7d", label: "Últimos 7 días", days: 7 },
+  { value: "30d", label: "Últimos 30 días", days: 30 },
+  { value: "3m", label: "Últimos 3 meses", days: 90 },
+  { value: "12m", label: "Últimos 12 meses", days: 365 },
+];
+
+// Fecha ISO (yyyy-mm-dd) de hace N días, en horario local.
+function isoHaceDias(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - (days - 1));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 // ===== Filtros reutilizables (controlados) =====
 // `show` decide qué controles se muestran, para NO exhibir filtros que no
 // aplican a la pestaña (el rango de fechas y categoría/región solo afectan a los
@@ -126,6 +143,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
   const { can } = usePermissions(role === "admin");
   const canTx = can("Reportes", "edit");
   const [txSearch, setTxSearch] = useState("");
+  const [txRange, setTxRange] = useState("all");
   const [txType, setTxType] = useState<"all" | "purchase" | "spend">("all");
   const [txPage, setTxPage] = useState(1);
   const [tx, setTx] = useState<{ data: AdminCreditTx[]; total: number }>({ data: [], total: 0 });
@@ -405,7 +423,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
                     <input
                       value={txSearch}
                       onChange={(e) => setTxSearch(e.target.value)}
-                      placeholder="Buscar por usuario o correo…"
+                      placeholder="Buscar por usuario, correo o id…"
                       className="flex-1 min-w-0 bg-transparent px-2 text-sm outline-none"
                     />
                   </div>
@@ -415,6 +433,21 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
                       <SelectItem value="all">Todos los tipos</SelectItem>
                       <SelectItem value="purchase">Compras</SelectItem>
                       <SelectItem value="spend">Gastos</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {/* Rango rápido: rellena el "Desde" de arriba, que se puede
+                      seguir ajustando a mano si hace falta otra ventana. */}
+                  <Select
+                    value={txRange}
+                    onValueChange={(v) => {
+                      setTxRange(v);
+                      const r = TX_RANGES.find((x) => x.value === v);
+                      setFilters((f) => ({ ...f, from: r?.days ? isoHaceDias(r.days) : "", to: "" }));
+                    }}
+                  >
+                    <SelectTrigger className="h-9 w-44"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {TX_RANGES.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -439,7 +472,12 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
                           tx.data.map((r) => (
                             <tr key={r.id} className="hover:bg-muted/30">
                               <td className="px-4 py-2.5">
-                                <p className="font-medium text-foreground">{r.full_name}</p>
+                                {/* Una cuenta borrada no borra su historial: el
+                                    movimiento se queda y se identifica por el
+                                    inicio de su id (se puede buscar por él). */}
+                                <p className={`font-medium ${r.deleted ? "italic text-muted-foreground" : "text-foreground"}`}>
+                                  {r.full_name}
+                                </p>
                                 <p className="text-[11px] text-muted-foreground">{r.email}</p>
                               </td>
                               <td className="px-4 py-2.5">
