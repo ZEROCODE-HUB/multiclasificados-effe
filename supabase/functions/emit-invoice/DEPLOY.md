@@ -187,6 +187,37 @@ Queda una sola incógnita, y no es de forma sino de contenido: que SUNAT acepte
 los importes y la firma. Eso solo se sabe emitiendo de verdad, con un token
 bueno y en un entorno de pruebas que responda.
 
+### Los dos tokens fallan por motivos DISTINTOS (medido el 2026-08-13)
+
+Repitiendo las pruebas mirando las **cabeceras** de la respuesta, y no solo el
+código, aparece una diferencia que antes se pasó por alto:
+
+| Token | Respuesta a `POST /api/v1/invoice/send` |
+|---|---|
+| `…eyJzdWIiOiI0MTMxNSJ9…` (el corto) | 401 + `WWW-Authenticate: Bearer error="invalid_token", error_description="The signature key was not found"` |
+| El de AD360 (`role: consultor`) | 401 «pelado», **sin** `WWW-Authenticate` |
+
+**«The signature key was not found» significa que ese token está firmado con una
+clave que su servidor de facturación no conoce**: no es un token de este
+producto, ni siquiera caducado. Descartado del todo.
+
+El de AD360, en cambio, **sí pasa la comprobación de firma** — se demuestra
+porque con él la validación del cuerpo llega a ejecutarse (devuelve 400 con la
+lista de campos), cosa que con el corto nunca ocurre: muere antes, en el 401.
+O sea que el token de AD360 es auténtico y lo reconocen; lo que le falta es el
+**permiso de emisión**.
+
+Su 401 trae un `traceId` (p. ej.
+`00-25df25f4b59f00aa0e4a143ce53e1002-66868b0e7cbf3f8c-00`), que ellos pueden
+buscar en sus logs para ver qué regla nos rechaza. Vale la pena dárselo.
+
+**Detalle de formato confirmado por su propio validador:** `tip_Afe_Igv` va como
+**cadena** (`"10"`), no como número; mandarlo numérico da
+`The JSON value could not be converted to System.String`. Nuestro
+`construirComprobante` ya lo manda como cadena (`AFECTACION_GRAVADO = "10"`), así
+que no hay nada que corregir — pero queda anotado porque es un error fácil de
+cometer al reescribirlo.
+
 ### Lo que YA está listo para el día que funcione
 
 Su documentación nueva (`factiliza.gitbook.io/api-docs/apis/api-sunat-facturacion`)
