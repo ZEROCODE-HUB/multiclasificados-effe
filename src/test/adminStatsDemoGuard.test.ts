@@ -28,13 +28,21 @@ describe("Dashboard: KPIs demo solo sin sesión", () => {
     expect(s.real).toBe(true);
     expect(s.data.users).toBe(0);
     expect(s.data.revenue).toBe(0);
+    // Tampoco se inventa una variación: sin datos previos las tarjetas no
+    // enseñan porcentaje (variacionPct devuelve null con 0 y 0).
+    expect(s.data.users_prev).toBe(0);
+    expect(s.data.revenue_prev).toBe(0);
   });
 
-  it("sin sesión (modo demo) → KPIs demo", async () => {
+  it("sin sesión (modo demo) → KPIs demo, con sus valores previos", async () => {
     user = null;
     const s = await fetchAdminStats();
     expect(s.real).toBe(false);
     expect(s.data.users).toBe(adminKpis.users);
+    // Sin los `*_prev` la demo saldría con las tarjetas sin variación.
+    expect(s.data.users_prev).toBe(adminKpis.usersPrev);
+    expect(s.data.active_listings_prev).toBe(adminKpis.activeListingsPrev);
+    expect(s.data.revenue_prev).toBe(adminKpis.revenuePrev);
   });
 
   it("staff logueado + RPC con datos → datos reales", async () => {

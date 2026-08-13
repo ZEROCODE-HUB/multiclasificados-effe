@@ -14,6 +14,7 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import {
   fetchAdminStats, fetchGrowthSeries, fetchCategoryDistribution,
   fetchAdminListings, fetchRecentActivity, GROWTH_RANGES,
+  variacionPct, formatVariacion, STATS_WINDOW_DAYS,
   type AdminStats, type AdminListingRow, type ActivityItem, type GrowthRange,
 } from "@/lib/admin";
 import { auditEntityLabel, lowercaseFirst } from "@/lib/auditLabels";
@@ -71,25 +72,54 @@ const AdminDashboard = ({ role }: Props) => {
   const activeCount = stats ? stats.active_listings : 0;
   const notSold = Math.max(0, activeCount - soldCount);
 
+  // Valores de hace 30 días (migración 0097). Con ellos se calcula la variación
+  // de cada tarjeta: hasta ahora eran porcentajes escritos a mano que no se
+  // movían nunca por más avisos que se publicaran.
+  const soldPrev = stats?.sold_listings_prev ?? null;
+  const activePrev = stats?.active_listings_prev ?? null;
+  const notSoldPrev = activePrev === null || soldPrev === null
+    ? null
+    : Math.max(0, activePrev - soldPrev);
+  const ventana = stats?.window_days ?? STATS_WINDOW_DAYS;
+
   const kpis = [
-    { label: "Avisos publicados", value: activeCount.toLocaleString(), icon: ClipboardList, trend: "+3.2%", accent: "bg-secondary/15 text-secondary" },
-    { label: "Vendidos", value: soldCount.toLocaleString(), icon: CheckCircle2, trend: "", accent: "bg-success/15 text-success" },
-    { label: "No vendidos", value: notSold.toLocaleString(), icon: XCircle, trend: "", accent: "bg-warning/15 text-warning" },
-    { label: "Reportados", value: (stats ? stats.reports_open : 0).toLocaleString(), icon: Flag, trend: "", accent: "bg-destructive/15 text-destructive" },
-    { label: "Usuarios", value: (stats ? stats.users : 0).toLocaleString(), icon: Users, trend: "+8.4%", accent: "bg-primary/10 text-primary" },
-    { label: "Ingresos (S/)", value: (stats ? stats.revenue : 0).toLocaleString(), icon: DollarSign, trend: "+14.1%", accent: "bg-success/15 text-success" },
-  ];
+    { label: "Avisos publicados", value: activeCount, prev: activePrev, icon: ClipboardList, accent: "bg-secondary/15 text-secondary" },
+    { label: "Vendidos", value: soldCount, prev: soldPrev, icon: CheckCircle2, accent: "bg-success/15 text-success" },
+    // En estas dos, subir es mala noticia: el color de la variación se invierte
+    // para que un aumento de reportes no se pinte en verde.
+    { label: "No vendidos", value: notSold, prev: notSoldPrev, icon: XCircle, accent: "bg-warning/15 text-warning", subirEsMalo: true },
+    { label: "Reportados", value: stats ? stats.reports_open : 0, prev: stats?.reports_open_prev ?? null, icon: Flag, accent: "bg-destructive/15 text-destructive", subirEsMalo: true },
+    { label: "Usuarios", value: stats ? stats.users : 0, prev: stats?.users_prev ?? null, icon: Users, accent: "bg-primary/10 text-primary" },
+    { label: "Ingresos (S/)", value: stats ? stats.revenue : 0, prev: stats?.revenue_prev ?? null, icon: DollarSign, accent: "bg-success/15 text-success" },
+  ].map((k) => {
+    const pct = variacionPct(k.value, k.prev);
+    return {
+      ...k,
+      value: k.value.toLocaleString(),
+      pct,
+      // Sin variación calculable pero con dato nuevo donde antes no había nada,
+      // "nuevo" dice la verdad; "+∞%" no.
+      trend: pct === null
+        ? (k.prev === 0 && k.value > 0 ? "nuevo" : "")
+        : formatVariacion(pct),
+      color: pct === null || pct === 0
+        ? "text-muted-foreground"
+        : (pct > 0) !== !!k.subirEsMalo
+          ? "text-success"
+          : "text-destructive",
+    };
+  });
 
   return (
     <>
       {/* Greeting */}
-      <div className="relative overflow-hidden rounded-2xl gradient-hero text-primary-foreground p-5 md:p-7">
-        <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-secondary/30 blur-3xl" />
-        <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="relative overflow-hidden rounded-2xl gradient-hero text-primary-foreground p-4 md:p-5">
+        <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-secondary/30 blur-3xl" />
+        <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <p className="text-[11px] uppercase tracking-widest text-secondary font-bold mb-1">Bienvenido</p>
-            <h2 className="text-xl md:text-3xl font-extrabold">Hola, {role === "superadmin" ? "Super Admin" : "Administrador"}</h2>
-            <p className="text-primary-foreground/70 text-sm md:text-base mt-1">
+            <p className="text-[11px] uppercase tracking-widest text-secondary font-bold mb-0.5">Bienvenido</p>
+            <h2 className="text-lg md:text-2xl font-extrabold">Hola, {role === "superadmin" ? "Super Admin" : "Administrador"}</h2>
+            <p className="text-primary-foreground/70 text-sm mt-0.5">
               Monitorea la salud de la plataforma en tiempo real.
             </p>
           </div>
@@ -97,7 +127,6 @@ const AdminDashboard = ({ role }: Props) => {
               Antes el botón no tenía handler y no hacía nada (IT2-040). */}
           <Button
             variant="hero"
-            size="lg"
             className="gap-2 self-start sm:self-auto"
             onClick={() => navigate(`/dashboard/${role}/reportes`)}
           >
@@ -107,27 +136,40 @@ const AdminDashboard = ({ role }: Props) => {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
-        {kpis.map((k) => (
-          <Card key={k.label} className="border-l-4 border-l-secondary/60 hover:shadow-md transition">
-            <CardContent className="p-3 md:p-4">
-              <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-3 ${k.accent}`}>
-                <k.icon size={18} />
-              </div>
-              <p className="text-xl md:text-2xl font-extrabold text-foreground leading-none">{k.value}</p>
-              <div className="flex items-center justify-between mt-2">
-                <p className="text-[11px] text-muted-foreground truncate">{k.label}</p>
-                <span className="text-[10px] font-semibold text-success">{k.trend}</span>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+      <div>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
+          {kpis.map((k) => (
+            <Card key={k.label} className="border-l-4 border-l-secondary/60 hover:shadow-md transition">
+              <CardContent className="p-3 md:p-4">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-2 ${k.accent}`}>
+                  <k.icon size={16} />
+                </div>
+                <p className="text-xl md:text-2xl font-extrabold text-foreground leading-none">{k.value}</p>
+                <div className="flex items-center justify-between gap-1 mt-1.5">
+                  <p className="text-[11px] text-muted-foreground truncate">{k.label}</p>
+                  {/* El color sigue al signo: antes estaba fijo en verde, así que
+                      una caída se habría pintado como buena noticia. */}
+                  <span
+                    className={`text-[10px] font-semibold shrink-0 ${k.color}`}
+                    title={k.pct === null ? undefined : `Hace ${ventana} días: ${(k.prev ?? 0).toLocaleString()}`}
+                  >
+                    {k.trend}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        {/* Sin esta línea el porcentaje no dice contra qué se compara. */}
+        <p className="text-[11px] text-muted-foreground mt-2">
+          La variación compara con hace {ventana} días.
+        </p>
       </div>
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
         <Card className="lg:col-span-2">
-          <CardHeader>
+          <CardHeader className="p-4 pb-2">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <CardTitle className="text-base md:text-lg">Ingresos y usuarios</CardTitle>
               <Select value={rangeFilter} onValueChange={(v) => setRangeFilter(v as GrowthRange)}>
@@ -167,7 +209,7 @@ const AdminDashboard = ({ role }: Props) => {
         </Card>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 pb-2">
             <CardTitle className="text-base md:text-lg">Avisos por categoría</CardTitle>
           </CardHeader>
           <CardContent className="h-72">

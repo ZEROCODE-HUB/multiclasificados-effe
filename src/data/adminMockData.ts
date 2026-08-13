@@ -5,6 +5,13 @@ export const adminKpis = {
   revenue: 248500,
   applications: 3120,
   reportsOpen: 17,
+  // Valores de hace 30 días, solo para el modo demo (sin sesión): sin ellos las
+  // tarjetas de la demo saldrían sin variación. Con datos reales estos números
+  // los calcula la RPC admin_stats (migración 0097).
+  usersPrev: 14220,
+  activeListingsPrev: 7810,
+  reportsOpenPrev: 21,
+  revenuePrev: 217900,
 };
 
 export const revenueSeries = [

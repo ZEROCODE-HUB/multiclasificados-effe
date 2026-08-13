@@ -21,8 +21,16 @@ const { LISTING_ACTIVITY, USER_ACTIVITY } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/admin", () => ({
-  // GROWTH_RANGES lo agregó el filtro del gráfico (PR #14) y este mock no se
-  // actualizó, dejando el test roto en main; se repone aquí.
+  // Ojo al mantener este mock: es una fábrica, así que TODA export que el
+  // dashboard consuma tiene que estar aquí o el render revienta antes de pintar
+  // nada. Ya pasó con GROWTH_RANGES (PR #14) y con la variación de los KPIs.
+  STATS_WINDOW_DAYS: 30,
+  // La real, no un stub: si el cálculo cambia, que se vea aquí también.
+  variacionPct: (a: number, p: number | null | undefined) =>
+    p === null || p === undefined || p === 0 || !Number.isFinite(p) || !Number.isFinite(a)
+      ? null
+      : Math.round(((a - p) / p) * 1000) / 10,
+  formatVariacion: (pct: number) => `${pct > 0 ? "+" : ""}${pct}%`,
   GROWTH_RANGES: [
     { value: "7d", label: "Esta semana" },
     { value: "30d", label: "Últimos 30 días" },

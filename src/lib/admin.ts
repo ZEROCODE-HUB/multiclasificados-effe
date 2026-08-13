@@ -29,9 +29,48 @@ async function isAuthed(): Promise<boolean> {
 }
 
 // ------------------------------------------------------------------ Dashboard
+// Los campos `*_prev` traen el valor que cada cifra tenía hace `window_days`
+// (migración 0097). Son lo que permite calcular la variación de las tarjetas:
+// antes eran porcentajes escritos a mano que nunca cambiaban.
 export interface AdminStats {
   users: number; active_listings: number; pending_listings: number;
   sold_listings: number; total_listings: number; reports_open: number; revenue: number;
+  window_days?: number;
+  users_prev?: number; active_listings_prev?: number;
+  sold_listings_prev?: number; reports_open_prev?: number; revenue_prev?: number;
+}
+
+// Ventana de comparación por defecto, por si la RPC es anterior a la 0097.
+export const STATS_WINDOW_DAYS = 30;
+
+/**
+ * Variación porcentual entre el valor de ahora y el de hace 30 días.
+ *
+ * Devuelve `null` cuando el porcentaje no significaría nada:
+ *  - no había nada antes y ahora sí → no es "+∞%", es algo nuevo;
+ *  - no había nada antes ni ahora   → no hay variación que enseñar;
+ *  - falta el dato previo (RPC vieja) → mejor nada que un número inventado.
+ */
+export function variacionPct(actual: number, previo: number | null | undefined): number | null {
+  if (previo === null || previo === undefined || !Number.isFinite(previo)) return null;
+  if (!Number.isFinite(actual)) return null;
+  if (previo === 0) return null;
+  return Math.round(((actual - previo) / previo) * 1000) / 10;
+}
+
+/**
+ * Cómo se escribe esa variación en una tarjeta que mide unos 150px.
+ *
+ * En una plataforma joven las variaciones son enormes (17 usuarios → 105 son
+ * +517%), y un "+1350%" no cabe y encima se lee peor que "×14,5". Por eso el
+ * decimal solo se conserva donde aporta, y a partir de multiplicar por diez se
+ * cambia a multiplicador.
+ */
+export function formatVariacion(pct: number): string {
+  const abs = Math.abs(pct);
+  if (abs >= 1000) return `×${(1 + pct / 100).toFixed(1)}`;
+  const n = abs >= 100 ? Math.round(pct) : pct;
+  return `${n > 0 ? "+" : ""}${n}%`;
 }
 
 export async function fetchAdminStats(): Promise<{ data: AdminStats; real: boolean }> {
@@ -48,6 +87,11 @@ export async function fetchAdminStats(): Promise<{ data: AdminStats; real: boole
       data: {
         users: 0, active_listings: 0, pending_listings: 0, sold_listings: 0,
         total_listings: 0, reports_open: 0, revenue: 0,
+        // Sin datos previos no se enseña variación: con 0 y 0 no hay nada que
+        // comparar, y `variacionPct` devuelve null.
+        window_days: STATS_WINDOW_DAYS,
+        users_prev: 0, active_listings_prev: 0, sold_listings_prev: 0,
+        reports_open_prev: 0, revenue_prev: 0,
       },
     };
   }
@@ -58,6 +102,10 @@ export async function fetchAdminStats(): Promise<{ data: AdminStats; real: boole
       pending_listings: adminKpis.pendingListings, sold_listings: 0,
       total_listings: adminKpis.activeListings, reports_open: adminKpis.reportsOpen,
       revenue: adminKpis.revenue,
+      window_days: STATS_WINDOW_DAYS,
+      users_prev: adminKpis.usersPrev, active_listings_prev: adminKpis.activeListingsPrev,
+      sold_listings_prev: 0, reports_open_prev: adminKpis.reportsOpenPrev,
+      revenue_prev: adminKpis.revenuePrev,
     },
   };
 }
