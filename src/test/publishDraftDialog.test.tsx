@@ -151,7 +151,7 @@ describe("PublishDraftDialog — publicar un borrador guardado", () => {
     expect(finalizeListingPublication).not.toHaveBeenCalled();
   });
 
-  it("sin saldo: el botón ofrece comprar saldo y no cobra", async () => {
+  it("sin saldo: ofrece pagar el aviso en el acto y no cobra nada todavía", async () => {
     getCreditBalance.mockResolvedValue(0);
     renderDialog();
     await screen.findAllByText(`S/ ${COST_CREDITS}`);
@@ -159,8 +159,10 @@ describe("PublishDraftDialog — publicar un borrador guardado", () => {
     const btn = await screen.findByRole("button", { name: /comprar saldo/i });
     fireEvent.click(btn);
 
-    await screen.findByText(/saldo a comprar/i);
-    expect(finalizeListingPublication).not.toHaveBeenCalled();
+    // Se cobra este aviso, no un paquete de saldo que el usuario deba armar.
+    await screen.findByText(/a pagar ahora/i);
+    expect(screen.getByRole("button", { name: /pagar y publicar/i })).toBeTruthy();
+    expect(screen.queryByText(/saldo a comprar/i)).toBeNull();
     expect(finalizeListingPublication).not.toHaveBeenCalled();
   });
 

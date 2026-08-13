@@ -34,7 +34,7 @@ import { fetchMyIdentity } from "@/lib/identity";
 import { getCreditBalance } from "@/lib/credits";
 import { fetchActivePromotions, bestPromoForCategory, applyDiscount, type Promotion } from "@/lib/promotions";
 import { fetchPricingSettings } from "@/lib/pricingRemote";
-import { BuyCreditsModal } from "@/components/BuyCreditsModal";
+import { BuyCreditsModal, type PublishTarget } from "@/components/BuyCreditsModal";
 import { LocationPicker } from "@/components/LocationPicker";
 import { supabase } from "@/lib/supabase";
 
@@ -159,6 +159,9 @@ const AdvertiserPublish = () => {
 
   // Flujo de publicación con créditos
   const [buyCreditsOpen, setBuyCreditsOpen] = useState(false);
+  // Aviso que se está pagando para publicar en el acto. Cuando está puesto, el
+  // modal cobra solo lo que falta y el servidor publica al confirmarse el pago.
+  const [pagarPublicar, setPagarPublicar] = useState<PublishTarget | null>(null);
   const [publishing, setPublishing] = useState(false);
   // Guard SÍNCRONO contra el doble envío. `publishing` es state: no se actualiza
   // hasta el siguiente render, así que dos toques seguidos (o el ghost-click de
@@ -412,15 +415,58 @@ const AdvertiserPublish = () => {
   // publicado sin foto que un anunciante que abandona por no tener una a mano.
   const canPublish = form.category && form.title && form.description && (isEmpleo || form.price) && form.department;
 
+  // Guarda el aviso en la BD como borrador y devuelve su id. No navega ni avisa:
+  // lo usan el botón "Guardar en mis borradores" y el pago-y-publica, que
+  // necesita que el aviso exista para poder atarle la orden.
+  const guardarBorradorEnBD = async (): Promise<string> => {
+    const id = await saveListingDraft({
+      form: formForSubmit, lat: coords?.lat ?? null, lng: coords?.lng ?? null,
+      quantity, duration, extras,
+      mainPhoto: mainPhoto ? { file: mainPhoto.file, name: mainPhoto.name } : null,
+      extraPhotos: extraPhotos.slice(0, extraImageCount)
+        .filter((p): p is PhotoItem => !!p)
+        .map((p) => ({ file: p.file, name: p.name })),
+      pdf: hasPdfInPackage && pdfFile ? { file: pdfFile.file, name: pdfFile.name } : null,
+      draftId: draftListingId.current,
+    });
+    draftListingId.current = id;
+    // El borrador local ya no hace falta: la fuente de verdad pasa a ser la BD.
+    localStorage.removeItem(DRAFT_KEY);
+    return id;
+  };
+
   // Publica según el saldo disponible. La identidad ya viene precargada del
   // perfil (verificada al comprar saldo): no se abre ningún modal de verificación.
-  const openPublishFlowAfterVerify = () => {
+  const openPublishFlowAfterVerify = async () => {
     if (balanceCredits >= totalCredits) {
       // Tiene créditos: se publica directo y se descuenta (sin cuadro de pagos).
       doPublish();
-    } else {
-      // No tiene créditos: abre el configurador para comprar.
+      return;
+    }
+    // No le alcanza: se cobra en el acto solo lo que falta. Para eso el aviso
+    // tiene que existir ya en la BD (con sus fotos subidas), porque la orden va
+    // atada a él y es el servidor quien lo publica al confirmarse el pago.
+    if (savingDraftRef.current || publishingRef.current) return;
+    savingDraftRef.current = true;
+    setSavingDraft(true);
+    try {
+      const id = await guardarBorradorEnBD();
+      setPagarPublicar({
+        listingId: id,
+        title: form.title,
+        costCredits: totalCredits,
+        durationDays: duration,
+      });
       setBuyCreditsOpen(true);
+    } catch (err: unknown) {
+      toast({
+        title: "No se pudo preparar el pago",
+        description: err instanceof Error ? err.message : "Inténtalo de nuevo.",
+        variant: "destructive",
+      });
+    } finally {
+      savingDraftRef.current = false;
+      setSavingDraft(false);
     }
   };
 
@@ -491,19 +537,7 @@ const AdvertiserPublish = () => {
     savingDraftRef.current = true;
     setSavingDraft(true);
     try {
-      const id = await saveListingDraft({
-        form: formForSubmit, lat: coords?.lat ?? null, lng: coords?.lng ?? null,
-        quantity, duration, extras,
-        mainPhoto: mainPhoto ? { file: mainPhoto.file, name: mainPhoto.name } : null,
-        extraPhotos: extraPhotos.slice(0, extraImageCount)
-          .filter((p): p is PhotoItem => !!p)
-          .map((p) => ({ file: p.file, name: p.name })),
-        pdf: hasPdfInPackage && pdfFile ? { file: pdfFile.file, name: pdfFile.name } : null,
-        draftId: draftListingId.current,
-      });
-      draftListingId.current = id;
-      // El borrador local ya no hace falta: la fuente de verdad pasa a ser la BD.
-      localStorage.removeItem(DRAFT_KEY);
+      await guardarBorradorEnBD();
       toast({
         title: "Guardado en tus borradores",
         description: "Lo encuentras en Mis avisos › Borradores. Puedes publicarlo cuando quieras.",
@@ -586,12 +620,22 @@ const AdvertiserPublish = () => {
         // El aviso ya existe (con sus fotos subidas): al reintentar hay que
         // publicar ESE. Sin esto, comprar saldo y volver a publicar dejaría dos.
         if (e.listingId) draftListingId.current = e.listingId;
-        setCreditBalance(await getCreditBalance());
+        const saldoReal = await getCreditBalance();
+        setCreditBalance(saldoReal);
         toast({
           title: "Te falta saldo para publicar",
-          description: "Tu aviso quedó guardado en borradores. Compra saldo y publícalo desde ahí.",
+          description: "Paga aquí mismo lo que falta y tu aviso se publica solo.",
           variant: "destructive",
         });
+        // Con el aviso identificado se cobra solo el faltante y lo publica el
+        // servidor. Si no hay aviso, o si el saldo que devuelve la BD ya
+        // cubriría el costo (entonces el rechazo viene de otra cosa y no hay
+        // "faltante" que cobrar), se cae al configurador de saldo de siempre.
+        setPagarPublicar(
+          e.listingId && saldoReal < totalCredits
+            ? { listingId: e.listingId, title: form.title, costCredits: totalCredits, durationDays: duration }
+            : null,
+        );
         setBuyCreditsOpen(true);
         return;
       }
@@ -1188,12 +1232,29 @@ const AdvertiserPublish = () => {
 
 
 
-      {/* Modal compra de créditos — configurador (cuando no hay saldo suficiente) */}
+      {/* Pago del aviso cuando no alcanza el saldo. Con `publishFor` cobra solo
+          el faltante y publica el servidor; sin él es el configurador de saldo
+          de siempre (por si el usuario prefiere esa vía). */}
       <BuyCreditsModal
         open={buyCreditsOpen}
-        onClose={() => setBuyCreditsOpen(false)}
+        onClose={() => { setBuyCreditsOpen(false); setPagarPublicar(null); }}
         creditCost={totalCredits}
         currentBalance={balanceCredits}
+        publishFor={pagarPublicar ?? undefined}
+        onPublished={async (published) => {
+          setBuyCreditsOpen(false);
+          setPagarPublicar(null);
+          setCreditBalance(await getCreditBalance());
+          if (published) {
+            // Ya está activo: publicarlo otra vez daría error de "ya publicado".
+            setSuccessOpen({ open: true, number: "", email: userEmail || "anunciante@effe.pe" });
+            resetPublishForm();
+          } else {
+            // Cobrado pero sin publicar (o ya tenía saldo): el saldo alcanza,
+            // así que se remata aquí reutilizando el mismo borrador.
+            doPublish();
+          }
+        }}
         onPurchaseComplete={(newBalance) => {
           setCreditBalance(newBalance);
           setBuyCreditsOpen(false);
@@ -1202,7 +1263,9 @@ const AdvertiserPublish = () => {
           // cobro" para no duplicar el aviso; ese estado ya no existe, porque
           // publicar y cobrar van juntos, y `draftListingId` hace que se
           // reutilice el mismo aviso en vez de crear otro.
-          if (Math.round(newBalance) >= totalCredits) {
+          // Sin redondear: con saldo 16.00 y costo 16.14, `Math.round` daba por
+          // bueno lo que la BD rechaza (resto de IT3-016).
+          if (newBalance >= totalCredits) {
             doPublish();
           } else {
             toast({

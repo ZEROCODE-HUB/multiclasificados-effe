@@ -1,9 +1,11 @@
-// Cobro real con Izipay/Lyra para COMPRAR SALDO.
+// Cobro real con Izipay/Lyra: para COMPRAR SALDO o para PAGAR Y PUBLICAR un
+// aviso concreto.
 //
 // El flujo tiene dos mitades: aquí (cliente) solo se PIDE el formToken y se
-// espera la confirmación; la acreditación de créditos y la boleta las hace el
-// webhook (server-to-server) cuando Izipay confirma el pago. Por eso el cliente
-// NUNCA acredita: solo hace polling del estado de su propia orden.
+// espera la confirmación; la acreditación de créditos, la boleta y —en el modo
+// pagar-y-publicar— la publicación del aviso las hace el webhook
+// (server-to-server) cuando Izipay confirma el pago. Por eso el cliente NUNCA
+// acredita ni publica: solo hace polling del estado de su propia orden.
 import { supabase } from "@/lib/supabase";
 import { getCreditBalance } from "@/lib/credits";
 
@@ -23,16 +25,36 @@ export interface PurchaseConfig {
   receipt: PurchaseReceipt;
 }
 
+// Pagar y publicar: el cobro va atado a un aviso propio en borrador. El
+// servidor calcula cuánto FALTA (costo del aviso − saldo) y publica el aviso al
+// confirmarse el pago.
+export interface PublishPaymentConfig {
+  listingId: string;
+  duration?: number; // opcional: si se cambió en el diálogo de borradores
+  receipt: PurchaseReceipt;
+}
+
 export interface CreatePaymentResult {
   orderId: string;
   formToken: string;
   publicKey: string | null;
+  amount: number;            // lo que se cobra ahora, en soles
+  listingCost: number | null; // costo del aviso (solo en pagar-y-publicar)
+}
+
+// El usuario ya tiene saldo de sobra: no hay nada que cobrar y hay que publicar
+// directo en vez de abrir la pasarela.
+export class SaldoYaSuficiente extends Error {
+  constructor() {
+    super("Ya tienes saldo suficiente para publicar.");
+    this.name = "SaldoYaSuficiente";
+  }
 }
 
 // Llama a la Edge Function create-payment: crea la orden 'pending' y devuelve el
 // formToken de Izipay. El monto lo recalcula el servidor (no se envía el precio).
-export async function createPayment(config: PurchaseConfig): Promise<CreatePaymentResult> {
-  const { data, error } = await supabase.functions.invoke("create-payment", { body: config });
+async function invokeCreatePayment(body: unknown): Promise<CreatePaymentResult> {
+  const { data, error } = await supabase.functions.invoke("create-payment", { body });
 
   if (error) {
     // El cuerpo de error de una Edge Function viene en error.context (Response).
@@ -40,8 +62,8 @@ export async function createPayment(config: PurchaseConfig): Promise<CreatePayme
     try {
       const ctx = (error as { context?: Response }).context;
       if (ctx && typeof ctx.json === "function") {
-        const body = await ctx.json();
-        if (body?.error) message = body.error;
+        const b = await ctx.json();
+        if (b?.error) message = b.error;
       }
     } catch {
       /* se mantiene el mensaje original */
@@ -49,12 +71,27 @@ export async function createPayment(config: PurchaseConfig): Promise<CreatePayme
     throw new Error(message);
   }
 
-  if (!data?.success) throw new Error(data?.error ?? "No se pudo iniciar el pago.");
+  if (!data?.success) {
+    if (data?.code === "SALDO_SUFICIENTE") throw new SaldoYaSuficiente();
+    throw new Error(data?.error ?? "No se pudo iniciar el pago.");
+  }
   return {
     orderId: data.orderId as string,
     formToken: data.formToken as string,
     publicKey: (data.publicKey as string | null) ?? null,
+    amount: Number(data.amount ?? 0),
+    listingCost: data.listingCost === null || data.listingCost === undefined
+      ? null
+      : Number(data.listingCost),
   };
+}
+
+export function createPayment(config: PurchaseConfig): Promise<CreatePaymentResult> {
+  return invokeCreatePayment(config);
+}
+
+export function createPublishPayment(config: PublishPaymentConfig): Promise<CreatePaymentResult> {
+  return invokeCreatePayment(config);
 }
 
 export type OrderOutcome = "paid" | "failed" | "timeout";
@@ -83,15 +120,23 @@ export async function pollOrderStatus(orderId: string, opts: PollOptions = {}): 
   return "timeout";
 }
 
-// Tras confirmarse el pago: saldo actualizado + número de la boleta emitida.
-export async function getPurchaseResult(orderId: string): Promise<{ balance: number; invoiceNumber: string }> {
+// Tras confirmarse el pago: saldo actualizado, número de la boleta emitida y,
+// si la orden venía atada a un aviso, si el servidor llegó a publicarlo.
+// `published` es null cuando la orden era una compra de saldo normal.
+export async function getPurchaseResult(
+  orderId: string,
+): Promise<{ balance: number; invoiceNumber: string; published: boolean | null }> {
   const balance = await getCreditBalance();
-  const { data } = await supabase
-    .from("invoices")
-    .select("number")
-    .eq("order_id", orderId)
-    .maybeSingle();
-  return { balance, invoiceNumber: (data?.number as string) ?? "" };
+  const [invoice, order] = await Promise.all([
+    supabase.from("invoices").select("number").eq("order_id", orderId).maybeSingle(),
+    supabase.from("orders").select("extras").eq("id", orderId).maybeSingle(),
+  ]);
+  const extras = (order.data?.extras ?? {}) as Record<string, unknown>;
+  return {
+    balance,
+    invoiceNumber: (invoice.data?.number as string) ?? "",
+    published: typeof extras.published === "boolean" ? extras.published : null,
+  };
 }
 
 // URL de la página de pago propia (ruta /pay) que se abre en el navegador del

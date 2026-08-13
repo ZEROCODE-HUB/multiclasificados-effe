@@ -139,12 +139,16 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
     publish(confirmed);
   };
 
-  const onPublishClick = () => {
-    if (!enoughCredits) { setBuyOpen(true); return; }
-    // Misma regla que al publicar desde el formulario: sin identidad confirmada
-    // no se publica. Si ya la confirmó en este diálogo, no se le vuelve a pedir.
+  // Misma regla que al publicar desde el formulario: sin identidad confirmada
+  // no se publica. Si ya la confirmó en este diálogo, no se le vuelve a pedir.
+  const continuarPublicacion = () => {
     if (identity) { publish(identity); return; }
     setVerifyOpen(true);
+  };
+
+  const onPublishClick = () => {
+    if (!enoughCredits) { setBuyOpen(true); return; }
+    continuarPublicacion();
   };
 
   return (
@@ -218,11 +222,32 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
         onConfirmed={onIdentityConfirmed}
       />
 
+      {/* Sin saldo no se manda al usuario a "comprar créditos y volver": se le
+          cobra aquí mismo lo que falta para ESTE aviso y el servidor lo publica
+          al confirmarse el pago. */}
       <BuyCreditsModal
         open={buyOpen}
         onClose={() => setBuyOpen(false)}
         currentBalance={balance ?? 0}
         creditCost={totalCredits}
+        publishFor={draft ? {
+          listingId: draft.id,
+          title: draft.title,
+          costCredits: totalCredits,
+          durationDays: duration,
+        } : undefined}
+        onPublished={async (publicado) => {
+          setBuyOpen(false);
+          setBalance(await getCreditBalance());
+          if (publicado) {
+            onPublished();
+            onClose();
+            return;
+          }
+          // Cobrado pero sin publicar (o ya le alcanzaba el saldo): se remata
+          // por el camino de siempre, que pide la identidad si hace falta.
+          continuarPublicacion();
+        }}
         onPurchaseComplete={(newBalance) => {
           setBalance(newBalance);
           setBuyOpen(false);

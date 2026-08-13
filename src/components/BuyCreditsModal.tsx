@@ -17,7 +17,8 @@ import { fetchPricingSettings } from "@/lib/pricingRemote";
 import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 import { verifyDocument, normalizeDocNumber } from "@/lib/verifyDoc";
 import {
-  createPayment, pollOrderStatus, getPurchaseResult, hostedPaymentUrl,
+  createPayment, createPublishPayment, pollOrderStatus, getPurchaseResult, hostedPaymentUrl,
+  SaldoYaSuficiente,
   type PurchaseConfig, type CreatePaymentResult, type OrderOutcome,
 } from "@/lib/payments";
 import { PaymentForm } from "@/components/PaymentForm";
@@ -25,12 +26,31 @@ import { PaymentForm } from "@/components/PaymentForm";
 // Correo válido para el comprobante.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// Piso de cobro de la pasarela. Debe coincidir con MIN_CHARGE_PEN de la Edge
+// Function create-payment: si aquí se enseña un importe y allí se cobra otro,
+// el usuario ve una cifra en el resumen y otra en el formulario de la tarjeta.
+const MIN_COBRO = 1;
+
+// Aviso que se quiere publicar pagando en el acto lo que falta.
+export interface PublishTarget {
+  listingId: string;
+  title: string;
+  costCredits: number;
+  durationDays: number;
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
   creditCost: number;      // costo del aviso que se quiere publicar
   currentBalance: number;  // saldo actual del usuario
   onPurchaseComplete: (newBalance: number) => void;
+  // Con esto el modal deja de ser un configurador de saldo y pasa a cobrar SOLO
+  // lo que falta para publicar ESE aviso, que el servidor publica al confirmarse
+  // el pago. `onPublished(false)` significa "cobrado pero sin publicar": el saldo
+  // ya está acreditado y quien llama debe rematar la publicación.
+  publishFor?: PublishTarget;
+  onPublished?: (published: boolean) => void;
 }
 
 const DURATIONS: DurationDays[] = [3, 7, 15, 30, 60, 90];
@@ -43,7 +63,9 @@ const EXTRA_DEFS: Array<{ key: keyof ExtraPrices; label: string; sub: string }> 
   { key: "destacado", label: "Aviso Destacado", sub: "aparece arriba" },
 ];
 
-export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onPurchaseComplete }: Props) {
+export function BuyCreditsModal({
+  open, onClose, creditCost, currentBalance, onPurchaseComplete, publishFor, onPublished,
+}: Props) {
   const [settings, setSettings] = useState<PricingSettings>(() => loadSettings());
   const [buying, setBuying] = useState(false);
 
@@ -51,6 +73,11 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
   const [step, setStep] = useState<"config" | "paying">("config");
   const [payment, setPayment] = useState<CreatePaymentResult | null>(null);
   const [confirming, setConfirming] = useState(false); // polling del estado de la orden
+
+  // Escape del modo pagar-y-publicar: quien prefiera cargar saldo por su cuenta
+  // (para varios avisos, por ejemplo) vuelve al configurador de siempre.
+  const [soloSaldo, setSoloSaldo] = useState(false);
+  const modoPublicar = !!publishFor && !soloSaldo;
 
   // Configurador de la compra
   const [quantity, setQuantity] = useState(1);
@@ -139,6 +166,7 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
       setStep("config");
       setPayment(null);
       setConfirming(false);
+      setSoloSaldo(false);
     }
   }, [open]);
 
@@ -148,15 +176,43 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
   );
   // Los adicionales se cobran por día publicado, así que la duración entra aquí.
   const extrasSum = useMemo(() => extrasTotal(extras, duration, settings), [extras, duration, settings]);
-  // Precio en soles (dinero real, para la boleta).
-  const solesTotal = Math.round((packageBase + extrasSum) * 100) / 100;
-  // Créditos a comprar (enteros): soles × multiplicador.
+  // Precio del configurador, en soles (dinero real, para la boleta).
+  const configSoles = Math.round((packageBase + extrasSum) * 100) / 100;
+
+  // En modo pagar-y-publicar el importe no lo arma el usuario: es lo que le
+  // falta para su aviso. El servidor lo vuelve a calcular igual, así que esto
+  // es solo lo que se le enseña antes de pagar.
+  const faltante = publishFor
+    ? Math.max(Math.round((publishFor.costCredits - currentBalance) * 100) / 100, 0)
+    : 0;
+  const aplicaMinimo = faltante > 0 && faltante < MIN_COBRO;
+  const publishSoles = faltante > 0 ? Math.max(faltante, MIN_COBRO) : 0;
+
+  const solesTotal = modoPublicar ? publishSoles : configSoles;
+  // Créditos a comprar: soles × multiplicador.
   const creditsToBuy = solesToCredits(solesTotal);
 
   // Cierra el flujo según el resultado del pago (confirmado por el webhook).
   const finishOutcome = async (outcome: OrderOutcome, orderId: string) => {
     if (outcome === "paid") {
-      const { balance, invoiceNumber } = await getPurchaseResult(orderId);
+      const { balance, invoiceNumber, published } = await getPurchaseResult(orderId);
+
+      if (modoPublicar) {
+        // El aviso lo publica el servidor al liquidar. Si por lo que sea no
+        // salió, el saldo quedó acreditado igual: se avisa al padre para que
+        // remate la publicación, que ya tiene con qué pagarla.
+        toast({
+          title: published ? "¡Aviso publicado!" : "Pago aprobado",
+          description: published
+            ? `Ya está activo por ${publishFor?.durationDays} días.` +
+              (invoiceNumber ? ` Comprobante: ${invoiceNumber}` : "")
+            : "Recibimos tu pago. Estamos publicando tu aviso…",
+        });
+        onPublished?.(published === true);
+        onClose();
+        return;
+      }
+
       toast({
         title: "¡Saldo acreditado!",
         description: `Se añadió ${formatCredits(creditsToBuy)} a tu saldo.` +
@@ -169,7 +225,12 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
       setStep("config");
       setPayment(null);
     } else {
-      toast({ title: "Seguimos confirmando tu pago", description: "Si ya pagaste, tu saldo se acreditará en unos minutos." });
+      toast({
+        title: "Seguimos confirmando tu pago",
+        description: modoPublicar
+          ? "Si ya pagaste, tu aviso se publicará solo en unos minutos."
+          : "Si ya pagaste, tu saldo se acreditará en unos minutos.",
+      });
       onClose();
     }
   };
@@ -177,7 +238,13 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
   // Paso 1 → crea la orden y obtiene el formToken. En APK abre la página de pago
   // en el navegador del sistema (redirect); en web pasa al formulario embebido.
   const handleContinue = async () => {
-    if (creditsToBuy <= 0) { toast({ title: "Selecciona qué comprar", variant: "destructive" }); return; }
+    // En modo publicar el importe lo decide el servidor, que es quien conoce el
+    // saldo real: si resulta que ya le alcanza, responde SaldoYaSuficiente y se
+    // publica sin cobrar (ver el catch de abajo).
+    if (!modoPublicar && creditsToBuy <= 0) {
+      toast({ title: "Selecciona qué comprar", variant: "destructive" });
+      return;
+    }
     if (!verifiedName) {
       toast({
         title: personType === "natural" ? "Verifica tu DNI" : "Verifica tu RUC",
@@ -189,20 +256,27 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
     if (!emailValid) { toast({ title: "Ingresa un correo válido", variant: "destructive" }); return; }
     setBuying(true);
     try {
+      const receipt = {
+        receiptType,
+        email: email.trim(),
+        advertiserName: verifiedName,
+        docType: (personType === "natural" ? "dni" : "ruc") as "dni" | "ruc",
+        docNumber: docNumber.trim(),
+        factilizaData: docData,
+      };
       const config: PurchaseConfig = {
         quantity,
         duration,
         extras: extras as Record<string, boolean | number>,
-        receipt: {
-          receiptType,
-          email: email.trim(),
-          advertiserName: verifiedName,
-          docType: personType === "natural" ? "dni" : "ruc",
-          docNumber: docNumber.trim(),
-          factilizaData: docData,
-        },
+        receipt,
       };
-      const result = await createPayment(config);
+      const result = modoPublicar && publishFor
+        ? await createPublishPayment({
+            listingId: publishFor.listingId,
+            duration: publishFor.durationDays,
+            receipt,
+          })
+        : await createPayment(config);
 
       if (Capacitor.isNativePlatform()) {
         // Redirect en móvil: el 3-D Secure corre en un navegador real, no en el WebView.
@@ -218,6 +292,13 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
         setStep("paying");
       }
     } catch (err: unknown) {
+      // El saldo alcanzó entre que se abrió el modal y se pulsó pagar (otra
+      // pestaña, un abono del admin): no se cobra nada y se publica.
+      if (err instanceof SaldoYaSuficiente) {
+        onPublished?.(false);
+        onClose();
+        return;
+      }
       const msg = err instanceof Error ? err.message : "No se pudo iniciar el pago.";
       toast({ title: "Error", description: msg, variant: "destructive" });
     } finally {
@@ -246,12 +327,15 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Wallet size={18} className="text-secondary" /> Comprar saldo
+            <Wallet size={18} className="text-secondary" />
+            {modoPublicar ? "Pagar y publicar" : "Comprar saldo"}
           </DialogTitle>
           <DialogDescription>
-            {step === "config"
-              ? "Arma tu compra: elige cantidad de avisos, duración y adicionales. Pagas justo lo que ves, en soles."
-              : "Ingresa los datos de tu tarjeta en el formulario seguro de Izipay."}
+            {step === "paying"
+              ? "Ingresa los datos de tu tarjeta en el formulario seguro de Izipay."
+              : modoPublicar
+                ? "Pagas solo lo que falta para este aviso y, en cuanto se apruebe, se publica solo."
+                : "Arma tu compra: elige cantidad de avisos, duración y adicionales. Pagas justo lo que ves, en soles."}
           </DialogDescription>
         </DialogHeader>
 
@@ -260,7 +344,10 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
           <div className="space-y-4">
             <div className="border border-secondary/30 bg-secondary/5 px-4 py-3 flex justify-between items-baseline gap-3">
               <span className="font-bold uppercase tracking-wider text-xs text-muted-foreground">Total a pagar</span>
-              <span className="text-3xl font-extrabold text-secondary tracking-tight">{formatSoles(solesTotal)}</span>
+              {/* El importe autoritativo es el que devolvió el servidor. */}
+              <span className="text-3xl font-extrabold text-secondary tracking-tight">
+                {formatSoles(payment.amount > 0 ? payment.amount : solesTotal)}
+              </span>
             </div>
 
             {confirming ? (
@@ -297,8 +384,39 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
         ) : (
           /* ── Paso 1: configuración de la compra + datos del comprobante ── */
           <>
+            {/* ── Modo pagar-y-publicar: el importe ya está decidido por el
+                   aviso, así que en vez del configurador va su desglose ── */}
+            {modoPublicar && publishFor && (
+              <div className="border p-3 bg-secondary/5 space-y-1.5">
+                <p className="font-bold text-sm leading-snug line-clamp-2">{publishFor.title}</p>
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Publicación por {publishFor.durationDays} días</span>
+                  <span className="font-semibold">{formatCredits(publishFor.costCredits)}</span>
+                </div>
+                {currentBalance > 0 && (
+                  <div className="flex justify-between text-xs text-success">
+                    <span>Tu saldo actual</span>
+                    <span className="font-semibold">− {formatCredits(Math.min(currentBalance, publishFor.costCredits))}</span>
+                  </div>
+                )}
+                <div className="border-t pt-2 flex justify-between items-baseline">
+                  <span className="font-bold uppercase tracking-wider text-xs">A pagar ahora</span>
+                  <span className="text-3xl font-extrabold text-secondary tracking-tight">{formatSoles(solesTotal)}</span>
+                </div>
+                {aplicaMinimo && (
+                  <p className="text-[11px] text-muted-foreground">
+                    El cobro mínimo por tarjeta es {formatSoles(MIN_COBRO)}; la diferencia te queda como saldo.
+                  </p>
+                )}
+                <p className="flex items-start gap-1.5 text-[11px] text-success">
+                  <CheckCircle2 size={13} className="mt-px shrink-0" />
+                  En cuanto se apruebe el pago, tu aviso se publica automáticamente.
+                </p>
+              </div>
+            )}
+
             {/* Aviso: cuántos créditos necesita para publicar */}
-            {creditCost > 0 && (
+            {!modoPublicar && creditCost > 0 && (
               <div className="text-xs border p-3 bg-muted/30 flex items-center justify-between gap-2">
                 <span className="text-muted-foreground">
                   Para publicar tu aviso necesitas <b className="text-foreground">{formatCredits(creditCost)}</b>
@@ -308,6 +426,8 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
               </div>
             )}
 
+            {!modoPublicar && (
+            <>
             {/* Cantidad de avisos */}
             <div className="space-y-2">
               <Label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Cantidad de avisos</Label>
@@ -397,6 +517,8 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
                 </p>
               )}
             </div>
+            </>
+            )}
 
             {/* Datos de comprobante */}
             <div className="space-y-3 border-t pt-3">
@@ -469,12 +591,29 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
               </div>
             </div>
 
+            {/* Quien quiera cargar saldo por su cuenta (para varios avisos, o
+                para dejarlo listo) no pierde esa vía: el configurador de
+                siempre sigue a un clic. */}
+            {modoPublicar && (
+              <button
+                type="button"
+                onClick={() => setSoloSaldo(true)}
+                className="text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground self-start"
+              >
+                Prefiero solo comprar saldo
+              </button>
+            )}
+
             <DialogFooter className="gap-2 pt-2">
               <Button variant="ghost" onClick={onClose} disabled={buying}>Cancelar</Button>
-              <Button onClick={handleContinue} disabled={buying || creditsToBuy <= 0 || verifyingDoc || !verifiedName || !emailValid} className="gap-2">
+              <Button
+                onClick={handleContinue}
+                disabled={buying || (!modoPublicar && creditsToBuy <= 0) || verifyingDoc || !verifiedName || !emailValid}
+                className="gap-2"
+              >
                 {buying
                   ? <><Loader2 size={14} className="animate-spin" /> {confirming ? "Confirmando…" : "Procesando…"}</>
-                  : <><CreditCard size={14} /> Continuar al pago · {formatSoles(solesTotal)}</>}
+                  : <><CreditCard size={14} /> {modoPublicar ? "Pagar y publicar" : "Continuar al pago"} · {formatSoles(solesTotal)}</>}
               </Button>
             </DialogFooter>
           </>

@@ -15,13 +15,16 @@ vi.mock("@/lib/credits", () => ({
 // Pasarela de pago (Izipay). El pago se simula: createPayment devuelve un
 // formToken, el formulario embebido (stub) dispara onPaid y el polling resuelve.
 const createPayment = vi.fn();
+const createPublishPayment = vi.fn();
 const pollOrderStatus = vi.fn();
 const getPurchaseResult = vi.fn();
 vi.mock("@/lib/payments", () => ({
   createPayment: (...a: unknown[]) => createPayment(...a),
+  createPublishPayment: (...a: unknown[]) => createPublishPayment(...a),
   pollOrderStatus: (...a: unknown[]) => pollOrderStatus(...a),
   getPurchaseResult: (...a: unknown[]) => getPurchaseResult(...a),
   hostedPaymentUrl: () => "https://x/pay",
+  SaldoYaSuficiente: class SaldoYaSuficiente extends Error {},
 }));
 vi.mock("@/components/PaymentForm", () => ({
   PaymentForm: ({ onPaid }: { onPaid: () => void }) => <button onClick={onPaid}>SIMULAR_PAGO</button>,
@@ -32,8 +35,12 @@ vi.mock("@/components/PaymentForm", () => ({
 // se encarga src/test/migration0091.test.ts, contra un Postgres de verdad—;
 // aquí se comprueba el precio que la pantalla calcula y arrastra.
 const createAndPublishListing = vi.fn();
+// Sin saldo, la pantalla guarda el aviso ANTES de cobrar: la orden de pago va
+// atada a él y es el servidor quien lo publica al confirmarse el pago.
+const saveListingDraft = vi.fn();
 vi.mock("@/lib/publish", () => ({
   createAndPublishListing: (...a: unknown[]) => createAndPublishListing(...a),
+  saveListingDraft: (...a: unknown[]) => saveListingDraft(...a),
   SaldoInsuficiente: class SaldoInsuficiente extends Error {},
 }));
 
@@ -115,12 +122,14 @@ const clickPublish = async () => {
 beforeEach(() => {
   localStorage.clear();
   getCreditBalance.mockReset();
-  createPayment.mockReset().mockResolvedValue({ orderId: "o1", formToken: "tok", publicKey: "pk" });
+  createPayment.mockReset().mockResolvedValue({ orderId: "o1", formToken: "tok", publicKey: "pk", amount: 16.14, listingCost: null });
+  createPublishPayment.mockReset().mockResolvedValue({ orderId: "o1", formToken: "tok", publicKey: "pk", amount: 16.14, listingCost: 16.14 });
   pollOrderStatus.mockReset().mockResolvedValue("paid");
-  getPurchaseResult.mockReset().mockResolvedValue({ balance: 1000, invoiceNumber: "B001-000100" });
+  getPurchaseResult.mockReset().mockResolvedValue({ balance: 1000, invoiceNumber: "B001-000100", published: null });
   createAndPublishListing.mockReset().mockResolvedValue({
     listingId: "L1", published: true,
   });
+  saveListingDraft.mockReset().mockResolvedValue("L1");
   navigate.mockClear();
   toast.mockClear();
   fetchActivePromotions.mockReset().mockResolvedValue([]);
@@ -170,7 +179,7 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     );
   });
 
-  it("SIN CRÉDITOS: al pulsar Publicar abre el configurador y NO publica", async () => {
+  it("SIN CRÉDITOS: guarda el aviso y ofrece pagarlo en el acto, sin publicar", async () => {
     getCreditBalance.mockResolvedValue(0); // sin saldo
     seedDraft();
     render(<AdvertiserPublish />);
@@ -179,13 +188,33 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     uploadMainPhoto();
     await clickPublish();
 
-    // Se abre el modal configurador (anuncios/días/extras → créditos).
+    // Cobra el aviso, no manda a armar una compra de saldo.
+    await screen.findByText(/a pagar ahora/i);
+    expect(screen.getByRole("button", { name: /pagar y publicar/i })).toBeTruthy();
+    // El configurador de saldo ya no aparece de entrada.
+    expect(screen.queryByText(/saldo a comprar/i)).toBeNull();
+
+    // El aviso queda guardado para poder atarle el pago…
+    await waitFor(() => expect(saveListingDraft).toHaveBeenCalledTimes(1));
+    // …pero no se publicó (ni se cobró, que van juntos).
+    expect(createAndPublishListing).not.toHaveBeenCalled();
+  });
+
+  it("SIN CRÉDITOS: quien prefiera cargar saldo suelto sigue teniendo el configurador", async () => {
+    getCreditBalance.mockResolvedValue(0);
+    seedDraft();
+    render(<AdvertiserPublish />);
+    await screen.findByDisplayValue("Casa bonita");
+
+    uploadMainPhoto();
+    await clickPublish();
+    await screen.findByText(/a pagar ahora/i);
+
+    fireEvent.click(screen.getByRole("button", { name: /prefiero solo comprar saldo/i }));
+
     await screen.findByText(/saldo a comprar/i);
     expect(screen.getByText(/arma tu compra/i)).toBeTruthy();
     expect(screen.getByRole("button", { name: /continuar al pago/i })).toBeTruthy();
-
-    // No se publicó nada (y como el cobro va dentro, tampoco se cobró).
-    expect(createAndPublishListing).not.toHaveBeenCalled();
   });
 
   it("CON PROMOCIÓN: aplica el descuento al costo al publicar (50% → 8.07)", async () => {
@@ -207,31 +236,57 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     expect(createAndPublishListing).toHaveBeenCalledWith(expect.objectContaining({ total: 8.07 }));
   });
 
-  it("POST-COMPRA: tras pagar en el configurador, recién publica y descuenta", async () => {
-    getCreditBalance.mockResolvedValue(0); // arranca sin saldo → abre el configurador
-    getPurchaseResult.mockResolvedValue({ balance: 1000, invoiceNumber: "B001-000100" });
+  // Paga en el modal (rellena comprobante → tarjeta → confirma por polling).
+  const pagarEnElModal = async () => {
+    fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "12345678" } });
+    fireEvent.change(screen.getByPlaceholderText("tu@correo.com"), { target: { value: "comprador@correo.com" } });
+    // El DNI se autoverifica con Factiliza; esperamos a que confirme antes de pagar.
+    await screen.findByText("JUAN PEREZ");
+    fireEvent.click(screen.getByRole("button", { name: /pagar y publicar/i }));
+    fireEvent.click(await screen.findByText("SIMULAR_PAGO"));
+  };
+
+  it("PAGO Y PUBLICACIÓN: el servidor publica el aviso y la pantalla no vuelve a publicarlo", async () => {
+    getCreditBalance.mockResolvedValue(0); // arranca sin saldo → cobra el aviso
+    // El webhook acreditó, publicó y emitió la boleta antes de que respondiéramos.
+    getPurchaseResult.mockResolvedValue({ balance: 0, invoiceNumber: "B001-000100", published: true });
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
 
     uploadMainPhoto();
     await clickPublish();
-    await screen.findByText(/saldo a comprar/i);
+    await screen.findByText(/a pagar ahora/i);
+    await pagarEnElModal();
 
-    // Completa datos del comprobante y continúa al pago.
-    fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "12345678" } });
-    fireEvent.change(screen.getByPlaceholderText("tu@correo.com"), { target: { value: "comprador@correo.com" } });
-    // El DNI se autoverifica con Factiliza; esperamos a que confirme antes de pagar.
-    await screen.findByText("JUAN PEREZ");
-    fireEvent.click(screen.getByRole("button", { name: /continuar al pago/i }));
+    // Se cobró el aviso, no un paquete de saldo.
+    await waitFor(() => expect(createPublishPayment).toHaveBeenCalledTimes(1));
+    expect(createPublishPayment).toHaveBeenCalledWith(expect.objectContaining({ listingId: "L1" }));
+    expect(createPayment).not.toHaveBeenCalled();
 
-    // Paga en el formulario embebido (stub) → se confirma por polling.
-    fireEvent.click(await screen.findByText("SIMULAR_PAGO"));
+    // Ya está activo: publicarlo otra vez sería un error de "ya publicado".
+    await screen.findByText(/aviso publicado/i);
+    expect(createAndPublishListing).not.toHaveBeenCalled();
+  });
 
-    // Al acreditarse y cubrir el costo, publica automáticamente y descuenta.
-    await waitFor(() => expect(createPayment).toHaveBeenCalledTimes(1));
+  it("PAGO SIN PUBLICAR: si el servidor no llegó a activarlo, la pantalla lo remata una vez", async () => {
+    getCreditBalance.mockResolvedValue(0);
+    // Cobrado y acreditado, pero la publicación no salió: el saldo ya alcanza.
+    getPurchaseResult.mockResolvedValue({ balance: 1000, invoiceNumber: "B001-000100", published: false });
+    seedDraft();
+    render(<AdvertiserPublish />);
+    await screen.findByDisplayValue("Casa bonita");
+
+    uploadMainPhoto();
+    await clickPublish();
+    await screen.findByText(/a pagar ahora/i);
+    await pagarEnElModal();
+
+    // Se publica el MISMO aviso (el borrador ya creado), una sola vez.
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
-    expect(createAndPublishListing).toHaveBeenCalledWith(expect.objectContaining({ total: COST_SOLES }));
+    expect(createAndPublishListing).toHaveBeenCalledWith(
+      expect.objectContaining({ draftId: "L1", total: COST_SOLES }),
+    );
     await screen.findByText(/aviso publicado/i);
   });
 });

@@ -19,21 +19,26 @@ vi.mock("@/lib/credits", () => ({
 // Pasarela de pago (Izipay) simulada: createPayment → formToken; el formulario
 // embebido (stub) dispara onPaid y el polling resuelve como pagado.
 const createPayment = vi.fn();
+const createPublishPayment = vi.fn();
 const pollOrderStatus = vi.fn();
 const getPurchaseResult = vi.fn();
 vi.mock("@/lib/payments", () => ({
   createPayment: (...a: unknown[]) => createPayment(...a),
+  createPublishPayment: (...a: unknown[]) => createPublishPayment(...a),
   pollOrderStatus: (...a: unknown[]) => pollOrderStatus(...a),
   getPurchaseResult: (...a: unknown[]) => getPurchaseResult(...a),
   hostedPaymentUrl: () => "https://x/pay",
+  SaldoYaSuficiente: class SaldoYaSuficiente extends Error {},
 }));
 vi.mock("@/components/PaymentForm", () => ({
   PaymentForm: ({ onPaid }: { onPaid: () => void }) => <button onClick={onPaid}>SIMULAR_PAGO</button>,
 }));
 
 const createAndPublishListing = vi.fn();
+const saveListingDraft = vi.fn();
 vi.mock("@/lib/publish", () => ({
   createAndPublishListing: (...a: unknown[]) => createAndPublishListing(...a),
+  saveListingDraft: (...a: unknown[]) => saveListingDraft(...a),
   SaldoInsuficiente: class SaldoInsuficiente extends Error {
     listingId?: string;
   },
@@ -114,12 +119,14 @@ const publishConfirmed = async () => {
 beforeEach(() => {
   localStorage.clear();
   getCreditBalance.mockReset().mockResolvedValue(1000);
-  createPayment.mockReset().mockResolvedValue({ orderId: "o1", formToken: "tok", publicKey: "pk" });
+  createPayment.mockReset().mockResolvedValue({ orderId: "o1", formToken: "tok", publicKey: "pk", amount: 16.14, listingCost: null });
+  createPublishPayment.mockReset().mockResolvedValue({ orderId: "o1", formToken: "tok", publicKey: "pk", amount: 16.14, listingCost: 16.14 });
   pollOrderStatus.mockReset().mockResolvedValue("paid");
-  getPurchaseResult.mockReset().mockResolvedValue({ balance: 1000, invoiceNumber: "B001-000100" });
+  getPurchaseResult.mockReset().mockResolvedValue({ balance: 1000, invoiceNumber: "B001-000100", published: null });
   createAndPublishListing.mockReset().mockResolvedValue({
     listingId: "L1", published: true,
   });
+  saveListingDraft.mockReset().mockResolvedValue("L1");
   navigate.mockClear();
   toast.mockClear();
   fetchActivePromotions.mockReset().mockResolvedValue([]);
@@ -225,6 +232,13 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     const falta = new SaldoInsuficiente("Tu saldo no alcanza para publicar este aviso.");
     falta.listingId = "L1";
     createAndPublishListing.mockRejectedValueOnce(falta);
+    // Al montar se enseñan 1000; el rechazo de la BD viene justamente de que ese
+    // saldo estaba obsoleto, así que al refrescarlo aparece el real: 0.
+    getCreditBalance.mockResolvedValueOnce(1000).mockResolvedValue(0);
+    // Se cobró y acreditó, pero el servidor no llegó a activar el aviso: es el
+    // caso que obliga a la pantalla a publicarlo, y por tanto el que puede
+    // duplicar si no reutiliza el borrador.
+    getPurchaseResult.mockResolvedValue({ balance: 1000, invoiceNumber: "B001-000100", published: false });
 
     seedDraft();
     render(<AdvertiserPublish />);
@@ -234,19 +248,21 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
 
     await publishConfirmed();
 
-    // Ni publicado ni cobrado: se abre el configurador de compra.
+    // Ni publicado ni cobrado: se ofrece pagar el aviso ahí mismo.
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
-    await screen.findByText(/saldo a comprar/i);
+    await screen.findByText(/a pagar ahora/i);
     // Y no se anuncia un éxito que no ocurrió.
     expect(screen.queryByText(/aviso publicado/i)).toBeNull();
 
     fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "12345678" } });
     fireEvent.change(screen.getByPlaceholderText("tu@correo.com"), { target: { value: "comprador@correo.com" } });
     await screen.findByText("JUAN PEREZ");
-    fireEvent.click(screen.getByRole("button", { name: /continuar al pago/i }));
+    fireEvent.click(screen.getByRole("button", { name: /pagar y publicar/i }));
     fireEvent.click(await screen.findByText("SIMULAR_PAGO"));
 
-    await waitFor(() => expect(createPayment).toHaveBeenCalledTimes(1));
+    // El cobro va atado al aviso que ya existía, no a un paquete de saldo.
+    await waitFor(() => expect(createPublishPayment).toHaveBeenCalledTimes(1));
+    expect(createPublishPayment).toHaveBeenCalledWith(expect.objectContaining({ listingId: "L1" }));
     await screen.findByText(/aviso publicado/i);
 
     // Clave: el segundo intento reutiliza el aviso que ya existía.

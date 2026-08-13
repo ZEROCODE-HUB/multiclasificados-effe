@@ -13,7 +13,10 @@ vi.mock("@/lib/supabase", () => ({
   },
 }));
 
-import { createPayment, pollOrderStatus, type PurchaseConfig } from "@/lib/payments";
+import {
+  createPayment, createPublishPayment, pollOrderStatus, SaldoYaSuficiente,
+  type PurchaseConfig,
+} from "@/lib/payments";
 
 const config: PurchaseConfig = {
   quantity: 1,
@@ -36,7 +39,7 @@ describe("createPayment", () => {
     const sentBody = invoke.mock.calls[0][1].body;
     expect(sentBody).not.toHaveProperty("total");
     expect(sentBody).not.toHaveProperty("amount");
-    expect(r).toEqual({ orderId: "ord-1", formToken: "tok", publicKey: "pk-1" });
+    expect(r).toEqual({ orderId: "ord-1", formToken: "tok", publicKey: "pk-1", amount: 0, listingCost: null });
   });
 
   it("data.success=false → lanza el error de la función", async () => {
@@ -50,6 +53,39 @@ describe("createPayment", () => {
       error: { message: "non-2xx", context: { json: async () => ({ error: "Inicia sesión para pagar." }) } },
     });
     await expect(createPayment(config)).rejects.toThrow("Inicia sesión para pagar.");
+  });
+});
+
+describe("createPublishPayment (pagar y publicar)", () => {
+  const cfg = { listingId: "lst-1", duration: 30, receipt: config.receipt };
+
+  it("manda el aviso y la duración, nunca el importe, y devuelve lo que se cobra", async () => {
+    invoke.mockResolvedValue({
+      data: { success: true, orderId: "ord-9", formToken: "tok", publicKey: null, amount: 6.14, listingCost: 16.14 },
+      error: null,
+    });
+    const r = await createPublishPayment(cfg);
+
+    const sentBody = invoke.mock.calls[0][1].body as Record<string, unknown>;
+    expect(sentBody.listingId).toBe("lst-1");
+    expect(sentBody.duration).toBe(30);
+    // El precio lo pone el servidor: aquí no viaja ningún importe.
+    expect(sentBody).not.toHaveProperty("total");
+    expect(sentBody).not.toHaveProperty("amount");
+    expect(sentBody).not.toHaveProperty("credits");
+
+    // Se cobra el faltante, no el costo entero del aviso.
+    expect(r.amount).toBe(6.14);
+    expect(r.listingCost).toBe(16.14);
+    expect(r.orderId).toBe("ord-9");
+  });
+
+  it("si ya le alcanza el saldo lanza SaldoYaSuficiente en vez de abrir la pasarela", async () => {
+    invoke.mockResolvedValue({
+      data: { success: false, code: "SALDO_SUFICIENTE", error: "Ya tienes saldo suficiente para publicar." },
+      error: null,
+    });
+    await expect(createPublishPayment(cfg)).rejects.toBeInstanceOf(SaldoYaSuficiente);
   });
 });
 
