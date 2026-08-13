@@ -7,7 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Wallet, User, Building2, Check, CheckCircle2, AlertCircle, Loader2, Minus, Plus, CreditCard, ArrowLeft } from "lucide-react";
+import { Wallet, User, Building2, Check, CheckCircle2, AlertCircle, Loader2, Minus, Plus, CreditCard, ArrowLeft, Lock } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
   loadSettings, priceForDuration, extrasTotal, formatSoles, formatCredits, solesToCredits,
@@ -258,9 +258,9 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
         {step === "paying" && payment ? (
           /* ── Paso 2 (web): formulario embebido de Izipay ── */
           <div className="space-y-4">
-            <div className="border p-3 bg-secondary/5 flex justify-between items-baseline">
-              <span className="font-bold uppercase tracking-wider text-xs">Total a pagar</span>
-              <span className="text-2xl font-extrabold text-secondary">{formatSoles(solesTotal)}</span>
+            <div className="border border-secondary/30 bg-secondary/5 px-4 py-3 flex justify-between items-baseline gap-3">
+              <span className="font-bold uppercase tracking-wider text-xs text-muted-foreground">Total a pagar</span>
+              <span className="text-3xl font-extrabold text-secondary tracking-tight">{formatSoles(solesTotal)}</span>
             </div>
 
             {confirming ? (
@@ -276,11 +276,23 @@ export function BuyCreditsModal({ open, onClose, creditCost, currentBalance, onP
               />
             )}
 
-            <DialogFooter className="gap-2 pt-2">
-              <Button variant="ghost" onClick={() => { setStep("config"); setPayment(null); }} disabled={confirming} className="gap-1">
+            {/* Quien va a teclear su tarjeta quiere saber a quién se la da y
+                que puede echarse atrás. Ambas cosas, en una línea y sin ruido. */}
+            <div className="flex items-center justify-between gap-3 pt-1 border-t">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => { setStep("config"); setPayment(null); }}
+                disabled={confirming}
+                className="gap-1 -ml-2"
+              >
                 <ArrowLeft size={14} /> Volver
               </Button>
-            </DialogFooter>
+              <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <Lock size={12} className="text-success shrink-0" />
+                Pago cifrado procesado por Izipay
+              </span>
+            </div>
           </div>
         ) : (
           /* ── Paso 1: configuración de la compra + datos del comprobante ── */

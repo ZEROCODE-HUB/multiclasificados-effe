@@ -214,3 +214,47 @@
    (MOB-10). Con Google ese apaño sobra: `gestureHandling: "cooperative"` hace
    lo mismo de serie —un dedo scrollea la página, dos mueven el mapa— y además
    se lo explica al usuario. Ver src/components/ListingLocationMap.tsx. */
+
+/* ── Formulario de pago de Izipay (Krypton, tema classic) ──────────────────
+   El tema de Lyra trae su propia paleta (azul genérico) y el botón de pagar es
+   lo primero que mira quien va a soltar el dinero: aquí se alinea con la marca.
+   Estos elementos NO están dentro del iframe —solo los campos sensibles de la
+   tarjeta lo están—, así que sí se pueden estilar desde nuestro CSS.
+   El `!important` es necesario: los estilos del tema llegan en su propia hoja,
+   cargada después de esta, y son más específicos. Ver PaymentForm.tsx. */
+.kr-embedded .kr-payment-button,
+.kr-embedded .kr-payment-button * {
+  /* El tema pinta el rótulo en un verde apagado que sobre el navy no se lee. */
+  color: #ffffff !important;
+}
+.kr-embedded .kr-payment-button {
+  background: hsl(var(--primary)) !important;
+  border: none !important;
+  border-radius: 0 !important;
+  height: 3rem !important;
+  font-weight: 700 !important;
+  font-size: 0.8125rem !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  transition: background-color 0.2s ease !important;
+}
+.kr-embedded .kr-payment-button:hover:not(:disabled) {
+  background: hsl(var(--secondary)) !important;
+}
+.kr-embedded .kr-payment-button:disabled {
+  opacity: 0.55 !important;
+}
+/* Campos: mismo trazo recto que el resto de la app (nada de esquinas redondas
+   ni sombras), y foco en el naranja de la marca en vez del azul del tema. */
+.kr-embedded .kr-field,
+.kr-embedded .kr-field-element {
+  border-radius: 0 !important;
+}
+.kr-embedded .kr-field.kr-focus,
+.kr-embedded .kr-field-element.kr-focus {
+  border-color: hsl(var(--secondary)) !important;
+  box-shadow: 0 0 0 1px hsl(var(--secondary)) !important;
+}
+.kr-embedded .kr-error {
+  color: hsl(var(--destructive)) !important;
+}

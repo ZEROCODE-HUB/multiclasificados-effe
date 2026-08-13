@@ -11,7 +11,11 @@ import { Loader2, AlertCircle } from "lucide-react";
 // script del CDN nosotros mismos (lo que hace la librería por dentro).
 
 const KR_SCRIPT = "/static/js/krypton-client/V4.0/stable/kr-payment-form.min.js";
+// El tema son DOS archivos y hasta ahora solo se cargaba el reset: por eso el
+// formulario salía sin estilar (campos planos, sin etiqueta flotante ni icono
+// de la marca de la tarjeta). `classic.js` es el que aporta el aspecto.
 const KR_THEME_CSS = "/static/js/krypton-client/V4.0/ext/classic-reset.css";
+const KR_THEME_JS = "/static/js/krypton-client/V4.0/ext/classic.js";
 
 interface KrSubmitResponse {
   clientAnswer?: { orderStatus?: string };
@@ -45,11 +49,29 @@ function loadKrypton(endpoint: string, publicKey: string): Promise<KrApi> {
     const script = document.createElement("script");
     script.src = endpoint + KR_SCRIPT;
     script.setAttribute("kr-public-key", publicKey);
+    // En modo TEST, Krypton engancha al pie de la página una barra con tarjetas
+    // de prueba ("Información · Métodos de prueba"). Va como ATRIBUTO del
+    // script: por `setFormConfig` se ignora — comprobado montando el formulario
+    // real de las dos formas. En producción no aparece nunca, pero así las
+    // pruebas se ven como las verá el cliente. Las tarjetas de prueba están en
+    // el Back Office → Ayuda → Tarjetas de prueba.
+    script.setAttribute("kr-hide-debug-toolbar", "true");
     script.async = true;
     script.onload = () => {
       const KR = krFromWindow();
-      if (KR) resolve(KR);
-      else reject(new Error("El formulario de pago no se inicializó."));
+      if (!KR) {
+        reject(new Error("El formulario de pago no se inicializó."));
+        return;
+      }
+      // El JS del tema va DESPUÉS de la librería. Si no llega (CDN caído), el
+      // formulario sigue funcionando: solo se vería con el estilo básico, así
+      // que no se bloquea el cobro por una hoja de estilos.
+      const tema = document.createElement("script");
+      tema.src = endpoint + KR_THEME_JS;
+      tema.async = true;
+      tema.onload = () => resolve(KR);
+      tema.onerror = () => resolve(KR);
+      document.head.appendChild(tema);
     };
     script.onerror = () => {
       krLoad = null; // permite reintentar
