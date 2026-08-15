@@ -66,7 +66,58 @@ supabase secrets set EMISOR_NOMBRE="Razón social"
 supabase secrets set FACTILIZA_INVOICE_URL="https://apife-qa.factiliza.com/api/v1/invoice/send"
 ```
 
-### ✅ DESBLOQUEADO — el entorno de pruebas funciona (2026-08-15)
+### ✅ FUNCIONANDO EN PRUEBAS — configuración vigente (2026-08-15)
+
+La emisión está **encendida para las compras de PRUEBA** y apagada para las
+reales. Dos interruptores, y hacen falta los dos para que un cliente reciba un
+comprobante declarado:
+
+| Ajuste (`system_settings`) | Valor hoy | Qué hace |
+|---|---|---|
+| `invoice_emission_enabled` | **true** | Interruptor maestro |
+| `invoice_emission_live` | **false** | Además, emitir las compras REALES |
+
+Con `live` apagado, una compra real genera su comprobante interno de siempre
+(`sunat_status = 'omitido'`, serie B001/F001, correo normal). **Los clientes no
+notan nada.** Las de prueba van por sus propias series **B066/F066**, así que no
+queman correlativos de las reales — un correlativo saltado hay que justificarlo
+ante SUNAT.
+
+Una compra es «de prueba» si la liquidó el simulador
+(`payment_provider = 'simulado'` o `payment_ref = 'SIMULADO'`), y queda marcada
+en `invoices.es_prueba`. Ese dato viaja hasta el PDF y el correo, que avisan de
+que el documento no tiene valor fiscal. Va por comprobante y **no por entorno**,
+a propósito: si dependiera de a qué host apunta la función, un cliente real con
+su comprobante interno recibiría un correo diciéndole que es una prueba.
+
+**Verificado de punta a punta el 2026-08-15**, contra Factiliza y SUNAT de verdad:
+
+| Prueba | Resultado |
+|---|---|
+| Boleta de prueba (`B066-000021`) | **aceptada** por SUNAT · correo enviado |
+| Factura de prueba (`F066-000021`) | **aceptada** por SUNAT · correo enviado |
+| Compra de saldo por el simulador (`B066-000022`) | aceptada · correo enviado |
+| Pagar y publicar (`B066-000023`) | aviso publicado · aceptada · correo enviado |
+| Compra REAL con `live` apagado | `omitido`, serie B001, correo normal — **sin cambios** |
+| Importe simulado vs. real (misma configuración) | **23.42 = 23.42** |
+| Comprobante rechazado por SUNAT | **el correo salió igual** (antes no salía nunca) |
+
+Secrets vigentes:
+
+```bash
+FACTILIZA_INVOICE_TOKEN   # el de facturación (AD360). SEPARADO de FACTILIZA_TOKEN,
+                          # que es el de consultas y lo usa verify-doc: son productos
+                          # distintos y cada uno da 401 en la API del otro.
+FACTILIZA_INVOICE_URL="https://apife-qa.factiliza.com/api/v1/invoice/send"
+EMISOR_RUC_PRUEBAS="10749283781"   # en QA el emisor de alta es el de Factiliza
+EMISOR_RUC                          # el de Coleffe, intacto: es el de los reales
+```
+
+**Para pasar a producción**, cuando Factiliza dé de alta el RUC de Coleffe:
+cambiar `FACTILIZA_INVOICE_URL` al host de producción, poner
+`invoice_emission_live = true` y comprobar que `EMISOR_RUC` es el nuestro.
+
+### ✅ Cómo se desbloqueó (2026-08-15)
 
 Factiliza levantó QA. **Ya emitimos de verdad contra SUNAT** (en su entorno DEMO)
 con el código de este repositorio, sin tocar una línea:
@@ -117,6 +168,18 @@ update invoice_series set serie = 'F066' where tipo = 'factura';
 **Lo que queda para producción**, y es lo único: que Factiliza dé de alta el RUC
 de Coleffe (`20616009061`) con su certificado, y nos confirme el token y la URL
 de producción. La integración en sí ya está demostrada.
+
+### Higiene: 7 facturas antiguas con número de boleta
+
+Hay 7 comprobantes de tipo `factura` numerados en la serie de boletas
+(`B001-000019`, `B001-000035`, `B001-000038`, `B001-000039`, `B001-000041`,
+`B001-000043`, `B001-000066`). Son anteriores a la migración 0082, cuando la
+numeración no distinguía serie por tipo.
+
+**No hay problema fiscal**: están todos en `omitido`, así que nunca se
+declararon a SUNAT. Se dejan como están —reescribir números de comprobante es
+peor que convivir con ellos— pero conviene saberlo antes de asustarse al verlos
+en el panel.
 
 ### ⚠️ Histórico: lo que bloqueó la emisión hasta el 2026-08-15
 

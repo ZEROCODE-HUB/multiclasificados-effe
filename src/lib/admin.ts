@@ -253,6 +253,15 @@ export interface AdminInvoice {
   factilizaData: Record<string, unknown> | null;
   listingTitle: string;
   amount: number;
+  // Estado de la emisión electrónica. Sin esto el panel no podía decir si un
+  // comprobante había fallado, y la función de reintentarlo —que existe desde
+  // la 0083— no la llamaba nadie.
+  sunatStatus: string;
+  emailStatus: string;
+  needsReview: boolean;
+  sunatError: string | null;
+  sunatAttempts: number;
+  esPrueba: boolean;
 }
 
 // Forma (laxa) de la fila que devuelve PostgREST con el join anidado. Las
@@ -272,6 +281,12 @@ interface InvoiceRow {
   amount: number | string;
   detail: string | null;
   issued_at: string;
+  sunat_status?: string | null;
+  email_status?: string | null;
+  needs_review?: boolean | null;
+  sunat_last_error?: string | null;
+  sunat_attempts?: number | null;
+  es_prueba?: boolean | null;
   orders?: RelOrder | RelOrder[] | null;
 }
 
@@ -282,6 +297,7 @@ export async function fetchAllInvoices(): Promise<{ data: AdminInvoice[]; real: 
         .from("invoices")
         .select(
           "id, number, type, email, advertiser_name, doc_type, doc_number, factiliza_data, amount, detail, issued_at, " +
+            "sunat_status, email_status, needs_review, sunat_last_error, sunat_attempts, es_prueba, " +
             "orders ( order_listings ( listings ( title ) ) )"
         )
         .order("issued_at", { ascending: false });
@@ -304,6 +320,12 @@ export async function fetchAllInvoices(): Promise<{ data: AdminInvoice[]; real: 
           factilizaData: r.factiliza_data ?? null,
           listingTitle: title || r.detail || "—",
           amount: Number(r.amount) || 0,
+          sunatStatus: r.sunat_status ?? "omitido",
+          emailStatus: r.email_status ?? "pendiente",
+          needsReview: r.needs_review === true,
+          sunatError: r.sunat_last_error ?? null,
+          sunatAttempts: Number(r.sunat_attempts ?? 0),
+          esPrueba: r.es_prueba === true,
         };
       });
       return { data: rows, real: true };
@@ -323,8 +345,27 @@ export async function fetchAllInvoices(): Promise<{ data: AdminInvoice[]; real: 
     factilizaData: null,
     listingTitle: l.listingTitle,
     amount: l.amount,
+    sunatStatus: "omitido",
+    emailStatus: "omitido",
+    needsReview: false,
+    sunatError: null,
+    sunatAttempts: 0,
+    esPrueba: false,
   }));
   return { data: local, real: false };
+}
+
+/**
+ * Vuelve a poner un comprobante en cola de emisión y de correo.
+ *
+ * La RPC existe desde la migración 0083 y hasta ahora no la llamaba nadie: un
+ * comprobante que fallara solo se podía rescatar entrando a la base de datos a
+ * mano. Exige permiso de edición en «Pagos y planes», que lo comprueba la
+ * propia función en el servidor.
+ */
+export async function retryInvoiceEmission(invoiceId: string): Promise<void> {
+  const { error } = await supabase.rpc("retry_invoice_emission", { p_invoice_id: invoiceId });
+  if (error) throw new Error(error.message);
 }
 
 // ------------------------------------------------------------------ Categorías

@@ -68,6 +68,56 @@ describe("helpers de la API", () => {
     expect(customer.email).toBe("a@b.com");
     expect(customer.billingDetails.country).toBe("PE");
     expect(customer.billingDetails.identityCode).toBe("44443333");
+    expect(customer.billingDetails.identityType).toBe("DNI");
+  });
+
+  // Este bloque existe por un fallo real: comprar como empresa devolvía
+  // «Invalid billing identityType» y la compra ni empezaba. Nunca se emitió una
+  // sola factura por eso. Lo comprobado aquí es lo que la sonda `probe` de
+  // create-payment midió contra la API de Izipay el 15/08/2026.
+  describe("facturación a empresa (el bug de 'Invalid billing identityType')", () => {
+    const empresa = {
+      amountCents: 1000, currency: "PEN", orderId: "ord-emp", email: "pagos@empresa.com",
+      firstName: "CONSTRUCTORA DEL SUR SAC", esEmpresa: true,
+      legalName: "CONSTRUCTORA DEL SUR SAC",
+    } as const;
+
+    it("NUNCA manda identityType cuando el pagador es una empresa", () => {
+      const body = buildCreatePaymentBody(empresa);
+      const bd = (body.customer as { billingDetails: Record<string, unknown> }).billingDetails;
+      // Es EL valor que Izipay rechaza; si vuelve, la compra se rompe otra vez.
+      expect(bd.identityType).toBeUndefined();
+      expect(bd.identityCode).toBeUndefined();
+      // Ningún campo puede valer "RUC": es el valor exacto que Izipay rechaza.
+      expect(Object.values(bd)).not.toContain("RUC");
+    });
+
+    it("manda la razón social y la categoría de empresa", () => {
+      const bd = (buildCreatePaymentBody(empresa).customer as {
+        billingDetails: Record<string, unknown>;
+      }).billingDetails;
+      expect(bd.category).toBe("COMPANY");
+      expect(bd.legalName).toBe("CONSTRUCTORA DEL SUR SAC");
+      expect(bd.country).toBe("PE");
+    });
+
+    it("no toca la forma de persona natural, que es la que ya funcionaba", () => {
+      const bd = (buildCreatePaymentBody({
+        amountCents: 1000, currency: "PEN", orderId: "ord-p", email: "a@b.com",
+        firstName: "MARIA", identityType: "DNI", identityCode: "44443333",
+      }).customer as { billingDetails: Record<string, unknown> }).billingDetails;
+      expect(bd).toEqual({
+        country: "PE", firstName: "MARIA", identityType: "DNI", identityCode: "44443333",
+      });
+      expect(bd.category).toBeUndefined();
+    });
+
+    it("sin razón social sigue siendo un cuerpo válido (no manda campos vacíos)", () => {
+      const bd = (buildCreatePaymentBody({
+        amountCents: 1000, currency: "PEN", orderId: "ord-x", email: "a@b.com", esEmpresa: true,
+      }).customer as { billingDetails: Record<string, unknown> }).billingDetails;
+      expect(bd).toEqual({ country: "PE", category: "COMPANY" });
+    });
   });
 
   it("readAnswer detecta PAID y extrae orderId + uuid de la transacción", () => {

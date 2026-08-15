@@ -27,6 +27,13 @@ export interface DatosComprobante {
   emisorRuc: string | null;
   /** Cuando el comprobante está declarado ante SUNAT, su resumen. */
   sunat?: { aceptado: boolean; hash?: string | null } | null;
+  /**
+   * El documento se emitió contra el entorno de PRUEBAS de Factiliza. No tiene
+   * valor fiscal aunque SUNAT lo haya aceptado, y el RUC del emisor puede no ser
+   * el nuestro. Tiene que verse a simple vista: quien reciba esto no debe poder
+   * confundirlo con un comprobante de verdad.
+   */
+  pruebas?: boolean;
 }
 
 const A4_W = 595;
@@ -122,6 +129,13 @@ export function renderComprobantePDF(d: DatosComprobante): Uint8Array {
   const derecha = A4_W - MARGIN;
   let y = MARGIN + 10;
 
+  // Un documento de prueba se anuncia ANTES que nada. Si solo lo dijera el pie,
+  // alguien podría imprimir la primera parte y creerse que tiene una factura.
+  if (d.pruebas) {
+    c.texto(MARGIN, y, "· · ·  DOCUMENTO DE PRUEBA — SIN VALOR FISCAL  · · ·", 12, true, 0);
+    y += 26;
+  }
+
   // Emisor
   c.texto(MARGIN, y, d.emisorNombre, 16, true);
   y += 16;
@@ -179,7 +193,14 @@ export function renderComprobantePDF(d: DatosComprobante): Uint8Array {
   y += 26;
   c.linea(MARGIN, y, derecha);
   y += 18;
-  if (d.sunat?.aceptado) {
+  if (d.pruebas) {
+    // Va primero y en negrita: es lo único que importa de este documento.
+    c.texto(MARGIN, y, "DOCUMENTO DE PRUEBA — SIN VALOR FISCAL", 11, true, 0);
+    y += 14;
+    c.texto(MARGIN, y, "Emitido contra el entorno de pruebas. No es un comprobante válido", 9, false, 0.35);
+    y += 12;
+    c.texto(MARGIN, y, "ante SUNAT y no sirve para sustentar gasto ni crédito fiscal.", 9, false, 0.35);
+  } else if (d.sunat?.aceptado) {
     c.texto(MARGIN, y, "Comprobante electrónico declarado ante SUNAT.", 9, false, 0.35);
     if (d.sunat.hash) {
       y += 13;

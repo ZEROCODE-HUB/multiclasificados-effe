@@ -94,6 +94,63 @@ export function createPublishPayment(config: PublishPaymentConfig): Promise<Crea
   return invokeCreatePayment(config);
 }
 
+// ── Simulación de pago (SOLO PRUEBAS) ────────────────────────────────────────
+// Salta Izipay: la Edge Function crea la orden y la liquida en el acto, igual
+// que haría el webhook. Sirve para probar de punta a punta el comprobante, su
+// envío a SUNAT y el correo sin necesitar una tarjeta.
+//
+// El servidor manda: si ALLOW_FAKE_PAYMENT no está en "true", devuelve 403 y
+// desde aquí no hay forma de forzarlo. Quién ve el botón lo decide el propio
+// modal (`SIMULACION_VISIBLE` en BuyCreditsModal.tsx).
+export interface SimulatedPaymentResult {
+  orderId: string;
+  invoiceNumber: string;
+  credits: number;
+  amount: number;
+  balance: number;
+  /** null cuando era una compra de saldo; true/false al pagar y publicar. */
+  published: boolean | null;
+}
+
+async function invokeSimulatePayment(body: unknown): Promise<SimulatedPaymentResult> {
+  const { data, error } = await supabase.functions.invoke("simulate-payment", { body });
+
+  if (error) {
+    let message = error.message;
+    try {
+      const ctx = (error as { context?: Response }).context;
+      if (ctx && typeof ctx.json === "function") {
+        const b = await ctx.json();
+        if (b?.error) message = b.error;
+      }
+    } catch {
+      /* se mantiene el mensaje original */
+    }
+    throw new Error(message);
+  }
+
+  if (!data?.success) {
+    if (data?.code === "SALDO_SUFICIENTE") throw new SaldoYaSuficiente();
+    throw new Error(data?.error ?? "No se pudo simular el pago.");
+  }
+  return {
+    orderId: data.orderId as string,
+    invoiceNumber: (data.invoiceNumber as string) ?? "",
+    credits: Number(data.credits ?? 0),
+    amount: Number(data.amount ?? 0),
+    balance: Number(data.balance ?? 0),
+    published: typeof data.published === "boolean" ? data.published : null,
+  };
+}
+
+export function simulatePayment(config: PurchaseConfig): Promise<SimulatedPaymentResult> {
+  return invokeSimulatePayment(config);
+}
+
+export function simulatePublishPayment(config: PublishPaymentConfig): Promise<SimulatedPaymentResult> {
+  return invokeSimulatePayment(config);
+}
+
 export type OrderOutcome = "paid" | "failed" | "timeout";
 
 interface PollOptions {

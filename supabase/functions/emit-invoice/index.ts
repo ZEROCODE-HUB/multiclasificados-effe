@@ -38,8 +38,20 @@ const EMISOR_RUC = Deno.env.get("EMISOR_RUC") ?? "";
 const SITE_URL = Deno.env.get("PUBLIC_SITE_URL") ?? "https://www.coleffe.com";
 
 // ─── Factiliza ────────────────────────────────────────────────────────────────
-// El mismo token que ya usa verify-doc para consultar DNI/RUC.
-const FACTILIZA_TOKEN = Deno.env.get("FACTILIZA_TOKEN") ?? "";
+// OJO: Factiliza vende DOS productos con DOS tokens distintos, y no son
+// intercambiables. Medido el 2026-08-15: el token de facturación devuelve 401
+// contra la API de consultas, y el de consultas devuelve 401 contra la de
+// facturación.
+//
+// Por eso esta función tiene su propia variable. Antes leía `FACTILIZA_TOKEN`,
+// la misma que usa verify-doc para validar DNI/RUC al registrarse: poner ahí el
+// token de facturación habría roto la verificación de documentos de toda la app.
+//
+// El fallback a `FACTILIZA_TOKEN` se mantiene para no romper lo que ya está
+// desplegado mientras no se configure la variable nueva.
+const FACTILIZA_TOKEN = Deno.env.get("FACTILIZA_INVOICE_TOKEN")
+  || Deno.env.get("FACTILIZA_TOKEN")
+  || "";
 // Por defecto el entorno de PRUEBAS que publica su documentación. Emitir de
 // verdad tiene que ser una decisión explícita, no lo que pasa por olvidarse de
 // configurar una variable.
@@ -65,8 +77,29 @@ const FACTILIZA_URL = Deno.env.get("FACTILIZA_INVOICE_URL")
  * quedó atascado porque faltaba configuración NO puede enviarse un mes después
  * con la fecha vieja: pasa a revisión y lo resuelve contabilidad. Sin esto, el
  * día que se enciendan los secrets se dispararía una avalancha de rechazos.
+ *
+ * TIENE QUE COINCIDIR con el plazo de `claim_invoice_emission` (migración 0083).
+ * Estuvo en 5 mientras la base de datos usaba 3, y el efecto era feo: pasados
+ * los 3 días la reserva ya devolvía 0 filas, así que esta comprobación no llegaba
+ * a ejecutarse nunca y el comprobante se quedaba MUDO en 'pendiente', sin
+ * marcarse vencido y sin `needs_review`. Nadie se enteraba.
  */
-const DIAS_DE_PLAZO = 5;
+const DIAS_DE_PLAZO = 3;
+
+/**
+ * RUC del emisor cuando el comprobante es de prueba.
+ *
+ * En el entorno de pruebas de Factiliza el emisor dado de alta es el SUYO
+ * (10749283781), no el nuestro: mandar el de Coleffe devuelve «Su usuario no se
+ * encuentra configurado para el RUC». Por eso van en variables separadas — y
+ * `EMISOR_RUC` se queda intacto, que es el que sale en los comprobantes de los
+ * clientes reales.
+ */
+const EMISOR_RUC_PRUEBAS = Deno.env.get("EMISOR_RUC_PRUEBAS") ?? "";
+
+/** El RUC que toca según de qué comprobante se trate. */
+const rucDelEmisor = (esPrueba: boolean) =>
+  (esPrueba && EMISOR_RUC_PRUEBAS) ? EMISOR_RUC_PRUEBAS : EMISOR_RUC;
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -113,7 +146,7 @@ const esc = (s: unknown) =>
 const money = (n: number, moneda: string) =>
   `${moneda === "USD" ? "US$" : "S/"} ${Number(n ?? 0).toFixed(2)}`;
 
-function htmlCorreo(inv: Record<string, unknown>, declarado: boolean): string {
+function htmlCorreo(inv: Record<string, unknown>, declarado: boolean, esPrueba: boolean): string {
   const numero = esc(inv.o_number);
   const total = money(Number(inv.o_amount), "PEN");
   return `<!doctype html><html><body style="margin:0;background:#f6f7f9;padding:24px;
@@ -122,6 +155,13 @@ function htmlCorreo(inv: Record<string, unknown>, declarado: boolean): string {
       <div style="background:#132a4a;color:#fff;padding:20px 24px">
         <div style="font-size:18px;font-weight:800">eFFe Multiclasificados</div>
       </div>
+      ${esPrueba
+        ? `<div style="background:#fff4e5;border-bottom:1px solid #f5c78a;color:#8a4b00;
+                       padding:14px 24px;font-size:13px;line-height:1.5">
+             <strong>Documento de prueba — sin valor fiscal.</strong> Se generó contra el
+             entorno de pruebas: no es un comprobante válido ante SUNAT.
+           </div>`
+        : ""}
       <div style="padding:24px">
         <h1 style="margin:0 0 8px;font-size:18px">Tu comprobante ${numero}</h1>
         <p style="margin:0 0 16px;color:#5b6270;font-size:14px;line-height:1.6">
@@ -205,14 +245,20 @@ async function emitirEnSunat(invoiceId: string): Promise<string | null> {
   const id = String(inv.o_id);
   const claimId = String(inv.o_claim_id);
   const intento = Number(inv.o_attempts ?? 1);
+  // En pruebas el emisor dado de alta es el de Factiliza, no el nuestro.
+  const emisorRuc = rucDelEmisor(inv.o_es_prueba === true);
 
   const rendirse = async (motivo: string) => {
     await admin.rpc("mark_invoice_skipped", { p_invoice_id: id, p_reason: motivo });
     return "omitido";
   };
 
-  if (!FACTILIZA_TOKEN) return await rendirse("Falta FACTILIZA_TOKEN en la función");
-  if (!EMISOR_RUC) return await rendirse("Falta el RUC del emisor (EMISOR_RUC)");
+  if (!FACTILIZA_TOKEN) return await rendirse("Falta el token de facturación (FACTILIZA_INVOICE_TOKEN)");
+  if (!emisorRuc) {
+    return await rendirse(inv.o_es_prueba === true
+      ? "Falta el RUC del emisor de pruebas (EMISOR_RUC_PRUEBAS)"
+      : "Falta el RUC del emisor (EMISOR_RUC)");
+  }
 
   // Plazo: la fecha se congeló en el primer intento y no se recalcula.
   const emitida = new Date(String(inv.o_fecha_emision ?? Date.now()));
@@ -238,7 +284,7 @@ async function emitirEnSunat(invoiceId: string): Promise<string | null> {
       serie: String(inv.o_serie),
       correlativo: Number(inv.o_correlativo),
       fechaEmision: emitida,
-      emisorRuc: EMISOR_RUC,
+      emisorRuc,
       clienteDocTipo: (inv.o_doc_type as "dni" | "ruc" | null) ?? null,
       clienteDocNumero: (inv.o_doc_number as string) ?? null,
       clienteNombre: String(inv.o_advertiser_name ?? ""),
@@ -317,6 +363,10 @@ async function enviarCorreo(inv: Record<string, unknown>) {
   }
 
   const declarado = inv.o_sunat_status === "aceptado" || inv.o_sunat_status === "observado";
+  // Del COMPROBANTE, no del entorno: mientras se prueba contra QA, las compras
+  // reales siguen generando su comprobante interno y a esos clientes no se les
+  // puede mandar un correo diciendo que es una prueba.
+  const esPrueba = inv.o_es_prueba === true;
   const pdf = renderComprobantePDF({
     numero: String(inv.o_number),
     tipo: inv.o_type === "factura" ? "factura" : "boleta",
@@ -330,8 +380,9 @@ async function enviarCorreo(inv: Record<string, unknown>) {
     total: Number(inv.o_amount ?? 0),
     moneda: "PEN",
     emisorNombre: EMISOR_NOMBRE,
-    emisorRuc: EMISOR_RUC || null,
+    emisorRuc: rucDelEmisor(esPrueba) || null,
     sunat: declarado ? { aceptado: true } : null,
+    pruebas: esPrueba,
   });
 
   try {
@@ -344,8 +395,10 @@ async function enviarCorreo(inv: Record<string, unknown>) {
       body: JSON.stringify({
         from: EMAIL_FROM,
         to: [String(inv.o_email)],
-        subject: `Comprobante ${inv.o_number} — eFFe Multiclasificados`,
-        html: htmlCorreo(inv, declarado),
+        subject: esPrueba
+          ? `[PRUEBA] Comprobante ${inv.o_number} — eFFe Multiclasificados`
+          : `Comprobante ${inv.o_number} — eFFe Multiclasificados`,
+        html: htmlCorreo(inv, declarado, esPrueba),
         attachments: [{ filename: `${inv.o_number}.pdf`, content: toBase64(pdf) }],
       }),
     });
@@ -412,10 +465,14 @@ Deno.serve(async (req) => {
       body.correlativo ?? 1,
     ).catch((e) => ({ http: 0, cuerpo: String(e) }));
 
+    // La API de consultas se prueba con SU token (el de verify-doc), no con el
+    // de facturación: son productos distintos y mezclarlos daba un diagnóstico
+    // engañoso — un 401 aquí no significaba nada.
+    const TOKEN_CONSULTAS = Deno.env.get("FACTILIZA_TOKEN") ?? "";
     let consultas: { http: number; ok: boolean } = { http: 0, ok: false };
     try {
       const r = await fetch(`https://api.factiliza.com/v1/ruc/info/${EMISOR_RUC}`, {
-        headers: { Authorization: `Bearer ${FACTILIZA_TOKEN}`, Accept: "application/json" },
+        headers: { Authorization: `Bearer ${TOKEN_CONSULTAS}`, Accept: "application/json" },
       });
       consultas = { http: r.status, ok: r.ok };
     } catch { /* se queda en 0 */ }

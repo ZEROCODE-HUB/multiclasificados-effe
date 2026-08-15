@@ -97,6 +97,30 @@ const EXTRA_LABELS: Record<string, string> = {
   img500: "2ª imagen", pdf500: "Adjuntar PDF", urgente: "Etiqueta Urgente", destacado: "Aviso Destacado",
 };
 
+/**
+ * Traduce el error de Izipay a algo que un comprador pueda entender y accionar.
+ *
+ * Lyra contesta en inglés y con el vocabulario de su API: el usuario que
+ * intentaba comprar como empresa veía literalmente «Invalid billing
+ * identityType», que no le dice nada ni le sugiere qué hacer. El texto original
+ * no se pierde: se registra en los logs de la función.
+ */
+export function mensajeDeIzipay(crudo: string): string {
+  const s = crudo.toLowerCase();
+  if (!s) return "No se pudo iniciar el pago. Inténtalo de nuevo en unos minutos.";
+  if (s.includes("identitytype") || s.includes("identitycode")) {
+    return "No pudimos validar tus datos de facturación. Revisa el documento y vuelve a intentarlo.";
+  }
+  if (s.includes("amount")) return "El importe del pago no es válido. Vuelve a calcular tu compra.";
+  if (s.includes("currency")) return "Moneda no admitida para este pago.";
+  if (s.includes("email")) return "El correo del comprobante no es válido.";
+  if (s.includes("shop") || s.includes("credential") || s.includes("authent")) {
+    return "La pasarela de pago no está disponible ahora mismo. Inténtalo más tarde.";
+  }
+  // Desconocido: mensaje genérico, y el original queda en los logs.
+  return "No se pudo iniciar el pago. Inténtalo de nuevo en unos minutos.";
+}
+
 // Devuelve el id del usuario dueño del token, o null si no hay usuario real.
 async function authenticatedUserId(req: Request): Promise<string | null> {
   const header = req.headers.get("Authorization") ?? "";
@@ -111,6 +135,91 @@ async function authenticatedUserId(req: Request): Promise<string | null> {
   return typeof user?.id === "string" ? user.id : null;
 }
 
+/** Staff con permiso de edición en pagos (para la sonda de diagnóstico). */
+async function esStaffAutorizado(req: Request): Promise<boolean> {
+  const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
+  if (!token || token === SUPABASE_ANON_KEY) return false;
+  // La service_role key vale para la sonda: quien la tenga ya puede hacer
+  // cualquier cosa en el proyecto, y así se puede diagnosticar desde un script
+  // sin montar una sesión de administrador. Se mira el claim `role` y no una
+  // comparación literal porque la clave del runtime y la del panel no siempre
+  // son el mismo formato. La FIRMA ya la ha validado el gateway: esta función
+  // está desplegada con verify_jwt, así que aquí no llega un JWT inventado.
+  if (token === SERVICE_ROLE) return true;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1] ?? ""));
+    if (payload?.role === "service_role") return true;
+  } catch { /* no es un JWT legible: se sigue por la vía normal */ }
+  const user = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { persistSession: false },
+  });
+  const { data, error } = await user.rpc("has_perm", { p_module: "Pagos y planes", p_action: "edit" });
+  return !error && data === true;
+}
+
+/**
+ * Sonda: prueba varias formas de `billingDetails` contra Izipay y dice cuál
+ * acepta. No cobra nada — pedir un formToken solo reserva un formulario, y el
+ * `orderId` va marcado como sonda para poder reconocerlo.
+ *
+ * Existe porque el enum de `identityType` de Lyra no está publicado en ninguna
+ * parte legible (su web de documentación es una SPA vacía), así que la forma
+ * correcta se averigua preguntándole a la API, no adivinando.
+ */
+async function sondaDeFacturacion(): Promise<unknown> {
+  const variantes: Array<{ nombre: string; billing: Record<string, unknown> }> = [
+    { nombre: "solo pais", billing: { country: "PE" } },
+    { nombre: "nombre, sin documento", billing: { country: "PE", firstName: "EMPRESA DE PRUEBA SAC" } },
+    { nombre: "identityType RUC (lo que fallaba)", billing: { country: "PE", firstName: "EMPRESA DE PRUEBA SAC", identityType: "RUC", identityCode: "20616009061" } },
+    { nombre: "legalName", billing: { country: "PE", legalName: "EMPRESA DE PRUEBA SAC" } },
+    { nombre: "legalName + category COMPANY", billing: { country: "PE", legalName: "EMPRESA DE PRUEBA SAC", category: "COMPANY" } },
+    { nombre: "legalName + firstName (el arreglo)", billing: { country: "PE", legalName: "EMPRESA DE PRUEBA SAC", firstName: "EMPRESA DE PRUEBA SAC" } },
+    { nombre: "identityType DNI con numero de RUC", billing: { country: "PE", firstName: "EMPRESA DE PRUEBA SAC", identityType: "DNI", identityCode: "20616009061" } },
+  ];
+
+  const resultados = [];
+  for (let i = 0; i < variantes.length; i++) {
+    const v = variantes[i];
+    try {
+      const r = await fetch(`${API_HOST}/api-payment/V4/Charge/CreatePayment`, {
+        method: "POST",
+        headers: {
+          Authorization: basicAuthHeader(IZIPAY_SHOP_ID, IZIPAY_PASSWORD),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          amount: 100,
+          currency: "PEN",
+          orderId: `SONDA-${Date.now()}-${i}`,
+          customer: { email: "sonda@coleffe.com", billingDetails: v.billing },
+        }),
+      });
+      const j = await r.json().catch(() => null);
+      const ok = j?.status === "SUCCESS" && Boolean(j?.answer?.formToken);
+      resultados.push({
+        variante: v.nombre,
+        billing: v.billing,
+        http: r.status,
+        acepta: ok,
+        error: ok ? null : (j?.answer?.errorMessage ?? j?.answer?.detailedErrorMessage ?? null),
+      });
+    } catch (e) {
+      resultados.push({ variante: v.nombre, billing: v.billing, http: 0, acepta: false, error: String(e) });
+    }
+  }
+
+  const aceptadas = resultados.filter((r) => r.acepta).map((r) => r.variante);
+  return {
+    ok: true,
+    resultados,
+    aceptadas,
+    diagnostico: aceptadas.length
+      ? `Izipay acepta: ${aceptadas.join(" · ")}`
+      : "Izipay no aceptó NINGUNA variante: revisa las credenciales de la tienda.",
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
@@ -120,10 +229,17 @@ Deno.serve(async (req) => {
       return json({ success: false, error: "Pasarela de pago no configurada." }, 503);
     }
 
+    const body = await req.json().catch(() => ({}));
+
+    // Diagnóstico para staff: no crea orden ni cobra.
+    if (body?.probe === true) {
+      if (!(await esStaffAutorizado(req))) return json({ success: false, error: "No autorizado." }, 401);
+      return json(await sondaDeFacturacion());
+    }
+
     const userId = await authenticatedUserId(req);
     if (!userId) return json({ success: false, error: "Inicia sesión para pagar." }, 401);
 
-    const body = await req.json().catch(() => ({}));
     const listingId = String(body?.listingId ?? "").trim();
     const receipt = (body?.receipt ?? {}) as Record<string, unknown>;
 
@@ -293,14 +409,22 @@ Deno.serve(async (req) => {
     }
 
     // ── Pedir el formToken a Izipay (Charge/CreatePayment) ──
+    // Una factura la paga una empresa, y a Izipay no se le manda el RUC: lo
+    // rechaza («Invalid billing identityType») y la compra no llegaba a
+    // empezar. El detalle, en construirBillingDetails().
+    const esEmpresa = receiptType === "factura" || docType === "ruc";
     const payload = buildCreatePaymentBody({
       amountCents: Math.round(total * 100),
       currency: "PEN",
       orderId: order.id,
       email,
       firstName: advertiserName || undefined,
-      identityType: docType ? (docType.toUpperCase() as "DNI" | "RUC" | "CE") : undefined,
-      identityCode: docNumber || undefined,
+      esEmpresa,
+      legalName: esEmpresa ? advertiserName || undefined : undefined,
+      identityType: esEmpresa || !docType
+        ? undefined
+        : docType === "ce" ? "CE" : "DNI",
+      identityCode: esEmpresa ? undefined : docNumber || undefined,
     });
 
     const resp = await fetch(`${API_HOST}/api-payment/V4/Charge/CreatePayment`, {
@@ -316,8 +440,19 @@ Deno.serve(async (req) => {
     if (!resp.ok || result?.status !== "SUCCESS" || !result?.answer?.formToken) {
       // El cobro no arrancó: dejamos la orden como 'failed' para no ensuciar 'pending'.
       await admin.from("orders").update({ status: "failed" }).eq("id", order.id);
-      const errMsg = result?.answer?.errorMessage ?? result?.answer?.detailedErrorMessage ?? "No se pudo iniciar el pago.";
-      return json({ success: false, error: String(errMsg) }, 502);
+      const crudo = String(
+        result?.answer?.errorMessage ?? result?.answer?.detailedErrorMessage ?? "",
+      );
+      // El mensaje de Izipay viene en inglés y con jerga de su API. Un comprador
+      // no tiene por qué leer «Invalid billing identityType»; y nosotros sí
+      // queremos el original, así que se registra aparte.
+      console.error("create-payment: Izipay rechazó el cobro", {
+        orderId: order.id,
+        errorCode: result?.answer?.errorCode ?? null,
+        errorMessage: crudo,
+        detailedErrorMessage: result?.answer?.detailedErrorMessage ?? null,
+      });
+      return json({ success: false, error: mensajeDeIzipay(crudo) }, 502);
     }
 
     return json({

@@ -13,7 +13,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Trash2, FileText, SlidersHorizontal, Save, GripVertical, Eye, Upload } from "lucide-react";
+import { Plus, Pencil, Trash2, FileText, SlidersHorizontal, Save, GripVertical, Eye, Upload, RefreshCw } from "lucide-react";
 import { InvoiceDetailDialog } from "@/components/InvoiceDetailDialog";
 import { personKindLabel } from "@/lib/identity";
 import {
@@ -34,7 +34,7 @@ import { formatSoles } from "@/lib/pricing";
 import { CATEGORY_ICON_NAMES as ICON_OPTIONS, CATEGORY_PHOTO_POOL, iconFor, invalidateCategories } from "@/lib/categories";
 import { imgUrlCover } from "@/lib/imageUrl";
 import {
-  fetchSettings, setSetting, fetchAllInvoices,
+  fetchSettings, setSetting, fetchAllInvoices, retryInvoiceEmission,
   fetchCategories, createCategory, updateCategory, deleteCategory, reorderCategories,
   uploadCategoryImage, uploadDefaultListingImage, removeDefaultListingImage,
   type AdminInvoice, type AdminCategory,
@@ -47,6 +47,50 @@ import { mensajeDeError } from "@/lib/errores";
 // exactamente lo que verá el visitante.
 const photoFor = (imageUrl: string | null, index: number) =>
   imageUrl || CATEGORY_PHOTO_POOL[index % CATEGORY_PHOTO_POOL.length];
+
+// ── Estado de la emisión electrónica de un comprobante ───────────────────────
+// El panel enseñaba solo el número y el importe, así que un comprobante que
+// SUNAT hubiera rechazado era indistinguible de uno correcto. Estas etiquetas
+// dicen en una ojeada cuál necesita atención.
+const ESTADO_SUNAT: Record<string, { texto: string; clase: string }> = {
+  aceptado:  { texto: "Aceptado",  clase: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200" },
+  observado: { texto: "Observado", clase: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200" },
+  rechazado: { texto: "Rechazado", clase: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200" },
+  error:     { texto: "Error",     clase: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200" },
+  vencido:   { texto: "Vencido",   clase: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200" },
+  pendiente: { texto: "En cola",   clase: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200" },
+  enviando:  { texto: "Enviando…", clase: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200" },
+  omitido:   { texto: "Interno",   clase: "bg-muted text-muted-foreground" },
+};
+
+/** Solo tiene sentido reintentar lo que acabó mal o se quedó a medias. */
+const puedeReintentar = (inv: AdminInvoice) =>
+  ["rechazado", "error", "vencido"].includes(inv.sunatStatus)
+  || inv.emailStatus === "error"
+  || inv.needsReview;
+
+function EstadoEmision({ inv }: { inv: AdminInvoice }) {
+  const s = ESTADO_SUNAT[inv.sunatStatus] ?? ESTADO_SUNAT.omitido;
+  return (
+    <div className="flex flex-col gap-1 items-start">
+      <span
+        className={cn("rounded px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap", s.clase)}
+        title={inv.sunatError ?? undefined}
+      >
+        {s.texto}
+      </span>
+      {inv.emailStatus === "error" && (
+        <span className="text-[10px] font-semibold text-red-700 dark:text-red-300">correo falló</span>
+      )}
+      {inv.emailStatus === "enviado" && (
+        <span className="text-[10px] text-muted-foreground">correo enviado</span>
+      )}
+      {inv.needsReview && (
+        <span className="text-[10px] font-semibold text-destructive">revisar</span>
+      )}
+    </div>
+  );
+}
 
 // Tarjeta arrastrable. El asa (grip) es el único punto de agarre para que los
 // botones de editar/eliminar sigan siendo clicables y la página pueda scrollear
@@ -366,7 +410,31 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
   const [invoices, setInvoices] = useState<AdminInvoice[]>([]);
   const [invoicesLoading, setInvoicesLoading] = useState(true);
   const [invoiceDetail, setInvoiceDetail] = useState<AdminInvoice | null>(null);
+  const [retrying, setRetrying] = useState<string | null>(null);
   const invoicesPager = usePagination(invoices, 10, invoices.length);
+
+  // Devuelve el comprobante a la cola de emisión y de correo. El permiso lo
+  // comprueba la propia RPC en el servidor, no aquí.
+  const reintentar = async (inv: AdminInvoice) => {
+    setRetrying(inv.id);
+    try {
+      await retryInvoiceEmission(inv.id);
+      toast({
+        title: "Comprobante en cola",
+        description: `${inv.number} se volverá a enviar en unos instantes.`,
+      });
+      const { data } = await fetchAllInvoices();
+      setInvoices(data);
+    } catch (e) {
+      toast({
+        title: "No se pudo reintentar",
+        description: mensajeDeError(e, "Error"),
+        variant: "destructive",
+      });
+    } finally {
+      setRetrying(null);
+    }
+  };
 
   useEffect(() => {
     fetchSettings().then((rows) => {
@@ -684,7 +752,7 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
           </Card>
         </TabsContent>
 
-        {/* BOLETAS (solo lectura) */}
+        {/* BOLETAS — con estado de emisión y reintento */}
         <TabsContent value="boletas" className="pt-4">
           <Card>
             <CardHeader>
@@ -712,25 +780,49 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
                           llamaba "Aviso" y hacía pensar que se emitía un
                           comprobante por cada publicación. */}
                       <TableHead>Concepto</TableHead>
+                      <TableHead>Estado</TableHead>
                       <TableHead className="text-right">Monto</TableHead>
                       <TableHead className="text-right">Ver</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {invoicesPager.pageItems.map((inv) => (
-                      <TableRow key={inv.id}>
-                        <TableCell className="font-mono text-xs">{inv.number}</TableCell>
+                      <TableRow key={inv.id} className={inv.needsReview ? "bg-destructive/5" : undefined}>
+                        <TableCell className="font-mono text-xs">
+                          {inv.number}
+                          {inv.esPrueba && (
+                            <span className="ml-1.5 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-bold
+                                             text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                              PRUEBA
+                            </span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-xs capitalize">{inv.type}</TableCell>
                         <TableCell className="text-xs">{new Date(inv.date).toLocaleDateString("es-PE")}</TableCell>
                         <TableCell className="text-sm">{inv.advertiser}</TableCell>
                         <TableCell className="font-mono text-xs text-muted-foreground">{inv.docNumber || "—"}</TableCell>
                         <TableCell className="text-xs">{personKindLabel(inv.docType, inv.docNumber)}</TableCell>
                         <TableCell className="text-sm font-medium">{inv.listingTitle}</TableCell>
+                        <TableCell>
+                          <EstadoEmision inv={inv} />
+                        </TableCell>
                         <TableCell className="text-right font-bold">{formatSoles(inv.amount)}</TableCell>
                         <TableCell className="text-right">
-                          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setInvoiceDetail(inv)}>
-                            <Eye size={14} /> Ver
-                          </Button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            {puedeReintentar(inv) && (
+                              <Button
+                                variant="outline" size="sm" className="gap-1.5"
+                                disabled={retrying === inv.id}
+                                onClick={() => reintentar(inv)}
+                              >
+                                <RefreshCw size={14} className={retrying === inv.id ? "animate-spin" : undefined} />
+                                Reintentar
+                              </Button>
+                            )}
+                            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setInvoiceDetail(inv)}>
+                              <Eye size={14} /> Ver
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}

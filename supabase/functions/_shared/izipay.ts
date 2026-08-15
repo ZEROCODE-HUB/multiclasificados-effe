@@ -71,25 +71,67 @@ export interface CreatePaymentInput {
   email: string;
   firstName?: string;
   lastName?: string;
-  identityType?: "DNI" | "RUC" | "CE";
+  /**
+   * Documento de identidad de la PERSONA que paga. OJO: nunca "RUC" — ver
+   * `construirBillingDetails`.
+   */
+  identityType?: "DNI" | "CE";
   identityCode?: string;
+  /** true cuando el comprobante es factura: el pagador es una empresa. */
+  esEmpresa?: boolean;
+  /** Razón social, solo si `esEmpresa`. */
+  legalName?: string;
 }
 
-// Payload para POST /api-payment/V4/Charge/CreatePayment.
-export function buildCreatePaymentBody(input: CreatePaymentInput): Record<string, unknown> {
+/**
+ * Arma `customer.billingDetails`.
+ *
+ * Lo que hay que saber, porque costó un bug en producción: **Lyra rechaza
+ * `identityType:"RUC"`** con «Invalid billing identityType», y el rechazo llega
+ * antes de crear el formToken, así que la compra ni empieza. En su modelo,
+ * `identityType`/`identityCode` describen el documento de la PERSONA que paga
+ * (DNI, carné de extranjería), no el de una empresa.
+ *
+ * Por eso, cuando el comprobante es una factura, aquí NO se manda el RUC: a
+ * Izipay solo le hace falta cobrar. El RUC va por nuestro lado a la boleta
+ * electrónica (`invoices.doc_number` → SUNAT), que es donde importa.
+ *
+ * La rama de persona natural se deja EXACTAMENTE como estaba: es la que lleva
+ * meses funcionando y no hay por qué moverla.
+ */
+export function construirBillingDetails(input: CreatePaymentInput): Record<string, unknown> {
   const billingDetails: Record<string, unknown> = { country: "PE" };
+
+  if (input.esEmpresa) {
+    // Comprobado contra la API de Izipay (sonda `probe` de create-payment,
+    // 15/08/2026): `category:"COMPANY"` + `legalName` lo acepta;
+    // `identityType:"RUC"` es el ÚNICO que rechaza.
+    billingDetails.category = "COMPANY";
+    const razon = input.legalName || input.firstName;
+    if (razon) {
+      billingDetails.legalName = razon;
+      // También como `firstName`: es el campo que Lyra enseña en su panel.
+      billingDetails.firstName = razon;
+    }
+    return billingDetails;
+  }
+
   if (input.firstName) billingDetails.firstName = input.firstName;
   if (input.lastName) billingDetails.lastName = input.lastName;
   if (input.identityType) billingDetails.identityType = input.identityType;
   if (input.identityCode) billingDetails.identityCode = input.identityCode;
+  return billingDetails;
+}
 
+// Payload para POST /api-payment/V4/Charge/CreatePayment.
+export function buildCreatePaymentBody(input: CreatePaymentInput): Record<string, unknown> {
   return {
     amount: input.amountCents,
     currency: input.currency,
     orderId: input.orderId,
     customer: {
       email: input.email,
-      billingDetails,
+      billingDetails: construirBillingDetails(input),
     },
   };
 }
