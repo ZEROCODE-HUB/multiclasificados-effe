@@ -401,16 +401,30 @@ describe("interpretar lo que contesta Factiliza", () => {
       //
       // Se distingue por el código: los rechazos de SUNAT son NUMÉRICOS (su
       // catálogo, 0100-4000). "HTTP" no lo emite SUNAT juzgando el documento.
+      // SIN hash: el envío no llegó a registrarse. Reintentar sí sirve.
+      const sinHash = leerRespuesta(200, {
+        status: 200, success: false,
+        message: "DEMO - hubo un problema con la SUNAT",
+        data: { error: { code: "HTTP", message: "Unauthorized" } },
+      });
+      expect(sinHash.desenlace).toBe("error");
+      expect(sinHash.reintentable).toBe(true);
+    });
+
+    it("🔴 …pero si Factiliza YA lo guardó (hay hash), reintentar no arregla nada", () => {
+      // El hash lo decide todo: significa que el documento está en su sistema.
+      // Reenviarlo devolvería «ya existe» una y otra vez, gastando intentos y
+      // tapando el problema de fondo. Lo que hay que hacer es pedirles el
+      // reproceso con ese hash, y el mensaje tiene que decirlo.
       const r = leerRespuesta(200, {
-        status: 200,
-        success: false,
+        status: 200, success: false,
         message: "DEMO - El documento fue registrado en el sistema, pero hubo un problema con la SUNAT",
         data: { hash: "mm/05v4QRw4n3ZGm/iV997mJZTk=", error: { code: "HTTP", message: "Unauthorized" } },
       });
-      expect(r.desenlace).toBe("error");
-      expect(r.reintentable).toBe(true);
-      // El hash se conserva: identifica el documento en su sistema.
+      expect(r.reintentable).toBe(false);
       expect(r.hash).toBe("mm/05v4QRw4n3ZGm/iV997mJZTk=");
+      expect(r.mensaje).toMatch(/reprocesen/i);
+      expect(r.mensaje).toContain("mm/05v4QRw4n3ZGm/iV997mJZTk=");
       expect(r.mensaje).toContain("Unauthorized");
     });
 

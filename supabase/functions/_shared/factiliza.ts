@@ -356,8 +356,26 @@ export function leerRespuesta(httpStatus: number, cuerpo: unknown): Resultado {
     // El criterio: **los rechazos de SUNAT traen código numérico** (su catálogo
     // va de 0100 a 4000). Un código no numérico no lo emite SUNAT juzgando
     // nuestros datos, así que no puede ser un rechazo definitivo.
+    // Y aquí entra el hash, que es la pista que lo decide todo: **si viene, el
+    // documento YA está guardado en Factiliza**. Reenviarlo daría «ya existe»
+    // eternamente, así que reintentar no solo no arregla nada: gasta intentos y
+    // esconde el problema. Solo se reintenta cuando NO hay hash, que es cuando
+    // el envío de verdad no llegó a registrarse.
+    const hashPrevio = (datos.hash as string) ?? null;
     if (esDeDatos && codigoSunat !== null && !/^\d+$/.test(codigoSunat)) {
-      esDeDatos = false;
+      if (hashPrevio) {
+        return {
+          ...base,
+          desenlace: "rechazado",   // terminal, pero no por culpa del documento
+          reintentable: false,
+          hash: hashPrevio,
+          codigo: codigoSunat,
+          mensaje: `Factiliza registró el documento (hash ${hashPrevio}) pero no consiguió `
+            + `declararlo ante SUNAT. NO se puede reenviar: pídeles que lo reprocesen con ese `
+            + `hash, o consulta su estado. — ${detalle || mensaje}`,
+        };
+      }
+      esDeDatos = false;   // no se llegó a registrar: reintentar sí sirve
     }
 
     // «Ya existe un documento con el mismo tipo, serie y correlativo» es un
