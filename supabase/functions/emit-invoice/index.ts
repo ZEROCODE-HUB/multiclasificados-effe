@@ -23,7 +23,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { renderComprobantePDF, toBase64 } from "../_shared/comprobante-pdf.ts";
 import {
-  construirComprobante, leerRespuesta, consultaDeComprobante, ComprobanteInvalido,
+  construirComprobante, construirNotaDeCredito, leerRespuesta, consultaDeComprobante,
+  ComprobanteInvalido,
 } from "../_shared/factiliza.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -276,6 +277,14 @@ const urlDeFactiliza = (recurso: "send" | "resend" | "cdr" | "pdf" | "xml") =>
   FACTILIZA_URL.replace(/\/send$/, `/${recurso}`);
 
 /**
+ * Las notas de crédito viven en otra familia de rutas: `/api/v1/note/*`, no
+ * `/api/v1/invoice/*`. Por eso no vale `urlDeFactiliza`, que solo cambia el
+ * último tramo.
+ */
+const urlDeNota = (recurso: "send" | "pdf" | "xml") =>
+  FACTILIZA_URL.replace(/\/invoice\/send$/, `/note/${recurso}`);
+
+/**
  * Pregunta a Factiliza si un comprobante ya existe. Es una LECTURA: no emite
  * nada, no consume correlativo y se puede lanzar sin miedo.
  *
@@ -444,6 +453,112 @@ async function emitirEnSunat(invoiceId: string): Promise<string | null> {
 }
 
 /** Envía el comprobante por correo. Devuelve el resultado, nunca lanza. */
+/**
+ * Manda a SUNAT la nota de crédito que anula un comprobante.
+ *
+ * Se llama en el mismo aviso que la emisión normal: si el comprobante no tiene
+ * ninguna nota pendiente, la reserva devuelve cero filas y esto no hace nada.
+ * Así el disparo desde la base de datos y el barrido sirven para las dos cosas
+ * sin tener que distinguirlas.
+ *
+ * Devuelve el desenlace, o null si no había nada que mandar.
+ */
+async function emitirNotaDeCredito(invoiceId: string): Promise<string | null> {
+  const { data: claim, error } = await admin.rpc("claim_invoice_note", {
+    p_invoice_id: invoiceId,
+    p_lease_seconds: 300,
+  });
+  if (error) {
+    console.error("[emit-invoice] no se pudo reclamar la nota:", error.message);
+    return null;
+  }
+  const n = (Array.isArray(claim) ? claim[0] : claim) as Record<string, unknown> | null;
+  if (!n) return null;   // no hay nota pendiente: el caso normal
+
+  const claimId = String(n.o_claim_id);
+  const intento = Number(n.o_attempts ?? 1);
+  const esPrueba = n.o_es_prueba === true;
+  const emisorRuc = rucDelEmisor(esPrueba);
+
+  const rendirse = async (motivo: string) => {
+    await admin.rpc("finish_invoice_note", {
+      p_invoice_id: invoiceId, p_claim_id: claimId, p_status: "omitido",
+      p_error_code: "LOCAL", p_error_message: motivo,
+    });
+    return "omitido";
+  };
+
+  if (!FACTILIZA_TOKEN) return await rendirse("Falta el token de facturación");
+  if (!emisorRuc) return await rendirse("Falta el RUC del emisor");
+
+  const ficha = (n.o_factiliza_data ?? {}) as Record<string, unknown>;
+  const direccion = [ficha.direccion, ficha.direccion_completa, ficha.domicilio_fiscal]
+    .find((v) => typeof v === "string" && v.trim()) as string | undefined;
+
+  // El número del comprobante anulado va SIN los ceros de relleno: B066-24, no
+  // B066-000024. Es lo que espera su API y lo que se comprobó contra ella.
+  const afectado = String(n.o_afectado_number).replace(/-0*(\d+)$/, "-$1");
+
+  let cuerpo: Record<string, unknown>;
+  try {
+    cuerpo = construirNotaDeCredito({
+      serie: String(n.o_nota_serie),
+      correlativo: Number(n.o_nota_correlativo),
+      fechaEmision: new Date(String(n.o_fecha_emision ?? Date.now())),
+      emisorRuc,
+      afectado: { tipo: n.o_type === "factura" ? "factura" : "boleta", numero: afectado },
+      clienteDocTipo: (n.o_doc_type as "dni" | "ruc" | null) ?? null,
+      clienteDocNumero: (n.o_doc_number as string) ?? null,
+      clienteNombre: String(n.o_advertiser_name ?? ""),
+      clienteDireccion: direccion ?? null,
+      descripcion: `Anulación: ${String(n.o_motivo ?? "anulación de la operación")}`.slice(0, 240),
+      total: Number(n.o_amount ?? 0),
+      subtotal: Number(n.o_subtotal ?? 0),
+      igv: Number(n.o_igv ?? 0),
+    });
+  } catch (e) {
+    const motivo = e instanceof ComprobanteInvalido ? e.message : "No se pudo construir la nota";
+    await admin.rpc("finish_invoice_note", {
+      p_invoice_id: invoiceId, p_claim_id: claimId, p_status: "rechazado",
+      p_error_code: "LOCAL", p_error_message: motivo,
+    });
+    return "rechazado";
+  }
+
+  let httpStatus = 0;
+  let respuesta: unknown = null;
+  try {
+    const res = await fetch(urlDeNota("send"), {
+      method: "POST",
+      headers: { Authorization: `Bearer ${FACTILIZA_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify(cuerpo),
+    });
+    httpStatus = res.status;
+    respuesta = await res.json().catch(() => null);
+  } catch (e) {
+    respuesta = { message: e instanceof Error ? e.message : "fallo de red" };
+  }
+
+  const r = leerRespuesta(httpStatus, respuesta);
+
+  await admin.rpc("log_invoice_attempt", {
+    p_invoice_id: invoiceId, p_step: "nota", p_attempt: intento,
+    p_http_status: httpStatus, p_ok: r.desenlace === "aceptado" || r.desenlace === "observado",
+    p_request: cuerpo,
+    p_response: (respuesta ?? { message: r.mensaje }) as Record<string, unknown>,
+  });
+
+  await admin.rpc("finish_invoice_note", {
+    p_invoice_id: invoiceId, p_claim_id: claimId, p_status: r.desenlace,
+    p_hash: r.hash, p_cdr: r.cdr,
+    p_error_code: r.codigo,
+    p_error_message: r.desenlace === "aceptado" ? null : r.mensaje,
+    p_espera: r.esperando === true,
+  });
+
+  return r.desenlace;
+}
+
 async function enviarCorreo(inv: Record<string, unknown>) {
   const claimId = String(inv.o_claim_id);
   const id = String(inv.o_id);
@@ -673,6 +788,11 @@ Deno.serve(async (req) => {
   // apagada esto no hace nada y el comprobante viaja como interno.
   const sunat = await emitirEnSunat(body.invoice_id);
 
+  // Paso 1-bis — la nota de crédito, si el comprobante se anuló. No hace nada
+  // cuando no hay ninguna pendiente, así que el mismo aviso de la base de datos
+  // vale para emitir y para anular.
+  const nota = await emitirNotaDeCredito(body.invoice_id);
+
   // Paso 2 — correo. Sale pase lo que pase con SUNAT: el usuario ya pagó y tiene
   // derecho a su comprobante aunque la emisión fiscal esté atascada.
   const { data: claim, error } = await admin.rpc("claim_invoice_email", {
@@ -684,8 +804,8 @@ Deno.serve(async (req) => {
     return json({ ok: false, error: error.message });
   }
   const inv = Array.isArray(claim) ? claim[0] : claim;
-  if (!inv) return json({ ok: true, claimed: false, sunat });
+  if (!inv) return json({ ok: true, claimed: false, sunat, nota });
 
   const resultado = await enviarCorreo(inv as Record<string, unknown>);
-  return json({ ok: true, invoice: inv.o_number, sunat, ...resultado });
+  return json({ ok: true, invoice: inv.o_number, sunat, nota, ...resultado });
 });

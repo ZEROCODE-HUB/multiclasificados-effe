@@ -166,7 +166,36 @@ JSON escrito a mano, así que lo verificado es el código que va a producción.
   | `/api/v1/invoice/xml` | ídem | el XML firmado |
   | `/api/v1/summary/send` | resumen diario | boletas resumidas |
 
+  | `/api/v1/note/send` | nota completa | **anular** un comprobante declarado |
+  | `/api/v1/note/pdf` · `/note/xml` | tipo_Doc, serie, correlativo, empresa_Ruc | la nota, en PDF o XML |
+  | `/api/v1/voided/cancel` | identificadores + motivo | baja de factura (no se usa: la nota cubre los dos casos) |
+
   `/invoice/cdr` no existe en QA (sí en producción).
+
+## Anular un comprobante
+
+Un documento que SUNAT aceptó **no se borra**: se anula emitiendo una **nota de
+crédito** (tipo 07) que lo referencia, con su propia serie y correlativo. Se hace
+desde Admin › Comercial › Boletas, botón **Anular**.
+
+| | |
+|---|---|
+| Series de las notas | **BC01 / FC01** reales · **BC66 / FC66** en pruebas |
+| Comprobante **declarado** | se retira el saldo **y** se emite la nota ante SUNAT |
+| Comprobante **interno** (`omitido`) | se retira el saldo; no hay nada que anular ante SUNAT |
+| Si el usuario ya gastó el saldo | se avisa con los números exactos y hay que confirmarlo aparte |
+| El dinero del cobro | **NO se devuelve por código**: se hace a mano en el panel de Izipay |
+
+Todo queda en `audit_logs` (`void_invoice`) con quién, cuándo y por qué.
+
+Verificado de punta a punta contra SUNAT el 2026-08-15: nota sobre boleta
+(`BC66-1`), sobre factura (`FC66-1`), una generada por `construirNotaDeCredito`
+(`BC66-2`) y una emitida por el worker desde el estado de la base
+(`BC66-000011`). Las cuatro aceptadas.
+
+> Dos detalles que cuestan un rechazo si se reescriben: en `/note/send` el campo
+> es **`Manual` con mayúscula** (en `/invoice/send` es `manual`), y los importes
+> van en **positivo** aunque la nota reste.
 
   **Qué se adjunta al correo**, según el estado del comprobante:
 

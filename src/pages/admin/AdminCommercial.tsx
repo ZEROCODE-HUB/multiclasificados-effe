@@ -13,7 +13,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Trash2, FileText, SlidersHorizontal, Save, GripVertical, Eye, Upload, RefreshCw } from "lucide-react";
+import { Plus, Pencil, Trash2, FileText, SlidersHorizontal, Save, GripVertical, Eye, Upload, RefreshCw, Ban } from "lucide-react";
 import { InvoiceDetailDialog } from "@/components/InvoiceDetailDialog";
 import { personKindLabel } from "@/lib/identity";
 import {
@@ -35,6 +35,7 @@ import { CATEGORY_ICON_NAMES as ICON_OPTIONS, CATEGORY_PHOTO_POOL, iconFor, inva
 import { imgUrlCover } from "@/lib/imageUrl";
 import {
   fetchSettings, setSetting, fetchAllInvoices, retryInvoiceEmission,
+  previsualizarAnulacion, anularComprobante, type PrevisualizacionAnulacion,
   fetchCategories, createCategory, updateCategory, deleteCategory, reorderCategories,
   uploadCategoryImage, uploadDefaultListingImage, removeDefaultListingImage,
   type AdminInvoice, type AdminCategory,
@@ -47,6 +48,146 @@ import { mensajeDeError } from "@/lib/errores";
 // exactamente lo que verá el visitante.
 const photoFor = (imageUrl: string | null, index: number) =>
   imageUrl || CATEGORY_PHOTO_POOL[index % CATEGORY_PHOTO_POOL.length];
+
+/**
+ * Diálogo de anulación.
+ *
+ * Se pide una previsualización al servidor ANTES de enseñar nada, porque anular
+ * retira saldo y emite un documento fiscal: quien lo hace tiene que ver los
+ * números concretos —cuánto se devuelve, cuánto se puede retirar de verdad y
+ * cuánto se queda por el camino— en vez de un «¿seguro?» a ciegas.
+ *
+ * Y si el usuario ya gastó parte de lo comprado, hay que marcar una casilla
+ * aparte: el servidor rechaza la anulación sin ese visto bueno explícito.
+ */
+function AnularDialog({ inv, onHecho }: { inv: AdminInvoice; onHecho: () => void }) {
+  const [abierto, setAbierto] = useState(false);
+  const [previa, setPrevia] = useState<PrevisualizacionAnulacion | null>(null);
+  const [motivo, setMotivo] = useState("");
+  const [acepta, setAcepta] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+
+  useEffect(() => {
+    if (!abierto) return;
+    setPrevia(null); setMotivo(""); setAcepta(false);
+    previsualizarAnulacion(inv.id)
+      .then(setPrevia)
+      .catch((e) => {
+        toast({ title: "No se pudo consultar", description: mensajeDeError(e, "Error"), variant: "destructive" });
+        setAbierto(false);
+      });
+  }, [abierto, inv.id]);
+
+  const faltaSaldo = previa ? !previa.saldoSuficiente : false;
+  const puedeEnviar = !!previa && motivo.trim().length >= 3 && (!faltaSaldo || acepta) && !enviando;
+
+  const confirmar = async () => {
+    setEnviando(true);
+    try {
+      const r = await anularComprobante(inv.id, motivo.trim(), acepta);
+      if (!r.anulado) {
+        toast({ title: "No se anuló", description: r.motivo ?? "Inténtalo de nuevo.", variant: "destructive" });
+      } else {
+        toast({
+          title: `${inv.number} anulado`,
+          description: [
+            r.creditosRetirados > 0 ? `Se retiraron ${formatSoles(r.creditosRetirados)} de saldo.` : "No había saldo que retirar.",
+            r.nota ? `Nota de crédito ${r.nota} en camino a SUNAT.` : "",
+            "Recuerda devolver el cobro desde el panel de Izipay.",
+          ].filter(Boolean).join(" "),
+        });
+      }
+      setAbierto(false);
+      onHecho();
+    } catch (e) {
+      toast({ title: "No se pudo anular", description: mensajeDeError(e, "Error"), variant: "destructive" });
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  const Fila = ({ k, v, fuerte }: { k: string; v: string; fuerte?: boolean }) => (
+    <div className="flex justify-between gap-3 text-sm">
+      <span className="text-muted-foreground">{k}</span>
+      <span className={fuerte ? "font-bold" : "font-medium"}>{v}</span>
+    </div>
+  );
+
+  return (
+    <AlertDialog open={abierto} onOpenChange={setAbierto}>
+      <AlertDialogTrigger asChild>
+        <Button variant="outline" size="sm" className="gap-1.5 text-destructive" title="Anular comprobante">
+          <Ban size={14} /> Anular
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent className="max-w-md">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Anular {inv.number}</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-3 pt-1">
+              {!previa ? (
+                <p className="text-sm">Comprobando qué pasaría…</p>
+              ) : (
+                <>
+                  <div className="space-y-1 rounded-md border p-3">
+                    <Fila k="Se compró" v={formatSoles(previa.creditosCompra)} />
+                    <Fila k="Saldo del usuario ahora" v={formatSoles(previa.saldoActual)} />
+                    <Fila k="Se le retirará" v={formatSoles(previa.seRetirara)} fuerte />
+                    {previa.sinRecuperar > 0 && (
+                      <Fila k="Ya gastado (no se recupera)" v={formatSoles(previa.sinRecuperar)} fuerte />
+                    )}
+                  </div>
+
+                  <p className="text-sm">
+                    {previa.emitiraNota
+                      ? "Se emitirá una nota de crédito ante SUNAT para anularlo."
+                      : "Es un comprobante interno, no declarado: no se manda nada a SUNAT."}
+                  </p>
+
+                  {/* Lo que la app NO hace, dicho claro: el dinero se devuelve
+                      a mano en Izipay y nadie debería descubrirlo por su cuenta. */}
+                  <p className="rounded-md bg-amber-50 p-2 text-xs text-amber-900
+                                dark:bg-amber-950/40 dark:text-amber-200">
+                    El dinero del cobro <b>no</b> se devuelve automáticamente. Tienes que
+                    hacerlo desde el panel de Izipay.
+                  </p>
+
+                  {faltaSaldo && (
+                    <label className="flex items-start gap-2 rounded-md border border-destructive/40 p-2 text-xs">
+                      <input type="checkbox" className="mt-0.5" checked={acepta}
+                             onChange={(e) => setAcepta(e.target.checked)} />
+                      <span>
+                        El usuario ya gastó {formatSoles(previa.sinRecuperar)} de lo que compró.
+                        Entiendo que esa parte <b>no se recupera</b> y quiero anular igual.
+                      </span>
+                    </label>
+                  )}
+
+                  <div className="space-y-1">
+                    <Label htmlFor="motivo-anulacion" className="text-xs">Motivo (queda registrado)</Label>
+                    <Input id="motivo-anulacion" value={motivo} maxLength={200}
+                           onChange={(e) => setMotivo(e.target.value)}
+                           placeholder="Cobro duplicado, devolución solicitada…" />
+                  </div>
+                </>
+              )}
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={enviando}>Cancelar</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={!puedeEnviar}
+            onClick={(e) => { e.preventDefault(); void confirmar(); }}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {enviando ? "Anulando…" : "Anular"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
 
 // ── Estado de la emisión electrónica de un comprobante ───────────────────────
 // El panel enseñaba solo el número y el importe, así que un comprobante que
@@ -65,11 +206,29 @@ const ESTADO_SUNAT: Record<string, { texto: string; clase: string }> = {
 
 /** Solo tiene sentido reintentar lo que acabó mal o se quedó a medias. */
 const puedeReintentar = (inv: AdminInvoice) =>
-  ["rechazado", "error", "vencido"].includes(inv.sunatStatus)
-  || inv.emailStatus === "error"
-  || inv.needsReview;
+  !inv.anuladoAt
+  && (["rechazado", "error", "vencido"].includes(inv.sunatStatus)
+    || inv.emailStatus === "error"
+    || inv.needsReview);
 
 function EstadoEmision({ inv }: { inv: AdminInvoice }) {
+  // Un comprobante anulado ya no se describe por cómo fue su emisión: lo que
+  // importa es que está anulado y con qué nota.
+  if (inv.anuladoAt) {
+    return (
+      <div className="flex flex-col gap-1 items-start">
+        <span className="rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap
+                         text-red-800 dark:bg-red-950 dark:text-red-200"
+              title={inv.anuladoMotivo ?? undefined}>
+          Anulado
+        </span>
+        {inv.notaNumber && (
+          <span className="font-mono text-[10px] text-muted-foreground">{inv.notaNumber}</span>
+        )}
+      </div>
+    );
+  }
+
   const s = ESTADO_SUNAT[inv.sunatStatus] ?? ESTADO_SUNAT.omitido;
   return (
     <div className="flex flex-col gap-1 items-start">
@@ -412,6 +571,12 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
   const [invoiceDetail, setInvoiceDetail] = useState<AdminInvoice | null>(null);
   const [retrying, setRetrying] = useState<string | null>(null);
   const invoicesPager = usePagination(invoices, 10, invoices.length);
+
+  /** Vuelve a leer los comprobantes. Lo usan el reintento y la anulación. */
+  const recargarInvoices = async () => {
+    const { data } = await fetchAllInvoices();
+    setInvoices(data);
+  };
 
   // Devuelve el comprobante a la cola de emisión y de correo. El permiso lo
   // comprueba la propia RPC en el servidor, no aquí.
@@ -818,6 +983,13 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
                                 <RefreshCw size={14} className={retrying === inv.id ? "animate-spin" : undefined} />
                                 Reintentar
                               </Button>
+                            )}
+                            {/* Anular es irreversible y mueve saldo, así que
+                                solo aparece donde tiene sentido: en comprobantes
+                                que no estén ya anulados. El permiso lo reexige
+                                el servidor dentro de la RPC. */}
+                            {!inv.anuladoAt && (
+                              <AnularDialog inv={inv} onHecho={recargarInvoices} />
                             )}
                             <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setInvoiceDetail(inv)}>
                               <Eye size={14} /> Ver

@@ -22,6 +22,7 @@ const ACTION_LABELS: Record<string, string> = {
   send_message: "Envió mensaje",
   broadcast: "Envió comunicado masivo",
   grant_credits: "Otorgó saldo",
+  void_invoice: "Anuló un comprobante",
 };
 
 const ENTITY_LABELS: Record<string, string> = {

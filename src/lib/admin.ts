@@ -262,6 +262,11 @@ export interface AdminInvoice {
   sunatError: string | null;
   sunatAttempts: number;
   esPrueba: boolean;
+  /** Si está anulado: cuándo, por qué y con qué nota de crédito. */
+  anuladoAt: string | null;
+  anuladoMotivo: string | null;
+  notaNumber: string | null;
+  notaStatus: string | null;
 }
 
 // Forma (laxa) de la fila que devuelve PostgREST con el join anidado. Las
@@ -287,6 +292,10 @@ interface InvoiceRow {
   sunat_last_error?: string | null;
   sunat_attempts?: number | null;
   es_prueba?: boolean | null;
+  anulado_at?: string | null;
+  anulado_motivo?: string | null;
+  nota_number?: string | null;
+  nota_sunat_status?: string | null;
   orders?: RelOrder | RelOrder[] | null;
 }
 
@@ -298,6 +307,7 @@ export async function fetchAllInvoices(): Promise<{ data: AdminInvoice[]; real: 
         .select(
           "id, number, type, email, advertiser_name, doc_type, doc_number, factiliza_data, amount, detail, issued_at, " +
             "sunat_status, email_status, needs_review, sunat_last_error, sunat_attempts, es_prueba, " +
+            "anulado_at, anulado_motivo, nota_number, nota_sunat_status, " +
             "orders ( order_listings ( listings ( title ) ) )"
         )
         .order("issued_at", { ascending: false });
@@ -326,6 +336,10 @@ export async function fetchAllInvoices(): Promise<{ data: AdminInvoice[]; real: 
           sunatError: r.sunat_last_error ?? null,
           sunatAttempts: Number(r.sunat_attempts ?? 0),
           esPrueba: r.es_prueba === true,
+          anuladoAt: r.anulado_at ?? null,
+          anuladoMotivo: r.anulado_motivo ?? null,
+          notaNumber: r.nota_number ?? null,
+          notaStatus: r.nota_sunat_status ?? null,
         };
       });
       return { data: rows, real: true };
@@ -351,6 +365,10 @@ export async function fetchAllInvoices(): Promise<{ data: AdminInvoice[]; real: 
     sunatError: null,
     sunatAttempts: 0,
     esPrueba: false,
+    anuladoAt: null,
+    anuladoMotivo: null,
+    notaNumber: null,
+    notaStatus: null,
   }));
   return { data: local, real: false };
 }
@@ -366,6 +384,77 @@ export async function fetchAllInvoices(): Promise<{ data: AdminInvoice[]; real: 
 export async function retryInvoiceEmission(invoiceId: string): Promise<void> {
   const { error } = await supabase.rpc("retry_invoice_emission", { p_invoice_id: invoiceId });
   if (error) throw new Error(error.message);
+}
+
+// ------------------------------------------------------- Anular un comprobante
+/** Lo que pasaría al anular. Se enseña ANTES de confirmar. */
+export interface PrevisualizacionAnulacion {
+  number: string;
+  yaAnulado: boolean;
+  /** Está declarado ante SUNAT, así que se emitirá una nota de crédito. */
+  emitiraNota: boolean;
+  esPrueba: boolean;
+  /** Créditos que se acreditaron por esa compra. */
+  creditosCompra: number;
+  saldoActual: number;
+  seRetirara: number;
+  /** Lo que el usuario ya gastó y no se puede recuperar. */
+  sinRecuperar: number;
+  saldoSuficiente: boolean;
+}
+
+/**
+ * Pregunta qué ocurriría al anular, sin anular nada.
+ *
+ * Existe porque anular retira saldo y emite un documento fiscal: quien lo hace
+ * tiene que ver los números concretos —cuánto se devuelve, cuánto se puede
+ * retirar de verdad, cuánto se queda por el camino— en vez de un «¿seguro?».
+ */
+export async function previsualizarAnulacion(invoiceId: string): Promise<PrevisualizacionAnulacion> {
+  const { data, error } = await supabase.rpc("previsualizar_anulacion", { p_invoice_id: invoiceId });
+  if (error) throw new Error(error.message);
+  const r = (data ?? {}) as Record<string, unknown>;
+  return {
+    number: String(r.number ?? ""),
+    yaAnulado: r.ya_anulado === true,
+    emitiraNota: r.emitira_nota === true,
+    esPrueba: r.es_prueba === true,
+    creditosCompra: Number(r.creditos_compra ?? 0),
+    saldoActual: Number(r.saldo_actual ?? 0),
+    seRetirara: Number(r.se_retirara ?? 0),
+    sinRecuperar: Number(r.sin_recuperar ?? 0),
+    saldoSuficiente: r.saldo_suficiente === true,
+  };
+}
+
+/**
+ * Anula la compra: retira el saldo y, si el comprobante estaba declarado, deja
+ * la nota de crédito en cola para SUNAT.
+ *
+ * `aceptarSinSaldo` es el visto bueno explícito cuando el usuario ya gastó parte
+ * de lo comprado. Sin él, el servidor se niega.
+ *
+ * OJO: el dinero del cobro NO se devuelve aquí. Eso se hace en el panel de
+ * Izipay, a mano.
+ */
+export async function anularComprobante(
+  invoiceId: string,
+  motivo: string,
+  aceptarSinSaldo = false,
+): Promise<{ anulado: boolean; nota: string | null; creditosRetirados: number; motivo?: string }> {
+  const { data, error } = await supabase.rpc("anular_comprobante", {
+    p_invoice_id: invoiceId,
+    p_motivo: motivo,
+    p_aceptar_sin_saldo: aceptarSinSaldo,
+  });
+  if (error) throw new Error(error.message);
+  const r = (data ?? {}) as Record<string, unknown>;
+  return {
+    anulado: r.anulado === true,
+    nota: (r.nota as string | null) ?? null,
+    creditosRetirados: Number(r.creditos_retirados ?? 0),
+    motivo: r.motivo as string | undefined,
+  };
 }
 
 // ------------------------------------------------------------------ Categorías
