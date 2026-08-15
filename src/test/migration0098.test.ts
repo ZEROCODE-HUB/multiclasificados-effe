@@ -29,6 +29,7 @@ const M0082 = leer("0082_invoice_series.sql");
 const M0083 = leer("0083_invoice_emission.sql");
 const M0098 = leer("0098_emision_de_pruebas.sql");
 const M0099 = leer("0099_modo_de_la_aplicacion.sql");
+const M0100 = leer("0100_reintentos_que_aguantan.sql");
 
 let db: PGlite;
 const q = <T,>(sql: string) => db.query<T>(sql).then((r) => r.rows);
@@ -134,7 +135,32 @@ async function montar() {
   await db.exec(M0083);
   await db.exec(M0098);
   await db.exec(M0099);
+  await db.exec(M0100);
 }
+
+/**
+ * Reserva el comprobante y cierra el intento como lo haría emit-invoice.
+ * Adelanta `sunat_next_try_at` para no tener que esperar el backoff de verdad:
+ * lo que se comprueba es el contador y el estado, no el reloj.
+ */
+async function intento(n: number, opts: { espera?: boolean } = {}) {
+  await db.exec(`update public.invoices set sunat_next_try_at = now() - interval '1 minute'
+                  where order_id = '${ORDER(n)}';`);
+  const c = await uno<{ o_claim_id: string }>(
+    `select o_claim_id from public.claim_invoice_emission(
+       (select id from public.invoices where order_id = '${ORDER(n)}'), 300)`);
+  await db.exec(`
+    select public.finish_invoice_emission(
+      (select id from public.invoices where order_id = '${ORDER(n)}'),
+      '${c.o_claim_id}', 'error'::public.invoice_sunat_status,
+      null, null, null, 'HTTP', 'fallo', false, ${opts.espera ? "true" : "false"});`);
+}
+
+const emision = (n: number) =>
+  uno<{ sunat_status: string; sunat_attempts: number; needs_review: boolean; hay_proximo: boolean }>(
+    `select sunat_status::text, sunat_attempts, needs_review,
+            sunat_next_try_at is not null as hay_proximo
+       from public.invoices where order_id = '${ORDER(n)}'`);
 
 const orden = (n: number, tipo: "boleta" | "factura" = "boleta") =>
   db.exec(`
@@ -334,6 +360,67 @@ describe("los que se pasan de plazo dejan de ser invisibles", () => {
     await viejo(13);
     await db.exec(`select public.sweep_invoice_emissions(20);`);
     expect((await comprobante(13)).sunat_status).toBe("vencido");
+  });
+});
+
+describe("0100 · los reintentos aguantan lo que dura el plazo", () => {
+  const enCola = async (n: number) => {
+    await encender("invoice_emission_enabled");
+    await orden(n);
+    await liquidar(n);
+  };
+
+  it("🔴 esperar en la cola de Factiliza NO gasta intentos", async () => {
+    // Es lo que rompía todo: su respuesta «sigue pendiente de envío» no es un
+    // fallo, pero cada consulta quemaba uno de los ocho intentos. Una cola
+    // lenta bastaba para dar por vencido un comprobante que iba a salir solo.
+    await enCola(30);
+    for (let i = 0; i < 5; i++) await intento(30, { espera: true });
+
+    const e = await emision(30);
+    expect(e.sunat_attempts).toBe(0);      // ni uno gastado
+    expect(e.sunat_status).toBe("error");  // sigue en cola, se reintentará
+    expect(e.hay_proximo).toBe(true);
+    expect(e.needs_review).toBe(false);    // nadie tiene que mirar esto
+  });
+
+  it("un fallo de verdad sí gasta intento y programa el siguiente", async () => {
+    await enCola(31);
+    await intento(31);
+    const e = await emision(31);
+    expect(e.sunat_attempts).toBe(1);
+    expect(e.hay_proximo).toBe(true);
+  });
+
+  it("aguanta muchos más intentos que los 8 de antes", async () => {
+    // Con el tope viejo, a las ~5 horas se daba por vencido pese a que el plazo
+    // de SUNAT son 3 días. Ahora el corte lo pone la FECHA, no el contador.
+    await enCola(32);
+    for (let i = 0; i < 12; i++) await intento(32);
+    const e = await emision(32);
+    expect(e.sunat_attempts).toBe(12);
+    expect(e.sunat_status).toBe("error");   // antes ya sería 'vencido'
+    expect(e.hay_proximo).toBe(true);
+  });
+
+  it("pero hay tope: no reintenta para siempre", async () => {
+    await enCola(33);
+    await db.exec(`update public.invoices set sunat_attempts = 60
+                    where order_id = '${ORDER(33)}';`);
+    await intento(33);
+    expect((await emision(33)).sunat_status).toBe("vencido");
+  });
+
+  it("y el plazo sigue siendo quien corta de verdad", async () => {
+    await enCola(34);
+    await db.exec(`
+      update public.invoices set issued_at = now() - interval '9 days',
+             sunat_fecha_emision = now() - interval '9 days'
+       where order_id = '${ORDER(34)}';`);
+    await db.exec(`select public.expire_stale_invoices(3);`);
+    const e = await emision(34);
+    expect(e.sunat_status).toBe("vencido");
+    expect(e.needs_review).toBe(true);
   });
 });
 

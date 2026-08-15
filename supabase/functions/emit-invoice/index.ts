@@ -36,6 +36,9 @@ const EMAIL_FROM = Deno.env.get("INVOICE_EMAIL_FROM")
 const EMISOR_NOMBRE = Deno.env.get("EMISOR_NOMBRE") ?? "eFFe Multiclasificados";
 const EMISOR_RUC = Deno.env.get("EMISOR_RUC") ?? "";
 const SITE_URL = Deno.env.get("PUBLIC_SITE_URL") ?? "https://www.coleffe.com";
+/** Dirección de respuesta del correo. Que el cliente pueda contestar ayuda a la
+ *  reputación del remitente: los proveedores penalizan los envíos "mudos". */
+const SOPORTE_EMAIL = Deno.env.get("SOPORTE_EMAIL") ?? "soporte@coleffe.com";
 
 // ─── Factiliza ────────────────────────────────────────────────────────────────
 // OJO: Factiliza vende DOS productos con DOS tokens distintos, y no son
@@ -145,6 +148,43 @@ const esc = (s: unknown) =>
 
 const money = (n: number, moneda: string) =>
   `${moneda === "USD" ? "US$" : "S/"} ${Number(n ?? 0).toFixed(2)}`;
+
+/**
+ * La misma información, en texto plano.
+ *
+ * No es un adorno: un correo que solo lleva HTML y un PDF adjunto tiene la
+ * forma exacta de un phishing, y los filtros lo tratan como tal. Mandar las dos
+ * versiones es de las cosas que más peso tienen para acabar en la bandeja de
+ * entrada en vez de en spam.
+ */
+function textoCorreo(inv: Record<string, unknown>, declarado: boolean, esPrueba: boolean): string {
+  const total = money(Number(inv.o_amount), "PEN");
+  const lineas = [
+    `Comprobante ${inv.o_number}`,
+    "",
+    `Hola ${String(inv.o_advertiser_name ?? "")}, gracias por tu compra.`,
+    "Adjuntamos el comprobante en PDF.",
+    "",
+    `Detalle: ${String(inv.o_detail ?? "")}`,
+    `Total: ${total}`,
+    "",
+  ];
+  if (esPrueba) {
+    lineas.push(
+      "AVISO: documento de prueba, sin valor fiscal. Se generó contra el entorno",
+      "de pruebas y no es un comprobante válido ante SUNAT.",
+      "",
+    );
+  } else if (!declarado) {
+    lineas.push("Este documento es un comprobante interno y no constituye documento tributario.", "");
+  }
+  lineas.push(
+    `Puedes ver todos tus comprobantes en ${SITE_URL}/dashboard/anunciante/boletas`,
+    "",
+    "eFFe Multiclasificados",
+  );
+  return lineas.join("\n");
+}
 
 function htmlCorreo(inv: Record<string, unknown>, declarado: boolean, esPrueba: boolean): string {
   const numero = esc(inv.o_number);
@@ -355,6 +395,8 @@ async function emitirEnSunat(invoiceId: string): Promise<string | null> {
     p_error_code: r.codigo,
     p_error_message: r.desenlace === "aceptado" ? null : r.mensaje,
     p_needs_review: r.desenlace === "rechazado" || r.desenlace === "observado",
+    // Esperar en su cola no es fallar: no gasta intento ni manda nada a revisión.
+    p_espera: r.esperando === true,
   });
 
   return r.desenlace;
@@ -406,10 +448,23 @@ async function enviarCorreo(inv: Record<string, unknown>) {
       body: JSON.stringify({
         from: EMAIL_FROM,
         to: [String(inv.o_email)],
-        subject: esPrueba
-          ? `[PRUEBA] Comprobante ${inv.o_number} — eFFe Multiclasificados`
-          : `Comprobante ${inv.o_number} — eFFe Multiclasificados`,
+        // El asunto va limpio a propósito. Antes empezaba por "[PRUEBA]", y un
+        // asunto que arranca con una etiqueta en corchetes y mayúsculas es un
+        // patrón clásico de spam: los filtros lo castigan. El aviso de que el
+        // documento no tiene valor fiscal está donde importa —bien visible en
+        // el cuerpo y en el propio PDF—, no en la línea que deciden los filtros.
+        subject: `Comprobante ${inv.o_number} de tu compra en eFFe Multiclasificados`,
         html: htmlCorreo(inv, declarado, esPrueba),
+        // Versión en texto plano. Un correo con solo HTML y un adjunto se
+        // parece demasiado a un phishing; con su alternativa de texto sube
+        // bastante la probabilidad de llegar a la bandeja de entrada.
+        text: textoCorreo(inv, declarado, esPrueba),
+        reply_to: SOPORTE_EMAIL,
+        headers: {
+          // Marca el correo como transaccional y no promocional: le dice a
+          // Gmail que no lo agrupe en Promociones ni lo trate como campaña.
+          "X-Entity-Ref-ID": String(inv.o_number),
+        },
         attachments: [{ filename: `${inv.o_number}.pdf`, content: toBase64(pdf) }],
       }),
     });

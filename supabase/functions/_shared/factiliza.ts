@@ -294,6 +294,13 @@ export interface Resultado {
   mensaje: string;
   /** Si conviene reintentarlo tal cual. Un rechazo NO se reintenta solo. */
   reintentable: boolean;
+  /**
+   * No ha fallado nada: Factiliza lo tiene en su cola y aún no lo ha mandado a
+   * SUNAT. Se distingue de un error porque **no debe gastar un intento** — si
+   * esperar consumiera reintentos, una cola lenta agotaría el presupuesto y
+   * daríamos por vencido un comprobante que iba a emitirse solo.
+   */
+  esperando?: boolean;
 }
 
 /**
@@ -370,8 +377,8 @@ export function leerRespuesta(httpStatus: number, cuerpo: unknown): Resultado {
     // reintenta, y sin marcar nada para revisión.
     if (/pendiente de env[ií]o/i.test(mensaje) || /pendiente de env[ií]o/i.test(detalle)) {
       return {
-        ...base, desenlace: "error", reintentable: true, hash: hashPrevio,
-        codigo: codigoSunat,
+        ...base, desenlace: "error", reintentable: true, esperando: true,
+        hash: hashPrevio, codigo: codigoSunat,
         mensaje: "Factiliza aún no lo ha enviado a SUNAT (en su cola). Se reintentará.",
       };
     }
