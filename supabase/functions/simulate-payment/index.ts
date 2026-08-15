@@ -14,9 +14,17 @@
 // buenas. Con esto se puede verificar de punta a punta: comprobante, envío a
 // SUNAT y correo.
 //
-// ── BLINDAJE ──
-// Se niega a correr salvo que el secret ALLOW_FAKE_PAYMENT sea exactamente
-// "true". Las órdenes quedan marcadas con payment_provider='simulado' y
+// ── BLINDAJE (DOS cerrojos, y hacen falta los dos) ──
+//
+//  1. El secret ALLOW_FAKE_PAYMENT tiene que ser exactamente "true".
+//  2. Quien llama tiene que ser STAFF con permiso en «Pagos y planes».
+//
+// El segundo cerrojo se añadió el 2026-08-15 tras comprobar el agujero: con
+// solo el flag, CUALQUIER usuario con sesión podía llamar a esta función y
+// acreditarse el saldo que quisiera. Se verificó con una cuenta normal, que se
+// regaló créditos sin ser staff. Un flag de entorno no es un permiso.
+//
+// Las órdenes quedan marcadas con payment_provider='simulado' y
 // payment_ref='SIMULADO', que es lo que usan:
 //   · los paneles (migraciones 0094/0097) para NO contarlas como ingresos;
 //   · settle_paid_order (migración 0098) para emitir con la serie de PRUEBAS y
@@ -74,6 +82,23 @@ async function authenticatedUserId(req: Request): Promise<string | null> {
   return typeof user?.id === "string" ? user.id : null;
 }
 
+/**
+ * Segundo cerrojo: solo staff con permiso de edición en pagos.
+ *
+ * Lo comprueba `has_perm` en la base de datos con el JWT de quien llama, así que
+ * no se puede falsear desde el cliente.
+ */
+async function esStaffAutorizado(req: Request): Promise<boolean> {
+  const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
+  if (!token || token === SUPABASE_ANON_KEY) return false;
+  const user = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { persistSession: false },
+  });
+  const { data, error } = await user.rpc("has_perm", { p_module: "Pagos y planes", p_action: "edit" });
+  return !error && data === true;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
@@ -85,6 +110,12 @@ Deno.serve(async (req) => {
 
     const userId = await authenticatedUserId(req);
     if (!userId) return json({ success: false, error: "Inicia sesión para simular el pago." }, 401);
+
+    // El flag de entorno NO es un permiso: sin esto, cualquier usuario con
+    // sesión podría acreditarse el saldo que quisiera.
+    if (!(await esStaffAutorizado(req))) {
+      return json({ success: false, error: "Solo el personal autorizado puede simular pagos." }, 403);
+    }
 
     const body = await req.json().catch(() => ({}));
     const listingId = String(body?.listingId ?? "").trim();
