@@ -2,7 +2,8 @@
 import { describe, it, expect } from "vitest";
 import {
   construirComprobante, leerRespuesta, montoEnLetras, fechaEmisionPeru,
-  ComprobanteInvalido, type DatosDelComprobante,
+  construirNotaDeCredito, ComprobanteInvalido,
+  type DatosDelComprobante, type DatosDeLaNota,
 } from "../../supabase/functions/_shared/factiliza.ts";
 import {
   DEFAULT_SETTINGS, priceForDuration, extrasTotal, splitIgv,
@@ -542,5 +543,106 @@ describe("campos que exige su API", () => {
 
   it("sin dirección del cliente manda vacío, no se la inventa", () => {
     expect((construir() as Record<string, unknown>).cliente_Direccion).toBe("");
+  });
+});
+
+/**
+ * La nota de crédito: cómo se anula una venta ya declarada.
+ *
+ * Un comprobante que SUNAT aceptó no se borra. Se anula emitiendo una nota que
+ * lo referencia, con su propia serie y correlativo. Los errores aquí son del
+ * mismo tipo que en el comprobante —no se ven hasta semanas después, en forma
+ * de rechazo y de un correlativo quemado— así que se prueba con el mismo rigor.
+ *
+ * El contrato está comprobado contra la API de Factiliza (15/08/2026): notas
+ * sobre boleta y sobre factura, las dos aceptadas por SUNAT.
+ */
+describe("la nota de crédito", () => {
+  const NOTA: DatosDeLaNota = {
+    serie: "BC66",
+    correlativo: 7,
+    fechaEmision: new Date("2026-08-15T15:30:00Z"),
+    emisorRuc: "10749283781",
+    afectado: { tipo: "boleta", numero: "B066-24" },
+    clienteDocTipo: "dni",
+    clienteDocNumero: "44443333",
+    clienteNombre: "OSCAR MIJAEL",
+    descripcion: "Anulación de compra de saldo",
+    total: 118,
+    subtotal: 100,
+    igv: 18,
+  };
+  const nota = (extra: Partial<DatosDeLaNota> = {}) =>
+    construirNotaDeCredito({ ...NOTA, ...extra }) as Record<string, unknown>;
+
+  it("es del tipo 07 y apunta al documento que anula", () => {
+    const n = nota();
+    expect(n.tipo_Doc).toBe("07");
+    expect(n.afectado_Tipo_Doc).toBe("03");        // 03 = boleta
+    expect(n.afectado_Num_Doc).toBe("B066-24");
+    expect(n.motivo_Cod).toBe("01");
+    expect(n.motivo_Des).toBe("ANULACION DE LA OPERACION");
+  });
+
+  it("sobre una factura, el tipo afectado es 01", () => {
+    const n = nota({ afectado: { tipo: "factura", numero: "F066-21" }, clienteDocTipo: "ruc" });
+    expect(n.afectado_Tipo_Doc).toBe("01");
+    expect(n.cliente_Tipo_Doc).toBe("6");           // catálogo 06: RUC
+  });
+
+  it("lleva SU serie y correlativo, no los del comprobante anulado", () => {
+    const n = nota();
+    expect(n.serie).toBe("BC66");
+    expect(n.correlativo).toBe("7");
+    // Confundirlos emitiría la nota encima del comprobante que quiere anular.
+    expect(n.serie).not.toBe("B066");
+  });
+
+  it("🔴 los importes van en POSITIVO aunque la nota reste", () => {
+    // Ponerlos en negativo "porque devuelve dinero" es rechazo seguro: SUNAT
+    // los espera positivos y es el sentido de la nota lo que resta.
+    const n = nota();
+    for (const campo of ["monto_Imp_Venta", "monto_Oper_Gravadas", "monto_Igv", "sub_Total", "valor_Venta"]) {
+      expect(Number(n[campo]), campo).toBeGreaterThan(0);
+    }
+  });
+
+  it("cuadra al céntimo, igual que el comprobante", () => {
+    const n = nota();
+    expect(Number(n.monto_Oper_Gravadas) + Number(n.monto_Igv)).toBeCloseTo(Number(n.monto_Imp_Venta), 10);
+    expect(n.sub_Total).toBe(118);      // CON igv
+    expect(n.valor_Venta).toBe(100);    // SIN igv
+  });
+
+  it("si el subtotal guardado no cuadra, se recalcula", () => {
+    const n = nota({ total: 118, subtotal: 99.99, igv: 18 });
+    expect(Number(n.monto_Oper_Gravadas) + Number(n.monto_Igv)).toBe(118);
+  });
+
+  it("`Manual` va con M mayúscula: su DTO de notas no es el del comprobante", () => {
+    // En /invoice/send el campo es `manual`; en /note/send es `Manual`. Parece
+    // un descuido suyo, pero es lo que valida su API.
+    const n = nota();
+    expect(n).toHaveProperty("Manual", false);
+    expect(n.manual).toBeUndefined();
+  });
+
+  it("la fecha va en hora de Perú", () => {
+    expect(nota().fecha_Emision).toBe("2026-08-15T10:30:00-05:00");
+  });
+
+  it("lleva el importe en letras con su código", () => {
+    expect((nota().legend as Array<Record<string, string>>)[0]).toEqual({
+      legend_Code: "1000",
+      legend_Value: "SON CIENTO DIECIOCHO CON 00/100 SOLES",
+    });
+  });
+
+  it("rechaza antes de gastar un correlativo si los datos no valen", () => {
+    // Igual que el comprobante: fallar en local es gratis, que lo rechace SUNAT
+    // cuesta un correlativo y una incidencia.
+    expect(() => nota({ total: 0 })).toThrow(ComprobanteInvalido);
+    expect(() => nota({ total: -5 })).toThrow(ComprobanteInvalido);
+    expect(() => nota({ afectado: { tipo: "boleta", numero: "" } })).toThrow(ComprobanteInvalido);
   });
 });

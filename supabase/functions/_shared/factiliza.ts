@@ -24,6 +24,18 @@
 /** Catálogo 01 — tipo de comprobante. */
 export const TIPO_DOC = { boleta: "03", factura: "01" } as const;
 
+/** Catálogo 01 — nota de crédito. Es con lo que se anula una venta declarada. */
+export const TIPO_DOC_NOTA_CREDITO = "07";
+
+/**
+ * Catálogo 09 — motivo de la nota de crédito.
+ *
+ * Solo se usa el 01: en eFFe una nota de crédito siempre anula la operación
+ * entera. No se venden cantidades ni se hacen descuentos posteriores, así que
+ * los demás motivos del catálogo no tienen forma de darse.
+ */
+export const MOTIVO_NOTA = { anulacion: { cod: "01", des: "ANULACION DE LA OPERACION" } } as const;
+
 /** Catálogo 06 — tipo de documento de identidad del cliente. */
 export const TIPO_DOC_CLIENTE = { dni: "1", ruc: "6" } as const;
 
@@ -244,6 +256,113 @@ export function construirComprobante(d: DatosDelComprobante): Record<string, unk
     ],
 
     forma_pago: [{ tipo: "Contado", monto: total, cuota: 0, fecha_Pago: fecha }],
+
+    legend: [{ legend_Code: "1000", legend_Value: montoEnLetras(total, moneda) }],
+  };
+}
+
+// ─── Nota de crédito (anular una venta ya declarada) ─────────────────────────
+
+export interface DatosDeLaNota {
+  /** Serie y correlativo de la NOTA (p. ej. BC66-1), no del comprobante anulado. */
+  serie: string;
+  correlativo: number | string;
+  fechaEmision: Date;
+  emisorRuc: string;
+  /** El comprobante que se anula. */
+  afectado: { tipo: "boleta" | "factura"; numero: string };
+  clienteDocTipo: "dni" | "ruc" | null;
+  clienteDocNumero: string | null;
+  clienteNombre: string;
+  clienteDireccion?: string | null;
+  descripcion: string;
+  total: number;
+  subtotal: number;
+  igv: number;
+  moneda?: string;
+}
+
+/**
+ * Arma el cuerpo de POST /api/v1/note/send.
+ *
+ * Un comprobante declarado ante SUNAT **no se borra**: se anula emitiendo una
+ * nota de crédito que lo referencia. Por eso la nota lleva su propia serie y su
+ * propio correlativo, y apunta al documento anulado con `afectado_*`.
+ *
+ * Los importes van en POSITIVO aunque la nota reste: es lo que espera SUNAT, y
+ * lo que su ejemplo enseña. Ponerlos en negativo es rechazo seguro.
+ *
+ * Comprobado contra su API el 2026-08-15 con los dos casos —nota sobre boleta y
+ * sobre factura—, ambas aceptadas por SUNAT.
+ */
+export function construirNotaDeCredito(d: DatosDeLaNota): Record<string, unknown> {
+  const moneda = d.moneda ?? "PEN";
+  const total = c2(d.total);
+  if (!(total > 0)) throw new ComprobanteInvalido("El importe a anular tiene que ser mayor que cero");
+  if (!d.afectado.numero) throw new ComprobanteInvalido("Falta el comprobante que se anula");
+
+  // Se recalcula igual que en el comprobante: si el subtotal guardado no cuadra
+  // con el total, manda el total, que es lo que de verdad se cobró.
+  let gravadas = c2(d.subtotal);
+  let igv = c2(d.igv);
+  if (c2(gravadas + igv) !== total) {
+    gravadas = c2(total / (1 + IGV_PORCENTAJE / 100));
+    igv = c2(total - gravadas);
+  }
+
+  const fecha = fechaEmisionPeru(d.fechaEmision);
+
+  return {
+    tipo_Operacion: TIPO_OPERACION,
+    tipo_Doc: TIPO_DOC_NOTA_CREDITO,
+    serie: d.serie,
+    correlativo: String(d.correlativo),
+    tipo_Moneda: moneda,
+    fecha_Emision: fecha,
+    estado_Documento: "0",
+    // OJO: con M mayúscula. Así lo declara su DTO para las notas, mientras que
+    // en el comprobante es `manual` en minúscula. No es un descuido de aquí.
+    Manual: false,
+    Observacion: "",
+
+    empresa_Ruc: d.emisorRuc,
+
+    cliente_Tipo_Doc: d.clienteDocTipo === "ruc" ? TIPO_DOC_CLIENTE.ruc : TIPO_DOC_CLIENTE.dni,
+    cliente_Num_Doc: d.clienteDocNumero,
+    cliente_Razon_Social: d.clienteNombre,
+    cliente_Direccion: d.clienteDireccion ?? "",
+
+    monto_Oper_Gravadas: gravadas,
+    monto_Oper_Exoneradas: 0,
+    monto_Igv: igv,
+    total_Impuestos: igv,
+    valor_Venta: gravadas,
+    sub_Total: total,
+    monto_Imp_Venta: total,
+
+    // El documento que se está anulando.
+    afectado_Tipo_Doc: TIPO_DOC[d.afectado.tipo],
+    afectado_Num_Doc: d.afectado.numero,
+    motivo_Cod: MOTIVO_NOTA.anulacion.cod,
+    motivo_Des: MOTIVO_NOTA.anulacion.des,
+
+    detalle: [
+      {
+        unidad: UNIDAD,
+        cantidad: 1,
+        cod_Producto: "SALDO",
+        descripcion: d.descripcion,
+        monto_Valor_Unitario: gravadas,
+        monto_Base_Igv: gravadas,
+        porcentaje_Igv: IGV_PORCENTAJE,
+        igv,
+        tip_Afe_Igv: AFECTACION_GRAVADO,
+        total_Impuestos: igv,
+        monto_Precio_Unitario: total,
+        monto_Valor_Venta: gravadas,
+        factor_Icbper: 0,
+      },
+    ],
 
     legend: [{ legend_Code: "1000", legend_Value: montoEnLetras(total, moneda) }],
   };
