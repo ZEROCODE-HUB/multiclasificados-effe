@@ -411,36 +411,42 @@ describe("interpretar lo que contesta Factiliza", () => {
       expect(sinHash.reintentable).toBe(true);
     });
 
-    it("🔴 …pero si Factiliza YA lo guardó (hay hash), reintentar no arregla nada", () => {
-      // El hash lo decide todo: significa que el documento está en su sistema.
-      // Reenviarlo devolvería «ya existe» una y otra vez, gastando intentos y
-      // tapando el problema de fondo. Lo que hay que hacer es pedirles el
-      // reproceso con ese hash, y el mensaje tiene que decirlo.
+    it("🔴 …y con hash también se reintenta, porque existe /invoice/resend", () => {
+      // El hash significa que el documento ya está en su sistema. Durante un
+      // rato di esto por irrecuperable —«habrá que pedirles el reproceso a
+      // mano»—, y era falso: tienen `/invoice/resend`, que vuelve a empujarlo
+      // hacia SUNAT sin duplicarlo. Comprobado contra su API el 15/08/2026.
       const r = leerRespuesta(200, {
         status: 200, success: false,
         message: "DEMO - El documento fue registrado en el sistema, pero hubo un problema con la SUNAT",
         data: { hash: "mm/05v4QRw4n3ZGm/iV997mJZTk=", error: { code: "HTTP", message: "Unauthorized" } },
       });
-      expect(r.reintentable).toBe(false);
+      expect(r.desenlace).toBe("error");
+      expect(r.reintentable).toBe(true);
       expect(r.hash).toBe("mm/05v4QRw4n3ZGm/iV997mJZTk=");
-      expect(r.mensaje).toMatch(/reprocesen/i);
-      expect(r.mensaje).toContain("mm/05v4QRw4n3ZGm/iV997mJZTk=");
-      expect(r.mensaje).toContain("Unauthorized");
     });
 
-    it("🔴 «ya existe» dice qué hacer, en vez de quedarse en un rechazo mudo", () => {
-      // Caso REAL: el primer envío llegó a Factiliza (guardó el documento) pero
-      // su traspaso a SUNAT falló. Al reintentar, contestan «ya existe». Eso no
-      // es un fallo de nuestros datos ni algo que arregle otro reenvío: hay que
-      // consultar el estado o pedirles que lo reprocesen, y el mensaje tiene
-      // que decirlo o quien lo lea se queda sin saber qué hacer.
+    it("🔴 «sigue pendiente de envío» es esperar, no un fallo", () => {
+      // Lo que contesta /invoice/resend cuando el documento está en SU cola.
+      // No hay nada roto: solo hay que volver más tarde. Marcarlo como rechazo
+      // dejaría muerto un comprobante que iba a emitirse solo.
+      const r = leerRespuesta(200, {
+        status: 200, success: false,
+        message: "DEMO - Este documento aun se encuentra pendiente de envio, por favor espere unos minutos a que se emita.",
+        data: { hash: null },
+      });
+      expect(r.desenlace).toBe("error");
+      expect(r.reintentable).toBe(true);
+      expect(r.mensaje).toMatch(/cola|no lo ha enviado/i);
+    });
+
+    it("«ya existe» se reintenta contra resend, en vez de darse por perdido", () => {
       const r = leerRespuesta(200, {
         status: 400, success: false, message: "Error al registrar",
         data: { hash: "h", error: { code: "400", message: "Ya existe un documento con el mismo tipo de documento (01), la misma serie y correlativo: F066-22" } },
       });
-      expect(r.reintentable).toBe(false);
-      expect(r.mensaje).toMatch(/ya está registrado en Factiliza/i);
-      expect(r.mensaje).toMatch(/reprocesen|cdr/i);
+      expect(r.desenlace).toBe("error");
+      expect(r.reintentable).toBe(true);
     });
 
     it("pero un código NUMÉRICO de SUNAT sigue siendo rechazo definitivo", () => {

@@ -191,7 +191,7 @@ function htmlCorreo(inv: Record<string, unknown>, declarado: boolean, esPrueba: 
 }
 
 /** La misma base que el envío, cambiando el último tramo. */
-const urlDeFactiliza = (recurso: "send" | "cdr" | "pdf" | "xml") =>
+const urlDeFactiliza = (recurso: "send" | "resend" | "cdr" | "pdf" | "xml") =>
   FACTILIZA_URL.replace(/\/send$/, `/${recurso}`);
 
 /**
@@ -306,10 +306,21 @@ async function emitirEnSunat(invoiceId: string): Promise<string | null> {
     return "rechazado";
   }
 
+  // ── ¿enviar o REPROCESAR? ──
+  // Si un intento anterior llegó a Factiliza, guardó su hash: el documento está
+  // en su sistema y `/invoice/send` contestaría «ya existe» para siempre. Para
+  // eso tienen `/invoice/resend`, que vuelve a empujarlo hacia SUNAT sin
+  // duplicarlo. Sin esto, un fallo pasajero entre ellos y SUNAT dejaba el
+  // comprobante muerto y había que pedirles el reproceso a mano.
+  const { data: previo } = await admin
+    .from("invoices").select("sunat_hash").eq("id", id).maybeSingle();
+  const yaRegistrado = Boolean(previo?.sunat_hash);
+  const url = yaRegistrado ? urlDeFactiliza("resend") : FACTILIZA_URL;
+
   let httpStatus = 0;
   let respuesta: unknown = null;
   try {
-    const res = await fetch(FACTILIZA_URL, {
+    const res = await fetch(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${FACTILIZA_TOKEN}`,

@@ -156,9 +156,25 @@ JSON escrito a mano, así que lo verificado es el código que va a producción.
   `"Su usuario no se encuentra configurado para el RUC '20616009061'"`. Es lo
   normal en un entorno compartido, pero significa que `EMISOR_RUC` en pruebas
   **no** puede ser el nuestro.
-- **QA solo expone dos rutas**: `/api/v1/invoice/send` y `/api/v1/summary/send`.
-  `/invoice/cdr` da 404 allí, así que la consulta de un comprobante ya enviado
-  **no se puede probar en QA** — solo existe en producción.
+- **Los endpoints que SÍ existen en QA** (barrido del 2026-08-15; el resto da 404):
+
+  | Ruta | Cuerpo que espera | Para qué |
+  |---|---|---|
+  | `/api/v1/invoice/send` | comprobante completo | emitir |
+  | `/api/v1/invoice/resend` | comprobante completo | **reprocesar** uno ya registrado, sin duplicarlo |
+  | `/api/v1/invoice/pdf` | tipo_Doc, serie, correlativo, empresa_Ruc | el PDF oficial |
+  | `/api/v1/invoice/xml` | ídem | el XML firmado |
+  | `/api/v1/summary/send` | resumen diario | boletas resumidas |
+
+  `/invoice/cdr` no existe en QA (sí en producción).
+
+  **`/invoice/resend` es la pieza clave**, y en un primer barrido no la vi:
+  cuando un envío llega a Factiliza pero su traspaso a SUNAT falla, `send`
+  contesta «ya existe» para siempre y el comprobante parece irrecuperable.
+  `resend` lo vuelve a empujar sin duplicarlo. Si aún está en su cola responde
+  *«Este documento aun se encuentra pendiente de envio»*, que no es un fallo:
+  hay que esperar y reintentar. `emitirEnSunat` elige solo entre `send` y
+  `resend` según si el comprobante ya tiene `sunat_hash`.
 
 ```bash
 # Configuración para PRUEBAS

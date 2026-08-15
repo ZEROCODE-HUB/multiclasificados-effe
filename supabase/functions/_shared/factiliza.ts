@@ -356,47 +356,34 @@ export function leerRespuesta(httpStatus: number, cuerpo: unknown): Resultado {
     // El criterio: **los rechazos de SUNAT traen código numérico** (su catálogo
     // va de 0100 a 4000). Un código no numérico no lo emite SUNAT juzgando
     // nuestros datos, así que no puede ser un rechazo definitivo.
-    // Y aquí entra el hash, que es la pista que lo decide todo: **si viene, el
-    // documento YA está guardado en Factiliza**. Reenviarlo daría «ya existe»
-    // eternamente, así que reintentar no solo no arregla nada: gasta intentos y
-    // esconde el problema. Solo se reintenta cuando NO hay hash, que es cuando
-    // el envío de verdad no llegó a registrarse.
     const hashPrevio = (datos.hash as string) ?? null;
+
+    // Un fallo de comunicación entre Factiliza y SUNAT (código no numérico) es
+    // pasajero y se resuelve reintentando —contra `/invoice/resend`, no contra
+    // `/invoice/send`, porque el documento puede estar ya registrado—.
     if (esDeDatos && codigoSunat !== null && !/^\d+$/.test(codigoSunat)) {
-      if (hashPrevio) {
-        return {
-          ...base,
-          desenlace: "rechazado",   // terminal, pero no por culpa del documento
-          reintentable: false,
-          hash: hashPrevio,
-          codigo: codigoSunat,
-          mensaje: `Factiliza registró el documento (hash ${hashPrevio}) pero no consiguió `
-            + `declararlo ante SUNAT. NO se puede reenviar: pídeles que lo reprocesen con ese `
-            + `hash, o consulta su estado. — ${detalle || mensaje}`,
-        };
-      }
-      esDeDatos = false;   // no se llegó a registrar: reintentar sí sirve
+      esDeDatos = false;
     }
 
-    // «Ya existe un documento con el mismo tipo, serie y correlativo» es un
-    // caso aparte y no encaja en ninguno de los dos cajones:
-    //   · NO es un rechazo por datos: el comprobante estaba bien y Factiliza lo
-    //     tiene registrado;
-    //   · NO es reintentable: reenviarlo dará siempre lo mismo.
-    // Pasa cuando un envío llega a Factiliza pero su respuesta no nos llega, o
-    // cuando el traspaso de ellos a SUNAT falla y se reintenta. Se marca para
-    // revisión con un mensaje que diga qué hacer, en vez de dejarlo como un
-    // rechazo mudo o metido en un bucle de reintentos inútiles.
-    const yaExiste = /ya existe un documento/i.test(detalle) || /ya existe un documento/i.test(mensaje);
-    if (yaExiste) {
+    // «Sigue pendiente de envío»: Factiliza lo tiene EN COLA y aún no lo ha
+    // mandado a SUNAT. No es un fallo de nada; solo hay que esperar. Se
+    // reintenta, y sin marcar nada para revisión.
+    if (/pendiente de env[ií]o/i.test(mensaje) || /pendiente de env[ií]o/i.test(detalle)) {
       return {
-        ...base,
-        desenlace: "rechazado",
-        reintentable: false,
-        hash: (datos.hash as string) ?? null,
+        ...base, desenlace: "error", reintentable: true, hash: hashPrevio,
         codigo: codigoSunat,
-        mensaje: `El documento YA está registrado en Factiliza; no se puede reenviar. `
-          + `Consulta su estado (/invoice/cdr) o pídeles que lo reprocesen ante SUNAT. — ${detalle || mensaje}`,
+        mensaje: "Factiliza aún no lo ha enviado a SUNAT (en su cola). Se reintentará.",
+      };
+    }
+
+    // «Ya existe»: el documento está registrado en su sistema. Reenviarlo con
+    // `/invoice/send` dará siempre lo mismo, pero `/invoice/resend` SÍ vale —
+    // así que se marca reintentable y del endpoint se encarga quien envía.
+    if (/ya existe un documento/i.test(detalle) || /ya existe un documento/i.test(mensaje)) {
+      return {
+        ...base, desenlace: "error", reintentable: true, hash: hashPrevio,
+        codigo: codigoSunat,
+        mensaje: `El documento ya está registrado en Factiliza; se reintentará el reproceso. — ${detalle || mensaje}`,
       };
     }
 
