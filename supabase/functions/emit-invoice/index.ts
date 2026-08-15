@@ -150,6 +150,47 @@ const money = (n: number, moneda: string) =>
   `${moneda === "USD" ? "US$" : "S/"} ${Number(n ?? 0).toFixed(2)}`;
 
 /**
+ * Descarga de Factiliza la representación OFICIAL del comprobante.
+ *
+ * Es lo que hay que mandarle al cliente cuando el documento está declarado, y
+ * no el PDF que dibujamos nosotros: la representación impresa de un comprobante
+ * electrónico tiene requisitos de SUNAT —código QR, hash, leyendas— que un PDF
+ * hecho en casa no cumple. El nuestro sirve como comprobante interno mientras no
+ * hay emisión; en cuanto la hay, el bueno es el suyo.
+ *
+ * El XML importa aún más: **legalmente, el comprobante ES el XML firmado**. El
+ * PDF es solo su representación.
+ *
+ * Devuelve null si no se puede: nunca deja al comprador sin correo por esto.
+ */
+async function descargarDeFactiliza(
+  recurso: "pdf" | "xml",
+  datos: { tipoDoc: string; serie: string; correlativo: string; emisorRuc: string },
+): Promise<Uint8Array | null> {
+  if (!FACTILIZA_TOKEN || !datos.emisorRuc) return null;
+  try {
+    const res = await fetch(urlDeFactiliza(recurso), {
+      method: "POST",
+      headers: { Authorization: `Bearer ${FACTILIZA_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tipo_Doc: datos.tipoDoc,
+        serie: datos.serie,
+        correlativo: datos.correlativo,
+        empresa_Ruc: datos.emisorRuc,
+      }),
+    });
+    if (!res.ok) return null;
+    const tipo = res.headers.get("content-type") ?? "";
+    // Si contesta JSON es un error suyo, no el fichero.
+    if (tipo.includes("application/json")) return null;
+    const buf = new Uint8Array(await res.arrayBuffer());
+    return buf.byteLength > 0 ? buf : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * La misma información, en texto plano.
  *
  * No es un adorno: un correo que solo lleva HTML y un PDF adjunto tiene la
@@ -420,6 +461,33 @@ async function enviarCorreo(inv: Record<string, unknown>) {
   // reales siguen generando su comprobante interno y a esos clientes no se les
   // puede mandar un correo diciendo que es una prueba.
   const esPrueba = inv.o_es_prueba === true;
+
+  // ── El comprobante que se adjunta ──
+  // Si el documento está declarado, el que vale es el de Factiliza: lleva el QR
+  // y el hash que exige SUNAT en la representación impresa. El nuestro solo es
+  // el sustituto mientras no hay emisión electrónica (o si su descarga falla,
+  // que nunca puede dejar al comprador sin su correo).
+  const adjuntos: Array<{ filename: string; content: string }> = [];
+  let pdfOficial: Uint8Array | null = null;
+
+  if (declarado) {
+    const [serie, corr] = String(inv.o_number).split("-");
+    const datos = {
+      tipoDoc: inv.o_type === "factura" ? "01" : "03",
+      serie,
+      correlativo: String(Number(corr)),   // sin los ceros a la izquierda
+      emisorRuc: rucDelEmisor(esPrueba),
+    };
+    pdfOficial = await descargarDeFactiliza("pdf", datos);
+    if (pdfOficial) {
+      adjuntos.push({ filename: `${inv.o_number}.pdf`, content: toBase64(pdfOficial) });
+      // El XML firmado es, legalmente, el comprobante. El PDF solo lo
+      // representa, así que se manda también.
+      const xml = await descargarDeFactiliza("xml", datos);
+      if (xml) adjuntos.push({ filename: `${inv.o_number}.xml`, content: toBase64(xml) });
+    }
+  }
+
   const pdf = renderComprobantePDF({
     numero: String(inv.o_number),
     tipo: inv.o_type === "factura" ? "factura" : "boleta",
@@ -465,7 +533,11 @@ async function enviarCorreo(inv: Record<string, unknown>) {
           // Gmail que no lo agrupe en Promociones ni lo trate como campaña.
           "X-Entity-Ref-ID": String(inv.o_number),
         },
-        attachments: [{ filename: `${inv.o_number}.pdf`, content: toBase64(pdf) }],
+        // El oficial si se pudo descargar; si no, el nuestro. Nadie se queda
+        // sin comprobante porque su servicio de PDF esté caído.
+        attachments: adjuntos.length
+          ? adjuntos
+          : [{ filename: `${inv.o_number}.pdf`, content: toBase64(pdf) }],
       }),
     });
     const cuerpo = await res.json().catch(() => ({}));
@@ -473,7 +545,16 @@ async function enviarCorreo(inv: Record<string, unknown>) {
     await admin.rpc("log_invoice_attempt", {
       p_invoice_id: id, p_step: "email", p_attempt: Number(inv.o_attempts ?? 1),
       p_http_status: res.status, p_ok: res.ok,
-      p_request: { to: inv.o_email, from: EMAIL_FROM },
+      // Se anota QUÉ se adjuntó, no solo a quién se mandó: si el PDF fue el
+      // oficial de Factiliza o el nuestro de reserva es justo el dato que hace
+      // falta cuando alguien pregunta por un comprobante de hace semanas.
+      p_request: {
+        to: inv.o_email,
+        from: EMAIL_FROM,
+        pdf: pdfOficial ? "oficial (Factiliza)" : "interno (generado por nosotros)",
+        adjuntos: (adjuntos.length ? adjuntos : [{ filename: `${inv.o_number}.pdf` }])
+          .map((a) => a.filename),
+      },
       p_response: cuerpo,
     });
 

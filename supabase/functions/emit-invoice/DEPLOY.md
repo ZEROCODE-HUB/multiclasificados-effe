@@ -168,6 +168,19 @@ JSON escrito a mano, así que lo verificado es el código que va a producción.
 
   `/invoice/cdr` no existe en QA (sí en producción).
 
+  **Qué se adjunta al correo**, según el estado del comprobante:
+
+  | Estado | Adjuntos |
+  |---|---|
+  | Declarado (aceptado/observado) | **PDF oficial de Factiliza + XML firmado** |
+  | Interno, o si su descarga falla | el PDF que generamos nosotros |
+
+  El oficial lleva el código QR y el hash que SUNAT exige en la representación
+  impresa, y el nuestro no: mandar el casero por un documento ya declarado sería
+  entregar algo que no cumple. El XML importa aún más, porque **legalmente el
+  comprobante ES el XML**; el PDF solo lo representa. La bitácora
+  (`invoice_emission_attempts`, paso `email`) anota cuál de los dos se mandó.
+
   **`/invoice/resend` es la pieza clave**, y en un primer barrido no la vi:
   cuando un envío llega a Factiliza pero su traspaso a SUNAT falla, `send`
   contesta «ya existe» para siempre y el comprobante parece irrecuperable.
