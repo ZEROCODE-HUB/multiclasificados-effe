@@ -442,6 +442,8 @@ Deno.serve(async (req) => {
   let body: {
     invoice_id?: string; sweep?: boolean; limit?: number;
     probe?: boolean; serie?: string; correlativo?: string | number; tipo?: "boleta" | "factura";
+    /** Id que devolvió Resend, para preguntarle si el correo llegó de verdad. */
+    email_status_id?: string;
   } = {};
   try {
     body = await req.json();
@@ -452,6 +454,22 @@ Deno.serve(async (req) => {
   // Comprobación de credenciales SIN emitir nada. Consulta un comprobante y
   // devuelve tal cual lo que conteste Factiliza, para poder verificar que el
   // token vale para la API de facturación antes de encender nada.
+  // Diagnóstico del CORREO: pregunta a Resend qué pasó de verdad con un envío.
+  //
+  // Hace falta porque `email_status = 'enviado'` solo significa que Resend
+  // ACEPTÓ el correo (nos devolvió un id), no que llegara a su destino. Un
+  // rebote, un bloqueo del proveedor o una entrega a spam no se ven desde
+  // nuestra base de datos, y sin esto la única respuesta posible a «no me
+  // llegó» era encogerse de hombros.
+  if (body.email_status_id) {
+    if (!RESEND_API_KEY) return json({ ok: false, error: "Falta RESEND_API_KEY." });
+    const r = await fetch(`https://api.resend.com/emails/${body.email_status_id}`, {
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}` },
+    });
+    const cuerpo = await r.json().catch(() => null);
+    return json({ ok: r.ok, http: r.status, resend: cuerpo });
+  }
+
   if (body.probe) {
     if (!FACTILIZA_TOKEN) return json({ ok: false, error: "Falta FACTILIZA_TOKEN." });
     if (!EMISOR_RUC) return json({ ok: false, error: "Falta EMISOR_RUC." });

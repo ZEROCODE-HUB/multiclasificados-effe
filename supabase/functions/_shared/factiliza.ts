@@ -333,7 +333,7 @@ export function leerRespuesta(httpStatus: number, cuerpo: unknown): Resultado {
 
   if (b.success !== true) {
     // Aquí es donde importa no mirar el HTTP: esto llega con 200.
-    const esDeDatos = httpStatus === 200 || httpStatus === 400 || httpStatus === 422;
+    let esDeDatos = httpStatus === 200 || httpStatus === 400 || httpStatus === 422;
 
     // El MOTIVO de verdad viene en `data.error`, no en `message`. El `message`
     // de un rechazo es "revise el portal para más detalles", que no sirve para
@@ -344,6 +344,43 @@ export function leerRespuesta(httpStatus: number, cuerpo: unknown): Resultado {
     const err = (datos.error ?? null) as Record<string, unknown> | null;
     const codigoSunat = err?.code != null ? String(err.code) : null;
     const detalle = String(err?.message ?? "").trim();
+
+    // No todo `success:false` es un dictamen de SUNAT sobre nuestro documento.
+    // Visto en producción: Factiliza registró el comprobante (devolvió su hash)
+    // pero SUNAT le contestó a ELLOS con «Unauthorized», y llegó como
+    // `error.code = "HTTP"`. Eso es un fallo de comunicación entre ellos y
+    // SUNAT, transitorio, que se arregla reintentando — y lo estábamos dando
+    // por rechazo definitivo, que NO se reintenta nunca. El comprobante se
+    // quedaba muerto por un problema ajeno y pasajero.
+    //
+    // El criterio: **los rechazos de SUNAT traen código numérico** (su catálogo
+    // va de 0100 a 4000). Un código no numérico no lo emite SUNAT juzgando
+    // nuestros datos, así que no puede ser un rechazo definitivo.
+    if (esDeDatos && codigoSunat !== null && !/^\d+$/.test(codigoSunat)) {
+      esDeDatos = false;
+    }
+
+    // «Ya existe un documento con el mismo tipo, serie y correlativo» es un
+    // caso aparte y no encaja en ninguno de los dos cajones:
+    //   · NO es un rechazo por datos: el comprobante estaba bien y Factiliza lo
+    //     tiene registrado;
+    //   · NO es reintentable: reenviarlo dará siempre lo mismo.
+    // Pasa cuando un envío llega a Factiliza pero su respuesta no nos llega, o
+    // cuando el traspaso de ellos a SUNAT falla y se reintenta. Se marca para
+    // revisión con un mensaje que diga qué hacer, en vez de dejarlo como un
+    // rechazo mudo o metido en un bucle de reintentos inútiles.
+    const yaExiste = /ya existe un documento/i.test(detalle) || /ya existe un documento/i.test(mensaje);
+    if (yaExiste) {
+      return {
+        ...base,
+        desenlace: "rechazado",
+        reintentable: false,
+        hash: (datos.hash as string) ?? null,
+        codigo: codigoSunat,
+        mensaje: `El documento YA está registrado en Factiliza; no se puede reenviar. `
+          + `Consulta su estado (/invoice/cdr) o pídeles que lo reprocesen ante SUNAT. — ${detalle || mensaje}`,
+      };
+    }
 
     return {
       ...base,

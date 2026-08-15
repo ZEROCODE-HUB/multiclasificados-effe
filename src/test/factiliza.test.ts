@@ -392,6 +392,56 @@ describe("interpretar lo que contesta Factiliza", () => {
       expect(r.reintentable).toBe(true);
     });
 
+    it("🔴 un fallo de SUNAT con Factiliza NO es un rechazo: se reintenta", () => {
+      // Caso REAL de producción (F066-000022, 15/08/2026): Factiliza registró
+      // el comprobante —devolvió su hash— pero SUNAT le contestó a ELLOS
+      // «Unauthorized». Eso llega con `success:false` y HTTP 200, igual que un
+      // rechazo, y lo estábamos dando por definitivo: el comprobante se quedaba
+      // muerto para siempre por un problema ajeno y pasajero.
+      //
+      // Se distingue por el código: los rechazos de SUNAT son NUMÉRICOS (su
+      // catálogo, 0100-4000). "HTTP" no lo emite SUNAT juzgando el documento.
+      const r = leerRespuesta(200, {
+        status: 200,
+        success: false,
+        message: "DEMO - El documento fue registrado en el sistema, pero hubo un problema con la SUNAT",
+        data: { hash: "mm/05v4QRw4n3ZGm/iV997mJZTk=", error: { code: "HTTP", message: "Unauthorized" } },
+      });
+      expect(r.desenlace).toBe("error");
+      expect(r.reintentable).toBe(true);
+      // El hash se conserva: identifica el documento en su sistema.
+      expect(r.hash).toBe("mm/05v4QRw4n3ZGm/iV997mJZTk=");
+      expect(r.mensaje).toContain("Unauthorized");
+    });
+
+    it("🔴 «ya existe» dice qué hacer, en vez de quedarse en un rechazo mudo", () => {
+      // Caso REAL: el primer envío llegó a Factiliza (guardó el documento) pero
+      // su traspaso a SUNAT falló. Al reintentar, contestan «ya existe». Eso no
+      // es un fallo de nuestros datos ni algo que arregle otro reenvío: hay que
+      // consultar el estado o pedirles que lo reprocesen, y el mensaje tiene
+      // que decirlo o quien lo lea se queda sin saber qué hacer.
+      const r = leerRespuesta(200, {
+        status: 400, success: false, message: "Error al registrar",
+        data: { hash: "h", error: { code: "400", message: "Ya existe un documento con el mismo tipo de documento (01), la misma serie y correlativo: F066-22" } },
+      });
+      expect(r.reintentable).toBe(false);
+      expect(r.mensaje).toMatch(/ya está registrado en Factiliza/i);
+      expect(r.mensaje).toMatch(/reprocesen|cdr/i);
+    });
+
+    it("pero un código NUMÉRICO de SUNAT sigue siendo rechazo definitivo", () => {
+      // La otra mitad de la regla, y la que protege los correlativos: si SUNAT
+      // dictaminó sobre los datos, reintentar da el mismo resultado.
+      for (const code of ["3027", "2335", "0100"]) {
+        const r = leerRespuesta(200, {
+          status: 200, success: false, message: "rechazado",
+          data: { hash: "h", error: { code, message: "dato inválido" } },
+        });
+        expect(r.desenlace, `código ${code}`).toBe("rechazado");
+        expect(r.reintentable, `código ${code}`).toBe(false);
+      }
+    });
+
     it("da igual que el rechazo llegue con 200 o con 400: es rechazo", () => {
       // Su documentación enseña 400, pero el cuerpo lleva su propio `status`.
       // Se decide por `success`, no por el HTTP, para no depender de cuál manden.
