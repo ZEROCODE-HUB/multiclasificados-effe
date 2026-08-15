@@ -66,7 +66,59 @@ supabase secrets set EMISOR_NOMBRE="Razón social"
 supabase secrets set FACTILIZA_INVOICE_URL="https://apife-qa.factiliza.com/api/v1/invoice/send"
 ```
 
-### ⚠️ Lo que bloquea hoy la emisión (comprobado el 2026-08-11)
+### ✅ DESBLOQUEADO — el entorno de pruebas funciona (2026-08-15)
+
+Factiliza levantó QA. **Ya emitimos de verdad contra SUNAT** (en su entorno DEMO)
+con el código de este repositorio, sin tocar una línea:
+
+```
+POST https://apife-qa.factiliza.com/api/v1/invoice/send
+→ 200 · success: true
+  "DEMO - El documento fue registrado en el sistema y se encuentra declarado
+   correctamente validado en la SUNAT!"
+
+Y así lo lee nuestro leerRespuesta():
+  desenlace : "aceptado"
+  cdr.code  : "0"
+  cdr.description: "La Boleta numero B066-2, ha sido aceptada"
+```
+
+Probado con **boleta (B066)** y con **factura (F066)**; las dos aceptadas, las
+dos con su CDR firmado. El comprobante lo generó `construirComprobante`, no un
+JSON escrito a mano, así que lo verificado es el código que va a producción.
+
+**Lo que hay que saber para configurarlo:**
+
+- **El token bueno es el de AD360**, el que ya teníamos. En producción daba 401
+  porque allí no está dado de alta; en QA autoriza. El otro token (el corto)
+  sigue sin servir: su firma no la reconocen ni en QA.
+- **En QA el RUC emisor es `10749283781`**, el que nos dieron. El de Coleffe
+  (`20616009061`) **no está vinculado** a ese usuario: devuelve
+  `"Su usuario no se encuentra configurado para el RUC '20616009061'"`. Es lo
+  normal en un entorno compartido, pero significa que `EMISOR_RUC` en pruebas
+  **no** puede ser el nuestro.
+- **QA solo expone dos rutas**: `/api/v1/invoice/send` y `/api/v1/summary/send`.
+  `/invoice/cdr` da 404 allí, así que la consulta de un comprobante ya enviado
+  **no se puede probar en QA** — solo existe en producción.
+
+```bash
+# Configuración para PRUEBAS
+supabase secrets set FACTILIZA_TOKEN="<el token de AD360>"
+supabase secrets set EMISOR_RUC="10749283781"       # el de QA, NO el de Coleffe
+supabase secrets set FACTILIZA_INVOICE_URL="https://apife-qa.factiliza.com/api/v1/invoice/send"
+```
+
+```sql
+-- Series de pruebas que nos indicaron (volver a B001/F001 en producción)
+update invoice_series set serie = 'B066' where tipo = 'boleta';
+update invoice_series set serie = 'F066' where tipo = 'factura';
+```
+
+**Lo que queda para producción**, y es lo único: que Factiliza dé de alta el RUC
+de Coleffe (`20616009061`) con su certificado, y nos confirme el token y la URL
+de producción. La integración en sí ya está demostrada.
+
+### ⚠️ Histórico: lo que bloqueó la emisión hasta el 2026-08-15
 
 **1. El token que tenemos no cubre facturación.** Factiliza vende dos productos
 distintos con tokens distintos, y `FACTILIZA_TOKEN` es el de *consultas*. Medido
@@ -96,7 +148,7 @@ producción, donde un envío aceptado es un documento fiscal de verdad.
 Mientras tanto el valor por defecto se deja en el de QA **aunque falle**: así la
 emisión falla **cerrada** en vez de emitir sin querer.
 
-### Segundo intento: las credenciales del 2026-08-12 tampoco sirven
+### Histórico: las credenciales del 2026-08-12 (ya resuelto)
 
 Factiliza mandó unas credenciales nuevas «del API de Facturación», con RUC
 `10749283781`, series recomendadas F066/B066 y la misma URL de pruebas. Se
