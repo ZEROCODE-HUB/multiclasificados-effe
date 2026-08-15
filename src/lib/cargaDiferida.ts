@@ -59,6 +59,50 @@ export function olvidarRecarga(): void {
   }
 }
 
+/** Parámetro con el que se rompe la caché. Se limpia en cuanto la app arranca. */
+const PARAM_RECARGA = "_r";
+
+/**
+ * Recarga trayéndose el index.html de verdad, no el que el navegador tenga
+ * guardado.
+ *
+ * `location.reload()` NO basta, y costó un caso real: un usuario con la pestaña
+ * abierta desde hacía días seguía viendo la v4.5 después de recargar, con la
+ * v6.8 ya desplegada. El HTML se sirve con `must-revalidate`, pero eso no
+ * impide que Chrome en Android lo resuelva desde su caché o restaure la pestaña
+ * congelada. Y si vuelve el mismo index viejo, vuelve a faltar el mismo trozo:
+ * la recarga no arregla nada y encima gasta el único intento.
+ *
+ * Con un parámetro distinto en la URL, el navegador no tiene ninguna copia que
+ * reutilizar y se ve obligado a pedirlo.
+ */
+function recargarSaltandoCache(): void {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set(PARAM_RECARGA, Date.now().toString(36));
+    window.location.replace(url.toString());
+  } catch {
+    window.location.reload();
+  }
+}
+
+/**
+ * Quita de la barra de direcciones el parámetro de la recarga.
+ *
+ * Es cosmético pero importa: sin esto, la URL que el usuario copia o guarda en
+ * favoritos se lleva un `?_r=lx3k9f` pegado para siempre.
+ */
+export function limpiarMarcaDeRecarga(): void {
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has(PARAM_RECARGA)) return;
+    url.searchParams.delete(PARAM_RECARGA);
+    window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+  } catch {
+    /* noop */
+  }
+}
+
 /**
  * Como `lazy()`, pero si el módulo no se puede descargar recarga la página una
  * vez para coger la versión desplegada.
@@ -74,7 +118,7 @@ export function cargaDiferida<T extends ComponentType<unknown>>(
     } catch (error) {
       if (recargaReciente()) throw error;
       anotarRecarga();
-      window.location.reload();
+      recargarSaltandoCache();
       // La página se está yendo: no resolvemos para que React no pinte nada
       // entre medias (ni el error, ni un componente a medio cargar).
       return new Promise<{ default: T }>(() => {});
@@ -92,6 +136,6 @@ export function vigilarPrecargas(): void {
     if (recargaReciente()) return;
     evento.preventDefault();
     anotarRecarga();
-    window.location.reload();
+    recargarSaltandoCache();
   });
 }

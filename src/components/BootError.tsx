@@ -95,6 +95,22 @@ function errorMessage(error: unknown): string {
   }
 }
 
+/**
+ * Recarga forzando al navegador a pedir el index.html otra vez.
+ *
+ * Vive aquí y no en cargaDiferida porque esta pantalla tiene que poder mostrarse
+ * aunque el resto de la app no haya llegado a cargar.
+ */
+function recargarDeCero(): void {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set("_r", Date.now().toString(36));
+    window.location.replace(url.toString());
+  } catch {
+    window.location.reload();
+  }
+}
+
 const PROBE_LABEL: Record<ProbeResult, string> = {
   ok: "alcanzable ✓",
   unreachable: "no se pudo conectar (red / CSP / DNS) ✗",
@@ -138,7 +154,23 @@ export function BootError({
 }) {
   const env = computeEnvDiagnostics();
   const [probe, setProbe] = useState<ProbeResult | "checking">("checking");
-  const copy = health ? HEALTH_COPY[health.status] : undefined;
+
+  // ── Caso especial: la app está desfasada, no rota ──
+  // Pasa a quien tenía la pestaña abierta cuando se desplegó: los archivos que
+  // pide su versión ya no existen. NO es un fallo de configuración ni de red, y
+  // enseñarle un diagnóstico de variables de entorno lo único que consigue es
+  // asustarle. Lo que necesita es traerse la versión nueva.
+  const esVersionDesfasada = /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed/i
+    .test(String((error as Error)?.message ?? error ?? ""));
+
+  const copy = esVersionDesfasada
+    ? {
+        titulo: "Hay una versión nueva",
+        explicacion:
+          "Tenías la app abierta desde antes de la última actualización, así que "
+          + "algunos archivos ya no están disponibles. Pulsa Actualizar y seguimos.",
+      }
+    : health ? HEALTH_COPY[health.status] : undefined;
 
   useEffect(() => {
     // React está vivo y ya mostramos el diagnóstico: silencia el watchdog externo.
@@ -178,7 +210,11 @@ export function BootError({
               : "Ocurrió un error durante el arranque. Detalles abajo."}
         </p>
 
-        {/* Checklist de variables de entorno requeridas */}
+        {/* Checklist de variables de entorno requeridas.
+            No se pinta cuando lo único que pasa es que la versión está vieja:
+            ahí las variables están bien y enseñarlas solo despista a quien lo
+            lee, que además suele ser el propio usuario y no un técnico. */}
+        {!esVersionDesfasada && (
         <div>
           {REQUIRED_ENV.map((key) => {
             const present = env.present.includes(key);
@@ -211,6 +247,7 @@ export function BootError({
             );
           })}
         </div>
+        )}
 
         {variant === "config" && detail && (
           <div style={S.errBox}>
@@ -240,8 +277,12 @@ export function BootError({
         </div>
       </div>
 
-      <button style={S.btn} onClick={() => window.location.reload()}>
-        Reintentar
+      {/* `location.reload()` a secas puede devolver el MISMO index.html viejo
+          desde la caché del navegador —pasó de verdad: un usuario seguía viendo
+          la v4.5 con la v6.8 desplegada, por muchas veces que pulsara—. Con un
+          parámetro nuevo en la URL no hay copia que reutilizar. */}
+      <button style={S.btn} onClick={recargarDeCero}>
+        {esVersionDesfasada ? "Actualizar" : "Reintentar"}
       </button>
     </div>
   );

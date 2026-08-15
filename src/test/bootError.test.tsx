@@ -44,4 +44,36 @@ describe("BootError", () => {
     render(<BootError variant="crash" error={new Error("boom-de-arranque")} />);
     expect(screen.getByText(/boom-de-arranque/)).toBeTruthy();
   });
+
+  // Lo que veía el usuario al entrar al panel con la pestaña abierta desde antes
+  // del despliegue: un diagnóstico de variables de entorno —todas correctas— y
+  // el título "No se pudo iniciar la app". Ni el título ni la lista tenían nada
+  // que ver con lo que pasaba, que era simplemente que su versión estaba vieja.
+  describe("🔴 cuando lo único que pasa es que hay una versión nueva", () => {
+    const desfasado = new TypeError(
+      "Failed to fetch dynamically imported module: https://www.coleffe.com/assets/AdminDashboard-DS9jK6ef.js",
+    );
+
+    it("lo dice con esas palabras, en vez de 'no se pudo iniciar'", () => {
+      render(<BootError variant="crash" error={desfasado} />);
+      expect(screen.getByText(/Hay una versión nueva/i)).toBeTruthy();
+      expect(screen.queryByText(/No se pudo iniciar la app/i)).toBeNull();
+    });
+
+    it("el botón invita a ACTUALIZAR, no a reintentar", () => {
+      render(<BootError variant="crash" error={desfasado} />);
+      expect(screen.getByRole("button", { name: /Actualizar/i })).toBeTruthy();
+    });
+
+    it("no enseña el diagnóstico de variables: aquí no aporta nada y asusta", () => {
+      render(<BootError variant="crash" error={desfasado} />);
+      expect(screen.queryByText(/VITE_SUPABASE_URL/)).toBeNull();
+    });
+
+    it("un fallo de verdad SÍ sigue enseñando el diagnóstico", () => {
+      render(<BootError variant="crash" error={new Error("otra cosa")} />);
+      expect(screen.getByText(/No se pudo iniciar la app/i)).toBeTruthy();
+      expect(screen.getByText(/VITE_SUPABASE_URL/)).toBeTruthy();
+    });
+  });
 });

@@ -6,7 +6,7 @@ import { supabaseConfigError } from "@/lib/supabase";
 import { BootError } from "@/components/BootError";
 import { BootErrorBoundary } from "@/components/BootErrorBoundary";
 import { ConnectionGate } from "@/components/ConnectionGate";
-import { vigilarPrecargas } from "@/lib/cargaDiferida";
+import { vigilarPrecargas, limpiarMarcaDeRecarga } from "@/lib/cargaDiferida";
 import { cargarImagenPorDefecto } from "@/lib/imagenPorDefecto";
 
 // Promueve el preload de la fuente Montserrat a stylesheet. Antes esto se hacía
@@ -26,6 +26,9 @@ if (fontLink) fontLink.rel = "stylesheet";
 // module" al entrar en cualquier sección del panel. Esto la recarga una vez para
 // coger la versión nueva; el mismo cuidado está en cada ruta diferida.
 vigilarPrecargas();
+// Si venimos de una recarga forzada, se quita el parámetro de la barra de
+// direcciones: la app ya arrancó y nadie tiene por qué copiar una URL con él.
+limpiarMarcaDeRecarga();
 
 // Imagen de los avisos sin foto, configurable desde el panel. Se pide una vez al
 // arrancar y se guarda en el navegador, así que a partir de la segunda visita
