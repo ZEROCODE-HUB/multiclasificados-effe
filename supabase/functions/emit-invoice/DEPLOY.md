@@ -68,27 +68,33 @@ supabase secrets set FACTILIZA_INVOICE_URL="https://apife-qa.factiliza.com/api/v
 
 ### ✅ FUNCIONANDO EN PRUEBAS — configuración vigente (2026-08-15)
 
-La emisión está **encendida para las compras de PRUEBA** y apagada para las
-reales. Dos interruptores, y hacen falta los dos para que un cliente reciba un
-comprobante declarado:
+**La aplicación entera está en PRUEBAS.** Izipay corre con credenciales de test
+(su clave pública es `testpublickey_…`), así que ningún cobro que entra es real
+— y por tanto ningún comprobante lo es tampoco.
 
 | Ajuste (`system_settings`) | Valor hoy | Qué hace |
 |---|---|---|
-| `invoice_emission_enabled` | **true** | Interruptor maestro |
-| `invoice_emission_live` | **false** | Además, emitir las compras REALES |
+| `app_produccion` | **false** | false = todo es de prueba. El interruptor del salto |
+| `invoice_emission_enabled` | **true** | Emitir electrónicamente sí/no |
 
-Con `live` apagado, una compra real genera su comprobante interno de siempre
-(`sunat_status = 'omitido'`, serie B001/F001, correo normal). **Los clientes no
-notan nada.** Las de prueba van por sus propias series **B066/F066**, así que no
-queman correlativos de las reales — un correlativo saltado hay que justificarlo
-ante SUNAT.
+Mientras `app_produccion` esté en false, **todo** comprobante —venga de donde
+venga— nace marcado como prueba, usa las series **B066/F066** y avisa en el PDF
+y en el correo de que no tiene valor fiscal. Las series reales (B001/F001) no se
+tocan: un correlativo saltado hay que justificarlo ante SUNAT.
 
-Una compra es «de prueba» si la liquidó el simulador
-(`payment_provider = 'simulado'` o `payment_ref = 'SIMULADO'`), y queda marcada
-en `invoices.es_prueba`. Ese dato viaja hasta el PDF y el correo, que avisan de
-que el documento no tiene valor fiscal. Va por comprobante y **no por entorno**,
-a propósito: si dependiera de a qué host apunta la función, un cliente real con
-su comprobante interno recibiría un correo diciéndole que es una prueba.
+La marca vive en `invoices.es_prueba` y viaja con el comprobante hasta el PDF.
+Va por comprobante y **no por entorno**, a propósito: si dependiera de a qué
+host apunta la función, el día que convivan comprobantes de los dos tipos se
+etiquetarían mal.
+
+> **Antes se decidía mirando quién había liquidado el pago** (el simulador).
+> Tenía sentido mientras convivían compras reales y simuladas; dejó de tenerlo
+> al comprobar que Izipay está en test — un pago suyo tampoco es real, y así
+> podía acabar gastando un correlativo de la serie fiscal buena.
+
+El salto a producción es un solo valor, y tiene su receta paso a paso en la
+skill **`pasar-a-produccion`** (`.claude/skills/pasar-a-produccion/`), que
+incluye además el vaciado de los datos de prueba.
 
 **Verificado de punta a punta el 2026-08-15**, contra Factiliza y SUNAT de verdad:
 
@@ -96,10 +102,10 @@ su comprobante interno recibiría un correo diciéndole que es una prueba.
 |---|---|
 | Boleta de prueba (`B066-000021`) | **aceptada** por SUNAT · correo enviado |
 | Factura de prueba (`F066-000021`) | **aceptada** por SUNAT · correo enviado |
-| Compra de saldo por el simulador (`B066-000022`) | aceptada · correo enviado |
+| Compra de saldo (`B066-000022`) | aceptada · correo enviado |
 | Pagar y publicar (`B066-000023`) | aviso publicado · aceptada · correo enviado |
-| Compra REAL con `live` apagado | `omitido`, serie B001, correo normal — **sin cambios** |
-| Importe simulado vs. real (misma configuración) | **23.42 = 23.42** |
+| Pago entrando por **Izipay** (`B066-000024`) | aceptada · correo enviado · serie de pruebas |
+| Serie real tras todas las pruebas | **B001 sigue en 89** · F001 en 0 |
 | Comprobante rechazado por SUNAT | **el correo salió igual** (antes no salía nunca) |
 
 Secrets vigentes:
@@ -113,9 +119,11 @@ EMISOR_RUC_PRUEBAS="10749283781"   # en QA el emisor de alta es el de Factiliza
 EMISOR_RUC                          # el de Coleffe, intacto: es el de los reales
 ```
 
-**Para pasar a producción**, cuando Factiliza dé de alta el RUC de Coleffe:
-cambiar `FACTILIZA_INVOICE_URL` al host de producción, poner
-`invoice_emission_live = true` y comprobar que `EMISOR_RUC` es el nuestro.
+**Para pasar a producción** no improvises: usa la skill `pasar-a-produccion`,
+que lleva la receta entera (vaciar los datos de prueba, conmutar Izipay y
+Factiliza, comprobar y volver atrás). En resumen: `app_produccion = true`,
+`FACTILIZA_INVOICE_URL` al host real, token de producción y `EMISOR_RUC` el
+nuestro. Requiere que Factiliza haya dado de alta el RUC de Coleffe.
 
 ### ✅ Cómo se desbloqueó (2026-08-15)
 
@@ -400,8 +408,9 @@ vale.
 ### Probar en el entorno de pruebas
 
 1. Enciende el interruptor de arriba.
-2. Haz una compra (hoy, con `simulate-payment`). Eso crea el comprobante en
-   estado `pendiente` y avisa a esta función.
+2. Haz una compra desde la app. Izipay está en modo test, así que se paga con
+   sus tarjetas de prueba y no se cobra nada de verdad. Eso crea el comprobante
+   en estado `pendiente` y avisa a esta función.
 3. Mira cómo fue, sin adivinar — cada intento queda con su petición y su
    respuesta completas:
 

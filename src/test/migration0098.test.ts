@@ -5,26 +5,21 @@ import fs from "node:fs";
 import path from "node:path";
 
 /**
- * 0098 — emisión de pruebas sin dañar a los clientes reales.
+ * 0098 + 0099 — la aplicación entera está en pruebas o en producción.
  *
- * El riesgo que esta migración existe para evitar: la app está viva y hay
- * compras de verdad todos los días. Encender la emisión apuntando al entorno de
- * pruebas de Factiliza "para todo el mundo" haría que un cliente real recibiera
- * un documento SIN VALOR FISCAL, con un RUC que no es el nuestro, por una compra
- * que sí fue real.
+ * Mientras `app_produccion` esté en false, TODO lo que se cobra es de prueba:
+ * da igual que el pago entre por Izipay, porque Izipay también está en modo
+ * test. Lo que se protege aquí:
  *
- * Por eso se prueba, sobre los ficheros SQL REALES:
- *
- *  1. Que una compra REAL no se emite mientras el interruptor `live` esté
- *     apagado, aunque el maestro esté encendido. Es la garantía que protege a
- *     los clientes y la que no puede romperse nunca.
- *  2. Que una compra de PRUEBA sí se emite, y con SU PROPIA SERIE — un
- *     correlativo saltado de la serie real hay que justificarlo ante SUNAT.
- *  3. Que hacer pruebas NO mueve el contador de la serie real.
- *  4. Que el correo sale aunque SUNAT rechace: el comprador ya pagó y tiene
+ *  1. Que en pruebas los comprobantes usen SUS series (B066/F066) y jamás
+ *     toquen el contador de las reales. Un correlativo saltado de la serie
+ *     buena hay que justificarlo ante SUNAT.
+ *  2. Que al pasar a producción se numere con las series de verdad, sin marca.
+ *  3. Que el correo salga aunque SUNAT rechace: el comprador ya pagó y tiene
  *     derecho a su comprobante. Antes se quedaba sin él para siempre.
- *  5. Que un comprobante fuera de plazo se marca y sale a revisión, en vez de
- *     quedarse mudo en 'pendiente' como pasaba.
+ *  4. Que un comprobante fuera de plazo se marque y salga a revisión, en vez
+ *     de quedarse mudo en 'pendiente' como pasaba.
+ *  5. Que la marca de prueba viaje con el comprobante hasta el PDF y el correo.
  */
 
 const leer = (f: string) =>
@@ -33,6 +28,7 @@ const leer = (f: string) =>
 const M0082 = leer("0082_invoice_series.sql");
 const M0083 = leer("0083_invoice_emission.sql");
 const M0098 = leer("0098_emision_de_pruebas.sql");
+const M0099 = leer("0099_modo_de_la_aplicacion.sql");
 
 let db: PGlite;
 const q = <T,>(sql: string) => db.query<T>(sql).then((r) => r.rows);
@@ -137,20 +133,20 @@ async function montar() {
   await db.exec(M0082);
   await db.exec(M0083);
   await db.exec(M0098);
+  await db.exec(M0099);
 }
 
-/** Crea una orden pendiente. `simulado` la marca como compra de prueba. */
-const orden = (n: number, opts: { simulado?: boolean; tipo?: "boleta" | "factura" } = {}) =>
+const orden = (n: number, tipo: "boleta" | "factura" = "boleta") =>
   db.exec(`
     insert into public.orders (id, user_id, extras, subtotal, igv, total, status, payment_provider)
     values ('${ORDER(n)}', '${USER}',
       jsonb_build_object('credits', 10, 'detail', 'Compra de saldo',
-        'receipt', jsonb_build_object('receiptType', '${opts.tipo ?? "boleta"}',
+        'receipt', jsonb_build_object('receiptType', '${tipo}',
           'email', 'a@b.com', 'advertiserName', 'JUAN', 'docType', 'dni', 'docNumber', '44443333')),
-      100, 18, 118, 'pending', ${opts.simulado ? "'simulado'" : "'izipay'"});
+      100, 18, 118, 'pending', 'izipay');
   `);
 
-const liquidar = (n: number, ref: string) =>
+const liquidar = (n: number, ref = "izi-1") =>
   uno<{ settle_paid_order: Record<string, unknown> }>(
     `select public.settle_paid_order('${ORDER(n)}', '${ref}') as settle_paid_order`,
   ).then((r) => r.settle_paid_order);
@@ -159,110 +155,126 @@ const encender = (clave: string) =>
   db.exec(`update public.system_settings set value = 'true'::jsonb where key = '${clave}';`);
 
 const comprobante = (n: number) =>
-  uno<{ number: string; serie: string; correlativo: string; es_prueba: boolean; sunat_status: string }>(
-    `select number, serie, correlativo::text, es_prueba, sunat_status::text
+  uno<{ number: string; serie: string; es_prueba: boolean; sunat_status: string }>(
+    `select number, serie, es_prueba, sunat_status::text
        from public.invoices where order_id = '${ORDER(n)}'`,
   );
 
 beforeEach(montar);
 
-describe("0098 · a los clientes reales no les toca un comprobante de prueba", () => {
-  it("con el maestro encendido pero 'live' apagado, una compra REAL no se emite", async () => {
+describe("modo pruebas · nada toca las series fiscales de verdad", () => {
+  it("la app arranca en pruebas", async () => {
+    expect((await uno<{ p: boolean }>(`select public.app_produccion() as p`)).p).toBe(false);
+  });
+
+  it("un pago de Izipay en pruebas se marca como prueba y usa B066", async () => {
+    // Izipay está en modo test: ese cobro tampoco es real, aunque venga de la
+    // pasarela. Marcarlo como real sería describir mal lo que pasó.
     await encender("invoice_emission_enabled");
     await orden(1);
-    await liquidar(1, "izi-abc");
+    const r = await liquidar(1);
 
+    expect(r.es_prueba).toBe(true);
     const c = await comprobante(1);
-    // Sigue siendo el comprobante interno de siempre: numerado y enviado por
-    // correo, pero sin declarar. Exactamente como antes de esta migración.
-    expect(c.sunat_status).toBe("omitido");
-    expect(c.es_prueba).toBe(false);
-    expect(c.serie).toBe("B001");
-  });
-
-  it("con los DOS interruptores encendidos, una compra real sí se declara", async () => {
-    await encender("invoice_emission_enabled");
-    await encender("invoice_emission_live");
-    await orden(2);
-    await liquidar(2, "izi-def");
-
-    const c = await comprobante(2);
-    expect(c.sunat_status).toBe("pendiente");
-    expect(c.es_prueba).toBe(false);
-    expect(c.serie).toBe("B001");
-  });
-
-  it("sin el maestro no se emite nada, ni siquiera una compra de prueba", async () => {
-    await orden(3, { simulado: true });
-    await liquidar(3, "SIMULADO");
-    expect((await comprobante(3)).sunat_status).toBe("omitido");
-  });
-});
-
-describe("0098 · las pruebas van por su propia serie", () => {
-  it("una compra simulada se emite y usa la serie de pruebas", async () => {
-    await encender("invoice_emission_enabled");
-    await orden(4, { simulado: true });
-    await liquidar(4, "SIMULADO");
-
-    const c = await comprobante(4);
-    expect(c.es_prueba).toBe(true);
-    expect(c.sunat_status).toBe("pendiente");
     expect(c.serie).toBe("B066");
     expect(c.number).toBe("B066-000001");
+    expect(c.sunat_status).toBe("pendiente");
   });
 
   it("la factura de prueba usa F066", async () => {
     await encender("invoice_emission_enabled");
-    await orden(5, { simulado: true, tipo: "factura" });
-    await liquidar(5, "SIMULADO");
-    expect((await comprobante(5)).serie).toBe("F066");
+    await orden(2, "factura");
+    await liquidar(2);
+    expect((await comprobante(2)).serie).toBe("F066");
   });
 
-  it("hacer pruebas NO mueve el contador de la serie real", async () => {
+  it("por muchas compras que haya, el contador REAL no se mueve", async () => {
     await encender("invoice_emission_enabled");
-    const antes = await uno<{ correlativo: string }>(
-      `select correlativo::text from public.invoice_series where id = 'boleta'`,
-    );
+    const antes = await uno<{ c: string }>(
+      `select correlativo::text as c from public.invoice_series where id = 'boleta'`);
 
-    await orden(6, { simulado: true });
-    await liquidar(6, "SIMULADO");
-    await orden(7, { simulado: true });
-    await liquidar(7, "SIMULADO");
+    for (const n of [3, 4, 5]) { await orden(n); await liquidar(n); }
 
-    const despues = await uno<{ correlativo: string; correlativo_pruebas: string }>(
-      `select correlativo::text, correlativo_pruebas::text from public.invoice_series where id = 'boleta'`,
-    );
-    // Un correlativo saltado en la serie real hay que justificarlo ante SUNAT.
-    expect(despues.correlativo).toBe(antes.correlativo);
-    expect(Number(despues.correlativo_pruebas)).toBe(2);
+    const d = await uno<{ c: string; p: string }>(
+      `select correlativo::text as c, correlativo_pruebas::text as p
+         from public.invoice_series where id = 'boleta'`);
+    expect(d.c).toBe(antes.c);   // intacto
+    expect(Number(d.p)).toBe(3);
   });
 
-  it("marcar como prueba también funciona por payment_ref, no solo por proveedor", async () => {
-    await encender("invoice_emission_enabled");
-    await orden(8); // proveedor 'izipay'
-    await liquidar(8, "SIMULADO");
-    expect((await comprobante(8)).es_prueba).toBe(true);
+  it("sin el interruptor de emisión, el comprobante es interno pero sigue siendo de prueba", async () => {
+    await orden(6);
+    await liquidar(6);
+    const c = await comprobante(6);
+    expect(c.sunat_status).toBe("omitido");
+    expect(c.es_prueba).toBe(true);
+    expect(c.serie).toBe("B066");
   });
 });
 
-describe("0098 · el comprobante llega al comprador pase lo que pase", () => {
+describe("modo producción · se numera de verdad y sin marcas", () => {
+  it("al pasar a producción se usan las series reales", async () => {
+    await encender("invoice_emission_enabled");
+    await encender("app_produccion");
+    await orden(7);
+    const r = await liquidar(7);
+
+    expect(r.es_prueba).toBe(false);
+    const c = await comprobante(7);
+    expect(c.serie).toBe("B001");
+    expect(c.es_prueba).toBe(false);
+    expect(c.sunat_status).toBe("pendiente");
+  });
+
+  it("el contador real avanza y el de pruebas se queda quieto", async () => {
+    await encender("invoice_emission_enabled");
+    await encender("app_produccion");
+    const antes = await uno<{ c: number }>(
+      `select correlativo as c from public.invoice_series where id = 'boleta'`);
+    await orden(8); await liquidar(8);
+    const d = await uno<{ c: number; p: number }>(
+      `select correlativo as c, correlativo_pruebas as p from public.invoice_series where id = 'boleta'`);
+    expect(d.c).toBe(antes.c + 1);
+    expect(d.p).toBe(0);
+  });
+});
+
+describe("la marca de prueba viaja con el comprobante", () => {
+  // Importa porque el aviso «sin valor fiscal» del PDF y del correo se decide
+  // con este dato, no con el entorno al que apunte la función.
+  it("las reservas de emisión y de correo la devuelven", async () => {
+    await encender("invoice_emission_enabled");
+    await orden(9);
+    await liquidar(9);
+    const id = `(select id from public.invoices where order_id = '${ORDER(9)}')`;
+
+    const emision = await q<{ o_es_prueba: boolean }>(
+      `select o_es_prueba from public.claim_invoice_emission(${id}, 300)`);
+    expect(emision[0].o_es_prueba).toBe(true);
+
+    await db.exec(`update public.invoices set sunat_status='aceptado' where order_id='${ORDER(9)}';`);
+    const correo = await q<{ o_es_prueba: boolean }>(
+      `select o_es_prueba from public.claim_invoice_email(${id}, 300)`);
+    expect(correo[0].o_es_prueba).toBe(true);
+  });
+});
+
+describe("el comprobante llega al comprador pase lo que pase", () => {
   const conEstado = async (estado: string) => {
     await encender("invoice_emission_enabled");
-    await encender("invoice_emission_live");
-    await orden(9);
-    await liquidar(9, "izi-xyz");
+    await orden(10);
+    await liquidar(10);
     await db.exec(`
       update public.invoices set sunat_status = '${estado}', email_status = 'pendiente',
              email_next_try_at = now()
-       where order_id = '${ORDER(9)}';`);
+       where order_id = '${ORDER(10)}';`);
     return q(`select * from public.claim_invoice_email(
-      (select id from public.invoices where order_id = '${ORDER(9)}'), 300)`);
+      (select id from public.invoices where order_id = '${ORDER(10)}'), 300)`);
   };
 
   it("se manda aunque SUNAT lo haya RECHAZADO", async () => {
-    // Antes de la 0098 esto devolvía 0 filas y el comprador —que ya había
-    // pagado— no recibía nada nunca, porque 'rechazado' es terminal.
+    // Antes esto devolvía 0 filas y el comprador —que ya había pagado— no
+    // recibía nada nunca, porque 'rechazado' es un estado terminal.
     expect(await conEstado("rechazado")).toHaveLength(1);
   });
 
@@ -286,61 +298,25 @@ describe("0098 · el comprobante llega al comprador pase lo que pase", () => {
   });
 });
 
-describe("0098 · la marca de prueba viaja con el comprobante", () => {
-  // Importa porque el aviso «documento de prueba» del PDF y del correo se
-  // decide con este dato. Si dependiera del entorno, un cliente REAL con su
-  // comprobante interno recibiría un correo diciéndole que es una prueba.
-  it("las reservas de emisión y de correo la devuelven", async () => {
+describe("los que se pasan de plazo dejan de ser invisibles", () => {
+  const viejo = async (n: number) => {
     await encender("invoice_emission_enabled");
-    await orden(20, { simulado: true });
-    await liquidar(20, "SIMULADO");
-    const id = `(select id from public.invoices where order_id = '${ORDER(20)}')`;
-
-    const emision = await q<{ o_es_prueba: boolean }>(
-      `select o_es_prueba from public.claim_invoice_emission(${id}, 300)`);
-    expect(emision[0].o_es_prueba).toBe(true);
-
-    await db.exec(`update public.invoices set sunat_status = 'aceptado' where order_id = '${ORDER(20)}';`);
-    const correo = await q<{ o_es_prueba: boolean }>(
-      `select o_es_prueba from public.claim_invoice_email(${id}, 300)`);
-    expect(correo[0].o_es_prueba).toBe(true);
-  });
-
-  it("una compra real NO se marca como prueba", async () => {
-    await encender("invoice_emission_enabled");
-    await encender("invoice_emission_live");
-    await orden(21);
-    await liquidar(21, "izi-real");
-    const correo = await q<{ o_es_prueba: boolean }>(`
-      select o_es_prueba from public.claim_invoice_email(
-        (select id from public.invoices where order_id = '${ORDER(21)}'), 300)`);
-    // Está 'pendiente', así que el correo espera; lo que importa es que cuando
-    // salga, no irá marcado.
-    expect(correo).toHaveLength(0);
-    expect((await comprobante(21)).es_prueba).toBe(false);
-  });
-});
-
-describe("0098 · los que se pasan de plazo dejan de ser invisibles", () => {
-  it("marca vencido y pide revisión", async () => {
-    await encender("invoice_emission_enabled");
-    await encender("invoice_emission_live");
-    await orden(10);
-    await liquidar(10, "izi-old");
+    await orden(n);
+    await liquidar(n);
     await db.exec(`
       update public.invoices set issued_at = now() - interval '9 days',
              sunat_fecha_emision = now() - interval '9 days'
-       where order_id = '${ORDER(10)}';`);
+       where order_id = '${ORDER(n)}';`);
+  };
 
-    const n = await uno<{ expire_stale_invoices: number }>(
-      `select public.expire_stale_invoices(3) as expire_stale_invoices`,
-    );
-    expect(n.expire_stale_invoices).toBe(1);
+  it("marca vencido y pide revisión", async () => {
+    await viejo(11);
+    const n = await uno<{ v: number }>(`select public.expire_stale_invoices(3) as v`);
+    expect(n.v).toBe(1);
 
     const c = await uno<{ sunat_status: string; needs_review: boolean; sunat_last_error: string }>(
       `select sunat_status::text, needs_review, sunat_last_error
-         from public.invoices where order_id = '${ORDER(10)}'`,
-    );
+         from public.invoices where order_id = '${ORDER(11)}'`);
     expect(c.sunat_status).toBe("vencido");
     expect(c.needs_review).toBe(true);
     expect(c.sunat_last_error).toMatch(/plazo/i);
@@ -348,39 +324,27 @@ describe("0098 · los que se pasan de plazo dejan de ser invisibles", () => {
 
   it("no toca los que siguen en plazo", async () => {
     await encender("invoice_emission_enabled");
-    await encender("invoice_emission_live");
-    await orden(11);
-    await liquidar(11, "izi-new");
-    const n = await uno<{ expire_stale_invoices: number }>(
-      `select public.expire_stale_invoices(3) as expire_stale_invoices`,
-    );
-    expect(n.expire_stale_invoices).toBe(0);
-    expect((await comprobante(11)).sunat_status).toBe("pendiente");
+    await orden(12);
+    await liquidar(12);
+    expect((await uno<{ v: number }>(`select public.expire_stale_invoices(3) as v`)).v).toBe(0);
+    expect((await comprobante(12)).sunat_status).toBe("pendiente");
   });
 
-  it("el barrido cierra los vencidos antes de repartir trabajo", async () => {
-    await encender("invoice_emission_enabled");
-    await encender("invoice_emission_live");
-    await orden(12);
-    await liquidar(12, "izi-sweep");
-    await db.exec(`
-      update public.invoices set issued_at = now() - interval '9 days',
-             sunat_fecha_emision = now() - interval '9 days'
-       where order_id = '${ORDER(12)}';`);
-
+  it("el barrido los cierra antes de repartir trabajo", async () => {
+    await viejo(13);
     await db.exec(`select public.sweep_invoice_emissions(20);`);
-    expect((await comprobante(12)).sunat_status).toBe("vencido");
+    expect((await comprobante(13)).sunat_status).toBe("vencido");
   });
 });
 
-describe("0098 · sigue siendo seguro y repetible", () => {
-  it("las funciones nuevas no quedan al alcance del navegador", async () => {
+describe("sigue siendo seguro y repetible", () => {
+  it("las funciones sensibles no quedan al alcance del navegador", async () => {
     const filas = await q<{ proname: string; acl: string | null }>(`
       select p.proname, array_to_string(p.proacl, ',') as acl
         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public'
-         and p.proname in ('invoice_emission_live', 'expire_stale_invoices',
-                           'sweep_invoice_emissions', 'settle_paid_order')`);
+         and p.proname in ('expire_stale_invoices', 'sweep_invoice_emissions',
+                           'settle_paid_order', 'claim_invoice_emission')`);
     expect(filas.length).toBeGreaterThan(0);
     for (const f of filas) {
       expect(f.acl ?? "").not.toMatch(/\banon=/);
@@ -388,20 +352,19 @@ describe("0098 · sigue siendo seguro y repetible", () => {
     }
   });
 
-  it("aplicarla dos veces no rompe nada", async () => {
+  it("aplicar las migraciones dos veces no rompe nada", async () => {
     await db.exec(M0098);
+    await db.exec(M0099);
     await encender("invoice_emission_enabled");
-    await orden(13, { simulado: true });
-    await liquidar(13, "SIMULADO");
-    expect((await comprobante(13)).serie).toBe("B066");
+    await orden(14);
+    await liquidar(14);
+    expect((await comprobante(14)).serie).toBe("B066");
   });
 
   it("liquidar dos veces sigue sin duplicar el comprobante", async () => {
-    await orden(14);
-    const a = await liquidar(14, "izi-1");
-    const b = await liquidar(14, "izi-1");
-    expect(a.settled).toBe(true);
-    expect(b.settled).toBe(false);
-    expect(await q(`select 1 from public.invoices where order_id = '${ORDER(14)}'`)).toHaveLength(1);
+    await orden(15);
+    expect((await liquidar(15)).settled).toBe(true);
+    expect((await liquidar(15)).settled).toBe(false);
+    expect(await q(`select 1 from public.invoices where order_id = '${ORDER(15)}'`)).toHaveLength(1);
   });
 });

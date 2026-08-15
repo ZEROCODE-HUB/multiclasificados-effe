@@ -35,4 +35,11 @@ dist-ssr
 /test-results/
 /playwright-report/
 /blob-report/
-.claude/
+# Estado local de Claude Code. Se ignora el CONTENIDO (`.claude/*`) y no el
+# directorio (`.claude/`) a propósito: con la barra final git ni siquiera entra
+# a mirar, y entonces la excepción de abajo no puede funcionar.
+.claude/*
+# Las skills sí se versionan: son procedimientos del proyecto —cómo pasar a
+# producción, qué borrar antes— y perderlas al cambiar de máquina sería perder
+# documentación.
+!.claude/skills/

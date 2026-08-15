@@ -18,7 +18,6 @@ import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 import { verifyDocument, normalizeDocNumber } from "@/lib/verifyDoc";
 import {
   createPayment, createPublishPayment, pollOrderStatus, getPurchaseResult, hostedPaymentUrl,
-  simulatePayment, simulatePublishPayment,
   SaldoYaSuficiente,
   type PurchaseConfig, type CreatePaymentResult, type OrderOutcome,
 } from "@/lib/payments";
@@ -55,16 +54,6 @@ interface Props {
 }
 
 const DURATIONS: DurationDays[] = [3, 7, 15, 30, 60, 90];
-
-// ¿Se enseña el botón de pago simulado? Quien de verdad manda es el servidor:
-// si el secret ALLOW_FAKE_PAYMENT no está en "true", la Edge Function contesta
-// 403 aunque alguien fuerce la bandera. Esto solo decide si se ve el botón.
-//
-// Se excluye el modo test a propósito: un botón extra en el diálogo cambiaría
-// lo que ven las pruebas de la interfaz sin aportarles nada.
-const SIMULACION_VISIBLE =
-  import.meta.env.MODE !== "test"
-  && (import.meta.env.DEV || import.meta.env.VITE_ALLOW_FAKE_PAYMENT === "true");
 
 // Solo los adicionales con costo (>0 en la matriz por defecto).
 const EXTRA_DEFS: Array<{ key: keyof ExtraPrices; label: string; sub: string }> = [
@@ -270,35 +259,6 @@ export function BuyCreditsModal({
       docNumber: docNumber.trim(),
       factilizaData: docData,
     };
-  };
-
-  // Pago simulado: salta Izipay y liquida en el acto. Solo existe donde el
-  // servidor lo permite (ALLOW_FAKE_PAYMENT); si no, responde 403.
-  const handleSimulate = async () => {
-    const receipt = datosDelComprobante();
-    if (!receipt) return;
-    setBuying(true);
-    try {
-      const r = modoPublicar && publishFor
-        ? await simulatePublishPayment({
-            listingId: publishFor.listingId, duration: publishFor.durationDays, receipt,
-          })
-        : await simulatePayment({
-            quantity, duration, extras: extras as Record<string, boolean | number>, receipt,
-          });
-      // Ya está liquidado: se sale por el mismo sitio que un pago de verdad,
-      // para probar también ese tramo y no una versión paralela de él.
-      await finishOutcome("paid", r.orderId);
-    } catch (err: unknown) {
-      if (err instanceof SaldoYaSuficiente) { onPublished?.(false); onClose(); return; }
-      toast({
-        title: "No se pudo simular el pago",
-        description: err instanceof Error ? err.message : "Inténtalo de nuevo.",
-        variant: "destructive",
-      });
-    } finally {
-      setBuying(false);
-    }
   };
 
   // Paso 1 → crea la orden y obtiene el formToken. En APK abre la página de pago
@@ -648,19 +608,6 @@ export function BuyCreditsModal({
                 className="text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground self-start"
               >
                 Prefiero solo comprar saldo
-              </button>
-            )}
-
-            {SIMULACION_VISIBLE && (
-              <button
-                type="button"
-                onClick={handleSimulate}
-                disabled={buying || verifyingDoc || !verifiedName || !emailValid}
-                className="mt-3 w-full rounded-md border border-dashed border-amber-400 bg-amber-50
-                           px-3 py-2 text-xs font-semibold text-amber-800 disabled:opacity-50
-                           dark:border-amber-600 dark:bg-amber-950/40 dark:text-amber-200"
-              >
-                Simular pago (solo pruebas) · no se cobra nada
               </button>
             )}
 
