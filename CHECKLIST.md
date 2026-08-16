@@ -1,5 +1,19 @@
 # ✅ Checklist de auditoría — eFFe Clasificados
 
+> ⚠️ **DESACTUALIZADO (revisado el 15-ago-2026).** Este documento se quedó en
+> julio y hoy engaña en las dos direcciones. Comprobado contra la base, la API y
+> el bundle en producción:
+> - La **§4 (configuración de producción) está HECHA**: los secretos de Izipay,
+>   Resend, hCaptcha, FCM, service_role y Factiliza están cargados, las 9 Edge
+>   Functions desplegadas, y en producción corren la sitekey real de hCaptcha y
+>   el Map ID de Google. Ya no es pendiente.
+> - La **§5-bis miente**: `0080_search_priority_by_zone.sql` **ya no existe** —
+>   se borró al cambiar cercanía por departamento— y `0081` está aplicada (no
+>   queda ningún aviso activo sin coordenadas).
+> - **Lo que sí sigue pendiente:** el `GoogleService-Info.plist` y la clave APNs
+>   para el push en iOS, restringir la llave de Google Maps, rotar los secretos,
+>   y el alta del RUC en Factiliza.
+>
 > **Estado al 15 de julio de 2026** · App v2.6 (versionCode 17) · Stack: React 18 + Vite + TypeScript + Supabase + Capacitor.
 > Documento vivo: marcá `[x]` a medida que se cierra cada ítem.
 > Este archivo **reemplaza** a `PENDIENTES.md` (fechado 23-jun-2026 y desactualizado: pagos, mapa real, reportes a tabla real, hilo de moderación y Factiliza/boletas ya están hechos).

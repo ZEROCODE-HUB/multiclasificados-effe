@@ -194,6 +194,17 @@ workflows:
             echo "OK  URL scheme del OAuth — $esquema"
           fi
 
+          # El icono se comprueba por su RESULTADO, igual que lo demás: que el
+          # master exista en el repo no garantiza que @capacitor/assets lo haya
+          # escrito. Y un IPA con el placeholder de Capacitor es rechazo directo
+          # en App Store — mejor caerse aquí que a los tres días de revisión.
+          ICONO=ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png
+          if [ ! -f "$ICONO" ]; then
+            faltan="$faltan\n  · el icono de la app (saldría el placeholder de Capacitor: rechazo en App Store)"
+          else
+            echo "OK  Icono de la app — $(basename "$ICONO")"
+          fi
+
           if [ -n "$faltan" ]; then
             printf "\nERROR: la configuración nativa quedó incompleta:%b\n" "$faltan"
             echo "El IPA compilaría igual, pero esas funciones fallarían en silencio en el iPhone."
