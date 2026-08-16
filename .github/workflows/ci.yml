@@ -1,8 +1,16 @@
 name: CI
+
+# Qué se comprueba en cada cambio.
+#
+# Antes esto solo hacía `npm install` + `npm run build`. Compilar no comprueba
+# casi nada: un test roto, un tipo mal puesto o una regla de lint incumplida
+# pasaban en verde hasta main. Con 1.394 pruebas escritas, no correrlas era
+# tirar el trabajo. Ahora el build se cae aquí y no en producción.
 on:
   pull_request:
   push:
     branches: [main]
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -11,5 +19,18 @@ jobs:
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af
         with:
           node-version: 22
-      - run: npm install
-      - run: npm run build
+      # `npm ci` y no `npm install`: instala exactamente lo del package-lock,
+      # así el CI compila lo mismo que la máquina de quien programó.
+      - run: npm ci
+
+      - name: Tipos
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Pruebas
+        run: npm test
+
+      - name: Build
+        run: npm run build

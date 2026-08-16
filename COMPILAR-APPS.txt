@@ -23,17 +23,32 @@ CONTENIDO
 1 . COMO ESTA MONTADO ESTO
 ================================================================================
 
-Android se compila EN TU PC con Windows. Todo lo que hace falta (Java, SDK de
-Android, Gradle) ya esta instalado en E:\SDKs.
+Las dos apps se compilan SOLAS EN LA NUBE. No hace falta compilar nada a mano.
 
-iPhone se compila EN LA NUBE, con Codemagic, porque para compilar iOS hace falta
-una Mac. Codemagic arranca una Mac, compila y sube la app a TestFlight solo.
+  ANDROID  ->  GitHub Actions, flujo "Android Build & Sign".
+               Se dispara con cada push a main. Compila, FIRMA el AAB con el
+               keystore y lo deja como archivo descargable.
+               .github/workflows/release.yml
 
-  Consecuencia practica: en Android tu controlas todo y ves los errores al
-  momento. En iPhone cada cambio del lado nativo cuesta una compilacion entera
-  (unos 15-20 minutos). Por eso el push de iPhone se hizo por el lado del
-  servidor: si algo falla, se corrige en Supabase en un minuto y no hay que
-  volver a compilar.
+  IPHONE   ->  Codemagic, flujo "iOS Build".
+               Se lanza a mano desde su panel. Compila y sube a TestFlight solo.
+               codemagic.yaml
+
+  Y ademas hay un tercer flujo, "CI", que en cada cambio comprueba tipos, lint,
+  las pruebas y que compile. Ese no genera apps: vigila que no se rompa nada.
+  .github/workflows/ci.yml
+
+  Por que iPhone no esta tambien en GitHub: para compilar iOS hace falta una
+  Mac, y las Mac de GitHub Actions se pagan aparte. Codemagic ya trae una.
+
+  Consecuencia practica: cada cambio del lado nativo de iPhone cuesta una
+  compilacion entera (15-20 minutos). Por eso el push de iPhone se hizo por el
+  lado del servidor: si algo falla se corrige en Supabase en un minuto y no hay
+  que volver a compilar.
+
+  (Si alguna vez necesitas compilar Android en tu PC, se puede: hace falta el
+  JDK 21 y el SDK de Android, que ya estan en E:\SDKs. Pero no es el camino
+  normal y ahi no se firma para Play.)
 
 Las dos apps salen del MISMO codigo web. Se compila la web una vez y Capacitor
 la mete dentro de cada app.
@@ -83,10 +98,11 @@ en el punto 6 y esas no se ponen nunca aqui.
 
 DONDE SE PONEN
 
-  Para Android  ->  en un archivo llamado  .env  en la raiz del proyecto
-                    (C:\Claude\MulticlasificadosEffe\.env)
-                    Una linea por variable, con el signo igual y sin comillas:
-                        VITE_SUPABASE_URL=https://prhbgniwymaaevnisyov.supabase.co
+  Para Android  ->  GitHub -> el repositorio -> Settings -> Secrets and
+                    variables -> Actions -> Repository secrets.
+                    Una por una, con el mismo nombre de arriba.
+                    Ya estan todas puestas (16-ago-2026). Se listan con:
+                        gh secret list --repo ZEROCODE-HUB/multiclasificados-effe
 
   Para iPhone   ->  en Codemagic, en Environment variables, dentro del grupo
                     que se llama exactamente:   multiclasificados-effe
@@ -109,67 +125,63 @@ UN AVISO QUE COSTO CARO
 3 . COMPILAR ANDROID
 ================================================================================
 
-REQUISITOS (ya instalados en esta PC)
-  Java JDK 21          E:\SDKs\jdk-21          (con JDK 17 NO compila)
-  SDK de Android       E:\SDKs\android-sdk
-  Gradle 8.14.3        E:\SDKs\gradle-8.14.3
+Se compila SOLO en GitHub Actions con cada push a main. Tambien se puede lanzar
+a mano: GitHub -> pestana Actions -> "Android Build & Sign" -> Run workflow.
 
-PASO 1 - Subir el numero de version
-  Se hace SIEMPRE, en dos sitios:
+QUE HACE EL FLUJO
+  1. Instala dependencias.
+  2. COMPRUEBA que los secretos del build esten puestos, y se para si falta uno.
+  3. Compila la web con todas las variables del punto 2.
+  4. COMPRUEBA que esa configuracion haya quedado DENTRO de lo compilado.
+  5. Mete la web dentro de la app (Capacitor).
+  6. Compila y FIRMA el AAB con el keystore guardado en los secretos.
+  7. Deja el archivo listo para descargar.
+
+DONDE SE RECOGE EL ARCHIVO
+  GitHub -> Actions -> abre la ejecucion que terminaste -> abajo del todo,
+  seccion "Artifacts" -> "android-release" -> se baja un zip con:
+      app-release.aab
+  Ese .aab es el que se sube a Google Play Console.
+
+  (Tambien: gh run download <id> --repo ZEROCODE-HUB/multiclasificados-effe
+   -n android-release)
+
+ANTES DE PUBLICAR: SUBIR EL NUMERO DE VERSION
+  Esto SI es a mano, y es obligatorio. Google Play RECHAZA un archivo cuyo
+  versionCode ya se haya usado.
 
   a) android\app\build.gradle
        versionCode 18      ->  sube de uno en uno: 19, 20, 21...
        versionName "2.7"   ->  el que ve la gente: "2.8"
 
-     Google Play RECHAZA subir un archivo con un versionCode que ya se uso.
-     Hoy va por versionCode 18 / versionName 2.7, del 16 de julio.
+     Hoy va por versionCode 18 / versionName 2.7, del 16 de julio de 2026.
 
   b) src\lib\version.ts
        APP_VERSION y APP_VERSION_DATE (es la version de la web, se ve en Ajustes)
 
-PASO 2 - Compilar la web y meterla en la app
-    npm run build
-    npx cap sync android
+  El flujo escribe el versionCode en el registro de la ejecucion, para que se
+  vea sin abrir el codigo.
 
-PASO 3 - Generar el archivo instalable
+LA FIRMA
+  Ya esta configurada y funciona. El keystore va guardado como secreto
+  (ANDROID_KEYSTORE_BASE64) junto con sus tres contrasenas, y Gradle lo recibe
+  al vuelo. No hay ningun keystore dentro del repositorio, que es como debe ser.
 
-  Para PROBAR en un telefono (APK de pruebas).
-  En PowerShell, que es la terminal que usas:
+  Si alguna vez se pierde ese keystore NO se puede volver a actualizar la app
+  en Play. Conviene tener una copia guardada aparte.
 
-    cd android
-    $env:JAVA_HOME    = "E:\SDKs\jdk-21"
-    $env:ANDROID_HOME = "E:\SDKs\android-sdk"
-    E:\SDKs\gradle-8.14.3\bin\gradle assembleDebug --no-daemon --console=plain
-
-    (si abres la terminal antigua, cmd, esas dos lineas serian
-     set JAVA_HOME=E:\SDKs\jdk-21   y   set ANDROID_HOME=E:\SDKs\android-sdk)
-
-    Queda en:  android\app\build\outputs\apk\debug\app-debug.apk
-    Ese archivo se pasa al telefono y se instala (hay que permitir
-    "instalar apps de origenes desconocidos").
-
-  Para SUBIR A GOOGLE PLAY (bundle firmado):
-
-    cd android
-    E:\SDKs\gradle-8.14.3\bin\gradle bundleRelease --no-daemon
-
-    Queda en:  android\app\build\outputs\bundle\release\app-release.aab
-
-    IMPORTANTE: hoy el proyecto NO tiene configurada la firma de release.
-    En android\app\build.gradle, el bloque "release" no tiene signingConfig y
-    no hay ningun keystore en el repositorio. Antes de subir a Play hay que:
-
-      1. Crear el keystore una sola vez (guardalo MUY bien; si se pierde ya no
-         puedes actualizar la app nunca mas):
-           E:\SDKs\jdk-21\bin\keytool -genkey -v -keystore effe-release.keystore ^
-             -alias effe -keyalg RSA -keysize 2048 -validity 10000
-
-      2. Enlazarlo en android\app\build.gradle (signingConfigs) o con un
-         archivo android\key.properties.
-
-      3. NO subir el keystore ni sus contrasenas al repositorio.
-
-    Si la app ya esta publicada en Play, usa el MISMO keystore de siempre.
+SI QUIERES PROBAR EN UN TELEFONO SIN PASAR POR PLAY
+  El AAB no se instala directamente. Dos opciones:
+    - Subirlo a Play Console como prueba interna (lo mas comodo), o
+    - compilar un APK de pruebas en tu PC:
+        npm run build
+        npx cap sync android
+        cd android
+        $env:JAVA_HOME    = "E:\SDKs\jdk-21"
+        $env:ANDROID_HOME = "E:\SDKs\android-sdk"
+        E:\SDKs\gradle-8.14.3\bin\gradle assembleDebug --no-daemon
+      Queda en android\app\build\outputs\apk\debug\app-debug.apk
+      OJO: ese APK usa el archivo .env de tu PC, no los secretos de GitHub.
 
 
 ================================================================================
@@ -408,6 +420,20 @@ SI ALGO NO LLEGA, DONDE MIRAR
 Google Play rechaza el archivo por el numero de version
     No subiste versionCode en android\app\build.gradle. Tiene que ser mayor que
     el de la ultima version publicada.
+
+El flujo de Android se cae en "Comprobar la configuracion del build"
+    Falta algun secreto en GitHub, o quedo vacio. GitHub -> Settings ->
+    Secrets and variables -> Actions. Los valores estan en el punto 2.
+
+El flujo de Android se cae en "Comprobar que la configuracion quedo DENTRO"
+    El secreto existe pero no llego a la app compilada: casi siempre porque el
+    nombre esta mal escrito, o porque se pego con comillas o con un espacio.
+    Esta comprobacion existe justo para eso: antes un AAB sin la llave de
+    Google se generaba en verde y llegaba a Play con los mapas en blanco.
+
+El flujo "CI" se cae en Pruebas, Tipos o Lint
+    Es lo que tiene que pasar: hay algo roto en el codigo. Se reproduce igual
+    en tu PC con  npm test  ,  npx tsc --noEmit  o  npm run lint.
 
 El build de iPhone se cae al firmar, hablando de "aps-environment"
     Pusiste IOS_PUSH=true pero no regeneraste el perfil de aprovisionamiento

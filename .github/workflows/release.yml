@@ -1,34 +1,123 @@
 name: Android Build & Sign
+
+# Genera el AAB firmado que se sube a Google Play.
+#
+# LO QUE PASABA HASTA AHORA, y por qué nadie se enteraba
+# ------------------------------------------------------
+# Este flujo solo le pasaba al build DOS variables: la URL y la clave de
+# Supabase. Las demás llegaban vacías, y las que faltan no dan error: la app
+# compila, se firma, el flujo sale en VERDE y el AAB queda listo para subir.
+# Lo que no hace es funcionar. Comprobado abriendo el AAB del 16-ago-2026:
+#
+#   · Sin VITE_GOOGLE_MAPS_API_KEY  -> los cuatro mapas en blanco, sin un error
+#     a la vista. Ni siquiera se descarga el SDK de Google.
+#   · Sin VITE_GOOGLE_MAPS_MAP_ID   -> el mapa de demostración de Google, con
+#     marca de agua, que sus condiciones prohíben en producción.
+#   · Sin VITE_HCAPTCHA_SITE_KEY    -> el captcha del login de staff cae a la
+#     clave de PRUEBA, que valida cualquier cosa. (El secreto ya existía en
+#     GitHub desde junio; simplemente no se le pasaba al build.)
+#   · Sin VITE_PUBLIC_SITE_URL      -> los enlaces para compartir un aviso
+#     salen como https://localhost/aviso/... y la página de pago que abre el
+#     APK queda en una ruta relativa que el navegador del sistema no resuelve.
+#
+# Por eso ahora se pasan todas Y se comprueba el RESULTADO: que la clave de
+# Google esté DENTRO de lo compilado. Comprobar que la variable existe no
+# basta —puede llegar vacía o con comillas—; lo que importa es lo que acabó
+# metido en la app.
 on:
   push:
     branches: [main]
   workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
       - name: Set up Node.js
         uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af
         with:
           node-version: '22'
+
       - name: Install dependencies
         run: npm ci
-      - name: Build React app
-        run: npm run build
+
+      - name: Comprobar la configuración del build
+        # Se para ANTES de compilar. Un AAB sin estas variables se sube a Play
+        # sin que nada chille y el fallo aparece en el teléfono de un usuario.
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_PUBLIC_SITE_URL: ${{ secrets.VITE_PUBLIC_SITE_URL }}
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+          VITE_GOOGLE_MAPS_MAP_ID: ${{ secrets.VITE_GOOGLE_MAPS_MAP_ID }}
+        run: |
+          faltan=""
+          for v in VITE_SUPABASE_URL VITE_SUPABASE_ANON_KEY VITE_PUBLIC_SITE_URL \
+                   VITE_GOOGLE_MAPS_API_KEY VITE_GOOGLE_MAPS_MAP_ID; do
+            valor=$(printf '%s' "${!v}" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+            [ -z "$valor" ] && faltan="$faltan $v"
+          done
+          if [ -n "$faltan" ]; then
+            echo "ERROR: faltan secretos del build:$faltan"
+            echo "Se ponen en GitHub > Settings > Secrets and variables > Actions."
+            echo "Los valores están en COMPILAR-APPS.txt (son públicos: viajan dentro de la app)."
+            exit 1
+          fi
+          # Las comillas envolventes ya rompieron un build de iPhone: la app
+          # arrancaba pero el servidor contestaba "Invalid API key" a todo.
+          case "$VITE_SUPABASE_ANON_KEY" in
+            \"*|\'*) echo "ERROR: VITE_SUPABASE_ANON_KEY tiene comillas. Pégala limpia."; exit 1 ;;
+          esac
+          echo "Configuración del build completa."
+
+      - name: Build React app
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_PUBLIC_SITE_URL: ${{ secrets.VITE_PUBLIC_SITE_URL }}
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+          VITE_GOOGLE_MAPS_MAP_ID: ${{ secrets.VITE_GOOGLE_MAPS_MAP_ID }}
+          VITE_IZIPAY_PUBLIC_KEY: ${{ secrets.VITE_IZIPAY_PUBLIC_KEY }}
+          VITE_IZIPAY_STATIC_ENDPOINT: ${{ secrets.VITE_IZIPAY_STATIC_ENDPOINT }}
+          VITE_HCAPTCHA_SITE_KEY: ${{ secrets.VITE_HCAPTCHA_SITE_KEY }}
+        run: npm run build
+
+      - name: Comprobar que la configuración quedó DENTRO de la app
+        # Lo que se verifica es el resultado, no el comando. Si Vite no
+        # sustituyó una variable —por el nombre mal escrito, por llegar vacía—
+        # esto lo caza; mirar solo que el secreto exista, no.
+        run: |
+          falla=0
+          if ! grep -rq "AIzaSy" dist/assets/*.js; then
+            echo "ERROR: la llave de Google Maps no quedó dentro del build: los mapas saldrían en blanco."
+            falla=1
+          fi
+          if grep -rq "10000000-ffff-ffff-ffff" dist/assets/*.js; then
+            echo "ERROR: el build usa la sitekey de PRUEBA de hCaptcha."
+            falla=1
+          fi
+          if ! grep -rq "supabase.co" dist/assets/*.js; then
+            echo "ERROR: la URL de Supabase no quedó dentro del build."
+            falla=1
+          fi
+          [ "$falla" = "1" ] && exit 1
+          echo "La app compilada lleva su configuración."
+
       - name: Sync Capacitor
         run: npx cap sync android
-      - name: Set up JDK 17
+
+      - name: Set up JDK 21
         uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12
         with:
           java-version: '21'
           distribution: 'temurin'
+
       - name: Decode Keystore
         run: |
           echo ${{ secrets.ANDROID_KEYSTORE_BASE64 }} | base64 -d > ${{ github.workspace }}/android/app/upload-keystore.jks
+
       - name: Build signed AAB
         run: |
           cd android
@@ -38,6 +127,15 @@ jobs:
             -Pandroid.injected.signing.store.password=${{ secrets.ANDROID_STORE_PASSWORD }} \
             -Pandroid.injected.signing.key.alias=${{ secrets.ANDROID_KEY_ALIAS }} \
             -Pandroid.injected.signing.key.password=${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Recordar el número de versión
+        # No se sube solo a propósito: el versionCode lo decide quien publica.
+        # Pero que quede escrito en el registro, porque Google Play RECHAZA un
+        # AAB cuyo versionCode ya se usó, y eso se descubre al subirlo.
+        run: |
+          grep -E "versionCode|versionName" android/app/build.gradle | sed 's/^[[:space:]]*/  /'
+          echo "  (Play rechaza repetir versionCode: súbelo en android/app/build.gradle antes de publicar)"
+
       - name: Upload AAB artifact
         uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b
         with:
