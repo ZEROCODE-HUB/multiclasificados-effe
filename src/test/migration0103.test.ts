@@ -135,9 +135,42 @@ describe("0103 · qué se cierra y qué no", () => {
     }
   });
 
-  it("fija el valor por defecto para que las próximas nazcan cerradas", () => {
-    // La causa de fondo: en PostgreSQL una función nace con EXECUTE para
-    // PUBLIC. Ya mordió con add_credits (0071) y con settle_paid_order.
-    expect(migracion).toMatch(/alter default privileges[\s\S]*revoke execute on functions from public/i);
+});
+
+describe("0104 · que las próximas nazcan cerradas", () => {
+  const m104 = fs.readFileSync(
+    path.join(raiz, "supabase/migrations/0104_privilegios_por_defecto.sql"),
+    "utf8",
+  );
+  // Solo las sentencias, sin el encabezado: los comentarios explican el intento
+  // fallido de la 0103 y contienen texto que confundiría a las expresiones.
+  const sentencias = m104
+    .split("\n")
+    .filter((l) => !l.trimStart().startsWith("--"))
+    .join("\n");
+
+  it("revoca en los DOS niveles, que es lo que falló en la 0103", () => {
+    // El del esquema por sí solo no quita nada: PostgreSQL rellena el nivel
+    // global ausente con acldefault(), que vuelve a meter a PUBLIC.
+    const plano = sentencias.replace(/\s+/g, " ");
+    expect(plano, "falta la revocación GLOBAL (sin 'in schema')")
+      .toMatch(/alter default privileges for role %I revoke execute on functions/i);
+    expect(plano, "falta la revocación del ESQUEMA")
+      .toMatch(/alter default privileges for role %I in schema public/i);
+  });
+
+  it("cierra a anon y a authenticated, no solo a PUBLIC", () => {
+    expect(sentencias.replace(/\s+/g, " ")).toMatch(
+      /revoke execute on functions from public, anon, authenticated/i,
+    );
+  });
+
+  it("NO se lo quita a service_role: las Edge Functions entran con ese rol", () => {
+    expect(sentencias).not.toMatch(/revoke[^;]*service_role/i);
+  });
+
+  it("avisa en voz alta si no se pudo aplicar", () => {
+    // Dar por hecha una protección que no está fue justo el error de la 0103.
+    expect(m104).toMatch(/raise warning/i);
   });
 });
