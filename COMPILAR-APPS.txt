@@ -1,0 +1,464 @@
+================================================================================
+  eFFe MULTICLASIFICADOS
+  COMO COMPILAR Y PUBLICAR LAS APPS  (Android + iPhone)
+  Incluye las notificaciones push en iPhone, que es lo que faltaba.
+
+  Actualizado: 16 de agosto de 2026
+  Este archivo esta en el repositorio: COMPILAR-APPS.txt
+================================================================================
+
+CONTENIDO
+  1 . Como esta montado esto (leelo una vez)
+  2 . Variables del build, con sus valores reales
+  3 . Compilar Android
+  4 . Compilar iPhone (Codemagic)
+  5 . Push en iPhone: lo que hay que traer de Apple
+  6 . Secretos de Supabase: cuales, donde y como
+  7 . Encender el push y comprobar que llega
+  8 . Errores comunes y que significan
+  9 . Antes de pasar a produccion (ojo con esto)
+
+
+================================================================================
+1 . COMO ESTA MONTADO ESTO
+================================================================================
+
+Android se compila EN TU PC con Windows. Todo lo que hace falta (Java, SDK de
+Android, Gradle) ya esta instalado en E:\SDKs.
+
+iPhone se compila EN LA NUBE, con Codemagic, porque para compilar iOS hace falta
+una Mac. Codemagic arranca una Mac, compila y sube la app a TestFlight solo.
+
+  Consecuencia practica: en Android tu controlas todo y ves los errores al
+  momento. En iPhone cada cambio del lado nativo cuesta una compilacion entera
+  (unos 15-20 minutos). Por eso el push de iPhone se hizo por el lado del
+  servidor: si algo falla, se corrige en Supabase en un minuto y no hay que
+  volver a compilar.
+
+Las dos apps salen del MISMO codigo web. Se compila la web una vez y Capacitor
+la mete dentro de cada app.
+
+  Identificador de la app (los dos sistemas):  com.effe.multiclasificados
+
+
+================================================================================
+2 . VARIABLES DEL BUILD, CON SUS VALORES REALES
+================================================================================
+
+Estas variables se leen AL COMPILAR y quedan grabadas dentro de la app. Si
+compilas sin ellas, la app abre pero no sirve: no deja iniciar sesion y no
+muestra avisos.
+
+Son publicas por naturaleza (viajan dentro del programa que descarga cualquiera),
+asi que no pasa nada porque esten escritas aqui. Las que SI son secretas estan
+en el punto 6 y esas no se ponen nunca aqui.
+
+--------------------------------------------------------------------------------
+  VITE_SUPABASE_URL
+    https://prhbgniwymaaevnisyov.supabase.co
+
+  VITE_SUPABASE_ANON_KEY
+    eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InByaGJnbml3eW1hYWV2bmlzeW92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyMTYwMDQsImV4cCI6MjA5Nzc5MjAwNH0.yLu4ZzOKDjoCeVKOPwMDyTmA68nZ6aIuM2jixGtA7v0
+
+  VITE_PUBLIC_SITE_URL
+    https://www.coleffe.com
+
+  VITE_IZIPAY_PUBLIC_KEY
+    96894874:testpublickey_Z0OCoUuhlEz96LmwDENg94RcNBe5i1Tnnmy84NkDxaol4
+    OJO: esta es la de PRUEBAS. Con ella no se cobra dinero de verdad.
+    Para produccion cambia (ver punto 9).
+
+  VITE_IZIPAY_STATIC_ENDPOINT
+    https://static.micuentaweb.pe
+
+  VITE_HCAPTCHA_SITE_KEY
+    e0d418b8-9e6c-4bba-b874-d3a8672e3322
+
+  VITE_GOOGLE_MAPS_API_KEY
+    AIzaSyBdQT5iLOsrO4IQt0-VQpLb0y0iEGyovEE
+
+  VITE_GOOGLE_MAPS_MAP_ID
+    87dc8bc5a71b57fb9ca81b45
+--------------------------------------------------------------------------------
+
+DONDE SE PONEN
+
+  Para Android  ->  en un archivo llamado  .env  en la raiz del proyecto
+                    (C:\Claude\MulticlasificadosEffe\.env)
+                    Una linea por variable, con el signo igual y sin comillas:
+                        VITE_SUPABASE_URL=https://prhbgniwymaaevnisyov.supabase.co
+
+  Para iPhone   ->  en Codemagic, en Environment variables, dentro del grupo
+                    que se llama exactamente:   multiclasificados-effe
+
+                    El nombre del grupo tiene que coincidir letra por letra con
+                    el que aparece en codemagic.yaml. Si no coincide, el grupo
+                    no se carga, las variables llegan vacias y sale una app
+                    inutil sin que nada avise.
+
+  Para la web (Vercel) ya estan puestas y funcionando. No hay que tocarlas.
+
+UN AVISO QUE COSTO CARO
+  No pongas las variables entre comillas ni con espacios sobrantes. Una clave
+  pegada como "eyJ..." (con comillas) ya rompio un build de iPhone una vez: la
+  app arrancaba pero el servidor contestaba "Invalid API key" a todo. Ahora el
+  build se detiene solo si detecta eso, pero mejor pegarlas limpias.
+
+
+================================================================================
+3 . COMPILAR ANDROID
+================================================================================
+
+REQUISITOS (ya instalados en esta PC)
+  Java JDK 21          E:\SDKs\jdk-21          (con JDK 17 NO compila)
+  SDK de Android       E:\SDKs\android-sdk
+  Gradle 8.14.3        E:\SDKs\gradle-8.14.3
+
+PASO 1 - Subir el numero de version
+  Se hace SIEMPRE, en dos sitios:
+
+  a) android\app\build.gradle
+       versionCode 18      ->  sube de uno en uno: 19, 20, 21...
+       versionName "2.7"   ->  el que ve la gente: "2.8"
+
+     Google Play RECHAZA subir un archivo con un versionCode que ya se uso.
+     Hoy va por versionCode 18 / versionName 2.7, del 16 de julio.
+
+  b) src\lib\version.ts
+       APP_VERSION y APP_VERSION_DATE (es la version de la web, se ve en Ajustes)
+
+PASO 2 - Compilar la web y meterla en la app
+    npm run build
+    npx cap sync android
+
+PASO 3 - Generar el archivo instalable
+
+  Para PROBAR en un telefono (APK de pruebas).
+  En PowerShell, que es la terminal que usas:
+
+    cd android
+    $env:JAVA_HOME    = "E:\SDKs\jdk-21"
+    $env:ANDROID_HOME = "E:\SDKs\android-sdk"
+    E:\SDKs\gradle-8.14.3\bin\gradle assembleDebug --no-daemon --console=plain
+
+    (si abres la terminal antigua, cmd, esas dos lineas serian
+     set JAVA_HOME=E:\SDKs\jdk-21   y   set ANDROID_HOME=E:\SDKs\android-sdk)
+
+    Queda en:  android\app\build\outputs\apk\debug\app-debug.apk
+    Ese archivo se pasa al telefono y se instala (hay que permitir
+    "instalar apps de origenes desconocidos").
+
+  Para SUBIR A GOOGLE PLAY (bundle firmado):
+
+    cd android
+    E:\SDKs\gradle-8.14.3\bin\gradle bundleRelease --no-daemon
+
+    Queda en:  android\app\build\outputs\bundle\release\app-release.aab
+
+    IMPORTANTE: hoy el proyecto NO tiene configurada la firma de release.
+    En android\app\build.gradle, el bloque "release" no tiene signingConfig y
+    no hay ningun keystore en el repositorio. Antes de subir a Play hay que:
+
+      1. Crear el keystore una sola vez (guardalo MUY bien; si se pierde ya no
+         puedes actualizar la app nunca mas):
+           E:\SDKs\jdk-21\bin\keytool -genkey -v -keystore effe-release.keystore ^
+             -alias effe -keyalg RSA -keysize 2048 -validity 10000
+
+      2. Enlazarlo en android\app\build.gradle (signingConfigs) o con un
+         archivo android\key.properties.
+
+      3. NO subir el keystore ni sus contrasenas al repositorio.
+
+    Si la app ya esta publicada en Play, usa el MISMO keystore de siempre.
+
+
+================================================================================
+4 . COMPILAR IPHONE (CODEMAGIC)
+================================================================================
+
+No hace falta Mac. Codemagic hace todo.
+
+PASO 1 - Subir la version
+  Igual que Android: sube APP_VERSION en src\lib\version.ts.
+  El numero de build de iOS lo pone Codemagic solo (paso "Increment build
+  number"), no hay que tocarlo.
+
+PASO 2 - Comprobar que las variables estan puestas
+  Codemagic -> Environment variables -> grupo "multiclasificados-effe"
+  Tienen que estar las 8 del punto 2.
+
+PASO 3 - Lanzar el build
+  Codemagic -> el flujo "iOS Build" -> Start new build.
+  Tarda entre 15 y 20 minutos. Al terminar sube la app a TestFlight solo.
+
+QUE HACE EL BUILD POR TI (no tienes que hacerlo a mano)
+  - Genera el proyecto de iOS desde cero cada vez.
+  - Pone los permisos de camara, fotos y ubicacion con sus textos.
+  - Registra el esquema de URL del login con Google.
+  - Genera los iconos y la pantalla de arranque a partir de assets\icon.png.
+  - Declara que la app no usa cifrado especial (si no, App Store Connect
+    pregunta en cada subida y deja la build bloqueada).
+  - Y AL FINAL COMPRUEBA QUE TODO ESO QUEDO PUESTO. Si falta algo, el build se
+    cae ahi mismo en vez de darte un IPA roto.
+
+PASO 4 - Probar en el iPhone
+  TestFlight -> instalar -> abrir.
+  Recuerda: TestFlight usa el entorno de PRODUCCION de Apple para las
+  notificaciones, no el de pruebas.
+
+
+================================================================================
+5 . PUSH EN IPHONE: LO QUE HAY QUE TRAER DE APPLE
+================================================================================
+
+Esto es lo unico que no puedo hacer yo: hace falta entrar con tu cuenta de Apple
+Developer. Son tres cosas y se hacen una sola vez.
+
+POR QUE HACE FALTA
+  En Android las notificaciones van por Firebase y ya funcionan. En iPhone no
+  sirve el mismo camino: Apple entrega un token distinto que Firebase no acepta.
+  Por eso el servidor ahora habla DIRECTO con Apple. Para que Apple le abra la
+  puerta necesita una llave, que es lo que vas a crear ahora.
+
+--------------------------------------------------------------------------------
+5.1  ACTIVAR LAS NOTIFICACIONES EN EL IDENTIFICADOR DE LA APP
+--------------------------------------------------------------------------------
+
+  1. Entra a  https://developer.apple.com/account
+  2. Certificates, Identifiers & Profiles  ->  Identifiers
+  3. Busca y abre:  com.effe.multiclasificados
+  4. En la lista de capacidades, MARCA "Push Notifications".
+  5. Guarda (Save) y confirma.
+
+  6. Ahora hay que REGENERAR el perfil de aprovisionamiento, porque el que
+     existe todavia no incluye el push:
+       Profiles -> busca "eFFe Multiclasificados AppStore"
+       -> Edit -> Save (asi se vuelve a generar con la capacidad nueva)
+
+     Si te lo saltas, el build de iPhone FALLARA al firmar en cuanto actives el
+     push (paso 5.4), con un error tipo "provisioning profile doesn't include
+     the aps-environment entitlement".
+
+--------------------------------------------------------------------------------
+5.2  CREAR LA LLAVE .p8  (esto es lo importante)
+--------------------------------------------------------------------------------
+
+  1. En la misma pagina:  Keys  ->  boton "+"  (Create a key)
+  2. Ponle un nombre, por ejemplo:  eFFe Push
+  3. MARCA la casilla  "Apple Push Notifications service (APNs)"
+  4. Continue -> Register
+  5. DESCARGA el archivo. Se llama algo como:   AuthKey_ABCD123456.p8
+
+     ATENCION: ese archivo SE DESCARGA UNA SOLA VEZ. Si lo pierdes, no se puede
+     volver a bajar: hay que borrar la llave y crear otra. Guardalo en un sitio
+     seguro (no en el repositorio, no en WhatsApp).
+
+  6. Apunta estos dos datos, que vas a necesitar:
+
+     KEY ID   -> son 10 caracteres y aparece en la misma pantalla de la llave.
+                 Tambien esta en el nombre del archivo:
+                 AuthKey_ABCD123456.p8  ->  el Key ID es  ABCD123456
+
+     TEAM ID  -> son 10 caracteres. Esta arriba a la derecha en
+                 developer.apple.com, debajo de tu nombre. Tambien en
+                 Membership details.
+
+--------------------------------------------------------------------------------
+5.3  PASARME LOS DATOS / PONERLOS EN SUPABASE
+--------------------------------------------------------------------------------
+
+  Con el archivo .p8, el Key ID y el Team ID, ve al punto 6 de este documento.
+  Ahi esta exactamente que se pone y donde.
+
+--------------------------------------------------------------------------------
+5.4  ENCENDER EL PUSH EN EL BUILD DE IPHONE
+--------------------------------------------------------------------------------
+
+  Cuando YA hayas hecho 5.1 (activar la capacidad y regenerar el perfil):
+
+    Codemagic -> Environment variables -> grupo "multiclasificados-effe"
+    Anade:      IOS_PUSH = true
+
+  Eso hace que el build le pida permiso de notificaciones al sistema.
+
+  Esta detras de una variable a proposito: si se activara antes de regenerar el
+  perfil, TODOS los builds de iPhone empezarian a fallar al firmar. Mientras
+  IOS_PUSH no este en "true", todo compila igual que hasta ahora, simplemente
+  sin notificaciones.
+
+  Despues de ponerla, lanza un build nuevo y sube esa version a TestFlight.
+  Hasta que no instales ESE build, el iPhone no pedira permiso de
+  notificaciones y no registrara ningun dispositivo.
+
+
+================================================================================
+6 . SECRETOS DE SUPABASE: CUALES, DONDE Y COMO
+================================================================================
+
+DONDE SE PONEN
+  Opcion A (con el navegador):
+    https://supabase.com/dashboard/project/prhbgniwymaaevnisyov/settings/functions
+    Es la seccion "Edge Functions" -> "Secrets" (tambien se llega desde
+    Project Settings -> Edge Functions).
+    Boton "Add new secret", uno por uno.
+
+  Opcion B (con la terminal). Una linea por secreto, para no pelearse con los
+  saltos de linea. En PowerShell, desde la carpeta donde tengas el .p8:
+
+    $P = "prhbgniwymaaevnisyov"
+    npx supabase secrets set --project-ref $P APNS_KEY_ID=ABCD123456
+    npx supabase secrets set --project-ref $P APNS_TEAM_ID=TU_TEAM_ID
+    npx supabase secrets set --project-ref $P APNS_BUNDLE_ID=com.effe.multiclasificados
+    npx supabase secrets set --project-ref $P APNS_ENV=production
+
+    Y la llave, leyendo el archivo directamente para no copiarla a mano:
+
+    $K = Get-Content AuthKey_ABCD123456.p8 -Raw
+    npx supabase secrets set --project-ref $P APNS_KEY_P8="$K"
+
+    (si prefieres la consola Git Bash, el ultimo seria
+     npx supabase secrets set --project-ref $P APNS_KEY_P8="$(cat AuthKey_ABCD123456.p8)")
+
+LOS CINCO SECRETOS NUEVOS
+--------------------------------------------------------------------------------
+  APNS_KEY_P8
+      El contenido COMPLETO del archivo .p8, incluidas las lineas
+      -----BEGIN PRIVATE KEY-----  y  -----END PRIVATE KEY-----
+      Da igual si los saltos de linea quedan raros al pegarlo: el codigo los
+      limpia solo. Lo que no puede faltar es ninguna parte del texto.
+
+  APNS_KEY_ID
+      Los 10 caracteres del Key ID.        Ejemplo: ABCD123456
+
+  APNS_TEAM_ID
+      Los 10 caracteres del Team ID.       Ejemplo: 9XY8Z7W6V5
+
+  APNS_BUNDLE_ID
+      com.effe.multiclasificados
+      (opcional: si no lo pones, ya usa ese por defecto)
+
+  APNS_ENV
+      production
+      Dejalo asi. TestFlight y App Store usan produccion. Solo se pone
+      "sandbox" si instalas la app directamente desde Xcode con un cable.
+--------------------------------------------------------------------------------
+
+QUE PASA MIENTRAS NO ESTEN PUESTOS
+  Nada malo. Android sigue funcionando exactamente igual. Los iPhone se saltan
+  sin dar error, y la respuesta del servidor lo dice claramente:
+      {"sent":1,"ios_sin_configurar":2}
+  Asi se distingue "no configurado" de "se perdio la notificacion".
+
+NO HACE FALTA VOLVER A DESPLEGAR NADA
+  La funcion send-push ya esta desplegada y preparada. En cuanto guardes los
+  secretos, empieza a usarlos.
+
+LOS SECRETOS QUE YA ESTAN PUESTOS (no los toques)
+  SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, FCM_SERVICE_ACCOUNT (Android),
+  RESEND_API_KEY, IZIPAY_SHOP_ID, IZIPAY_PASSWORD, IZIPAY_HMAC_KEY,
+  FACTILIZA_TOKEN, FACTILIZA_INVOICE_TOKEN, HCAPTCHA_SECRET, y algunos mas.
+
+
+================================================================================
+7 . ENCENDER EL PUSH Y COMPROBAR QUE LLEGA
+================================================================================
+
+ORDEN CORRECTO (si te saltas uno, no llega nada)
+
+  1. Apple: capacidad Push activada y perfil regenerado          (punto 5.1)
+  2. Supabase: los cinco secretos guardados                      (punto 6)
+  3. Codemagic: IOS_PUSH = true                                  (punto 5.4)
+  4. Build nuevo desde Codemagic y subida a TestFlight
+  5. Instalar ESE build en el iPhone
+  6. Abrir la app e iniciar sesion
+  7. Cuando pida permiso de notificaciones, ACEPTAR
+
+COMO SABER SI EL IPHONE QUEDO REGISTRADO
+  Si no aparece nada aqui, el telefono nunca pidio permiso o no se acepto:
+  no sigas buscando el fallo en el servidor.
+
+      Supabase -> SQL Editor:
+      select platform, count(*) from device_tokens group by platform;
+
+  Hoy hay 3 dispositivos Android y 0 iPhone.
+
+COMO PROBAR QUE LLEGA
+  La forma mas simple y realista: que otra persona te escriba un mensaje por un
+  aviso desde otra cuenta. Eso genera una notificacion de verdad.
+
+  Otra opcion, desde el panel: Comunicaciones -> mandar un mensaje individual a
+  tu propio usuario.
+
+SI ALGO NO LLEGA, DONDE MIRAR
+  Supabase -> Edge Functions -> send-push -> Logs.
+  Los mensajes de error de Apple salen ahi con su motivo escrito en claro.
+
+
+================================================================================
+8 . ERRORES COMUNES Y QUE SIGNIFICAN
+================================================================================
+
+"invalid source release: 21"  (al compilar Android)
+    Estas usando Java 17. Usa el JDK 21 de E:\SDKs\jdk-21.
+
+"SDK location not found"  (al compilar Android)
+    Falta el archivo android\local.properties con esta linea:
+        sdk.dir=E:/SDKs/android-sdk
+
+Google Play rechaza el archivo por el numero de version
+    No subiste versionCode en android\app\build.gradle. Tiene que ser mayor que
+    el de la ultima version publicada.
+
+El build de iPhone se cae al firmar, hablando de "aps-environment"
+    Pusiste IOS_PUSH=true pero no regeneraste el perfil de aprovisionamiento
+    despues de activar Push en el App ID. Vuelve al punto 5.1, paso 6.
+
+El build de iPhone se cae diciendo que faltan variables
+    El grupo de Codemagic no se llama exactamente "multiclasificados-effe", o
+    alguna variable quedo vacia. Ver punto 2.
+
+La app de iPhone abre pero no deja iniciar sesion
+    Se compilo sin VITE_SUPABASE_ANON_KEY o con comillas alrededor. Ver punto 2.
+
+Los mapas salen en blanco dentro de la app (en la web funcionan)
+    La llave de Google esta restringida solo para la web. Hay que anadir
+    tambien las apps a la restriccion. OJO: una misma llave NO admite
+    restriccion por web y por app a la vez; lo normal es terminar con dos o
+    tres llaves distintas.
+
+En los registros de send-push sale algo sobre APNS_KEY_ID
+    Es un problema de configuracion nuestra, no del telefono: el .p8, el Key ID
+    o el Team ID no cuadran. Revisa el punto 6. (El sistema NUNCA borra
+    dispositivos por este tipo de error, asi que no se pierde nada: se arregla
+    el secreto y vuelve a funcionar.)
+
+Las notificaciones llegan a Android pero no a iPhone
+    Repasa el orden del punto 7. Lo mas frecuente: el iPhone tiene instalada
+    una version ANTERIOR a la que activo el push.
+
+
+================================================================================
+9 . ANTES DE PASAR A PRODUCCION
+================================================================================
+
+Hoy la aplicacion entera esta en modo PRUEBAS. Eso significa que los cobros de
+Izipay no mueven dinero real y que las boletas no tienen valor fiscal.
+
+Cuando se pase a produccion cambian, entre otras cosas:
+  - VITE_IZIPAY_PUBLIC_KEY  (deja de empezar por "testpublickey_")
+  - los secretos IZIPAY_* en Supabase
+  - el interruptor app_produccion en la base de datos
+  - y se vacian los datos de prueba
+
+Ese salto tiene su propio procedimiento paso a paso, ya escrito, para no
+olvidarse de nada. No lo hagas a mano desde este documento.
+
+Otra cosa pendiente antes de tener trafico de verdad: RESTRINGIR la llave de
+Google Maps en la consola de Google Cloud. Ahora mismo cualquiera que la lea
+del programa puede usarla y el consumo se carga a tu cuenta. Conviene hacerlo
+JUSTO DESPUES de publicar en las dos tiendas, para saber exactamente que
+restricciones necesita cada app sin dejar los mapas en blanco.
+
+================================================================================
+FIN
+================================================================================

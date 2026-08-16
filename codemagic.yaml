@@ -155,6 +155,28 @@ workflows:
           else
             echo "AVISO: falta ios-config/GoogleService-Info.plist; el push en iOS no funcionará hasta agregarlo (ver PLAN-IMPLEMENTACION.md)."
           fi
+          # Push en iOS (APNs). Va detrás de una variable A PROPÓSITO: poner el
+          # entitlement sin que el perfil de aprovisionamiento tenga habilitado
+          # Push hace que la FIRMA falle y el build se caiga entero. Poner
+          # IOS_PUSH=true en Codemagic SOLO después de haber activado Push
+          # Notifications en el App ID y regenerado el perfil. Hasta entonces
+          # todo compila igual, sencillamente sin notificaciones.
+          if [ "$IOS_PUSH" = "true" ]; then
+            # Con PlistBuddy y no con un heredoc: dentro de un bloque YAML el
+            # terminador del heredoc tendría que ir sin sangría, y eso corta el
+            # bloque. Además PlistBuddy crea el archivo si no existe.
+            rm -f ios/App/App/App.entitlements
+            /usr/libexec/PlistBuddy -c "Add :aps-environment string production" \
+              ios/App/App/App.entitlements
+            # El proyecto se regenera en cada build, así que hay que volver a
+            # decirle a Xcode que use el archivo. Se inyecta junto al bundle id,
+            # que aparece una vez por configuración (Debug y Release).
+            perl -0pi -e 's/(PRODUCT_BUNDLE_IDENTIFIER = com\.effe\.multiclasificados;)/$1\n\t\t\t\tCODE_SIGN_ENTITLEMENTS = App\/App.entitlements;/g' \
+              ios/App/App.xcodeproj/project.pbxproj
+            echo "Push iOS: entitlement aps-environment=production puesto."
+          else
+            echo "AVISO: IOS_PUSH no está en 'true'; este IPA no recibirá notificaciones push."
+          fi
           # Iconos/splash de iOS a partir de un master 1024x1024 (evita el placeholder de Capacitor).
           if [ -f assets/icon.png ]; then
             npx @capacitor/assets generate --ios
@@ -203,6 +225,20 @@ workflows:
             faltan="$faltan\n  · el icono de la app (saldría el placeholder de Capacitor: rechazo en App Store)"
           else
             echo "OK  Icono de la app — $(basename "$ICONO")"
+          fi
+
+          # Si se pidió push, que el entitlement esté puesto Y enganchado al
+          # proyecto. Con el archivo suelto pero sin la referencia en el
+          # pbxproj, Xcode firma sin él y la app nunca recibe un token: falla
+          # en silencio, que es la peor forma de fallar.
+          if [ "$IOS_PUSH" = "true" ]; then
+            if [ ! -f ios/App/App/App.entitlements ]; then
+              faltan="$faltan\n  · App.entitlements (se pidió IOS_PUSH pero no se escribió)"
+            elif ! grep -q "CODE_SIGN_ENTITLEMENTS = App/App.entitlements;" ios/App/App.xcodeproj/project.pbxproj; then
+              faltan="$faltan\n  · el proyecto no apunta al entitlement: la app no pediría token de push"
+            else
+              echo "OK  Push iOS — aps-environment enganchado al proyecto"
+            fi
           fi
 
           if [ -n "$faltan" ]; then

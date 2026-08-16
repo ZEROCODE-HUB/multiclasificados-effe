@@ -1,17 +1,53 @@
 // Edge Function: send-push
-// Se dispara con un Database Webhook de Supabase en INSERT sobre `notifications`.
-// Busca los tokens de dispositivo del usuario y envía una notificación push
-// vía Firebase Cloud Messaging (FCM HTTP v1).
+// La dispara un trigger de la base en INSERT sobre `notifications`. Busca los
+// tokens del usuario y manda la notificación a su teléfono.
+//
+// DOS CAMINOS, y no es un capricho
+// --------------------------------
+// Android va por Firebase (FCM HTTP v1). iPhone va DIRECTO a Apple (APNs),
+// porque `@capacitor/push-notifications` entrega en iOS un token de APNs y el
+// campo `token` de FCM solo acepta tokens de FCM: mandarle uno de Apple es un
+// rechazo seguro. El porqué de elegir esta vía y no meter el SDK de Firebase en
+// iOS está explicado en `_shared/apns.ts`.
+//
+// Por eso aquí se consulta `platform` además del token. Si un día se registra
+// una plataforma nueva, cae en la rama de FCM, que es la que sirve para todo lo
+// que no sea Apple.
 //
 // Secrets requeridos (Supabase → Edge Functions → Secrets):
 //   - SUPABASE_URL                (lo provee Supabase)
 //   - SUPABASE_SERVICE_ROLE_KEY   (lo provee Supabase)
-//   - FCM_SERVICE_ACCOUNT         (JSON completo de la cuenta de servicio de Firebase)
+//   - FCM_SERVICE_ACCOUNT         (JSON de la cuenta de servicio de Firebase; Android)
+//   - APNS_KEY_P8                 (contenido del .p8 de Apple; iOS)
+//   - APNS_KEY_ID                 (10 caracteres, de developer.apple.com → Keys)
+//   - APNS_TEAM_ID                (10 caracteres, de la cuenta de Apple Developer)
+//   - APNS_BUNDLE_ID              (opcional; por defecto com.effe.multiclasificados)
+//   - APNS_ENV                    (opcional; 'production' por defecto, 'sandbox' solo
+//                                  para builds instaladas desde Xcode)
+//
+// Mientras los secretos de APNs no estén puestos, los iPhone se saltan sin
+// ruido y Android sigue funcionando igual.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  apnsConfigurado, crearProveedorDeJwt, urlDeApns, cabecerasDeApns,
+  cuerpoDeApns, interpretarApns, type ConfigApns,
+} from "../_shared/apns.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const FCM_SA = JSON.parse(Deno.env.get("FCM_SERVICE_ACCOUNT") || "{}");
+
+const APNS: Partial<ConfigApns> = {
+  claveP8: Deno.env.get("APNS_KEY_P8") ?? "",
+  keyId: Deno.env.get("APNS_KEY_ID") ?? "",
+  teamId: Deno.env.get("APNS_TEAM_ID") ?? "",
+  bundleId: Deno.env.get("APNS_BUNDLE_ID") ?? "com.effe.multiclasificados",
+  entorno: (Deno.env.get("APNS_ENV") ?? "production") === "sandbox" ? "sandbox" : "production",
+};
+
+// El proveedor cachea el JWT: Apple rechaza que se regenere más de una vez cada
+// 20 minutos, y una tanda de avisos puede tocar muchos dispositivos seguidos.
+const jwtDeApns = apnsConfigurado(APNS) ? crearProveedorDeJwt(APNS) : null;
 
 // Texto legible según el tipo de evento (igual que en el frontend).
 function bodyFor(type: string, payload: Record<string, unknown>): string {
@@ -118,12 +154,16 @@ Deno.serve(async (req) => {
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
     const { data: tokens } = await admin
       .from("device_tokens")
-      .select("token")
+      .select("token, platform")
       .eq("user_id", record.user_id);
 
     if (!tokens?.length) return new Response("sin dispositivos", { status: 200 });
 
-    const accessToken = await getAccessToken();
+    // El token de Google solo se pide si hay algún Android al que mandar: si
+    // todos los dispositivos del usuario son iPhone, pedirlo sería una llamada
+    // de red para nada, y encima una que puede fallar y tumbar el envío entero.
+    const hayAndroid = tokens.some((t) => t.platform !== "ios");
+    const accessToken = hayAndroid ? await getAccessToken() : "";
     const title = record.title || "eFFe Clasificados";
     const body = bodyFor(record.type, record.payload || {});
     let roles: string[] = [];
@@ -134,7 +174,38 @@ Deno.serve(async (req) => {
     const route = routeFor(record, roles);
 
     let sent = 0;
-    for (const { token } of tokens) {
+    let omitidos = 0;
+    for (const { token, platform } of tokens) {
+      // ── iPhone: directo a Apple ──
+      if (platform === "ios") {
+        if (!jwtDeApns) {
+          // Sin los secretos de APNs no se puede. No es un error del envío: es
+          // que todavía no se ha configurado, y se cuenta aparte para que se
+          // note en la respuesta en vez de parecer que el push "se perdió".
+          omitidos++;
+          continue;
+        }
+        const config = APNS as ConfigApns;
+        const res = await fetch(urlDeApns(config, token), {
+          method: "POST",
+          headers: cabecerasDeApns(config, await jwtDeApns.obtener()),
+          body: cuerpoDeApns({
+            titulo: title, cuerpo: body,
+            tipo: String(record.type ?? ""), payload: record.payload ?? {}, route,
+          }),
+        });
+        const resultado = interpretarApns(res.status, await res.text());
+        if (resultado.entregado) sent++;
+        else {
+          if (resultado.borrarToken) {
+            await admin.from("device_tokens").delete().eq("token", token);
+          }
+          console.warn("APNs", res.status, resultado.motivo);
+        }
+        continue;
+      }
+
+      // ── Android (y cualquier otra cosa): por Firebase ──
       const r = await fetch(
         `https://fcm.googleapis.com/v1/projects/${FCM_SA.project_id}/messages:send`,
         {
@@ -168,7 +239,7 @@ Deno.serve(async (req) => {
         console.warn("FCM error", r.status, err);
       }
     }
-    return new Response(JSON.stringify({ sent }), {
+    return new Response(JSON.stringify(omitidos ? { sent, ios_sin_configurar: omitidos } : { sent }), {
       headers: { "Content-Type": "application/json" },
     });
   } catch (e) {
