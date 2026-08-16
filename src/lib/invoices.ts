@@ -19,6 +19,11 @@ export interface DbInvoice {
   sunatStatus: string;
   /** Estado del correo al comprador. */
   emailStatus: string;
+  /** Anulado desde el panel: la compra quedó sin efecto y se retiró el saldo. */
+  anuladoAt: string | null;
+  anuladoMotivo: string | null;
+  /** Nota de crédito que lo anula ante SUNAT (null si era interno). */
+  notaNumber: string | null;
 }
 
 interface Row {
@@ -34,6 +39,9 @@ interface Row {
   issued_at: string;
   sunat_status: string | null;
   email_status: string | null;
+  anulado_at: string | null;
+  anulado_motivo: string | null;
+  nota_number: string | null;
   orders?: { order_listings?: Array<{ listings?: { title?: string | null } | null }> } | null;
 }
 
@@ -41,7 +49,7 @@ export async function loadInvoicesFromDb(): Promise<DbInvoice[]> {
   const { data, error } = await supabase
     .from("invoices")
     .select(
-      "number, type, email, advertiser_name, doc_type, doc_number, factiliza_data, amount, detail, issued_at, sunat_status, email_status, orders(order_listings(listings(title)))"
+      "number, type, email, advertiser_name, doc_type, doc_number, factiliza_data, amount, detail, issued_at, sunat_status, email_status, anulado_at, anulado_motivo, nota_number, orders(order_listings(listings(title)))"
     )
     .order("issued_at", { ascending: false });
 
@@ -63,6 +71,9 @@ export async function loadInvoicesFromDb(): Promise<DbInvoice[]> {
       listingTitle: title || r.detail || "—",
       sunatStatus: r.sunat_status ?? "omitido",
       emailStatus: r.email_status ?? "pendiente",
+      anuladoAt: r.anulado_at ?? null,
+      anuladoMotivo: r.anulado_motivo ?? null,
+      notaNumber: r.nota_number ?? null,
     };
   });
 }

@@ -226,6 +226,33 @@ Desde **Admin › Comercial › Boletas → Anular**. Requiere
   de Izipay, y el diálogo lo dice.
 - Queda en `audit_logs` como `void_invoice`.
 
+### Qué recibe el comprador (0102)
+
+Hasta la 0102 no recibía **nada**: le bajaba el saldo sin explicación y se
+quedaba con la boleta original en el correo, ya sin valor. Ahora:
+
+| Pieza | Cuándo | Dónde |
+|---|---|---|
+| **Aviso in-app** `invoice_voided` | al anular, **siempre** (haya nota o no) | `notify_user` dentro de `anular_comprobante` |
+| **Correo con la nota** | solo cuando SUNAT la **acepta** | ciclo `nota_email_*` propio |
+
+- El aviso lleva número, motivo, créditos retirados y lo que quedó sin
+  recuperar; enlaza a *Mis comprobantes*, donde el comprobante sale **Anulado**
+  con su motivo y su nota.
+- El correo adjunta el **PDF y el XML oficiales de la nota**, descargados de
+  `/note/pdf` y `/note/xml` con `tipo_Doc: "07"`. Verificado en vivo.
+- **La regla del correo es la CONTRARIA a la del comprobante.** Aquel sale pase
+  lo que pase; el de la nota espera a que sea válida — anunciar una nota que
+  SUNAT rechazó es anunciar un documento que no existe. Si la descarga del PDF
+  falla, se reintenta dos veces y a la tercera sale el correo sin adjunto: la
+  noticia no puede perderse por un fichero.
+- `nota_email_status` nace en `'pendiente'` para **todos** los comprobantes. Lo
+  que impide correos fantasma es que la reserva y el barrido exigen además
+  `nota_sunat_status in ('aceptado','observado')`, que es null si nadie anuló.
+  Si tocas esas condiciones, la prueba que lo caza es *«NO despierta a un
+  comprobante normal»*.
+- El botón **Reintentar** del panel destraba también la nota y su correo.
+
 ---
 
 ## 9. Diagnóstico
@@ -272,11 +299,14 @@ select jobname, schedule from cron.job;
 | Modo pruebas y series separadas | `0098` · `0099` |
 | Reintentos que aguantan el plazo | `0100` |
 | Anulación y notas de crédito | `0101` |
+| Aviso al comprador y correo de la nota | `0102` |
 | Panel | `src/pages/admin/AdminCommercial.tsx` · `src/lib/admin.ts` |
+| Vista del comprador | `src/pages/advertiser/AdvertiserInvoices.tsx` · `src/components/InvoiceDetailDialog.tsx` |
 | Despliegue y estado detallado | `supabase/functions/emit-invoice/DEPLOY.md` |
 
 Pruebas: `src/test/factiliza.test.ts` (168 casos, incluida toda la matriz de
-precios al céntimo) y `migration0082/0083/0098/0101.test.ts` sobre Postgres real.
+precios al céntimo) y `migration0082/0083/0098/0101/0102.test.ts` sobre Postgres
+real.
 
 ---
 

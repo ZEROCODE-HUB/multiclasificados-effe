@@ -18,6 +18,10 @@ export interface InvoiceDetailData {
   email: string;
   listingTitle: string;
   amount: number;
+  /** Anulación (0101/0102). Solo se muestran si el comprobante está anulado. */
+  anuladoAt?: string | null;
+  anuladoMotivo?: string | null;
+  notaNumber?: string | null;
 }
 
 // Modal "Ver": muestra TODOS los datos del comprobante, incluidos los traídos de
@@ -36,6 +40,15 @@ export function InvoiceDetailDialog({ invoice, onClose }: { invoice: InvoiceDeta
         ...factilizaRows(invoice.docType, invoice.factilizaData),
         ["Correo", invoice.email || "—"],
         ["Aviso", invoice.listingTitle || "—"],
+        // La anulación solo aparece cuando la hay: un comprobante vivo no tiene
+        // por qué enseñar filas vacías.
+        ...(invoice.anuladoAt
+          ? ([
+              ["Anulado el", new Date(invoice.anuladoAt).toLocaleString("es-PE")],
+              ["Motivo de la anulación", invoice.anuladoMotivo || "—"],
+              ...(invoice.notaNumber ? [["Nota de crédito", invoice.notaNumber]] : []),
+            ] as Array<[string, string]>)
+          : []),
       ]
     : [];
 

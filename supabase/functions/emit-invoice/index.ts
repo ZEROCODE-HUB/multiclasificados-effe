@@ -24,7 +24,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { renderComprobantePDF, toBase64 } from "../_shared/comprobante-pdf.ts";
 import {
   construirComprobante, construirNotaDeCredito, leerRespuesta, consultaDeComprobante,
-  ComprobanteInvalido,
+  ComprobanteInvalido, TIPO_DOC_NOTA_CREDITO,
 } from "../_shared/factiliza.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -167,10 +167,13 @@ const money = (n: number, moneda: string) =>
 async function descargarDeFactiliza(
   recurso: "pdf" | "xml",
   datos: { tipoDoc: string; serie: string; correlativo: string; emisorRuc: string },
+  // Las notas de crédito se descargan de `/note/pdf` y `/note/xml`. El cuerpo es
+  // idéntico —lo único que cambia es la familia de rutas y el tipo de documento.
+  familia: "invoice" | "note" = "invoice",
 ): Promise<Uint8Array | null> {
   if (!FACTILIZA_TOKEN || !datos.emisorRuc) return null;
   try {
-    const res = await fetch(urlDeFactiliza(recurso), {
+    const res = await fetch(familia === "note" ? urlDeNota(recurso) : urlDeFactiliza(recurso), {
       method: "POST",
       headers: { Authorization: `Bearer ${FACTILIZA_TOKEN}`, "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -261,6 +264,109 @@ function htmlCorreo(inv: Record<string, unknown>, declarado: boolean, esPrueba: 
           : `<p style="margin:16px 0 0;color:#8a919e;font-size:12px;line-height:1.5">
                Este documento es un comprobante interno de tu compra y no constituye
                documento tributario.</p>`}
+        <p style="margin:24px 0 0">
+          <a href="${SITE_URL}/dashboard/anunciante/boletas"
+             style="display:inline-block;background:#f97316;color:#fff;text-decoration:none;
+                    padding:12px 20px;border-radius:8px;font-weight:700;font-size:14px">
+            Ver mis comprobantes
+          </a>
+        </p>
+      </div>
+    </div></body></html>`;
+}
+
+/** Los créditos no son soles: se muestran a secas y sin decimales de adorno. */
+const creditos = (n: unknown) =>
+  Number(n ?? 0).toFixed(2).replace(/\.00$/, "");
+
+/**
+ * El correo de la ANULACIÓN.
+ *
+ * Va aparte del anterior a propósito: no es "tu comprobante" con otro texto, es
+ * otra noticia. Quien lo recibe ya tiene en su bandeja la boleta original, y lo
+ * que necesita saber es que aquella quedó sin efecto, por qué, y cuánto saldo se
+ * le retiró. Adjunta la nota de crédito, que es el documento que ante SUNAT
+ * anula al primero.
+ *
+ * Sobre la devolución del dinero no se promete nada: el reintegro del cobro se
+ * hace a mano en el panel de Izipay y no todas las anulaciones lo llevan. Se
+ * remite a soporte, que es lo honesto.
+ */
+function textoAnulacion(n: Record<string, unknown>, esPrueba: boolean, conAdjunto: boolean): string {
+  const lineas = [
+    `Anulación del comprobante ${n.o_number}`,
+    "",
+    `Hola ${String(n.o_advertiser_name ?? "")}, anulamos tu compra y con ella el`,
+    `comprobante ${n.o_number}.`,
+    "",
+    `Motivo: ${String(n.o_motivo ?? "—")}`,
+    `Nota de crédito: ${n.o_nota_number}`,
+    `Importe del comprobante: ${money(Number(n.o_amount), "PEN")}`,
+    `Créditos retirados de tu saldo: ${creditos(n.o_credits_devueltos)}`,
+    "",
+  ];
+  lineas.push(
+    conAdjunto
+      ? "Adjuntamos la nota de crédito en PDF y XML: es el documento que deja sin\nefecto el comprobante anterior."
+      : "La nota de crédito ya está emitida. Si necesitas el PDF o el XML,\nescríbenos y te los enviamos.",
+    "",
+  );
+  if (esPrueba) {
+    lineas.push(
+      "AVISO: documento de prueba, sin valor fiscal. Se generó contra el entorno",
+      "de pruebas y no es un comprobante válido ante SUNAT.",
+      "",
+    );
+  }
+  lineas.push(
+    `Si tienes dudas sobre la devolución del importe, escríbenos a ${SOPORTE_EMAIL}.`,
+    "",
+    `Puedes ver todos tus comprobantes en ${SITE_URL}/dashboard/anunciante/boletas`,
+    "",
+    "eFFe Multiclasificados",
+  );
+  return lineas.join("\n");
+}
+
+function htmlAnulacion(n: Record<string, unknown>, esPrueba: boolean, conAdjunto: boolean): string {
+  const fila = (etiqueta: string, valor: string) =>
+    `<tr><td style="padding:8px 0;color:#5b6270">${etiqueta}</td>
+         <td style="padding:8px 0;text-align:right">${valor}</td></tr>`;
+  return `<!doctype html><html><body style="margin:0;background:#f6f7f9;padding:24px;
+    font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#22262e">
+    <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e6e8ec;border-radius:12px;overflow:hidden">
+      <div style="background:#132a4a;color:#fff;padding:20px 24px">
+        <div style="font-size:18px;font-weight:800">eFFe Multiclasificados</div>
+      </div>
+      ${esPrueba
+        ? `<div style="background:#fff4e5;border-bottom:1px solid #f5c78a;color:#8a4b00;
+                       padding:14px 24px;font-size:13px;line-height:1.5">
+             <strong>Documento de prueba — sin valor fiscal.</strong> Se generó contra el
+             entorno de pruebas: no es un comprobante válido ante SUNAT.
+           </div>`
+        : ""}
+      <div style="padding:24px">
+        <h1 style="margin:0 0 8px;font-size:18px">Se anuló tu compra</h1>
+        <p style="margin:0 0 16px;color:#5b6270;font-size:14px;line-height:1.6">
+          Hola ${esc(n.o_advertiser_name) || "de nuevo"}, el comprobante
+          <strong>${esc(n.o_number)}</strong> quedó sin efecto y los créditos de esa
+          compra se retiraron de tu saldo.
+        </p>
+        <table style="width:100%;border-collapse:collapse;font-size:14px">
+          ${fila("Motivo", esc(n.o_motivo) || "—")}
+          ${fila("Nota de crédito", esc(n.o_nota_number))}
+          ${fila("Importe del comprobante", money(Number(n.o_amount), "PEN"))}
+          ${fila("Créditos retirados", creditos(n.o_credits_devueltos))}
+        </table>
+        <p style="margin:16px 0 0;color:#5b6270;font-size:13px;line-height:1.6">
+          ${conAdjunto
+            ? "Adjuntamos la nota de crédito en PDF y XML: es el documento que deja sin efecto el comprobante anterior."
+            : "La nota de crédito ya está emitida. Si necesitas el PDF o el XML, escríbenos y te los enviamos."}
+        </p>
+        <p style="margin:12px 0 0;color:#8a919e;font-size:12px;line-height:1.5">
+          ¿Dudas sobre la devolución del importe? Escríbenos a
+          <a href="mailto:${esc(SOPORTE_EMAIL)}" style="color:#5b6270">${esc(SOPORTE_EMAIL)}</a>.
+        </p>
         <p style="margin:24px 0 0">
           <a href="${SITE_URL}/dashboard/anunciante/boletas"
              style="display:inline-block;background:#f97316;color:#fff;text-decoration:none;
@@ -689,6 +795,106 @@ async function enviarCorreo(inv: Record<string, unknown>) {
   }
 }
 
+/**
+ * Manda al comprador la nota de crédito que anula su compra.
+ *
+ * La reserva solo concede el turno cuando SUNAT ya dio la nota por buena, así
+ * que aquí no hay que comprobar nada de eso: si devuelve una fila, hay un
+ * documento válido que enviar.
+ *
+ * El adjunto es siempre el de Factiliza —el PDF de una nota de crédito no lo
+ * dibujamos nosotros—, y si su descarga falla se reintenta un par de veces antes
+ * de mandar el correo sin él. El orden importa: es preferible que la noticia
+ * llegue tarde con el documento a que llegue puntual y vacía, pero nunca es
+ * aceptable que no llegue.
+ */
+async function enviarCorreoDeAnulacion(invoiceId: string): Promise<string | null> {
+  const { data: claim, error } = await admin.rpc("claim_invoice_note_email", {
+    p_invoice_id: invoiceId,
+    p_lease_seconds: 300,
+  });
+  if (error) {
+    console.error("[emit-invoice] no se pudo reclamar el correo de la nota:", error.message);
+    return null;
+  }
+  const n = (Array.isArray(claim) ? claim[0] : claim) as Record<string, unknown> | undefined;
+  if (!n) return null;   // no hay ninguna anulación que avisar: el caso normal
+
+  const claimId = String(n.o_claim_id);
+  const cerrar = (estado: string, messageId: string | null, error: string | null) =>
+    admin.rpc("finish_invoice_note_email", {
+      p_invoice_id: invoiceId, p_claim_id: claimId,
+      p_status: estado, p_message_id: messageId, p_error: error,
+    });
+
+  if (!RESEND_API_KEY) {
+    await cerrar("omitido", null, "Correo no configurado (falta RESEND_API_KEY)");
+    return "omitido";
+  }
+
+  const esPrueba = n.o_es_prueba === true;
+  const intento = Number(n.o_attempts ?? 1);
+
+  const datos = {
+    tipoDoc: TIPO_DOC_NOTA_CREDITO,
+    serie: String(n.o_nota_serie),
+    correlativo: String(Number(n.o_nota_correlativo)),   // sin los ceros a la izquierda
+    emisorRuc: rucDelEmisor(esPrueba),
+  };
+  const adjuntos: Array<{ filename: string; content: string }> = [];
+  const pdf = await descargarDeFactiliza("pdf", datos, "note");
+  if (pdf) {
+    adjuntos.push({ filename: `${n.o_nota_number}.pdf`, content: toBase64(pdf) });
+    const xml = await descargarDeFactiliza("xml", datos, "note");
+    if (xml) adjuntos.push({ filename: `${n.o_nota_number}.xml`, content: toBase64(xml) });
+  } else if (intento < 3) {
+    // Aún hay margen para volver a intentarlo con el documento puesto.
+    await cerrar("error", null, "No se pudo descargar la nota de crédito de Factiliza");
+    return "error";
+  }
+
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: EMAIL_FROM,
+        to: [String(n.o_email)],
+        subject: `Se anuló tu compra ${n.o_number} — nota de crédito ${n.o_nota_number}`,
+        html: htmlAnulacion(n, esPrueba, adjuntos.length > 0),
+        text: textoAnulacion(n, esPrueba, adjuntos.length > 0),
+        reply_to: SOPORTE_EMAIL,
+        headers: { "X-Entity-Ref-ID": String(n.o_nota_number) },
+        ...(adjuntos.length ? { attachments: adjuntos } : {}),
+      }),
+    });
+    const cuerpo = await res.json().catch(() => ({}));
+
+    await admin.rpc("log_invoice_attempt", {
+      p_invoice_id: invoiceId, p_step: "email_nota", p_attempt: intento,
+      p_http_status: res.status, p_ok: res.ok,
+      p_request: {
+        to: n.o_email, from: EMAIL_FROM, nota: n.o_nota_number,
+        adjuntos: adjuntos.map((a) => a.filename),
+      },
+      p_response: cuerpo,
+    });
+
+    await cerrar(
+      res.ok ? "enviado" : "error",
+      (cuerpo as { id?: string })?.id ?? null,
+      res.ok ? null : `Resend respondió ${res.status}`,
+    );
+    return res.ok ? "enviado" : "error";
+  } catch (e) {
+    await cerrar("error", null, e instanceof Error ? e.message : "fallo de red");
+    return "error";
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
@@ -793,6 +999,12 @@ Deno.serve(async (req) => {
   // vale para emitir y para anular.
   const nota = await emitirNotaDeCredito(body.invoice_id);
 
+  // Paso 1-ter — el correo con esa nota. Va detrás de emitirla para que, cuando
+  // la anulación se despacha entera de una vez, el comprador reciba el aviso en
+  // la misma pasada; si la nota se emitió en una llamada anterior, la reserva la
+  // encuentra aquí igualmente.
+  const notaCorreo = await enviarCorreoDeAnulacion(body.invoice_id);
+
   // Paso 2 — correo. Sale pase lo que pase con SUNAT: el usuario ya pagó y tiene
   // derecho a su comprobante aunque la emisión fiscal esté atascada.
   const { data: claim, error } = await admin.rpc("claim_invoice_email", {
@@ -804,8 +1016,8 @@ Deno.serve(async (req) => {
     return json({ ok: false, error: error.message });
   }
   const inv = Array.isArray(claim) ? claim[0] : claim;
-  if (!inv) return json({ ok: true, claimed: false, sunat, nota });
+  if (!inv) return json({ ok: true, claimed: false, sunat, nota, nota_correo: notaCorreo });
 
   const resultado = await enviarCorreo(inv as Record<string, unknown>);
-  return json({ ok: true, invoice: inv.o_number, sunat, nota, ...resultado });
+  return json({ ok: true, invoice: inv.o_number, sunat, nota, nota_correo: notaCorreo, ...resultado });
 });

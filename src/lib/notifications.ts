@@ -132,6 +132,17 @@ export function notificationText(n: AppNotification): string {
       const base = reason ? `Advertencia por: ${reason}` : "Recibiste una advertencia de moderación";
       return note ? `${base}. ${note}` : base;
     }
+    case "invoice_voided": {
+      // Lo que el usuario nota es que le baja el saldo. El aviso tiene que
+      // explicar eso antes que nada, y solo después el papeleo.
+      const numero = (p.number as string) || "una de tus compras";
+      const retirados = Number(p.credits ?? 0);
+      const motivo = (p.reason as string) || "";
+      const base = retirados > 0
+        ? `Se anuló ${numero} y se retiraron ${retirados} créditos de tu saldo`
+        : `Se anuló ${numero}`;
+      return motivo ? `${base}. Motivo: ${motivo}` : `${base}.`;
+    }
     case "account_suspended": {
       const reason = (p.reason as string) || "";
       return reason
@@ -163,6 +174,9 @@ export function notificationLink(n: AppNotification, role: string): string {
     case "listing_expiring":
       // El dueño revisa el estado/motivo en "Mis avisos".
       return "/dashboard/anunciante/avisos";
+    case "invoice_voided":
+      // Allí ve el comprobante marcado como anulado y su motivo.
+      return "/dashboard/anunciante/boletas";
     default:
       return "#";
   }

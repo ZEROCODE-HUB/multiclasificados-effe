@@ -16,6 +16,16 @@ import { InvoiceDetailDialog } from "@/components/InvoiceDetailDialog";
  * nadie le había mandado.
  */
 function EstadoComprobante({ inv }: { inv: DbInvoice }) {
+  // Un comprobante anulado ya no es "enviado a tu correo": esa compra quedó sin
+  // efecto y sus créditos se retiraron. Es lo primero que hay que decir, y el
+  // aviso in-app de la anulación trae al usuario justo aquí a comprobarlo.
+  if (inv.anuladoAt) {
+    return (
+      <Badge variant="outline" className="text-destructive border-destructive/30 bg-destructive/10">
+        Anulado
+      </Badge>
+    );
+  }
   // Lo que le importa a quien compra es si ya lo tiene en el correo.
   if (inv.emailStatus === "enviado") {
     return (
