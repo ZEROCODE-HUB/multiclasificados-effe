@@ -3,13 +3,18 @@
 // Escrito a mano, sin librerías, igual que el generador de reportes del panel
 // (src/lib/pdf.ts): un PDF 1.4 con fuentes base-14 no necesita dependencias, y
 // en Deno cualquier librería sería una descarga más en cada arranque en frío.
-// Comparte con aquél la técnica (codificación WinAnsi y tabla de referencias
-// cruzadas por posición de byte) pero no el contenido: aquí se dibuja un
-// comprobante, no una tabla paginada.
+// La mecánica del formato vive en `pdf-basico.ts`, compartida con la Hoja de
+// Reclamación; aquí solo se dibuja un comprobante.
 //
 // Mientras la emisión electrónica no esté activa, este PDF es el comprobante
 // interno. Cuando lo esté, el correo lleva el PDF oficial que devuelve Factiliza
 // y este queda como respaldo.
+
+import { A4_W, Lienzo, serializarPaginas, toBase64 } from "./pdf-basico.ts";
+
+// Se reexporta porque `emit-invoice` lo importa desde aquí desde antes de que
+// existiera `pdf-basico.ts`.
+export { toBase64 };
 
 export interface DatosComprobante {
   numero: string;
@@ -36,26 +41,7 @@ export interface DatosComprobante {
   pruebas?: boolean;
 }
 
-const A4_W = 595;
-const A4_H = 842;
 const MARGIN = 48;
-
-// Solo los caracteres que WinAnsi no cubre en su tramo bajo; el resto pasa tal cual.
-const WINANSI: Record<string, string> = {
-  "€": "\x80", "…": "\x85", "‘": "\x91", "’": "\x92", "“": "\x93", "”": "\x94",
-  "–": "\x96", "—": "\x97", "•": "\x95",
-};
-
-/** Pasa a WinAnsi y escapa lo que rompería un literal `(...)` de PDF. */
-function pdfText(s: string): string {
-  let out = "";
-  for (const ch of String(s ?? "")) {
-    const cp = ch.codePointAt(0)!;
-    const b = cp <= 0xff ? ch : WINANSI[ch] ?? "?";
-    out += b === "\\" || b === "(" || b === ")" ? "\\" + b : b;
-  }
-  return out;
-}
 
 const money = (n: number, moneda: string) =>
   `${moneda === "USD" ? "US$" : "S/"} ${Number(n ?? 0).toFixed(2)}`;
@@ -69,53 +55,6 @@ const fechaLarga = (d: Date) => {
   });
   return f.format(d);
 };
-
-/** Operadores de dibujo: texto, líneas y rectángulos. */
-class Lienzo {
-  private ops: string[] = [];
-
-  texto(x: number, y: number, s: string, size = 10, bold = false, gris = 0) {
-    this.ops.push(
-      `BT /${bold ? "F2" : "F1"} ${size} Tf ${gris} g ${x} ${A4_H - y} Td (${pdfText(s)}) Tj ET`,
-    );
-  }
-
-  derecha(xFin: number, y: number, s: string, size = 10, bold = false) {
-    // Helvetica es proporcional; sin las métricas reales esto se aproxima, que
-    // es suficiente para alinear importes a la derecha.
-    const ancho = s.length * size * (bold ? 0.55 : 0.5);
-    this.texto(xFin - ancho, y, s, size, bold);
-  }
-
-  linea(x1: number, y: number, x2: number, gris = 0.75) {
-    this.ops.push(`${gris} G 0.7 w ${x1} ${A4_H - y} m ${x2} ${A4_H - y} l S`);
-  }
-
-  caja(x: number, y: number, w: number, h: number, gris = 0.94) {
-    this.ops.push(`${gris} g ${x} ${A4_H - y - h} ${w} ${h} re f`);
-  }
-
-  build(): string {
-    return this.ops.join("\n");
-  }
-}
-
-function serialize(objects: string[]): Uint8Array {
-  let body = "%PDF-1.4\n%\xe2\xe3\xcf\xd3\n";
-  const offsets: number[] = [];
-  objects.forEach((obj, i) => {
-    offsets.push(body.length);
-    body += `${i + 1} 0 obj\n${obj}\nendobj\n`;
-  });
-  const xrefAt = body.length;
-  body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  for (const off of offsets) body += `${String(off).padStart(10, "0")} 00000 n \n`;
-  body += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefAt}\n%%EOF\n`;
-
-  const bytes = new Uint8Array(body.length);
-  for (let i = 0; i < body.length; i++) bytes[i] = body.charCodeAt(i) & 0xff;
-  return bytes;
-}
 
 const TITULO = {
   boleta: "BOLETA DE VENTA ELECTRÓNICA",
@@ -212,28 +151,5 @@ export function renderComprobantePDF(d: DatosComprobante): Uint8Array {
   y += 16;
   c.texto(MARGIN, y, "Gracias por tu compra.", 9, false, 0.5);
 
-  const contenido = c.build();
-  return serialize([
-    "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${A4_W} ${A4_H}] ` +
-      "/Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>",
-    `<< /Length ${contenido.length} >>\nstream\n${contenido}\nendstream`,
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
-  ]);
-}
-
-/**
- * Base64 de un binario, por trozos.
- * `String.fromCharCode(...bytes)` de golpe desborda la pila con un PDF de unos
- * cientos de KB: hay un límite de argumentos por llamada.
- */
-export function toBase64(bytes: Uint8Array): string {
-  let bin = "";
-  const CHUNK = 0x8000;
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
-  }
-  return btoa(bin);
+  return serializarPaginas(c.paginas());
 }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen, ShieldCheck, Send, CheckCircle2, Loader2 } from "lucide-react";
+import { BookOpen, ShieldCheck, Send, CheckCircle2, Loader2, Mail, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -22,12 +22,18 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
+  formatComplaintDate,
   submitComplaint,
   type ComplaintDocType,
   type ComplaintGoodType,
   type ComplaintInput,
   type ComplaintKind,
+  type ComplaintResult,
 } from "@/lib/complaints";
+
+// Mismo tope que aplica la Edge Function al guardar: si el navegador dejara
+// escribir más, el texto se cortaría en el servidor sin avisar.
+const MAX_TEXTO = 3000;
 
 const emptyForm: ComplaintInput = {
   kind: "reclamo",
@@ -47,14 +53,17 @@ export function LibroReclamaciones() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<ComplaintInput>(emptyForm);
   const [sending, setSending] = useState(false);
-  const [doneCode, setDoneCode] = useState<string | null>(null);
+  const [done, setDone] = useState<ComplaintResult | null>(null);
+  // El correo al que se envió la copia; el formulario se limpia al terminar.
+  const [copiaA, setCopiaA] = useState("");
 
   const set = <K extends keyof ComplaintInput>(key: K, value: ComplaintInput[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
   const resetAll = () => {
     setForm(emptyForm);
-    setDoneCode(null);
+    setDone(null);
+    setCopiaA("");
     setSending(false);
   };
 
@@ -87,8 +96,13 @@ export function LibroReclamaciones() {
     setSending(false);
 
     if (res.ok) {
-      setDoneCode(res.code ?? "—");
-      toast.success("Tu reclamo fue registrado y enviado correctamente.");
+      setCopiaA(form.email.trim());
+      setDone(res);
+      toast.success(
+        res.ackSent === false
+          ? "Tu reclamo quedó registrado."
+          : "Tu reclamo fue registrado. Te enviamos una copia por correo.",
+      );
     } else {
       toast.error(res.error ?? "No se pudo enviar el reclamo. Inténtalo nuevamente.");
     }
@@ -136,8 +150,10 @@ export function LibroReclamaciones() {
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="max-w-2xl">
-                  {doneCode ? (
-                    // Confirmación tras el envío.
+                  {done ? (
+                    // Confirmación tras el envío. Deja a la vista el número de
+                    // hoja y la fecha y hora del registro: es la constancia que
+                    // el consumidor tiene derecho a conservar.
                     <div className="py-6 text-center">
                       <div className="mx-auto w-16 h-16 rounded-full bg-secondary/15 text-secondary flex items-center justify-center mb-5">
                         <CheckCircle2 size={34} />
@@ -147,10 +163,41 @@ export function LibroReclamaciones() {
                       </DialogTitle>
                       <DialogDescription className="mt-3 text-sm">
                         Hemos recibido tu Hoja de Reclamación{" "}
-                        <span className="font-semibold text-foreground">N.º {doneCode}</span> y la
-                        enviamos a nuestro equipo. Te responderemos al correo que indicaste dentro
-                        del plazo de ley.
+                        <span className="font-semibold text-foreground">N.º {done.code ?? "—"}</span>
+                        . Te responderemos dentro del plazo de ley (15 días hábiles).
                       </DialogDescription>
+
+                      {formatComplaintDate(done.createdAt) && (
+                        <p className="mt-4 text-xs text-muted-foreground">
+                          Registrada el{" "}
+                          <span className="font-medium text-foreground">
+                            {formatComplaintDate(done.createdAt)}
+                          </span>{" "}
+                          (hora de Perú)
+                        </p>
+                      )}
+
+                      {done.ackSent === false ? (
+                        // Si la copia no salió, se dice. El reclamo está
+                        // registrado igual y el número es la prueba.
+                        <div className="mt-5 mx-auto max-w-md rounded-xl border border-destructive/30 bg-destructive/5 p-3 flex items-start gap-2 text-left">
+                          <AlertTriangle size={16} className="text-destructive mt-0.5 shrink-0" />
+                          <p className="text-xs text-muted-foreground">
+                            No pudimos enviarte la copia por correo. Tu reclamo quedó registrado con
+                            el número de arriba; guárdalo y escríbenos si necesitas la copia.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="mt-5 mx-auto max-w-md rounded-xl border border-border bg-muted/40 p-3 flex items-start gap-2 text-left">
+                          <Mail size={16} className="text-secondary mt-0.5 shrink-0" />
+                          <p className="text-xs text-muted-foreground">
+                            Enviamos una copia de tu Hoja de Reclamación en PDF a{" "}
+                            <span className="font-medium text-foreground">{copiaA}</span>. Si no la
+                            ves, revisa la carpeta de correo no deseado.
+                          </p>
+                        </div>
+                      )}
+
                       <Button
                         className="mt-6"
                         variant="hero"
@@ -247,6 +294,9 @@ export function LibroReclamaciones() {
                               onChange={(e) => set("email", e.target.value)}
                               placeholder="tucorreo@ejemplo.com"
                             />
+                            <p className="text-[11px] text-muted-foreground">
+                              Aquí te enviaremos la copia de tu Hoja de Reclamación.
+                            </p>
                           </div>
 
                           <div className="space-y-2">
@@ -313,6 +363,7 @@ export function LibroReclamaciones() {
                             onChange={(e) => set("description", e.target.value)}
                             placeholder="Describe lo ocurrido con el mayor detalle posible."
                             rows={4}
+                            maxLength={MAX_TEXTO}
                           />
                         </div>
 
@@ -326,6 +377,7 @@ export function LibroReclamaciones() {
                             onChange={(e) => set("request", e.target.value)}
                             placeholder="¿Qué solución esperas?"
                             rows={3}
+                            maxLength={MAX_TEXTO}
                           />
                         </div>
 

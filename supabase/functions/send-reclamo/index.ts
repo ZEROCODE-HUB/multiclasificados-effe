@@ -1,24 +1,47 @@
 // Edge Function: send-reclamo (Libro de Reclamaciones)
-// Recibe el reclamo desde la página principal, lo guarda en la tabla
-// `public.complaints` (con service_role) y envía el correo a los destinatarios
-// avisos@coleffe.com (configurable con RECLAMOS_TO) usando Resend.
+//
+// Recibe el reclamo desde la página principal, lo guarda en `public.complaints`
+// (con service_role) y manda DOS correos:
+//
+//   1. Al CONSUMIDOR — el acuse de recibo. Es una obligación del Reglamento del
+//      Libro de Reclamaciones cuando deja su correo: confirmar la recepción,
+//      remitirle copia de la hoja que ingresó y dejar constancia de la fecha y
+//      hora del registro. Hasta el 17-ago-2026 esto no se hacía: el reclamo se
+//      guardaba y se avisaba a la empresa, y al consumidor no le llegaba nada.
+//   2. Al buzón de la empresa (RECLAMOS_TO) — el aviso interno de siempre.
+//
+// El acuse va primero porque es el obligatorio, y su resultado queda anotado en
+// la propia fila (`ack_email_*`): si mañana hay que demostrar que se envió, la
+// prueba tiene que estar en el Libro, no en los registros de Resend.
 //
 // Secrets requeridos (Supabase → Edge Functions → Secrets):
 //   - SUPABASE_URL                (lo provee Supabase)
 //   - SUPABASE_SERVICE_ROLE_KEY   (lo provee Supabase)
 //   - RESEND_API_KEY              (API key de https://resend.com)
 //   - RECLAMOS_FROM (opcional)    remitente de un dominio verificado en Resend.
-//                                 Sin dominio verificado, dejar "onboarding@resend.dev".
-//   - RECLAMOS_TO (opcional)      destinatarios separados por coma. Por defecto:
-//                                 avisos@coleffe.com (buzón real del cPanel; ojo,
-//                                 reclamos@/soporte@ NO existen como buzones).
-//                                 En modo PRUEBA (dominio sin verificar) ponlo a TU
-//                                 propio correo de la cuenta Resend para recibir el test.
+//                                 OJO: sin dominio verificado (el default
+//                                 onboarding@resend.dev) Resend SOLO entrega al
+//                                 dueño de la cuenta, así que el acuse al
+//                                 consumidor no llegaría.
+//   - RECLAMOS_TO (opcional)      destinatarios internos separados por coma. Por
+//                                 defecto avisos@coleffe.com (buzón real del
+//                                 cPanel; ojo, reclamos@/soporte@ NO existen).
+//   - RECLAMOS_REPLY_TO (opcional) buzón al que contesta el consumidor si
+//                                 responde el acuse. Por defecto, el primero de
+//                                 RECLAMOS_TO — nunca el remitente, que puede
+//                                 ser una dirección sin buzón detrás.
 //
 // Deploy:  supabase functions deploy send-reclamo --no-verify-jwt
 //   (--no-verify-jwt para permitir reclamos de visitantes sin sesión)
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { toBase64 } from "../_shared/pdf-basico.ts";
+import {
+  type DatosHoja,
+  correoAcuseAlConsumidor,
+  correoAvisoInterno,
+  renderHojaReclamacionPDF,
+} from "../_shared/hoja-reclamacion.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -32,22 +55,43 @@ const json = (body: unknown, status = 200) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
-// Destinatarios del Libro de Reclamaciones. Configurables vía RECLAMOS_TO
-// (coma-separados). Usar SIEMPRE buzones que existan de verdad en el cPanel:
-// un destinatario inexistente rebota y el aviso del reclamo se pierde.
+// Destinatarios internos. Usar SIEMPRE buzones que existan de verdad en el
+// cPanel: un destinatario inexistente rebota y el aviso del reclamo se pierde.
 const TO = (Deno.env.get("RECLAMOS_TO") ?? "avisos@coleffe.com")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
 
-const KIND_LABEL: Record<string, string> = { reclamo: "Reclamo", queja: "Queja" };
-const GOOD_LABEL: Record<string, string> = { producto: "Producto", servicio: "Servicio" };
+const REPLY_TO = Deno.env.get("RECLAMOS_REPLY_TO") ?? TO[0] ?? "avisos@coleffe.com";
 
-const esc = (s: unknown) =>
-  String(s ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+// Un relato puede ser largo, pero no infinito: sin tope, un envío automatizado
+// llenaría la tabla y el PDF crecería sin límite.
+const MAX_TEXTO = 3000;
+
+/** Manda un correo por Resend. Devuelve el id del mensaje o el error, sin lanzar. */
+async function enviarPorResend(
+  apiKey: string,
+  payload: unknown,
+): Promise<{ ok: true; id: string | null } | { ok: false; error: string }> {
+  try {
+    const resp = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const texto = await resp.text();
+    if (!resp.ok) return { ok: false, error: `${resp.status} ${texto}`.slice(0, 500) };
+    let id: string | null = null;
+    try {
+      id = JSON.parse(texto)?.id ?? null;
+    } catch {
+      /* Resend contestó 200 sin JSON; el envío igual salió */
+    }
+    return { ok: true, id };
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message ?? e).slice(0, 500) };
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -76,6 +120,8 @@ Deno.serve(async (req) => {
     const kind = b.kind === "queja" ? "queja" : "reclamo";
     const goodType = b.good_type === "producto" || b.goodType === "producto" ? "producto" : "servicio";
     const docType = ["DNI", "CE", "Pasaporte", "RUC"].includes(b.docType) ? b.docType : "DNI";
+    const description = String(b.description).slice(0, MAX_TEXTO);
+    const request = String(b.request).slice(0, MAX_TEXTO);
 
     // Si el solicitante envió un JWT válido, lo asociamos (opcional).
     let userId: string | null = null;
@@ -99,74 +145,102 @@ Deno.serve(async (req) => {
         address: b.address ?? null,
         good_type: goodType,
         amount: b.amount ?? null,
-        description: b.description,
-        request: b.request,
+        description,
+        request,
         user_id: userId,
       })
-      .select("code")
+      .select("id, code, created_at")
       .single();
 
     if (dbErr) return json({ error: "No se pudo registrar: " + dbErr.message }, 500);
     const code = row?.code ?? "—";
+    // La hora del registro la pone la base de datos, no el navegador ni esta
+    // función: es la que va a constar como momento de presentación.
+    const createdAt = row?.created_at ? new Date(row.created_at) : new Date();
 
-    // 2) Enviar el aviso a los destinatarios de RECLAMOS_TO vía Resend.
-    if (RESEND_API_KEY) {
-      const html = `
-        <div style="font-family:Arial,Helvetica,sans-serif;color:#1f2937;max-width:640px">
-          <h2 style="margin:0 0 4px">Nueva ${esc(KIND_LABEL[kind])} — Hoja N.º ${esc(code)}</h2>
-          <p style="color:#6b7280;margin:0 0 16px">Libro de Reclamaciones · eFFe Multiclasificados</p>
-          <table style="width:100%;border-collapse:collapse;font-size:14px">
-            ${row2("Tipo", KIND_LABEL[kind])}
-            ${row2("Nombre completo", b.fullName)}
-            ${row2("Documento", `${docType} ${b.docNumber}`)}
-            ${row2("Correo", b.email)}
-            ${row2("Teléfono", b.phone || "—")}
-            ${row2("Domicilio", b.address || "—")}
-            ${row2("Tipo de bien", GOOD_LABEL[goodType])}
-            ${row2("Monto reclamado", b.amount || "—")}
-            ${row2("Detalle del reclamo", b.description)}
-            ${row2("Pedido del consumidor", b.request)}
-          </table>
-        </div>`;
+    const hoja: DatosHoja = {
+      code,
+      kind,
+      fullName: String(b.fullName),
+      docType,
+      docNumber: String(b.docNumber),
+      email: String(b.email),
+      phone: b.phone ?? null,
+      address: b.address ?? null,
+      goodType,
+      amount: b.amount ?? null,
+      description,
+      request,
+      createdAt,
+    };
 
-      const resp = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${RESEND_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: FROM,
-          to: TO,
-          reply_to: b.email,
-          subject: `[Libro de Reclamaciones] ${KIND_LABEL[kind]} N.º ${code} — ${b.fullName}`,
-          html,
-        }),
-      });
+    /** Deja anotado en la propia fila cómo acabó el acuse. */
+    const anotarAcuse = async (campos: Record<string, unknown>) => {
+      if (!row?.id) return;
+      const { error } = await admin.from("complaints").update(campos).eq("id", row.id);
+      // Que no se pueda anotar no invalida el envío; solo se pierde el rastro.
+      if (error) console.error("No se pudo anotar el acuse:", error.message);
+    };
 
-      if (!resp.ok) {
-        const errTxt = await resp.text();
-        // El reclamo ya quedó guardado; reportamos que el correo falló.
-        console.error("Resend error:", resp.status, errTxt);
-        return json(
-          { ok: true, code, warning: "Registrado, pero el correo no pudo enviarse." },
-          200,
-        );
-      }
-    } else {
+    if (!RESEND_API_KEY) {
       console.warn("RESEND_API_KEY no configurada: el reclamo se guardó pero no se envió correo.");
-      return json({ ok: true, code, warning: "Registrado. Correo no configurado (RESEND_API_KEY)." });
+      await anotarAcuse({
+        ack_email_status: "error",
+        ack_email_error: "RESEND_API_KEY no configurada",
+      });
+      return json({
+        ok: true,
+        code,
+        created_at: createdAt.toISOString(),
+        ack_sent: false,
+        warning: "Registrado. Correo no configurado (RESEND_API_KEY).",
+      });
     }
 
-    return json({ ok: true, code });
+    // La copia en PDF se genera una vez y viaja en los dos correos.
+    let adjuntoBase64: string | undefined;
+    try {
+      adjuntoBase64 = toBase64(renderHojaReclamacionPDF(hoja));
+    } catch (e) {
+      // Sin adjunto el correo sigue llevando la hoja completa en el cuerpo, que
+      // es lo que importa; mejor eso que no enviar nada.
+      console.error("No se pudo generar el PDF de la hoja:", (e as Error)?.message ?? e);
+    }
+
+    // 2) Acuse de recibo al consumidor. Va primero: es el obligatorio.
+    const acuse = await enviarPorResend(
+      RESEND_API_KEY,
+      correoAcuseAlConsumidor(hoja, { from: FROM, replyTo: REPLY_TO, adjuntoBase64 }),
+    );
+    if (acuse.ok) {
+      await anotarAcuse({
+        ack_email_status: "enviado",
+        ack_email_sent_at: new Date().toISOString(),
+        ack_email_message_id: acuse.id,
+        ack_email_error: null,
+      });
+    } else {
+      console.error("Resend (acuse al consumidor):", acuse.error);
+      await anotarAcuse({ ack_email_status: "error", ack_email_error: acuse.error });
+    }
+
+    // 3) Aviso interno al buzón de la empresa.
+    const interno = await enviarPorResend(
+      RESEND_API_KEY,
+      correoAvisoInterno(hoja, { from: FROM, to: TO, adjuntoBase64 }),
+    );
+    if (!interno.ok) console.error("Resend (aviso interno):", interno.error);
+
+    return json({
+      ok: true,
+      code,
+      created_at: createdAt.toISOString(),
+      ack_sent: acuse.ok,
+      ...(acuse.ok
+        ? {}
+        : { warning: "Registrado, pero no pudimos enviarte la copia por correo." }),
+    });
   } catch (e) {
     return json({ error: String((e as Error)?.message ?? e) }, 500);
   }
 });
-
-function row2(label: string, value: unknown): string {
-  return `<tr>
-    <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-weight:bold;width:200px;vertical-align:top">${esc(label)}</td>
-    <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;white-space:pre-wrap">${esc(value)}</td>
-  </tr>`;
-}
