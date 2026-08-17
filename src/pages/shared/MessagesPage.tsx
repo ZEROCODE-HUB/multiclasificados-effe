@@ -15,6 +15,7 @@ import { ArrowLeft, Send, Search, CheckCircle2, Check, CheckCheck, Flag, Loader2
 import { toast } from "@/hooks/use-toast";
 import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 import { reportUser, USER_REPORT_REASONS } from "@/lib/reports";
+import { NombreDeContacto } from "@/components/NombreDeContacto";
 import { loadSold, markSold, unmarkSold } from "@/lib/pricing";
 import {
   fetchConversations, fetchMessages, sendMessage, markDelivered, markRead,
@@ -265,7 +266,12 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-foreground truncate">{conv.counterpart_name}</p>
+                        <p className="text-sm font-semibold text-foreground truncate">
+                          <NombreDeContacto
+                            nombre={conv.counterpart_name}
+                            esCorreo={conv.counterpart_is_email}
+                          />
+                        </p>
                         <span className="text-[10px] text-muted-foreground flex-shrink-0">{fmtWhen(conv.last_message_at)}</span>
                       </div>
                       <p className="text-xs text-secondary truncate font-medium">{conv.listing_title}</p>
@@ -303,7 +309,12 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
                       {selected.counterpart_name.charAt(0).toUpperCase()}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <CardTitle className="text-sm truncate">{selected.counterpart_name}</CardTitle>
+                      <CardTitle className="text-sm truncate">
+                        <NombreDeContacto
+                          nombre={selected.counterpart_name}
+                          esCorreo={selected.counterpart_is_email}
+                        />
+                      </CardTitle>
                       <p className="text-xs text-muted-foreground truncate">{selected.listing_title}</p>
                     </div>
                     <button

@@ -216,7 +216,7 @@ function EstadoEmision({ inv }: { inv: AdminInvoice }) {
   // importa es que está anulado y con qué nota.
   if (inv.anuladoAt) {
     return (
-      <div className="flex flex-col gap-1 items-start">
+      <div className="flex flex-col gap-1 items-center">
         <span className="rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap
                          text-red-800 dark:bg-red-950 dark:text-red-200"
               title={inv.anuladoMotivo ?? undefined}>
@@ -231,7 +231,7 @@ function EstadoEmision({ inv }: { inv: AdminInvoice }) {
 
   const s = ESTADO_SUNAT[inv.sunatStatus] ?? ESTADO_SUNAT.omitido;
   return (
-    <div className="flex flex-col gap-1 items-start">
+    <div className="flex flex-col gap-1 items-center">
       <span
         className={cn("rounded px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap", s.clase)}
         title={inv.sunatError ?? undefined}
@@ -932,20 +932,28 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
                 <p className="text-sm text-muted-foreground text-center py-8">Aún no se han generado boletas.</p>
               ) : (
                 <Table>
+                  {/* Alineación por tipo de dato, no por gusto: el texto a la
+                      izquierda (se lee desde ahí), las fechas y los estados
+                      centrados, y todo lo que son cifras a la derecha, que es
+                      como se comparan de un vistazo. Y `whitespace-nowrap` donde
+                      partir en dos líneas estropea el dato: "S/" separado de su
+                      importe, o una fecha rota, no se leen: se descifran. La
+                      tabla ya scrollea en horizontal, así que ensanchar una
+                      columna no rompe la página. */}
                   <TableHeader>
                     <TableRow>
-                      <TableHead>N° Comprobante</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Fecha</TableHead>
+                      <TableHead className="whitespace-nowrap">N° Comprobante</TableHead>
+                      <TableHead className="text-center">Tipo</TableHead>
+                      <TableHead className="text-center">Fecha</TableHead>
                       <TableHead>Anunciante</TableHead>
-                      <TableHead>DNI/RUC</TableHead>
-                      <TableHead>Usuario/Empresa</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">DNI/RUC</TableHead>
+                      <TableHead className="text-center whitespace-nowrap">Usuario/Empresa</TableHead>
                       {/* No es el título de un aviso: es el concepto de lo que
                           se cobró ("Compra de saldo: 1 aviso · 7 días"). Se
                           llamaba "Aviso" y hacía pensar que se emitía un
                           comprobante por cada publicación. */}
                       <TableHead>Concepto</TableHead>
-                      <TableHead>Estado</TableHead>
+                      <TableHead className="text-center">Estado</TableHead>
                       <TableHead className="text-right">Monto</TableHead>
                       <TableHead className="text-right">Ver</TableHead>
                     </TableRow>
@@ -953,7 +961,7 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
                   <TableBody>
                     {invoicesPager.pageItems.map((inv) => (
                       <TableRow key={inv.id} className={inv.needsReview ? "bg-destructive/5" : undefined}>
-                        <TableCell className="font-mono text-xs">
+                        <TableCell className="font-mono text-xs whitespace-nowrap">
                           {inv.number}
                           {inv.esPrueba && (
                             <span className="ml-1.5 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-bold
@@ -962,16 +970,23 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
                             </span>
                           )}
                         </TableCell>
-                        <TableCell className="text-xs capitalize">{inv.type}</TableCell>
-                        <TableCell className="text-xs">{new Date(inv.date).toLocaleDateString("es-PE")}</TableCell>
+                        <TableCell className="text-xs capitalize text-center">{inv.type}</TableCell>
+                        <TableCell className="text-xs text-center whitespace-nowrap">
+                          {new Date(inv.date).toLocaleDateString("es-PE")}
+                        </TableCell>
                         <TableCell className="text-sm">{inv.advertiser}</TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">{inv.docNumber || "—"}</TableCell>
-                        <TableCell className="text-xs">{personKindLabel(inv.docType, inv.docNumber)}</TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground text-right tabular-nums">
+                          {inv.docNumber || "—"}
+                        </TableCell>
+                        <TableCell className="text-xs text-center">{personKindLabel(inv.docType, inv.docNumber)}</TableCell>
                         <TableCell className="text-sm font-medium">{inv.listingTitle}</TableCell>
-                        <TableCell>
+                        <TableCell className="text-center">
                           <EstadoEmision inv={inv} />
                         </TableCell>
-                        <TableCell className="text-right font-bold">{formatSoles(inv.amount)}</TableCell>
+                        {/* El símbolo de moneda no se separa de su importe. */}
+                        <TableCell className="text-right font-bold tabular-nums whitespace-nowrap">
+                          {formatSoles(inv.amount)}
+                        </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1.5">
                             {puedeReintentar(inv) && (

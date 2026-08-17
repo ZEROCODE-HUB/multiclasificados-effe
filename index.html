@@ -6,6 +6,12 @@
          quien lo necesita para leer (WCAG 1.4.4). El `viewport-fit=cover` sí se
          mantiene: es lo que respeta el notch/barra de gestos en el APK. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- iOS convierte SOLO, sin que nadie se lo pida, cualquier cosa que parezca
+         un correo, un teléfono o una dirección en un enlace azul subrayado. En el
+         chat eso hacía que tocar el correo del anunciante de un aviso
+         confidencial abriera Gmail y sacara al usuario de la app. Los enlaces de
+         verdad los ponemos nosotros. -->
+    <meta name="format-detection" content="telephone=no, email=no, address=no, date=no" />
     <!-- Favicon (icono de la pestaña del navegador) e iconos PWA -->
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
