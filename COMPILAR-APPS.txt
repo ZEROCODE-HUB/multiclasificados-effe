@@ -236,20 +236,24 @@ POR QUE HACE FALTA
 5.1  ACTIVAR LAS NOTIFICACIONES EN EL IDENTIFICADOR DE LA APP
 --------------------------------------------------------------------------------
 
-  1. Entra a  https://developer.apple.com/account
-  2. Certificates, Identifiers & Profiles  ->  Identifiers
-  3. Busca y abre:  com.effe.multiclasificados
-  4. En la lista de capacidades, MARCA "Push Notifications".
-  5. Guarda (Save) y confirma.
+  ESTO YA NO HAY QUE HACERLO A MANO.  (17-ago-2026)
 
-  6. Ahora hay que REGENERAR el perfil de aprovisionamiento, porque el que
-     existe todavia no incluye el push:
-       Profiles -> busca "eFFe Multiclasificados AppStore"
-       -> Edit -> Save (asi se vuelve a generar con la capacidad nueva)
+  Lo hace el propio build de Codemagic: activa "Push Notifications" en el App
+  ID y regenera el perfil de aprovisionamiento, con la llave de App Store
+  Connect que Codemagic ya tiene conectada. Es el paso "Activar Push en el App
+  ID" de codemagic.yaml, y solo actua la primera vez.
 
-     Si te lo saltas, el build de iPhone FALLARA al firmar en cuanto actives el
-     push (paso 5.4), con un error tipo "provisioning profile doesn't include
-     the aps-environment entitlement".
+  Tampoco hay que subir ningun perfil a Codemagic: la firma pasa a ser
+  automatica (ios_signing: distribution_type + bundle_identifier), asi que el
+  perfil se pide en cada build y viene con lo que el App ID tenga en ese
+  momento.
+
+  Requisito: que la llave de App Store Connect conectada a Codemagic tenga rol
+  Admin. Si no lo tuviera, el build se para en ese paso y lo dice con todas las
+  letras.
+
+  Lo unico que sigue siendo manual es la llave .p8 del punto 5.2: Apple no
+  ofrece ninguna forma de crearla por API.
 
 --------------------------------------------------------------------------------
 5.2  CREAR LA LLAVE .p8  (esto es lo importante)
@@ -286,17 +290,16 @@ POR QUE HACE FALTA
 5.4  ENCENDER EL PUSH EN EL BUILD DE IPHONE
 --------------------------------------------------------------------------------
 
-  Cuando YA hayas hecho 5.1 (activar la capacidad y regenerar el perfil):
+  YA ESTA ENCENDIDO.  IOS_PUSH = "true" vive dentro de codemagic.yaml
+  (workflows -> ios-workflow -> environment -> vars), no en la interfaz de
+  Codemagic, para que se vea leyendo el repositorio.
 
-    Codemagic -> Environment variables -> grupo "multiclasificados-effe"
-    Anade:      IOS_PUSH = true
+  Para apagarlo, ponlo en "false" y vuelve a compilar: todo lo demas del build
+  sigue igual, simplemente sin notificaciones.
 
-  Eso hace que el build le pida permiso de notificaciones al sistema.
-
-  Esta detras de una variable a proposito: si se activara antes de regenerar el
-  perfil, TODOS los builds de iPhone empezarian a fallar al firmar. Mientras
-  IOS_PUSH no este en "true", todo compila igual que hasta ahora, simplemente
-  sin notificaciones.
+  Ojo con el orden: el build activa el push en la cuenta de Apple ANTES de
+  firmar, precisamente porque firmar con el permiso puesto y el perfil viejo
+  falla con un error que no menciona el push por ninguna parte.
 
   Despues de ponerla, lanza un build nuevo y sube esa version a TestFlight.
   Hasta que no instales ESE build, el iPhone no pedira permiso de

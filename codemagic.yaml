@@ -6,11 +6,18 @@ workflows:
     integrations:
       app_store_connect: Codemagic Key2
     environment:
+      # FIRMA AUTOMÁTICA, y no el perfil subido a mano de antes.
+      #
+      # El motivo es el push: activar Push Notifications en el App ID obliga a
+      # regenerar el perfil de aprovisionamiento, y un perfil subido a mano hay
+      # que volver a generarlo y volver a subirlo CADA vez que cambia algo en la
+      # cuenta de Apple. Así, Codemagic lo pide él mismo en cada build con la
+      # llave de App Store Connect que ya está conectada arriba
+      # (`integrations`), y siempre viene con las capacidades que el App ID
+      # tenga en ese momento.
       ios_signing:
-        provisioning_profiles:
-          - eFFe Multiclasificados AppStore
-        certificates:
-          - Apple Distribution Certificate
+        distribution_type: app_store
+        bundle_identifier: com.effe.multiclasificados
       node: 22
       # Las VITE_* viven en Codemagic → Environment variables, dentro del grupo
       # "multiclasificados-effe". Un grupo NO se aplica solo: si no se declara
@@ -31,6 +38,11 @@ workflows:
       # enlaces de compartir se rompen en iOS (ver PLAN-IMPLEMENTACION.md).
       vars:
         XCODE_SCHEME: App
+        # Push en iPhone. Vive aquí y no en la interfaz de Codemagic para que
+        # quede a la vista de quien lea el repo y no haya que acordarse de un
+        # ajuste guardado en otro sitio. Ponerlo en "false" desactiva el push
+        # sin tocar nada más: el resto del build sigue igual.
+        IOS_PUSH: "true"
     scripts:
       - name: Install dependencies
         # @capacitor/ios ya está en package.json → lo instala `npm ci`.
@@ -119,7 +131,7 @@ workflows:
         script: npx cap add ios
       - name: Sync Capacitor
         script: npx cap sync ios
-      - name: Configure iOS (deep link, permisos, Firebase, iconos)
+      - name: Configure iOS (deep link, permisos, push, iconos)
         # `cap add ios` regenera ios/ en cada build, así que la config nativa se
         # reinyecta aquí por script (no se pierde entre compilaciones).
         script: |
@@ -148,19 +160,16 @@ workflows:
           # exento. Sin esta clave, App Store Connect PREGUNTA en cada subida y
           # deja la build bloqueada hasta responder a mano.
           /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" "$PLIST" || true
-          # Firebase (push iOS): copia el plist si está versionado en el repo.
-          if [ -f ios-config/GoogleService-Info.plist ]; then
-            cp ios-config/GoogleService-Info.plist ios/App/App/GoogleService-Info.plist
-            echo "GoogleService-Info.plist copiado."
-          else
-            echo "AVISO: falta ios-config/GoogleService-Info.plist; el push en iOS no funcionará hasta agregarlo (ver PLAN-IMPLEMENTACION.md)."
-          fi
+          # Aquí había una copia de GoogleService-Info.plist. Ya no hace falta:
+          # en iPhone las notificaciones no pasan por Firebase, el servidor habla
+          # directamente con Apple (APNs) desde la función send-push. El plugin de
+          # Capacitor devuelve el token de APNs sin intermediarios.
+          #
           # Push en iOS (APNs). Va detrás de una variable A PROPÓSITO: poner el
-          # entitlement sin que el perfil de aprovisionamiento tenga habilitado
-          # Push hace que la FIRMA falle y el build se caiga entero. Poner
-          # IOS_PUSH=true en Codemagic SOLO después de haber activado Push
-          # Notifications en el App ID y regenerado el perfil. Hasta entonces
-          # todo compila igual, sencillamente sin notificaciones.
+          # entitlement sin que el App ID tenga habilitado Push hace que la FIRMA
+          # falle y el build se caiga entero. El paso "Activar Push en el App ID"
+          # se encarga de eso más abajo; con IOS_PUSH="false" todo compila igual,
+          # sencillamente sin notificaciones.
           if [ "$IOS_PUSH" = "true" ]; then
             # Con PlistBuddy y no con un heredoc: dentro de un bloque YAML el
             # terminador del heredoc tendría que ir sin sangría, y eso corta el
@@ -247,21 +256,69 @@ workflows:
             exit 1
           fi
 
-          # El push es la única pieza que puede faltar sin romper el build, porque
-          # depende de un archivo que se descarga de la consola de Firebase y hoy
-          # no está en el repo. Queda MUY visible al final del resumen.
-          if [ -f ios/App/App/GoogleService-Info.plist ]; then
-            echo "OK  Firebase (push) configurado."
-          else
+          # El push es la única pieza que puede faltar sin romper el build, así
+          # que se dice claramente al final del resumen en vez de dejarlo perdido
+          # entre los mensajes de arriba.
+          if [ "$IOS_PUSH" != "true" ]; then
             echo ""
             echo "############################################################"
             echo "# ATENCIÓN: este IPA NO recibirá notificaciones push.       #"
-            echo "# Falta ios-config/GoogleService-Info.plist en el repo.     #"
+            echo "# IOS_PUSH no está en 'true' (se define en codemagic.yaml). #"
             echo "# Todo lo demás del build funciona con normalidad.          #"
             echo "############################################################"
           fi
           echo ""
           echo "Configuración nativa de iOS verificada."
+      - name: Activar Push en el App ID
+        # Activar "Push Notifications" en el App ID es un paso del portal de
+        # Apple que, si no está hecho, hace que el perfil salga SIN el permiso y
+        # la firma se caiga con un error que no menciona el push por ninguna
+        # parte. Se hace aquí con la llave de App Store Connect que Codemagic ya
+        # tiene conectada, así que nadie necesita entrar al portal.
+        #
+        # Es idempotente: si ya está activado, no toca nada. Y va ANTES de la
+        # firma, porque el perfil que Codemagic pide después es el que tiene que
+        # traer el permiso.
+        script: |
+          if [ "$IOS_PUSH" != "true" ]; then
+            echo "IOS_PUSH no está en 'true': no se toca la cuenta de Apple."
+            exit 0
+          fi
+          ID=$(app-store-connect bundle-ids list \
+                 --bundle-id-identifier com.effe.multiclasificados \
+                 --strict-match-identifier --json \
+               | python3 -c "import json,sys; d=json.load(sys.stdin); print(d[0]['id'] if d else '')")
+          if [ -z "$ID" ]; then
+            echo "ERROR: no se encontró el App ID com.effe.multiclasificados en la cuenta."
+            echo "Comprueba que la llave de App Store Connect conectada a Codemagic tenga rol Admin."
+            exit 1
+          fi
+          if app-store-connect bundle-ids capabilities "$ID" --json | grep -q "PUSH_NOTIFICATIONS"; then
+            echo "Push ya estaba activado en el App ID: no hay nada que cambiar."
+            exit 0
+          fi
+
+          # El nombre del permiso se acepta como enum o como texto según la
+          # versión de las herramientas; se prueban los dos antes de rendirse.
+          app-store-connect bundle-ids enable-capabilities "$ID" --capability PUSH_NOTIFICATIONS \
+            || app-store-connect bundle-ids enable-capabilities "$ID" --capability "Push Notifications"
+          echo "Push activado en el App ID."
+
+          # Y aquí está el detalle que arruinaría el build si se pasara por alto:
+          # Codemagic pide los perfiles ANTES de ejecutar estos scripts, así que
+          # el que ya tiene descargado es el de antes, sin el permiso. Apple, al
+          # cambiar el App ID, deja inválidos los perfiles anteriores. Se borran
+          # y se pide uno nuevo, que ya nace con el push dentro.
+          #
+          # Solo ocurre la primera vez: en los builds siguientes el permiso ya
+          # está y esto ni se ejecuta.
+          for P in $(app-store-connect bundle-ids profiles "$ID" --json \
+                     | python3 -c "import json,sys; print(' '.join(p['id'] for p in json.load(sys.stdin)))"); do
+            app-store-connect profiles delete "$P" || echo "AVISO: no se pudo borrar el perfil $P"
+          done
+          app-store-connect fetch-signing-files com.effe.multiclasificados \
+            --type IOS_APP_STORE --create
+          echo "Perfil de aprovisionamiento regenerado con el permiso de push."
       - name: Increment build number
         script: |
           cd ios/App
