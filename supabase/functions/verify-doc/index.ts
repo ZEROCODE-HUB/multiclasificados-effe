@@ -20,6 +20,14 @@
 // contrario cualquiera podría iterar DNIs y usar esto como buscador de
 // domicilios a costa de nuestra cuenta.
 //
+// Exigir sesión, sin embargo, no era suficiente: con una cuenta cualquiera se
+// podían encadenar consultas sin límite. Desde el 17-ago-2026 hay un tope por
+// usuario (5 por hora, 10 al día) y una caché de 30 días en
+// `public.doc_lookups`, de modo que repetir el mismo documento —al corregir un
+// dígito, al volver a comprar— no vuelve a costar. Las consultas fallidas
+// también cuentan: quien prueba documentos que no existen es a quien hay que
+// frenar. Ver migración 0106.
+//
 // Secret requerido (Supabase → Edge Functions → Secrets):
 //   - FACTILIZA_TOKEN  (el token JWT de tu cuenta Factiliza → sección "Token")
 //
@@ -27,12 +35,21 @@
 //   (SIN --no-verify-jwt: el gateway filtra las peticiones sin JWT y el código
 //    de abajo, además, descarta la anon key y exige un usuario autenticado)
 
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  type ConsultaPrevia,
+  VIDA_CACHE_DIAS,
+  buscarEnCache,
+  evaluarLimite,
+} from "../_shared/limite-consultas.ts";
+
 const FACTILIZA_TOKEN = Deno.env.get("FACTILIZA_TOKEN") ?? "";
 const FACTILIZA_BASE = "https://api.factiliza.com/v1";
 
 // Inyectadas automáticamente por Supabase en el entorno de la Edge Function.
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
 // Devuelve el id del usuario dueño del token, o null si no hay usuario real.
 async function authenticatedUserId(req: Request): Promise<string | null> {
@@ -64,6 +81,50 @@ const json = (body: unknown, status = 200) =>
     headers: { ...cors, "Content-Type": "application/json" },
   });
 
+const admin = SERVICE_ROLE ? createClient(SUPABASE_URL, SERVICE_ROLE) : null;
+
+/**
+ * Consultas del usuario en la ventana que puede importar: 30 días, que es lo
+ * que vive la caché (los topes solo miran un día atrás). Se trae de una vez y
+ * se decide en memoria, para no hacer dos viajes a la base.
+ */
+async function historialDe(userId: string): Promise<ConsultaPrevia[]> {
+  if (!admin) return [];
+  const desde = new Date(Date.now() - VIDA_CACHE_DIAS * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await admin
+    .from("doc_lookups")
+    .select("doc_type, doc_number, ok, nombre, data, created_at")
+    .eq("user_id", userId)
+    .gte("created_at", desde)
+    .order("created_at", { ascending: false })
+    .limit(400);
+  if (error) {
+    // Si el historial no se puede leer, no se deja a nadie sin comprar: se
+    // sigue adelante sin caché ni tope. Es preferible pagar alguna consulta de
+    // más a que un fallo de la base bloquee una venta.
+    console.error("[verify-doc] no se pudo leer el historial:", error.message);
+    return [];
+  }
+  return (data ?? []) as ConsultaPrevia[];
+}
+
+async function anotarConsulta(
+  userId: string,
+  tipo: string,
+  numero: string,
+  ok: boolean,
+  nombre: string | null,
+  data: Record<string, unknown> | null,
+) {
+  if (!admin) return;
+  const { error } = await admin.from("doc_lookups").insert({
+    user_id: userId, doc_type: tipo, doc_number: numero, ok,
+    nombre: ok ? nombre : null,
+    data: ok ? data : null,
+  });
+  if (error) console.error("[verify-doc] no se pudo anotar la consulta:", error.message);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
@@ -73,7 +134,8 @@ Deno.serve(async (req) => {
     }
 
     // Solo usuarios autenticados: se comprueba ANTES de gastar una consulta.
-    if (!(await authenticatedUserId(req))) {
+    const userId = await authenticatedUserId(req);
+    if (!userId) {
       return json({ success: false, error: "Inicia sesión para verificar tu documento." }, 401);
     }
 
@@ -88,6 +150,29 @@ Deno.serve(async (req) => {
     }
     if (tipo === "ruc" && doc.length !== 11) {
       return json({ success: false, error: "El RUC debe tener 11 dígitos." });
+    }
+
+    // Antes de gastar nada: ¿ya está contestada esta pregunta, y le queda cupo?
+    const ahora = Date.now();
+    const historial = await historialDe(userId);
+
+    const cacheado = buscarEnCache(historial, tipo, doc, ahora);
+    if (cacheado) {
+      return json({
+        success: true,
+        tipo,
+        numero: doc,
+        nombre: cacheado.nombre ?? "",
+        data: cacheado.data ?? {},
+        // Para el que llama: esta respuesta no costó una consulta.
+        cached: true,
+      });
+    }
+
+    const veredicto = evaluarLimite(historial, ahora);
+    if (!veredicto.permitido) {
+      // 429: el cliente lo distingue de un documento que no existe.
+      return json({ success: false, error: veredicto.motivo, rate_limited: true }, 429);
     }
 
     const url = `${FACTILIZA_BASE}/${tipo}/info/${doc}`;
@@ -112,6 +197,9 @@ Deno.serve(async (req) => {
         res.status === 401
           ? "Token de Factiliza inválido o vencido."
           : "No se encontró el USUARIO/EMPRESA con el DNI/RUC ingresado";
+      // Un 401 es culpa nuestra (token caducado), no de quien consulta: no se
+      // le carga en su cupo. Un documento que no existe, sí.
+      if (res.status !== 401) await anotarConsulta(userId, tipo, doc, false, null, null);
       return json({ success: false, error: msg });
     }
 
@@ -122,6 +210,8 @@ Deno.serve(async (req) => {
       (data.nombre_o_razon_social as string) ??
       (data.razon_social as string) ??
       "";
+
+    await anotarConsulta(userId, tipo, doc, true, nombre, data);
 
     return json({
       success: true,

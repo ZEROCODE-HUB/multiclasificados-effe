@@ -23,6 +23,12 @@ export interface VerifyDocResult {
   nombre?: string; // Nombre completo (DNI) o razón social (RUC)
   data?: Record<string, unknown>;
   error?: string;
+  /**
+   * El servidor cortó por exceso de consultas (5/hora, 10/día). No es un
+   * documento inválido: reintentar con otro número tampoco va a funcionar, así
+   * que la pantalla no debe empujar a seguir probando.
+   */
+  rateLimited?: boolean;
 }
 
 export async function verifyDocument(tipo: DocType, numero: string): Promise<VerifyDocResult> {
@@ -39,16 +45,18 @@ export async function verifyDocument(tipo: DocType, numero: string): Promise<Ver
   if (error) {
     // El cuerpo de error de una Edge Function viene en error.context (Response).
     let message = error.message;
+    let rateLimited = false;
     try {
       const ctx = (error as { context?: Response }).context;
       if (ctx && typeof ctx.json === "function") {
         const body = await ctx.json();
         if (body?.error) message = body.error;
+        rateLimited = body?.rate_limited === true || ctx.status === 429;
       }
     } catch {
       /* se mantiene el mensaje original */
     }
-    return { ok: false, error: message };
+    return { ok: false, error: message, rateLimited };
   }
 
   if (!data?.success) {

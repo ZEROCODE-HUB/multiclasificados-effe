@@ -44,12 +44,12 @@ describe("BuyCreditsModal — verificación de documento con Factiliza + campos 
     await waitFor(() =>
       expect(verifyDocument).toHaveBeenCalledWith("dni", "44443333"),
     );
-    // Muestra el nombre y la dirección devueltos por Factiliza.
     await screen.findByText("ROMAINA SILVA, LISMELI");
-    expect(screen.getByText("AV. LIMA 123")).toBeInTheDocument();
   });
 
-  it("DNI: muestra la ficha completa (documento + domicilio con ubigeo)", async () => {
+  it("DNI: NO enseña el domicilio, solo el nombre y el número", async () => {
+    // Para confirmar que el DNI es el correcto basta el nombre. La dirección de
+    // casa de alguien en la pantalla del móvil, delante de quien sea, sobra.
     verifyDocument.mockResolvedValue({
       ok: true,
       nombre: "ROMAINA SILVA, LISMELI",
@@ -65,24 +65,12 @@ describe("BuyCreditsModal — verificación de documento con Factiliza + campos 
     await screen.findByText("ROMAINA SILVA, LISMELI");
     expect(screen.getByText("DNI:")).toBeInTheDocument();
     expect(screen.getByText("44443333")).toBeInTheDocument();
-    // Prefiere `direccion_completa` (ya trae el ubigeo concatenado).
-    expect(screen.getByText(/UCAYALI - CORONEL PORTILLO - MASISEA/)).toBeInTheDocument();
+    expect(screen.queryByText(/FELICIANO PAREDES/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/CORONEL PORTILLO/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Domicilio:")).not.toBeInTheDocument();
   });
 
-  it("DNI: si falta direccion_completa, arma el domicilio con dirección + ubigeo", async () => {
-    verifyDocument.mockResolvedValue({
-      ok: true,
-      nombre: "ANA TORRES",
-      data: { direccion: "AV. LIMA 123", distrito: "MIRAFLORES", provincia: "LIMA", departamento: "LIMA" },
-    });
-    open();
-    fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "44443333" } });
-
-    await screen.findByText("ANA TORRES");
-    expect(screen.getByText("AV. LIMA 123, MIRAFLORES - LIMA - LIMA")).toBeInTheDocument();
-  });
-
-  it("RUC: muestra razón social, estado, condición y domicilio fiscal (omite lo vacío)", async () => {
+  it("RUC: muestra razón social, estado y condición, pero NO el domicilio fiscal", async () => {
     verifyDocument.mockResolvedValue({
       ok: true,
       nombre: "SUNAT",
@@ -101,8 +89,56 @@ describe("BuyCreditsModal — verificación de documento con Factiliza + campos 
     expect(screen.getByText("Empresa verificada")).toBeInTheDocument();
     expect(screen.getByText("ACTIVO")).toBeInTheDocument();
     expect(screen.getByText("HABIDO")).toBeInTheDocument();
-    expect(screen.getByText(/GARCILASO DE LA VEGA/)).toBeInTheDocument();
+    expect(screen.queryByText(/GARCILASO DE LA VEGA/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Domicilio fiscal:")).not.toBeInTheDocument();
     expect(screen.queryByText("Tipo:")).not.toBeInTheDocument();
+  });
+
+  it("el mismo documento no se consulta dos veces", async () => {
+    // Cada consulta se le paga a Factiliza. Corregir un dígito y volver a
+    // escribir el mismo número disparaba otra.
+    verifyDocument.mockResolvedValue({ ok: true, nombre: "JUAN PEREZ", data: {} });
+    open();
+
+    const campo = screen.getByPlaceholderText("12345678");
+    fireEvent.change(campo, { target: { value: "44443333" } });
+    await screen.findByText("JUAN PEREZ");
+    expect(verifyDocument).toHaveBeenCalledTimes(1);
+
+    // Borra el último dígito y lo vuelve a poner: mismo documento.
+    fireEvent.change(campo, { target: { value: "4444333" } });
+    fireEvent.change(campo, { target: { value: "44443333" } });
+    await screen.findByText("JUAN PEREZ");
+    await act(async () => { await new Promise((r) => setTimeout(r, 700)); });
+    expect(verifyDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it("mientras se teclea no se consulta: solo cuando para", async () => {
+    verifyDocument.mockResolvedValue({ ok: true, nombre: "ANA TORRES", data: {} });
+    open();
+
+    const campo = screen.getByPlaceholderText("12345678");
+    // Ocho dígitos, y enseguida un noveno que el campo descarta... pero antes
+    // pasa por dos números completos distintos.
+    fireEvent.change(campo, { target: { value: "44443333" } });
+    fireEvent.change(campo, { target: { value: "44443334" } });
+    await screen.findByText("ANA TORRES");
+
+    expect(verifyDocument).toHaveBeenCalledTimes(1);
+    expect(verifyDocument).toHaveBeenCalledWith("dni", "44443334");
+  });
+
+  it("si el servidor corta por exceso de consultas, lo explica y no insiste", async () => {
+    verifyDocument.mockResolvedValue({
+      ok: false,
+      error: "Has hecho varias verificaciones seguidas. Espera unos minutos e inténtalo de nuevo.",
+      rateLimited: true,
+    });
+    open();
+    fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "44443333" } });
+
+    await screen.findByText(/varias verificaciones seguidas/i);
+    expect(screen.getByText(/ciérralo y vuelve a abrirlo/i)).toBeInTheDocument();
   });
 
   it("pegar el DNI CON ESPACIO conserva los 8 dígitos y verifica", async () => {

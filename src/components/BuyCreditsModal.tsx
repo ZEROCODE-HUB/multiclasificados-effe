@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { Browser } from "@capacitor/browser";
 import {
@@ -16,6 +16,7 @@ import {
 import { fetchPricingSettings } from "@/lib/pricingRemote";
 import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 import { verifyDocument, normalizeDocNumber } from "@/lib/verifyDoc";
+import { fetchMyIdentity, saveMyIdentity } from "@/lib/identity";
 import {
   createPayment, createPublishPayment, pollOrderStatus, getPurchaseResult, hostedPaymentUrl,
   SaldoYaSuficiente,
@@ -95,14 +96,30 @@ export function BuyCreditsModal({
   const [docData, setDocData] = useState<Record<string, unknown> | null>(null);
   const [verifyingDoc, setVerifyingDoc] = useState(false);
   const [docError, setDocError] = useState("");
+  // El servidor cortó por exceso de consultas: no tiene sentido seguir probando.
+  const [docBloqueado, setDocBloqueado] = useState(false);
+
+  /**
+   * Documentos ya resueltos en esta sesión del modal, para no volver a
+   * preguntar por el mismo. Cada consulta a Factiliza se paga, y corregir un
+   * dígito y volver a escribirlo disparaba otra.
+   */
+  const consultados = useRef(new Map<string, { nombre: string; data: Record<string, unknown> | null }>());
 
   const deficit = Math.max(0, creditCost - currentBalance);
 
   // En el APK, reserva el alto del teclado y centra el campo enfocado.
   const { kbPad, scrollFocusedIntoView } = useKeyboardInset();
 
-  // Al completar el documento (DNI 8 / RUC 11) lo consultamos automáticamente en
-  // Factiliza y mostramos el nombre/razón social y los datos disponibles.
+  // Al completar el documento (DNI 8 / RUC 11) lo consultamos en Factiliza y
+  // mostramos el nombre/razón social.
+  //
+  // Antes se consultaba en cuanto había 8 u 11 dígitos, sin más. Escribiendo
+  // del tirón eso está bien, pero corregir el último dígito de un DNI mal
+  // tecleado disparaba dos consultas, y cada una se paga. Ahora se espera a que
+  // la persona deje de escribir, y lo ya preguntado no se vuelve a preguntar:
+  // ni en esta sesión (`consultados`) ni entre sesiones (el servidor guarda 30
+  // días, ver migración 0106).
   useEffect(() => {
     const docType = personType === "natural" ? "dni" : "ruc";
     const requiredLen = personType === "natural" ? 8 : 11;
@@ -113,23 +130,47 @@ export function BuyCreditsModal({
       setVerifyingDoc(false);
       return;
     }
+
+    // Ya resuelto antes: se responde de memoria, sin gastar una consulta.
+    const clave = `${docType}:${docNumber}`;
+    const enMemoria = consultados.current.get(clave);
+    if (enMemoria) {
+      setVerifiedName(enMemoria.nombre);
+      setDocData(enMemoria.data);
+      setVerifyingDoc(false);
+      return;
+    }
+
     let cancelled = false;
     setVerifyingDoc(true);
     setVerifiedName("");
     setDocData(null);
-    verifyDocument(docType, docNumber)
-      .then((r) => {
-        if (cancelled) return;
-        if (r.ok) {
-          setVerifiedName(r.nombre ?? "");
-          setDocData(r.data ?? null);
-        } else {
-          setDocError(r.error ?? "No se pudo verificar el documento.");
-        }
-      })
-      .catch(() => { if (!cancelled) setDocError("No se pudo verificar el documento."); })
-      .finally(() => { if (!cancelled) setVerifyingDoc(false); });
-    return () => { cancelled = true; };
+
+    // Espera a que deje de teclear. Sin esto, un documento escrito con una
+    // corrección al final cuesta dos consultas en vez de una.
+    const t = setTimeout(() => {
+      verifyDocument(docType, docNumber)
+        .then((r) => {
+          if (cancelled) return;
+          if (r.ok) {
+            const nombre = r.nombre ?? "";
+            const data = r.data ?? null;
+            consultados.current.set(clave, { nombre, data });
+            setVerifiedName(nombre);
+            setDocData(data);
+            setDocBloqueado(false);
+            // Queda en el perfil: la próxima compra ya no lo pregunta.
+            void saveMyIdentity({ docType, docNumber, name: nombre });
+          } else {
+            setDocError(r.error ?? "No se pudo verificar el documento.");
+            setDocBloqueado(!!r.rateLimited);
+          }
+        })
+        .catch(() => { if (!cancelled) setDocError("No se pudo verificar el documento."); })
+        .finally(() => { if (!cancelled) setVerifyingDoc(false); });
+    }, 600);
+
+    return () => { cancelled = true; clearTimeout(t); };
   }, [docNumber, personType]);
 
   const emailValid = EMAIL_RE.test(email.trim());
@@ -139,24 +180,22 @@ export function BuyCreditsModal({
     return typeof v === "string" && v.trim() ? v.trim() : "";
   };
 
-  // Ficha a mostrar tras verificar. Factiliza devuelve `direccion_completa` con
-  // el ubigeo ya concatenado; si falta, la armamos con dirección + ubigeo.
-  const ubigeo = [docField("distrito"), docField("provincia"), docField("departamento")]
-    .filter(Boolean).join(" - ");
-  const direccion = docField("direccion_completa")
-    || [docField("direccion"), ubigeo].filter(Boolean).join(", ");
-
+  // Ficha a mostrar tras verificar.
+  //
+  // El domicilio NO se muestra, ni el del DNI ni el fiscal del RUC. Enseñar en
+  // pantalla la dirección de casa de alguien para confirmar que el DNI es
+  // correcto no hace falta —con el nombre basta— y en un móvil, delante de
+  // quien sea, es un dato que sobra. Sigue guardado en el comprobante si
+  // Factiliza lo devolvió.
   const docRows: Array<[string, string]> = personType === "natural"
     ? [
         ["DNI", docNumber],
-        ["Domicilio", direccion],
       ]
     : [
         ["RUC", docNumber],
         ["Estado", docField("estado")],
         ["Condición", docField("condicion")],
         ["Tipo", docField("tipo_contribuyente")],
-        ["Domicilio fiscal", direccion],
       ];
 
   // Al abrir: recarga la matriz de precios vigente y reinicia el flujo de pago.
@@ -168,6 +207,38 @@ export function BuyCreditsModal({
       setConfirming(false);
       setSoloSaldo(false);
     }
+  }, [open]);
+
+  // Al abrir, trae el documento que ya verificó en una compra o publicación
+  // anterior. Quien compra por segunda vez no tiene que volver a escribirlo ni
+  // esperar a que se verifique: la consulta ya se pagó una vez.
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    fetchMyIdentity().then((id) => {
+      if (!active || !id) return;
+
+      if (id.docNumber && id.docType && id.name) {
+        const tipo = id.docType === "ruc" ? "juridica" : "natural";
+        // Se marca como ya consultado ANTES de escribir el número, para que el
+        // efecto de verificación lo tome de aquí y no salga a Factiliza.
+        consultados.current.set(`${id.docType}:${id.docNumber}`, {
+          nombre: id.name,
+          // El domicilio no se guarda en el perfil y ya no se muestra; el
+          // comprobante no lo necesita.
+          data: null,
+        });
+        setPersonType(tipo);
+        setReceiptType(tipo === "juridica" ? "factura" : "boleta");
+        setDocNumber(id.docNumber);
+        setVerifiedName(id.name);
+      }
+
+      // El correo del comprobante: el de la cuenta como punto de partida, que
+      // es lo que casi siempre quiere. Se puede cambiar antes de pagar.
+      if (id.accountEmail) setEmail((actual) => actual || id.accountEmail);
+    });
+    return () => { active = false; };
   }, [open]);
 
   const packageBase = useMemo(
@@ -581,9 +652,18 @@ export function BuyCreditsModal({
                   </div>
                 )}
                 {!verifyingDoc && docError && (
-                  <p className="mt-2 flex items-start gap-1.5 text-xs text-destructive">
-                    <AlertCircle size={13} className="mt-0.5 shrink-0" /> {docError}
-                  </p>
+                  <div className={`mt-2 flex items-start gap-1.5 text-xs ${docBloqueado ? "rounded-md border border-destructive/40 bg-destructive/5 p-2.5 text-muted-foreground" : "text-destructive"}`}>
+                    <AlertCircle size={13} className={`mt-0.5 shrink-0 ${docBloqueado ? "text-destructive" : ""}`} />
+                    <span>
+                      {docError}
+                      {/* Cuando el corte es por cantidad de intentos, seguir
+                          escribiendo documentos no arregla nada: hay que decir
+                          por dónde sale. */}
+                      {docBloqueado && (
+                        <> Si ya verificaste tu documento antes, ciérralo y vuelve a abrirlo: se carga solo.</>
+                      )}
+                    </span>
+                  </div>
                 )}
               </div>
               <div>
