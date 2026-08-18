@@ -17,16 +17,19 @@ import { usePermissions } from "@/hooks/usePermissions";
 import {
   fetchCategoryDistribution, fetchCategoryRevenue, fetchRegionDistribution,
   fetchClaimsSummary, fetchGrowthSeries, fetchAdminCreditTransactions,
+  fetchSaldosUsuarios, SALDOS_PAGE_SIZE, type SaldoUsuario,
   CREDIT_TX_PAGE_SIZE, GROWTH_RANGES,
   type ClaimsSummary, type GrowthPoint, type AdminCreditTx, type GrowthRange,
 } from "@/lib/admin";
 import { exportRows } from "@/lib/exportReport";
-import { formatCredits } from "@/lib/pricing";
+import { formatCredits, formatSoles } from "@/lib/pricing";
 
 const COLORS = ["hsl(24 95% 53%)", "hsl(220 56% 30%)", "hsl(160 64% 40%)", "hsl(280 65% 55%)", "hsl(40 90% 50%)", "hsl(200 70% 50%)"];
 
-// Formato de dinero para tooltips/valores de los reportes: siempre con "S/".
-const soles = (v: number | string) => `S/ ${Number(v).toLocaleString("es-PE")}`;
+// Formato de dinero para tooltips/valores de los reportes. Delega en el único
+// formateador de la app: antes el reporte decía "S/ 1,200" y la boleta del
+// mismo importe "S/ 1200.00".
+const soles = (v: number | string) => formatSoles(Number(v) || 0);
 
 // Cada pestaña de reporte por tipo grafica SU métrica de la serie de crecimiento
 // (EFFE-044/059/060). Antes las 4 mostraban ingresos+usuarios (el mismo gráfico).
@@ -146,6 +149,11 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
   const [txRange, setTxRange] = useState("all");
   const [txType, setTxType] = useState<"all" | "purchase" | "spend">("all");
   const [txPage, setTxPage] = useState(1);
+  // Saldos a favor: la deuda viva de la plataforma con sus usuarios.
+  const [saldos, setSaldos] = useState<{ data: SaldoUsuario[]; total: number }>({ data: [], total: 0 });
+  const [saldosSearch, setSaldosSearch] = useState("");
+  const [saldosPage, setSaldosPage] = useState(1);
+  const [saldosLoading, setSaldosLoading] = useState(false);
   const [tx, setTx] = useState<{ data: AdminCreditTx[]; total: number }>({ data: [], total: 0 });
   const [txLoading, setTxLoading] = useState(false);
 
@@ -186,6 +194,21 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
   // Al cambiar la búsqueda, el tipo o las fechas, vuelve a la primera página.
   useEffect(() => { setTxPage(1); }, [txSearch, txType, filters.from, filters.to]);
 
+  // Saldos a favor: mismo patrón que el historial (debounce + paginación en el
+  // servidor), porque la lista puede ser tan larga como la base de usuarios.
+  useEffect(() => {
+    if (activeTab !== "saldos" || !canTx) return;
+    setSaldosLoading(true);
+    const t = setTimeout(() => {
+      fetchSaldosUsuarios({ search: saldosSearch || undefined, page: saldosPage })
+        .then(setSaldos)
+        .finally(() => setSaldosLoading(false));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [activeTab, canTx, saldosSearch, saldosPage]);
+
+  useEffect(() => { setSaldosPage(1); }, [saldosSearch]);
+
   // Coincidencia de categoría robusta: acepta que el backend devuelva el NOMBRE
   // o el id/slug, sin distinguir mayúsculas/acentos de más.
   const matchCat = (cat: string) => {
@@ -205,7 +228,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
   const regionNames = allRegion.map((r) => r.reg);
 
   // Exportación: arma las filas según la pestaña activa y descarga en el formato elegido.
-  const exp = (format: string) => {
+  const exp = async (format: string) => {
     const stamp = filters.from || filters.to ? ` (${filters.from || "inicio"} a ${filters.to || "hoy"})` : "";
     let rows: Record<string, string | number>[] = [];
     let title = "Reporte";
@@ -229,6 +252,17 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
         "Monto (S/)": `${r.credits >= 0 ? "+" : "−"}${formatCredits(Math.abs(r.credits))}`,
         Detalle: r.description ?? (r.listing_title ? `Aviso: ${r.listing_title}` : ""),
         Fecha: r.created_at.slice(0, 19).replace("T", " "),
+      }));
+    } else if (activeTab === "saldos") {
+      title = "Saldos a favor";
+      // Se pide TODO lo filtrado, no solo la página que se está viendo: un
+      // reporte de deuda que solo trae 20 filas no sirve para cuadrar nada.
+      const todos = await fetchSaldosUsuarios({ search: saldosSearch || undefined, page: 1, pageSize: 5000 });
+      rows = todos.data.map((r) => ({
+        Nombre: r.full_name,
+        "DNI / RUC": r.doc_number ?? "",
+        Correo: r.email,
+        "Saldo a favor (S/)": Number(r.balance.toFixed(2)),
       }));
     } else {
       const cfg = SERIES_TABS.find((x) => x.value === activeTab);
@@ -261,6 +295,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
               <TabsTrigger value="usuarios">Usuarios</TabsTrigger>
               <TabsTrigger value="postulaciones">Postulaciones</TabsTrigger>
               {canTx && <TabsTrigger value="transacciones">Transacciones</TabsTrigger>}
+              {canTx && <TabsTrigger value="saldos">Saldos a favor</TabsTrigger>}
             </TabsList>
 
             {/* DASHBOARD EN TIEMPO REAL */}
@@ -511,6 +546,71 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
                         <ChevronLeft size={14} /> Anterior
                       </Button>
                       <Button variant="outline" size="sm" className="gap-1" disabled={txPage >= Math.ceil(tx.total / CREDIT_TX_PAGE_SIZE)} onClick={() => setTxPage((p) => p + 1)}>
+                        Siguiente <ChevronRight size={14} />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </TabsContent>
+            )}
+
+            {/* SALDOS A FAVOR — lo que la plataforma le debe a sus usuarios */}
+            {canTx && (
+              <TabsContent value="saldos" className="mt-5 space-y-3">
+                <ReportFilters onExport={exp} show={{ dates: false, catRegion: false }} />
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="relative flex-1 min-w-[220px]">
+                    <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={saldosSearch}
+                      onChange={(e) => setSaldosSearch(e.target.value)}
+                      placeholder="Buscar por nombre, correo o documento…"
+                      className="h-9 pl-9"
+                    />
+                  </div>
+                </div>
+                <Card>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/30 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+                          <th className="px-4 py-2.5 font-semibold">Nombre</th>
+                          <th className="px-4 py-2.5 font-semibold">DNI / RUC</th>
+                          <th className="px-4 py-2.5 font-semibold">Correo</th>
+                          <th className="px-4 py-2.5 font-semibold text-right whitespace-nowrap">Saldo a favor</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {saldosLoading ? (
+                          <tr><td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">Cargando…</td></tr>
+                        ) : saldos.data.length === 0 ? (
+                          <tr><td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">Nadie tiene saldo pendiente con estos filtros.</td></tr>
+                        ) : (
+                          saldos.data.map((r) => (
+                            <tr key={r.user_id} className="hover:bg-muted/30">
+                              <td className="px-4 py-2.5 font-medium text-foreground">{r.full_name}</td>
+                              <td className="px-4 py-2.5 text-muted-foreground tabular-nums">{r.doc_number ?? "—"}</td>
+                              <td className="px-4 py-2.5 text-muted-foreground">{r.email}</td>
+                              <td className="px-4 py-2.5 text-right font-bold tabular-nums whitespace-nowrap text-secondary">
+                                {formatCredits(r.balance)}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+                {saldos.total > SALDOS_PAGE_SIZE && (
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <p className="text-xs text-muted-foreground">
+                      {saldos.total.toLocaleString()} usuarios con saldo · página {saldosPage} de {Math.max(1, Math.ceil(saldos.total / SALDOS_PAGE_SIZE))}
+                    </p>
+                    <div className="flex gap-1.5">
+                      <Button variant="outline" size="sm" className="gap-1" disabled={saldosPage <= 1} onClick={() => setSaldosPage((p) => Math.max(1, p - 1))}>
+                        <ChevronLeft size={14} /> Anterior
+                      </Button>
+                      <Button variant="outline" size="sm" className="gap-1" disabled={saldosPage >= Math.ceil(saldos.total / SALDOS_PAGE_SIZE)} onClick={() => setSaldosPage((p) => p + 1)}>
                         Siguiente <ChevronRight size={14} />
                       </Button>
                     </div>

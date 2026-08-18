@@ -26,7 +26,8 @@ const setSetting = vi.fn();
 vi.mock("@/lib/admin", () => ({
   fetchSettings: async () => [],
   setSetting: (...a: unknown[]) => setSetting(...a),
-  fetchAllInvoices: async () => ({ data: [], real: true }),
+  fetchAllInvoices: async () => ({ data: [], real: true, total: 0 }),
+  INVOICES_PAGE_SIZE: 20,
   fetchCategories: async () => ({ data: [], real: true }),
   createCategory: async () => {},
   updateCategory: async () => {},

@@ -2,10 +2,13 @@ import { describe, it, expect } from "vitest";
 import { personKindLabel, docKindLabel, factilizaRows } from "@/lib/identity";
 
 describe("personKindLabel — Usuario vs Empresa", () => {
-  it("usa el tipo cuando está: dni/ce = Usuario, ruc = Empresa", () => {
+  it("usa el tipo cuando está: dni = Usuario, ruc = Empresa, ce/pasaporte = Extranjero", () => {
     expect(personKindLabel("dni", "12345678")).toBe("Usuario");
-    expect(personKindLabel("ce", "000111")).toBe("Usuario");
     expect(personKindLabel("ruc", "20123456789")).toBe("Empresa");
+    // Quien compra con carné de extranjería o pasaporte no pasa por Factiliza:
+    // sus datos van tal cual al comprobante y conviene distinguirlo.
+    expect(personKindLabel("ce", "000111")).toBe("Extranjero");
+    expect(personKindLabel("pasaporte", "AB123456")).toBe("Extranjero");
   });
   it("sin tipo, lo infiere por longitud (11 dígitos = Empresa)", () => {
     expect(personKindLabel(null, "20123456789")).toBe("Empresa");

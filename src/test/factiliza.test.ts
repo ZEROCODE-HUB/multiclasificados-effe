@@ -201,6 +201,34 @@ describe("coherencia: se rechaza aquí antes de gastar un envío", () => {
       .toThrow(/factura/i);
   });
 
+  it("una boleta con pasaporte o carné de extranjería sale con su tipo de SUNAT", () => {
+    // Sin esto, un extranjero no podía comprar: no había forma de emitirle
+    // comprobante. Catálogo 06: 7 = pasaporte, 4 = carné de extranjería.
+    const pasaporte = construir({
+      clienteDocTipo: "pasaporte", clienteDocNumero: "AB123456", clienteNombre: "JOHN SMITH",
+    }) as Record<string, string>;
+    expect(pasaporte.cliente_Tipo_Doc).toBe("7");
+    expect(pasaporte.cliente_Num_Doc).toBe("AB123456");
+
+    const ce = construir({
+      clienteDocTipo: "ce", clienteDocNumero: "001234567", clienteNombre: "MARIA LOPEZ",
+    }) as Record<string, string>;
+    expect(ce.cliente_Tipo_Doc).toBe("4");
+  });
+
+  it("una FACTURA sigue exigiendo RUC: ni pasaporte ni carné valen", () => {
+    expect(() => construir({ tipo: "factura", serie: "F001", clienteDocTipo: "pasaporte", clienteDocNumero: "AB123456" }))
+      .toThrow(/RUC/i);
+    expect(() => construir({ tipo: "factura", serie: "F001", clienteDocTipo: "ce", clienteDocNumero: "001234567" }))
+      .toThrow(/RUC/i);
+  });
+
+  it("el formato del documento se comprueba según su tipo", () => {
+    // Un pasaporte con letras es válido; con un solo carácter, no.
+    expect(() => construir({ clienteDocTipo: "pasaporte", clienteDocNumero: "X" })).toThrow(/pasaporte/i);
+    expect(() => construir({ clienteDocTipo: "ce", clienteDocNumero: "123" })).toThrow(/extranjer/i);
+  });
+
   it("una factura con RUC sí se construye", () => {
     const c = construir({
       tipo: "factura", serie: "F001",
@@ -582,6 +610,15 @@ describe("la nota de crédito", () => {
     expect(n.afectado_Num_Doc).toBe("B066-24");
     expect(n.motivo_Cod).toBe("01");
     expect(n.motivo_Des).toBe("ANULACION DE LA OPERACION");
+  });
+
+  it("anular la boleta de un extranjero usa SU MISMO tipo de documento", () => {
+    // Si la nota saliera con tipo 1 (DNI) y el comprobante original con 7
+    // (pasaporte), SUNAT rechaza la nota y el comprobante se queda sin anular.
+    const n = nota({ clienteDocTipo: "pasaporte", clienteDocNumero: "AB123456" });
+    expect(n.cliente_Tipo_Doc).toBe("7");
+    const ce = nota({ clienteDocTipo: "ce", clienteDocNumero: "001234567" });
+    expect(ce.cliente_Tipo_Doc).toBe("4");
   });
 
   it("sobre una factura, el tipo afectado es 01", () => {

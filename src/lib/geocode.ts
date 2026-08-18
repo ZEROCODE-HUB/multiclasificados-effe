@@ -54,6 +54,8 @@ export interface LugarElegido {
   lng: number;
   region: string | null;
   referencia: string | null;
+  /** ISO alpha-2 del país del lugar. */
+  pais: string | null;
 }
 
 // ─── Sesiones de búsqueda ─────────────────────────────────────────────────────
@@ -78,6 +80,8 @@ export function nuevaSesionDeBusqueda(): string {
 interface Componente {
   long_name?: string;  // Geocoding API
   longText?: string;   // Places API (New)
+  short_name?: string; // Geocoding API — el código ISO del país vive aquí
+  shortText?: string;  // Places API (New)
   types?: string[];
 }
 
@@ -90,6 +94,13 @@ export interface UbicacionDelPunto {
    * variantes.
    */
   region: string | null;
+  /**
+   * País del punto, en ISO-3166-1 alpha-2 ("PE", "CL"…). Google lo da en el
+   * `shortText` del componente `country`. Hace falta desde que un aviso puede
+   * estar fuera del Perú: es lo que decide si la región se traduce a un
+   * departamento del INEI o se deja como texto.
+   */
+  pais: string | null;
   /** Cómo se lee la ubicación: "Miraflores, Lima", "Chancay, Huaral", "Trujillo". */
   referencia: string | null;
 }
@@ -106,18 +117,24 @@ export interface UbicacionDelPunto {
  *   Trujillo   → a1 "La Libertad"      · a2 "Trujillo" · locality "Trujillo"
  */
 export function interpretarComponentes(componentes: Componente[]): UbicacionDelPunto {
-  const vacio: UbicacionDelPunto = { region: null, referencia: null };
+  const vacio: UbicacionDelPunto = { region: null, referencia: null, pais: null };
 
   // El primero que aparece de cada tipo: los resultados vienen del más
   // específico al más general, así que gana el más cercano al punto.
   const partes: Record<string, string> = {};
+  const cortos: Record<string, string> = {};
   for (const c of componentes) {
     const nombre = c.longText ?? c.long_name;
+    const corto = c.shortText ?? c.short_name;
     for (const t of c.types ?? []) {
       if (nombre && !partes[t]) partes[t] = nombre;
+      if (corto && !cortos[t]) cortos[t] = corto;
     }
   }
-  if (partes.country && partes.country !== "Perú" && partes.country !== "Peru") return vacio;
+  // Antes se descartaba cualquier punto fuera del Perú. Ya no: lo que hay fuera
+  // se acepta con su país, y es el llamador quien decide qué hacer con la
+  // región (dentro del Perú se traduce a departamento; fuera, es texto).
+  const pais = (cortos.country ?? "").toUpperCase() || null;
 
   const region = partes.administrative_area_level_1 ?? null;
   // El distrito. `locality` es lo que la gente llama su sitio; si no viene,
@@ -133,7 +150,7 @@ export function interpretarComponentes(componentes: Componente[]): UbicacionDelP
       : distrito
     : provincia;
 
-  return { region, referencia };
+  return { region, referencia, pais };
 }
 
 // ─── Places API (New) — sugerir mientras se escribe ───────────────────────────
@@ -164,18 +181,21 @@ interface RespuestaAutocomplete {
  */
 export async function sugerirDirecciones(
   consulta: string,
-  opciones: { sesion?: string; sesgo?: SesgoZona } = {},
+  opciones: { sesion?: string; sesgo?: SesgoZona; pais?: string } = {},
 ): Promise<Sugerencia[]> {
   const q = consulta.trim();
   if (!q || !hayGoogleMaps()) return [];
 
   try {
+    // Se acota al país elegido, no siempre al Perú: "Av. Larco" existe en medio
+    // mundo, y buscar sin acotar devuelve la de cualquier parte. Con un país
+    // distinto, se acota a ese.
+    const pais = (opciones.pais ?? "PE").toUpperCase();
     const cuerpo: Record<string, unknown> = {
       input: q,
       languageCode: "es",
-      regionCode: "PE",
-      // Limitado al Perú: "Av. Larco" existe en medio mundo.
-      includedRegionCodes: ["pe"],
+      regionCode: pais,
+      includedRegionCodes: [pais.toLowerCase()],
     };
     if (opciones.sesion) cuerpo.sessionToken = opciones.sesion;
     if (opciones.sesgo) {
@@ -207,7 +227,7 @@ export async function sugerirDirecciones(
       .slice(0, 5);
   } catch (e) {
     console.warn("[geocode] Places no contestó; se usa Geocoding como respaldo:", e);
-    return sugerenciasPorGeocoding(q, opciones.sesgo);
+    return sugerenciasPorGeocoding(q, opciones.sesgo, opciones.pais);
   }
 }
 
@@ -245,8 +265,8 @@ export async function detalleDeLugar(placeId: string, sesion?: string): Promise<
     const lng = Number(data.location?.longitude);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
 
-    const { region, referencia } = interpretarComponentes(data.addressComponents ?? []);
-    return { lat, lng, region, referencia };
+    const { region, referencia, pais } = interpretarComponentes(data.addressComponents ?? []);
+    return { lat, lng, region, referencia, pais };
   } catch (e) {
     console.warn("[geocode] no se pudo obtener el detalle del lugar:", e);
     return null;
@@ -277,14 +297,15 @@ const gradosPara = (metros: number) => metros / 111_320;
  * Devuelve direcciones completas y no predicciones, así que acierta menos con
  * texto a medias; aun así "av jose larco mira" da la avenida de Miraflores.
  */
-async function sugerenciasPorGeocoding(consulta: string, sesgo?: SesgoZona): Promise<Sugerencia[]> {
+async function sugerenciasPorGeocoding(consulta: string, sesgo?: SesgoZona, pais?: string): Promise<Sugerencia[]> {
   try {
     const url = new URL(GEOCODING);
     url.searchParams.set("address", consulta);
     url.searchParams.set("key", GOOGLE_KEY);
     url.searchParams.set("language", "es");
-    url.searchParams.set("region", "pe");
-    url.searchParams.set("components", "country:PE");
+    const codigo = (pais ?? "PE").toUpperCase();
+    url.searchParams.set("region", codigo.toLowerCase());
+    url.searchParams.set("components", `country:${codigo}`);
     if (sesgo) {
       const d = gradosPara(sesgo.radioM ?? 15000);
       url.searchParams.set(

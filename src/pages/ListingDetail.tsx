@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { type Listing } from "@/data/mockData";
 import { useCategories } from "@/hooks/useCategories";
-import { fetchListingById, fetchListingImages, fetchListings, fetchListingDocumentUrl, fetchAdvertiserPhone, trackEvent, urgentTimeLeft } from "@/lib/listings";
+import { fetchListingById, fetchListingImages, fetchListings, fetchListingDocumentUrl, fetchListingVideos, fetchAdvertiserPhone, trackEvent, urgentTimeLeft, type VideoDelAviso } from "@/lib/listings";
 import { listingBadges, advertiserDisplayName } from "@/lib/listingBadges";
 import {
   ChevronRight,
@@ -54,7 +54,8 @@ import { ListingLocationMap } from "@/components/ListingLocationMap";
 import { fetchSellerInfo, fetchReviews, fetchAdvertiserStats, type AdvertiserStats } from "@/lib/reviews";
 import { applyToListing, fetchMyApplication, STATUS_LABEL, type ApplicationStatus } from "@/lib/applications";
 import { Checkbox } from "@/components/ui/checkbox";
-import { loadSold, markSold, unmarkSold } from "@/lib/pricing";
+import { loadSold, markSold, unmarkSold, formatPrecioAviso } from "@/lib/pricing";
+import { ubicacionConPais } from "@/lib/paises";
 import { reportListing, reportUser, LISTING_REPORT_REASONS, USER_REPORT_REASONS } from "@/lib/reports";
 import { ShareMenuItems, ShareFab } from "@/components/ShareListing";
 import { codigoDeAviso } from "@/lib/listingCode";
@@ -104,6 +105,7 @@ export default function ListingDetail() {
   };
   const [listing, setListing] = useState<Listing>(EMPTY);
   const [docUrl, setDocUrl] = useState<string | null>(null);
+  const [videos, setVideos] = useState<VideoDelAviso[]>([]);
   const [related, setRelated] = useState<Listing[]>([]);
   const session = useSession();
   const { isFavorite, toggle } = useFavorites();
@@ -189,6 +191,7 @@ export default function ListingDetail() {
       if (mounted && l) setListing(l);
     });
     fetchListingDocumentUrl(id).then((url) => mounted && setDocUrl(url));
+    fetchListingVideos(id).then((vs) => mounted && setVideos(vs));
     fetchListings({ limit: 8 }).then((rows) => {
       if (mounted) setRelated(rows.filter((l) => l.id !== id).slice(0, 4));
     });
@@ -446,8 +449,6 @@ export default function ListingDetail() {
     }
   };
 
-  const formatPrice = (price: number, currency: string) =>
-    currency === "USD" ? `US$ ${price.toLocaleString()}` : `S/ ${price.toLocaleString()}`;
 
   // "Condición" solo se muestra si la categoría la tiene habilitada (no aplica
   // en Servicios/Empleos). Y si la categoría se pudiera resolver aún.
@@ -612,7 +613,7 @@ export default function ListingDetail() {
             <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-secondary">{category?.name ?? listing.category}</span>
             <h1 className="text-2xl md:text-3xl font-extrabold text-foreground tracking-tight leading-tight">{listing.title}</h1>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs md:text-sm text-muted-foreground">
-              <span className="flex items-center gap-1.5"><MapPin size={14} className="text-secondary" /> {listing.location}</span>
+              <span className="flex items-center gap-1.5"><MapPin size={14} className="text-secondary" /> {ubicacionConPais(listing.location, listing.country)}</span>
               <span className="flex items-center gap-1.5"><Eye size={14} /> {listing.views.toLocaleString()} vistas</span>
               <span className="flex items-center gap-1.5"><Calendar size={14} /> {new Date(listing.date).toLocaleDateString("es-PE", { day: "2-digit", month: "short", year: "numeric" })}</span>
               {/* La cuenta atrás ya va en la insignia sobre la foto, que es donde
@@ -668,7 +669,7 @@ export default function ListingDetail() {
               <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-secondary">Precio</span>
             </div>
             <div>
-              <p className="text-3xl font-extrabold text-primary tracking-tight">{formatPrice(listing.price, listing.currency)}</p>
+              <p className="text-3xl font-extrabold text-primary tracking-tight">{formatPrecioAviso(listing.price, listing.currency)}</p>
               <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5"><Clock size={12} /> Precio vigente</p>
             </div>
 
@@ -884,6 +885,25 @@ export default function ListingDetail() {
               >
                 <FileText size={16} /> Ver documento (PDF)
               </a>
+            )}
+
+            {/* Vídeos del aviso. Sin miniatura, por decisión de producto: se
+                carga solo la primera imagen (`preload="metadata"`), así que no
+                cuestan datos hasta que alguien le da al play. `playsInline`
+                para que en iPhone no salte a pantalla completa solo. */}
+            {videos.length > 0 && (
+              <div className="mt-4 space-y-3">
+                {videos.map((v) => (
+                  <video
+                    key={v.id}
+                    src={v.url}
+                    controls
+                    preload="metadata"
+                    playsInline
+                    className="w-full max-h-[420px] bg-black"
+                  />
+                ))}
+              </div>
             )}
           </section>
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { MapPin, Heart, ShieldCheck } from "lucide-react";
+import { MapPin, Heart, ShieldCheck, Video } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -11,6 +11,8 @@ import { useFavorites } from "@/hooks/useFavorites";
 import { listingBadges } from "@/lib/listingBadges";
 import { urgentTimeLeft } from "@/lib/listings";
 import { imgUrl, imgSrcSet } from "@/lib/imageUrl";
+import { formatPrecioAviso } from "@/lib/pricing";
+import { ubicacionConPais } from "@/lib/paises";
 
 interface ListingCardProps {
   listing: Listing;
@@ -50,8 +52,6 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
       toast.error("No se pudo actualizar el favorito");
     }
   };
-  const formatPrice = (price: number, currency: string) =>
-    currency === "USD" ? `US$ ${price.toLocaleString()}` : `S/ ${price.toLocaleString()}`;
 
   // Insignias visuales del aviso (adicionales que pagó el anunciante). Solo
   // decorativas, como el corazón de favoritos. Van como ICONO compacto para no
@@ -122,10 +122,10 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
           {/* Contenido detallado solo para usuarios con sesión */}
           {isAuthed && <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{listing.description}</p>}
           <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1"><MapPin size={12} />{listing.location}</span>
+            <span className="flex items-center gap-1"><MapPin size={12} />{ubicacionConPais(listing.location, listing.country)}</span>
           </div>
           {isAuthed ? (
-            <p className="text-xl font-extrabold text-primary mt-2">{formatPrice(listing.price, listing.currency)}</p>
+            <p className="text-lg font-extrabold text-primary mt-2">{formatPrecioAviso(listing.price, listing.currency)}</p>
           ) : (
             <p className="text-sm text-secondary font-semibold mt-2 group-hover:underline">Ver detalle</p>
           )}
@@ -154,6 +154,14 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
       <div className="absolute top-3 left-3 z-10 flex flex-col items-start gap-1.5 w-fit max-w-[calc(100%-8.5rem)]">
         {badgeChips}
       </div>
+      {/* "Tiene video": es un dato que cambia si vale la pena entrar, y se ve de
+          un vistazo sin cargar nada. Abajo a la izquierda, donde no compite con
+          las insignias de pago. */}
+      {(listing.videoCount ?? 0) > 0 && (
+        <span className="absolute bottom-3 left-3 z-10 inline-flex items-center gap-1 px-2 py-1 bg-black/70 text-white text-[10px] font-bold uppercase tracking-wider">
+          <Video size={10} /> Video
+        </span>
+      )}
       {/* Solo si el equipo de administración verificó al anunciante. Antes salía
           en todas las tarjetas sin condición: decoración con pinta de dato. */}
       {listing.advertiserVerified && (
@@ -200,18 +208,18 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
           <>
             {/* Ubicación */}
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1 truncate"><MapPin size={11} />{listing.location}</span>
+              <span className="flex items-center gap-1 truncate"><MapPin size={11} />{ubicacionConPais(listing.location, listing.country)}</span>
             </div>
 
             {/* Price */}
             <div className="flex items-baseline gap-2">
-              <p className="text-lg font-extrabold text-primary tracking-tight">{formatPrice(listing.price, listing.currency)}</p>
+              <p className="text-base font-extrabold text-primary tracking-tight">{formatPrecioAviso(listing.price, listing.currency)}</p>
             </div>
           </>
         ) : (
           /* Visibilidad restringida para no logueados: solo ciudad */
           <div className="flex items-center gap-1 text-xs text-muted-foreground truncate">
-            <MapPin size={11} />{listing.location}
+            <MapPin size={11} />{ubicacionConPais(listing.location, listing.country)}
           </div>
         )}
 

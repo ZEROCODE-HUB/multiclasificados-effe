@@ -13,6 +13,7 @@ import { useCategories } from "@/hooks/useCategories";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useGridColumns } from "@/hooks/useFittingCount";
 import { searchListings, fetchListingsByOwner, topeAlcanzado, type SortKey } from "@/lib/listings";
+import { formatPrecioAviso } from "@/lib/pricing";
 import { useSession } from "@/hooks/useSession";
 import { useFavorites } from "@/hooks/useFavorites";
 import { createSavedSearch, DUPLICATE_SEARCH_MSG } from "@/lib/savedSearches";
@@ -20,6 +21,7 @@ import {
   DEPARTAMENTOS, departamentoPorId, departamentoGuardado, guardarDepartamento,
   type Departamento,
 } from "@/lib/departamentos";
+import { PAISES, PAIS_POR_DEFECTO, esPeru, paisPorCodigo, paisPreferido, guardarPais } from "@/lib/paises";
 import { toast } from "@/hooks/use-toast";
 import {
   Search,
@@ -54,8 +56,6 @@ const WEB_PAGE_SIZE = 20;
 const MOBILE_PAGE_SIZE = 10;
 
 
-const formatPrice = (price: number, currency: string) =>
-  currency === "USD" ? `US$ ${(price / 1000).toFixed(0)}K` : `S/ ${price.toLocaleString()}`;
 
 export default function SearchPage() {
   const categories = useCategories();
@@ -81,6 +81,13 @@ export default function SearchPage() {
   const [departamento, setDepartamento] = useState<Departamento | null>(
     () => departamentoPorId(params.get("dep")) ?? departamentoGuardado(),
   );
+  // País: por defecto, el que se deduce de la zona horaria del dispositivo
+  // (Perú de respaldo). Viaja en la URL (pais=PE) y se recuerda como el
+  // departamento. Fuera del Perú el filtro de departamento no tiene sentido.
+  const [pais, setPais] = useState<string>(
+    () => (paisPorCodigo(params.get("pais")) ?? paisPreferido()).code,
+  );
+  const enPeru = esPeru(pais);
   // Moneda (EFFE-050): "" = todas. El RPC search_listings ya filtra por p_currency.
   const [currency, setCurrency] = useState<string>(params.get("cur") || "");
   const [sort, setSort] = useState<SortKey>((params.get("sort") as SortKey) || "recent");
@@ -150,10 +157,13 @@ export default function SearchPage() {
     // el que ya tenga el usuario recordado del dispositivo.
     const enUrl = departamentoPorId(params.get("dep"));
     if (enUrl) setDepartamento(enUrl);
+    const paisEnUrl = paisPorCodigo(params.get("pais"));
+    if (paisEnUrl) setPais(paisEnUrl.code);
   }, [params]);
 
   // Recuerda el departamento para las próximas visitas.
   useEffect(() => { guardarDepartamento(departamento); }, [departamento]);
+  useEffect(() => { guardarPais(pais); }, [pais]);
 
   // EFFE-051/092: refleja los filtros EN la URL (replace, para no ensuciar el
   // historial en cada tecla) de modo que copiar el enlace y el botón "atrás"
@@ -166,12 +176,14 @@ export default function SearchPage() {
     put("cat", category);
     put("min", priceMin);
     put("max", priceMax);
-    put("dep", departamento?.id ?? "");
+    put("dep", enPeru ? departamento?.id ?? "" : "");
+    // "PE" no ensucia la URL: es el caso normal.
+    put("pais", pais === PAIS_POR_DEFECTO ? "" : pais);
     put("cur", currency);
     if (sort && sort !== "recent") next.set("sort", sort); else next.delete("sort");
     if (next.toString() !== params.toString()) setParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, category, priceMin, priceMax, departamento, currency, sort]);
+  }, [q, category, priceMin, priceMax, departamento, pais, enPeru, currency, sort]);
 
   // Guarda la búsqueda actual (REQ-04).
   const saveCurrentSearch = async () => {
@@ -241,7 +253,9 @@ export default function SearchPage() {
             priceMin: priceMin ? Number(priceMin) : undefined,
             priceMax: priceMax ? Number(priceMax) : undefined,
             currency: currency || undefined,
-            department: departamento?.id,
+            // El departamento del INEI solo distingue dentro del Perú.
+            department: enPeru ? departamento?.id : undefined,
+            country: pais,
             // Solo con permiso concedido, y solo para ordenar.
             lat: geo?.lat,
             lng: geo?.lng,
@@ -253,10 +267,10 @@ export default function SearchPage() {
       });
     }, owner ? 0 : 250);
     return () => clearTimeout(t);
-  }, [q, category, priceMin, priceMax, currency, sort, owner, departamento, geo]);
+  }, [q, category, priceMin, priceMax, currency, sort, owner, departamento, pais, enPeru, geo]);
 
   // Al cambiar la búsqueda o los filtros, vuelve a la primera página.
-  useEffect(() => { setPage(1); }, [q, category, priceMin, priceMax, currency, sort, owner, departamento, geo]);
+  useEffect(() => { setPage(1); }, [q, category, priceMin, priceMax, currency, sort, owner, departamento, pais, geo]);
 
   // Cuántas columnas está pintando la rejilla ahora mismo (1 en la vista de
   // lista). Manda el ancho real, no el de la ventana.
@@ -284,7 +298,8 @@ export default function SearchPage() {
   // El departamento SÍ cuenta como filtro activo: a diferencia del orden, sí
   // deja fuera avisos, así que tiene que poder limpiarse.
   const hasActiveFilters = !!(
-    q || category || priceMin || priceMax || currency || departamento || geo || (sort && sort !== "recent")
+    q || category || priceMin || priceMax || currency || departamento || geo ||
+    pais !== PAIS_POR_DEFECTO || (sort && sort !== "recent")
   );
   // Resetea TODOS los filtros de una vez. El efecto de URL (arriba) los limpia
   // también del enlace al vaciarse el estado.
@@ -296,6 +311,8 @@ export default function SearchPage() {
     setCurrency("");
     setSort("recent");
     setDepartamento(null);
+    // Limpiar devuelve al Perú, que es donde está el 99 % de los avisos.
+    setPais(PAIS_POR_DEFECTO);
     setGeo(null);
   };
 
@@ -438,10 +455,31 @@ export default function SearchPage() {
           </SelectContent>
         </Select>
       </div>
+      {/* País: arranca en el que dice la zona horaria del dispositivo (Perú de
+          respaldo), así que quien entra desde Lima no tiene que tocar nada. */}
+      <div>
+        <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">País</label>
+        <Select
+          value={pais}
+          onValueChange={(v) => {
+            setPais(v);
+            // El departamento es del INEI: fuera del Perú no significa nada.
+            if (v !== PAIS_POR_DEFECTO) setDepartamento(null);
+          }}
+        >
+          <SelectTrigger className="mt-1.5 rounded-none"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {PAISES.map((p) => (
+              <SelectItem key={p.code} value={p.code}>{p.nombre}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
       {/* Ubicación: un desplegable de departamentos y nada más. Exacto y
           predecible — eliges Lima y ves Lima. Lima y Callao van juntos porque
           en la práctica son la misma ciudad: separarlos escondería avisos que
-          el usuario tiene cruzando la avenida. */}
+          el usuario tiene cruzando la avenida. Solo dentro del Perú. */}
+      {enPeru && (
       <div>
         <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Departamento</label>
         <Select
@@ -482,6 +520,7 @@ export default function SearchPage() {
           </Button>
         )}
       </div>
+      )}
       <div>
         <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Ordenar por</label>
         <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
@@ -746,7 +785,7 @@ export default function SearchPage() {
                     </div>
                     {session?.supabase ? (
                       <p className="text-base font-extrabold text-primary mt-2">
-                        {formatPrice(l.price, l.currency)}
+                        {formatPrecioAviso(l.price, l.currency)}
                       </p>
                     ) : (
                       <p className="text-[11px] text-secondary font-semibold mt-2">Ver detalle</p>

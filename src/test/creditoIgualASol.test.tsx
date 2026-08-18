@@ -15,7 +15,7 @@ vi.mock("@/lib/payments", () => ({
   getPurchaseResult: vi.fn().mockResolvedValue({ balance: 100, invoiceNumber: "B001-1" }),
   hostedPaymentUrl: () => "https://x/pay",
 }));
-vi.mock("@/components/PaymentForm", () => ({ PaymentForm: () => <div>FORM_PAGO</div> }));
+vi.mock("@/components/PaymentForm", () => ({ PaymentForm: () => <div>FORM_PAGO</div>, precargarKrypton: () => {} }));
 
 const verifyDocument = vi.fn().mockResolvedValue({ ok: true, nombre: "ANA TORRES", data: {} });
 vi.mock("@/lib/verifyDoc", async (orig) => ({
@@ -50,9 +50,10 @@ describe("Conversión — 1 sol = 1 crédito", () => {
 
   it("el saldo se escribe como dinero, con la sigla 'S/'", () => {
     expect(formatCredits(ESTANDAR)).toBe("S/ 16.14");
-    expect(formatCredits(1)).toBe("S/ 1");
-    // Un entero no arrastra decimales: "S/ 8472", no "S/ 8472.00".
-    expect(formatCredits(8472)).toBe("S/ 8472");
+    // Siempre dos decimales y con separador de miles: el saldo tiene que verse
+    // igual que el importe de la boleta del mismo dinero.
+    expect(formatCredits(1)).toBe("S/ 1.00");
+    expect(formatCredits(8472)).toBe("S/ 8,472.00");
   });
 });
 

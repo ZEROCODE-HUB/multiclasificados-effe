@@ -14,7 +14,7 @@ vi.mock("@/lib/payments", () => ({
   hostedPaymentUrl: () => "https://x/pay",
 }));
 // Stub del formulario embebido: evita cargar Krypton por CDN en el paso 2.
-vi.mock("@/components/PaymentForm", () => ({ PaymentForm: () => <div>FORM_PAGO</div> }));
+vi.mock("@/components/PaymentForm", () => ({ PaymentForm: () => <div>FORM_PAGO</div>, precargarKrypton: () => {} }));
 vi.mock("@/hooks/use-toast", () => ({ toast: vi.fn() }));
 
 const verifyDocument = vi.fn();
@@ -169,7 +169,7 @@ describe("BuyCreditsModal — verificación de documento con Factiliza + campos 
     await screen.findByText(/No se encontró información/i);
   });
 
-  it("el botón de pago queda deshabilitado sin documento verificado y NO inicia el pago", async () => {
+  it("sin documento verificado NO inicia el pago y señala el campo", async () => {
     verifyDocument.mockResolvedValue({ ok: false, error: "Documento inválido." });
     open();
 
@@ -178,10 +178,12 @@ describe("BuyCreditsModal — verificación de documento con Factiliza + campos 
     fireEvent.change(screen.getByPlaceholderText("12345678"), { target: { value: "00000000" } });
     await screen.findByText(/Documento inválido/i);
 
+    // El botón ya no se queda muerto sin explicar por qué: se pulsa, no se cobra
+    // nada y el campo que falta queda marcado.
     const continuar = screen.getByRole("button", { name: /continuar al pago/i });
-    expect(continuar).toBeDisabled();
     fireEvent.click(continuar);
     expect(createPayment).not.toHaveBeenCalled();
+    await screen.findByText(/Ingresa tu DNI para emitir la boleta/i);
   });
 
   it("con documento verificado y correo válido, habilita e inicia el pago (con el nombre real)", async () => {

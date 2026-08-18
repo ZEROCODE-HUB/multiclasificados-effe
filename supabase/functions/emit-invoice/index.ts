@@ -24,7 +24,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { renderComprobantePDF, toBase64 } from "../_shared/comprobante-pdf.ts";
 import {
   construirComprobante, construirNotaDeCredito, leerRespuesta, consultaDeComprobante,
-  ComprobanteInvalido, TIPO_DOC_NOTA_CREDITO,
+  ComprobanteInvalido, TIPO_DOC_NOTA_CREDITO, type ClienteDocTipo,
 } from "../_shared/factiliza.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -38,8 +38,12 @@ const EMISOR_NOMBRE = Deno.env.get("EMISOR_NOMBRE") ?? "eFFe Multiclasificados";
 const EMISOR_RUC = Deno.env.get("EMISOR_RUC") ?? "";
 const SITE_URL = Deno.env.get("PUBLIC_SITE_URL") ?? "https://www.coleffe.com";
 /** Dirección de respuesta del correo. Que el cliente pueda contestar ayuda a la
- *  reputación del remitente: los proveedores penalizan los envíos "mudos". */
-const SOPORTE_EMAIL = Deno.env.get("SOPORTE_EMAIL") ?? "soporte@coleffe.com";
+ *  reputación del remitente: los proveedores penalizan los envíos "mudos".
+ *
+ *  El default era `soporte@coleffe.com`, que NO es un buzón real en cPanel: quien
+ *  contestara al comprobante escribía al vacío. Se usa el mismo que recibe el
+ *  Libro de Reclamaciones (`RECLAMOS_TO`), que sí está en pie y verificado. */
+const SOPORTE_EMAIL = Deno.env.get("SOPORTE_EMAIL") ?? "avisos@coleffe.com";
 
 // ─── Factiliza ────────────────────────────────────────────────────────────────
 // OJO: Factiliza vende DOS productos con DOS tokens distintos, y no son
@@ -481,7 +485,7 @@ async function emitirEnSunat(invoiceId: string): Promise<string | null> {
       correlativo: Number(inv.o_correlativo),
       fechaEmision: emitida,
       emisorRuc,
-      clienteDocTipo: (inv.o_doc_type as "dni" | "ruc" | null) ?? null,
+      clienteDocTipo: (inv.o_doc_type as ClienteDocTipo | null) ?? null,
       clienteDocNumero: (inv.o_doc_number as string) ?? null,
       clienteNombre: String(inv.o_advertiser_name ?? ""),
       clienteDireccion: direccion ?? null,
@@ -613,7 +617,7 @@ async function emitirNotaDeCredito(invoiceId: string): Promise<string | null> {
       fechaEmision: new Date(String(n.o_fecha_emision ?? Date.now())),
       emisorRuc,
       afectado: { tipo: n.o_type === "factura" ? "factura" : "boleta", numero: afectado },
-      clienteDocTipo: (n.o_doc_type as "dni" | "ruc" | null) ?? null,
+      clienteDocTipo: (n.o_doc_type as ClienteDocTipo | null) ?? null,
       clienteDocNumero: (n.o_doc_number as string) ?? null,
       clienteNombre: String(n.o_advertiser_name ?? ""),
       clienteDireccion: direccion ?? null,

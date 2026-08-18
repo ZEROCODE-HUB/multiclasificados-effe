@@ -16,6 +16,7 @@ import { fetchApplicationsForOwner, STATUS_LABEL, type OwnerApplication } from "
 import { loadInvoices, formatSoles, formatCredits, avisosBreakdown } from "@/lib/pricing";
 import { getCreditBalance, getCreditsSpent } from "@/lib/credits";
 import { BuyCreditsModal } from "@/components/BuyCreditsModal";
+import { enlaceDevolucionSaldo } from "@/lib/soporte";
 
 const ROW_STATUS = (s: MyListing["status"]): "Activo" | "Pausado" | "Vencido" =>
   s === "active" ? "Activo" : s === "paused" ? "Pausado" : "Vencido";
@@ -184,6 +185,21 @@ const AdvertiserDashboard = () => {
               <div className="h-2 flex-1 bg-muted overflow-hidden">
                 <div className="h-full bg-secondary" style={{ width: `${publishedPct}%` }} />
               </div>
+            </div>
+            {/* Devolver el saldo es un trámite manual (hay que verificar la cuenta
+                bancaria), así que no se automatiza: se abre un correo con los datos
+                ya escritos para que soporte pueda resolverlo sin preguntar nada. */}
+            <div className="border-t pt-3">
+              <a
+                href={enlaceDevolucionSaldo({
+                  nombre: session?.user?.user_metadata?.full_name as string | undefined,
+                  correo: session?.user?.email,
+                  saldo: creditBalance ?? 0,
+                })}
+                className="text-xs text-muted-foreground underline underline-offset-2 hover:text-secondary"
+              >
+                Solicitar devolución de saldo
+              </a>
             </div>
             <div>
               <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">Comprobantes emitidos</p>

@@ -55,6 +55,7 @@ const DURATION_ROWS: Array<7 | 15 | 30 | 60 | 90> = [7, 15, 30, 60, 90];
 const EXTRAS_EDITABLES = [
   ["img500", "Segunda imagen (hasta 500 KB)"],
   ["pdf500", "PDF adjunto (hasta 500 KB)"],
+  ["video20", "Video del aviso (hasta 20 s)"],
   ["urgente", "Urgente"],
   ["destacado", "Destacado"],
   ["confidencial", "Confidencial"],
@@ -620,7 +621,7 @@ const AdminPricing = ({ role }: { role: AdminRole }) => {
           <Card>
             <CardHeader className="border-b flex flex-row items-center justify-between">
               <div>
-                <CardTitle className="text-base">Matriz de precios (S/. incluye IGV)</CardTitle>
+                <CardTitle className="text-base">Matriz de precios (S/ incluye IGV)</CardTitle>
                 <CardDescription className="text-xs">Calculada automáticamente a partir de los parámetros.</CardDescription>
               </div>
               <Badge variant="outline" className="text-secondary border-secondary/40">Automática</Badge>

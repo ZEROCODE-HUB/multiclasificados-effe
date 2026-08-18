@@ -1,9 +1,10 @@
 import { Badge } from "@/components/ui/badge";
 import { imgUrl } from "@/lib/imageUrl";
 import { Button } from "@/components/ui/button";
-import { Eye, MapPin, Calendar, MoreVertical, Edit, Pause, Play, Trash2, Rocket, RotateCw, Clock, Flame, EyeOff, Ban } from "lucide-react";
+import { Eye, MapPin, Calendar, MoreVertical, Edit, Pause, Play, Trash2, Rocket, RotateCw, Copy, Clock, Flame, EyeOff, Ban } from "lucide-react";
 import type { Listing } from "@/data/mockData";
 import { expiryInfo } from "@/lib/listings";
+import { formatPrecioAviso } from "@/lib/pricing";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,6 +26,10 @@ interface ListingRowProps {
   onPublish?: (listing: Listing) => void;
   /** Solo en avisos vencidos: vuelve a cobrar y publicar (EFFE-036). */
   onRepublish?: (listing: Listing) => void;
+  /** Aviso vivo por vencer: le suma días sin dejarlo caer (0113). */
+  onRenew?: (listing: Listing) => void;
+  /** Crea un aviso NUEVO con los mismos datos, para volver a anunciar lo mismo. */
+  onDuplicate?: (listing: Listing) => void;
   /** Motivo de rechazo de moderación; si viene, se muestra un aviso. */
   rejectionReason?: string | null;
 }
@@ -44,8 +49,8 @@ const expiryStyles: Record<string, string> = {
   urgent: "text-destructive font-semibold",
 };
 
-export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEdit, onDelete, onTogglePause, onPublish, onRepublish, rejectionReason }: ListingRowProps) {
-  const hasActions = !!(onView || onEdit || onDelete || onTogglePause || onPublish || onRepublish);
+export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEdit, onDelete, onTogglePause, onPublish, onRepublish, onRenew, onDuplicate, rejectionReason }: ListingRowProps) {
+  const hasActions = !!(onView || onEdit || onDelete || onTogglePause || onPublish || onRepublish || onRenew || onDuplicate);
   // El contador solo tiene sentido en un aviso activo (los vencidos ya caducaron).
   const expiry = status === "Activo" ? expiryInfo(expiresAt ?? null) : null;
   return (
@@ -95,6 +100,16 @@ export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEd
               {onRepublish && (
                 <DropdownMenuItem onSelect={() => onRepublish(listing)}>
                   <RotateCw size={14} className="mr-2" /> Republicar
+                </DropdownMenuItem>
+              )}
+              {onRenew && (
+                <DropdownMenuItem onSelect={() => onRenew(listing)}>
+                  <RotateCw size={14} className="mr-2" /> Renovar
+                </DropdownMenuItem>
+              )}
+              {onDuplicate && (
+                <DropdownMenuItem onSelect={() => onDuplicate(listing)}>
+                  <Copy size={14} className="mr-2" /> Publicar uno igual
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem onSelect={() => onEdit?.(listing)}>
@@ -147,8 +162,7 @@ export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEd
             caben junto al precio y el último botón se salía de la tarjeta. */}
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mt-auto pt-2 border-t border-dashed">
           <p className="text-lg font-extrabold text-primary">
-            <span className="text-xs font-bold text-secondary mr-1">{listing.currency}</span>
-            {listing.price.toLocaleString()}
+            {formatPrecioAviso(listing.price, listing.currency)}
           </p>
           <div className="flex flex-wrap items-center gap-1.5">
             {hasActions ? (
@@ -163,6 +177,12 @@ export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEd
                 {onRepublish && (
                   <Button size="sm" className="h-8 px-3 text-xs gap-1" onClick={() => onRepublish(listing)}>
                     <RotateCw size={13} /> Republicar
+                  </Button>
+                )}
+                {/* Por vencer: se le suman días y conserva visitas y enlace. */}
+                {onRenew && (
+                  <Button size="sm" className="h-8 px-3 text-xs gap-1" onClick={() => onRenew(listing)}>
+                    <RotateCw size={13} /> Renovar
                   </Button>
                 )}
                 <Button variant="outline" size="sm" className="h-8 px-3 text-xs gap-1" onClick={() => onEdit?.(listing)}>

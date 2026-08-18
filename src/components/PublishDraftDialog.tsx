@@ -15,7 +15,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { VerifyIdentityDialog, type ConfirmedIdentity } from "@/components/VerifyIdentityDialog";
 import { BuyCreditsModal } from "@/components/BuyCreditsModal";
-import { finalizeListingPublication, SaldoInsuficiente } from "@/lib/publish";
+import { finalizeListingPublication, renovarAviso, SaldoInsuficiente } from "@/lib/publish";
 import { getCreditBalance } from "@/lib/credits";
 import {
   priceForDuration, extrasTotal, formatSoles, formatCredits, solesToCredits, loadSettings,
@@ -38,12 +38,20 @@ interface Props {
   fallbackName: string;
   onClose: () => void;
   onPublished: () => void;
+  /**
+   * "renovar" suma días a un aviso vivo conservando sus visitas, sus favoritos
+   * y su enlace. "publicar" es el de siempre (borrador o vencido).
+   */
+  modo?: "publicar" | "renovar";
 }
 
-export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPublished }: Props) {
+export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPublished, modo = "publicar" }: Props) {
   const open = draft !== null;
   // EFFE-036: el mismo diálogo publica un borrador o REPUBLICA un aviso vencido.
   const isRepublish = draft?.status === "expired";
+  // Y desde la 0113 también RENUEVA uno vivo: mismo precio, misma duración,
+  // pero sumando días al aviso que ya existe en vez de crear vigencia nueva.
+  const esRenovar = modo === "renovar";
   const [settings, setSettings] = useState<PricingSettings>(() => loadSettings());
   const [promos, setPromos] = useState<Promotion[]>([]);
   const [balance, setBalance] = useState<number | null>(null);
@@ -85,6 +93,17 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
     if (!draft || publishing) return;
     setPublishing(true);
     try {
+      if (esRenovar) {
+        await renovarAviso(draft.id, duration);
+        setBalance(await getCreditBalance());
+        toast({
+          title: "¡Aviso renovado!",
+          description: `Le sumamos ${duration} días. Conserva sus visitas, sus favoritos y su enlace.`,
+        });
+        onPublished();
+        onClose();
+        return;
+      }
       const { published } = await finalizeListingPublication(draft.id, {
         quantity, duration, extras, total: totalSoles,
         receiptType: confirmed.docType === "ruc" ? "factura" : "boleta",
@@ -116,14 +135,18 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
         setBalance(await getCreditBalance());
         toast({
           title: "Te falta saldo",
-          description: "Tu aviso sigue en borradores. Compra saldo y vuelve a intentarlo.",
+          description: err.faltan !== undefined
+            ? `Te faltan ${formatCredits(err.faltan)}. Puedes pagarlos aquí mismo.`
+            : esRenovar
+              ? "Tu aviso sigue activo. Compra saldo y vuelve a intentarlo."
+              : "Tu aviso sigue en borradores. Compra saldo y vuelve a intentarlo.",
           variant: "destructive",
         });
         setBuyOpen(true);
         return;
       }
       toast({
-        title: "No se pudo publicar",
+        title: esRenovar ? "No se pudo renovar" : "No se pudo publicar",
         description: err instanceof Error ? err.message : "Inténtalo de nuevo.",
         variant: "destructive",
       });
@@ -142,6 +165,9 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
   // Misma regla que al publicar desde el formulario: sin identidad confirmada
   // no se publica. Si ya la confirmó en este diálogo, no se le vuelve a pedir.
   const continuarPublicacion = () => {
+    // Renovar no pide identidad: no emite comprobante ni crea nada nuevo, solo
+    // le suma días a un aviso que ya es de quien está en sesión.
+    if (esRenovar) { publish(identity ?? { name: fallbackName, docType: "dni", docNumber: "" }); return; }
     if (identity) { publish(identity); return; }
     setVerifyOpen(true);
   };
@@ -156,7 +182,7 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
       <Dialog open={open && !verifyOpen && !buyOpen} onOpenChange={(o) => { if (!o) onClose(); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{isRepublish ? "Republicar aviso" : "Publicar borrador"}</DialogTitle>
+            <DialogTitle>{esRenovar ? "Renovar aviso" : isRepublish ? "Republicar aviso" : "Publicar borrador"}</DialogTitle>
             <DialogDescription>{draft?.title}</DialogDescription>
           </DialogHeader>
 
@@ -235,6 +261,7 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
           title: draft.title,
           costCredits: totalCredits,
           durationDays: duration,
+          purpose: esRenovar ? "renew" : "publish",
         } : undefined}
         onPublished={async (publicado) => {
           setBuyOpen(false);

@@ -75,12 +75,20 @@ export interface CreatePaymentInput {
    * Documento de identidad de la PERSONA que paga. OJO: nunca "RUC" — ver
    * `construirBillingDetails`.
    */
+  /**
+   * Ojo: Lyra solo admite "DNI" y "CE". Un pasaporte se manda como "CE" porque
+   * es el único valor no-DNI que acepta —igual que rechaza "RUC"—; el número
+   * real viaja de todas formas a SUNAT por `invoices.doc_number`, que es donde
+   * importa. A Izipay solo le hace falta cobrar.
+   */
   identityType?: "DNI" | "CE";
   identityCode?: string;
   /** true cuando el comprobante es factura: el pagador es una empresa. */
   esEmpresa?: boolean;
   /** Razón social, solo si `esEmpresa`. */
   legalName?: string;
+  /** País del pagador (ISO-3166-1 alpha-2). Por defecto PE. */
+  country?: string;
 }
 
 /**
@@ -100,7 +108,12 @@ export interface CreatePaymentInput {
  * meses funcionando y no hay por qué moverla.
  */
 export function construirBillingDetails(input: CreatePaymentInput): Record<string, unknown> {
-  const billingDetails: Record<string, unknown> = { country: "PE" };
+  // El país ya no es siempre PE: desde que se admite comprar con pasaporte o
+  // carné de extranjería, quien paga puede estar fuera del Perú.
+  const pais = (input.country ?? "PE").trim().toUpperCase();
+  const billingDetails: Record<string, unknown> = {
+    country: /^[A-Z]{2}$/.test(pais) ? pais : "PE",
+  };
 
   if (input.esEmpresa) {
     // Comprobado contra la API de Izipay (sonda `probe` de create-payment,
@@ -151,5 +164,57 @@ export function readAnswer(answer: Record<string, unknown>): {
     orderId: typeof orderId === "string" ? orderId : null,
     paid: orderStatus === "PAID",
     transactionUuid: typeof uuid === "string" ? uuid : null,
+  };
+}
+
+/**
+ * Estado real de una orden según Izipay, leído de `Order/Get` o `Transaction/Get`.
+ *
+ * Hace falta porque el IPN puede no llegar nunca (la red del comprador se cae,
+ * nuestra función está caída un minuto, la URL está mal configurada). Cuando eso
+ * pasa, la orden se queda en 'pending' para siempre aunque el dinero SÍ se haya
+ * cobrado. Preguntando por el estado se recupera sin depender del aviso.
+ *
+ * Lyra devuelve el estado a nivel de orden (`orderStatus`) y también por
+ * transacción; se miran los dos porque `Transaction/Get` no trae el primero.
+ */
+export interface OrderGetResult {
+  paid: boolean;
+  /** Rechazada, abandonada o caducada: no va a cobrarse nunca. */
+  refused: boolean;
+  /** Sigue en curso (el comprador está tecleando la tarjeta, 3-D Secure...). */
+  pending: boolean;
+  transactionUuid: string | null;
+  status: string;
+}
+
+const ESTADOS_RECHAZO = ["UNPAID", "ABANDONED", "EXPIRED", "REFUSED", "CANCELLED"];
+
+export function readOrderGet(answer: Record<string, unknown> | null | undefined): OrderGetResult {
+  const a = (answer ?? {}) as Record<string, unknown>;
+  // `Order/Get` responde { orderStatus, transactions: [...] }; `Transaction/Get`
+  // responde la transacción suelta, con su `status`/`detailedStatus`.
+  const txs = Array.isArray(a.transactions)
+    ? (a.transactions as Array<Record<string, unknown>>)
+    : (a.uuid ? [a] : []);
+
+  const estados = [String(a.orderStatus ?? ""), ...txs.map((t) => String(t?.status ?? ""))]
+    .map((e) => e.toUpperCase())
+    .filter(Boolean);
+
+  const paid = estados.includes("PAID");
+  const refused = !paid && estados.length > 0 && estados.every((e) => ESTADOS_RECHAZO.includes(e));
+
+  // El uuid de una transacción PAGADA es el que interesa como referencia; si no
+  // hay, vale el de la última intentada.
+  const pagada = txs.find((t) => String(t?.status ?? "").toUpperCase() === "PAID");
+  const uuid = (pagada ?? txs[txs.length - 1])?.uuid;
+
+  return {
+    paid,
+    refused,
+    pending: !paid && !refused,
+    transactionUuid: typeof uuid === "string" ? uuid : null,
+    status: estados[0] ?? "",
   };
 }

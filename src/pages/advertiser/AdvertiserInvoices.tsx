@@ -6,7 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { FileText, Eye } from "lucide-react";
 import { formatSoles } from "@/lib/pricing";
-import { loadInvoicesFromDb, type DbInvoice } from "@/lib/invoices";
+import { loadInvoicesFromDb, MIS_COMPROBANTES_POR_PAGINA, type DbInvoice } from "@/lib/invoices";
+import { Input } from "@/components/ui/input";
+import { Search } from "lucide-react";
+import { TablePagination } from "@/components/TablePagination";
 import { personKindLabel } from "@/lib/identity";
 import { InvoiceDetailDialog } from "@/components/InvoiceDetailDialog";
 
@@ -53,30 +56,39 @@ const AdvertiserInvoices = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<DbInvoice | null>(null);
+  // Buscador y paginación: antes se descargaba el historial entero en cada
+  // visita, y quien lleva dos años comprando tiene bastantes comprobantes.
+  const [busqueda, setBusqueda] = useState("");
+  const [pagina, setPagina] = useState(1);
+  const [total, setTotal] = useState(0);
+  const totalPaginas = Math.max(1, Math.ceil(total / MIS_COMPROBANTES_POR_PAGINA));
+
+  useEffect(() => { setPagina(1); }, [busqueda]);
 
   useEffect(() => {
     let active = true;
     const load = async () => {
       try {
-        const rows = await loadInvoicesFromDb();
-        if (active) { setInvoices(rows); setError(null); }
+        const { rows, total: n } = await loadInvoicesFromDb({ search: busqueda || undefined, page: pagina });
+        if (active) { setInvoices(rows); setTotal(n); setError(null); }
       } catch (e) {
         if (active) setError(e instanceof Error ? e.message : "No se pudieron cargar los comprobantes.");
       } finally {
         if (active) setLoading(false);
       }
     };
-    load();
+    const t = setTimeout(load, busqueda ? 300 : 0);
     // Refresca cuando se emite un comprobante nuevo (misma pestaña) o vuelve el foco.
     const sync = () => load();
     window.addEventListener("effe:invoices-updated", sync);
     window.addEventListener("focus", sync);
     return () => {
       active = false;
+      clearTimeout(t);
       window.removeEventListener("effe:invoices-updated", sync);
       window.removeEventListener("focus", sync);
     };
-  }, []);
+  }, [busqueda, pagina]);
 
   return (
     <DashboardLayout role="anunciante">
@@ -87,13 +99,24 @@ const AdvertiserInvoices = () => {
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-5">
+          <div className="relative mb-4">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar por N° de comprobante o concepto…"
+              className="h-9 pl-9"
+            />
+          </div>
           {loading ? (
             <p className="text-sm text-muted-foreground text-center py-8">Cargando comprobantes…</p>
           ) : error ? (
             <p className="text-sm text-destructive text-center py-8">{error}</p>
           ) : invoices.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">
-              Aún no tienes boletas. Se generan automáticamente al comprar créditos.
+              {busqueda
+                ? "Ningún comprobante coincide con esa búsqueda."
+                : "Aún no tienes boletas. Se generan automáticamente al comprar créditos."}
             </p>
           ) : (
             <>
@@ -177,6 +200,18 @@ const AdvertiserInvoices = () => {
                   </div>
                 ))}
               </div>
+
+              {total > MIS_COMPROBANTES_POR_PAGINA && (
+                <TablePagination
+                  page={pagina}
+                  totalPages={totalPaginas}
+                  total={total}
+                  from={(pagina - 1) * MIS_COMPROBANTES_POR_PAGINA + 1}
+                  to={Math.min(pagina * MIS_COMPROBANTES_POR_PAGINA, total)}
+                  setPage={setPagina}
+                  noun="comprobantes"
+                />
+              )}
             </>
           )}
         </CardContent>

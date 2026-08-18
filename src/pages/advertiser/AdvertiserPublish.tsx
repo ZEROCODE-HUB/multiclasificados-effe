@@ -12,18 +12,22 @@ import {
 import {
   ImagePlus, X, ArrowLeft, ArrowRight, Star, Check, MapPin, Tag, FileText, Camera,
   ShieldCheck, CreditCard, Receipt, Sparkles, Flame, EyeOff, Lock, Package, Minus, Plus,
-  Wallet, Loader2, Percent, Save,
+  Wallet, Loader2, Percent, Save, Video, Trash2,
 } from "lucide-react";
 import { useCategories } from "@/hooks/useCategories";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSession } from "@/hooks/useSession";
 import { toast } from "@/hooks/use-toast";
+import { useValidacion, MensajeDeError } from "@/hooks/useValidacion";
+import { compressImage } from "@/lib/compressImage";
+import { MAX_SEGUNDOS, MAX_VIDEOS, validarVideo } from "@/lib/video";
+import { paisPreferido, guardarPais, esPeru } from "@/lib/paises";
 import {
   loadSettings, priceForDuration, extrasTotal, formatSoles, formatCredits, avisosBreakdown, solesToCredits,
   type DurationDays, type PricingSettings, type ExtraPrices,
 } from "@/lib/pricing";
-import { createAndPublishListing, saveListingDraft, SaldoInsuficiente } from "@/lib/publish";
+import { cargarAvisoParaCopiar, createAndPublishListing, finalizeListingPublication, saveListingDraft, SaldoInsuficiente } from "@/lib/publish";
 import { urgenteAllowedFor, URGENTE_MAX_DAYS } from "@/lib/listingBadges";
 import { ListingCard } from "@/components/ListingCard";
 import { InfoHint } from "@/components/InfoHint";
@@ -38,15 +42,19 @@ import { BuyCreditsModal, type PublishTarget } from "@/components/BuyCreditsModa
 import { LocationPicker } from "@/components/LocationPicker";
 import { supabase } from "@/lib/supabase";
 
-interface PhotoItem { id: string; url: string; name: string; file: File; }
+interface PhotoItem { id: string; url: string; name: string; file: File; comprimida?: boolean; }
 
 const DURATIONS: DurationDays[] = [3, 7, 15, 30, 60, 90];
+
+// Un aviso copiado puede traer una duración que ya no esté en la tarifa.
+const asDuracion = (d: number | null | undefined): DurationDays =>
+  (DURATIONS as number[]).includes(d ?? 0) ? (d as DurationDays) : 7;
 
 // "Imagen adicional" admite hasta 3 por aviso (además de la portada incluida).
 const MAX_EXTRA_IMAGES = 3;
 
 // Extras del paquete (cantidad numérica por cada uno)
-type ExtraKey = "img500" | "pdf500" | "urgente" | "destacado" | "confidencial";
+type ExtraKey = "img500" | "pdf500" | "video20" | "urgente" | "destacado" | "confidencial";
 // `sub` es la restricción, siempre visible; `help` es la explicación que sale al
 // pulsar la ⓘ. Antes urgente/destacado/confidencial no decían qué hacían (IT3-018).
 const EXTRA_DEFS: Array<{ key: ExtraKey; label: string; sub?: string; help: string; icon: typeof Sparkles }> = [
@@ -54,6 +62,8 @@ const EXTRA_DEFS: Array<{ key: ExtraKey; label: string; sub?: string; help: stri
     help: "Suma fotos a la galería del aviso, además de la portada que ya viene incluida. Cada archivo puede pesar hasta 500 KB." },
   { key: "pdf500", label: "PDF adjunto por aviso", sub: "hasta 500 KB", icon: FileText,
     help: "Adjunta un documento descargable (ficha técnica, plano, catálogo…) que quien vea el aviso podrá abrir." },
+  { key: "video20", label: "Video del aviso", sub: `hasta ${MAX_SEGUNDOS} s · hasta ${MAX_VIDEOS}`, icon: Video,
+    help: `Sube videos cortos (máximo ${MAX_SEGUNDOS} segundos cada uno) que se reproducen dentro del aviso. Se ve el video completo, no una miniatura.` },
   { key: "urgente", label: "Marcar como Urgente", icon: Flame,
     help: `Muestra una insignia con la cuenta atrás para transmitir prisa. Solo está disponible en avisos de hasta ${URGENTE_MAX_DAYS} días.` },
   { key: "destacado", label: "Marcar como Destacado", icon: Star,
@@ -123,7 +133,12 @@ const AdvertiserPublish = () => {
   // PDF adjunto (adicional "PDF adjunto por aviso"). Solo se muestra su apartado
   // si el adicional está activo; si se desactiva, el archivo elegido se descarta.
   const [pdfFile, setPdfFile] = useState<{ file: File; name: string } | null>(null);
+  // Vídeos elegidos, en el orden en que se verán. Se guardan ya validados
+  // (tipo, tamaño y duración): lo que llega aquí es subible.
+  const [videos, setVideos] = useState<Array<{ file: File; name: string; duracion: number }>>([]);
+  const [validandoVideo, setValidandoVideo] = useState(false);
   const pdfFileRef = useRef<HTMLInputElement>(null);
+  const videoFileRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState({
     category: "",
@@ -134,6 +149,8 @@ const AdvertiserPublish = () => {
     department: "",
     location: "",
     condition: "nuevo",
+    // Por defecto, el país que se deduce del dispositivo (Perú de respaldo).
+    country: paisPreferido().code,
   });
 
   // Coordenadas del aviso (para el mapa del buscador). Se fijan geocodificando
@@ -148,6 +165,14 @@ const AdvertiserPublish = () => {
   // valor interno (para la vista previa y el cálculo), pero hasta que el usuario
   // elige explícitamente NO se resalta ninguna opción ni se muestra un costo,
   // para que nadie crea que se le va a cobrar sin haber elegido.
+  const val = useValidacion();
+  // "Subiendo imagen 2 de 4…": la misma espera, pero sabiendo en qué va.
+  const [subiendo, setSubiendo] = useState<{ hechas: number; total: number } | null>(null);
+  // ¿El aviso guardado en la BD ya tiene EXACTAMENTE estas fotos? Si es que sí,
+  // publicar no vuelve a subirlas. Antes, tras pagar el faltante, se borraban y
+  // se resubían las cuatro fotos otra vez, justo cuando el usuario ya llevaba
+  // medio minuto esperando.
+  const adjuntosAlDia = useRef(false);
   const [durationChosen, setDurationChosen] = useState(false);
   const [extras, setExtras] = useState<ExtrasCount>({});
 
@@ -226,6 +251,58 @@ const AdvertiserPublish = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // "Publicar uno igual": llega ?copiar=<id> desde Mis avisos. Se rellena el
+  // formulario con ese aviso —incluidas sus fotos y su PDF— pero SIN atarlo:
+  // es un aviso nuevo, el original sigue su curso.
+  const [copiando, setCopiando] = useState(false);
+  useEffect(() => {
+    // Se lee de la URL directamente y no con `useSearchParams`: este parámetro
+    // solo se mira al montar, y el hook obligaría a envolver la pantalla en un
+    // Router también en las pruebas.
+    const id = new URLSearchParams(window.location.search).get("copiar");
+    if (!id) return;
+    let vivo = true;
+    setCopiando(true);
+    cargarAvisoParaCopiar(id)
+      .then((copia) => {
+        if (!vivo) return;
+        setForm(copia.form);
+        setCoords(copia.lat != null && copia.lng != null ? { lat: copia.lat, lng: copia.lng } : null);
+        setDuration(asDuracion(copia.duration));
+        setDurationChosen(true);
+        // La cantidad no se copia: esta pantalla publica un aviso por vez.
+        setExtras(copia.extras as ExtrasCount);
+        if (copia.mainPhoto) {
+          setMainPhoto({ id: "copia-main", url: URL.createObjectURL(copia.mainPhoto.file), name: copia.mainPhoto.name, file: copia.mainPhoto.file });
+        }
+        setExtraPhotos(copia.extraPhotos.map((f, i) => ({
+          id: `copia-extra-${i}`, url: URL.createObjectURL(f.file), name: f.name, file: f.file,
+        })));
+        if (copia.pdf) setPdfFile({ file: copia.pdf.file, name: copia.pdf.name });
+        // Es un aviso NUEVO: sin esto se editaría el original.
+        draftListingId.current = null;
+        adjuntosAlDia.current = false;
+        toast({
+          title: "Datos copiados del aviso",
+          description: copia.faltanAdjuntos
+            ? "No pudimos traer alguna imagen: revísalas antes de publicar."
+            : "Revisa lo que quieras cambiar y publica.",
+        });
+      })
+      .catch((e) => {
+        if (vivo) {
+          toast({
+            title: "No se pudo copiar el aviso",
+            description: e instanceof Error ? e.message : "Inténtalo de nuevo.",
+            variant: "destructive",
+          });
+        }
+      })
+      .finally(() => { if (vivo) setCopiando(false); });
+    return () => { vivo = false; };
+    // Solo al montar: el parámetro de la URL se mira una vez.
+  }, []);
+
   const packageBase = priceForDuration(quantity, duration, settings);
   // Se llama a `extrasTotal` en vez de rehacer la suma aquí: esta pantalla la
   // recalculaba a mano sobre EXTRA_DEFS, que solo tiene 5 de los 7 adicionales,
@@ -264,6 +341,7 @@ const AdvertiserPublish = () => {
 
   const pickPhoto = (slot: "main" | "extra", files: FileList | null) => {
     if (!files || files.length === 0) return;
+    adjuntosAlDia.current = false;
     const f = files[0];
     // `accept="image/*"` es solo una sugerencia del selector; validamos de verdad
     // (antes se aceptaba hasta un .txt como "imagen principal").
@@ -281,23 +359,63 @@ const AdvertiserPublish = () => {
       name: f.name,
       file: f,
     };
+    const i = pickingSlot.current;
     if (slot === "main") {
       setMainPhoto(item);
     } else {
-      const i = pickingSlot.current;
       setExtraPhotos((prev) => { const next = [...prev]; next[i] = item; return next; });
     }
+
+    // Comprimir AQUÍ y no al publicar. Es el mismo trabajo, pero ocurre mientras
+    // el usuario sigue rellenando el formulario en vez de acumularse entero en
+    // el clic de "Publicar", que es donde se notaba (cuatro fotos de 10 MP eran
+    // segundos de pantalla congelada). Si falla, se sube el original.
+    void compressImage(f)
+      .then((comprimida) => {
+        const listo: PhotoItem = { ...item, file: comprimida, comprimida: true };
+        if (slot === "main") {
+          setMainPhoto((prev) => (prev?.id === item.id ? listo : prev));
+        } else {
+          setExtraPhotos((prev) => {
+            if (prev[i]?.id !== item.id) return prev; // la cambió mientras tanto
+            const next = [...prev];
+            next[i] = listo;
+            return next;
+          });
+        }
+      })
+      .catch(() => {});
+  };
+
+  /**
+   * Elige un vídeo. La duración se comprueba AQUÍ, leyendo los metadatos del
+   * archivo: es la única forma de saberla sin decodificarlo en el servidor.
+   */
+  const pickVideo = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const f = files[0];
+    setValidandoVideo(true);
+    const r = await validarVideo(f);
+    setValidandoVideo(false);
+    if (!r.ok) {
+      toast({ title: "No se puede usar ese video", description: r.motivo, variant: "destructive" });
+      return;
+    }
+    adjuntosAlDia.current = false;
+    setVideos((prev) => (prev.length >= videosContratados ? prev : [...prev, { file: f, name: f.name, duracion: r.duracion }]));
   };
 
   // Abre el selector de archivo para el slot adicional `i`.
   const openExtraPicker = (i: number) => { pickingSlot.current = i; extraFileRef.current?.click(); };
-  const removeExtraPhoto = (i: number) =>
+  const removeExtraPhoto = (i: number) => {
+    adjuntosAlDia.current = false;
     setExtraPhotos((prev) => { const next = [...prev]; next[i] = null; return next; });
+  };
 
   // Tope por adicional: "Imagen adicional" hasta MAX_EXTRA_IMAGES; el resto a la
   // cantidad de avisos (aquí siempre 1: un aviso por publicación).
   const maxForExtra = useCallback(
-    (key: ExtraKey) => (key === "img500" ? MAX_EXTRA_IMAGES : quantity),
+    (key: ExtraKey) => (key === "img500" ? MAX_EXTRA_IMAGES : key === "video20" ? MAX_VIDEOS : quantity),
     [quantity],
   );
 
@@ -382,6 +500,13 @@ const AdvertiserPublish = () => {
     if (!hasPdfInPackage && pdfFile) setPdfFile(null);
   }, [hasPdfInPackage, pdfFile]);
 
+  // Vídeos contratados en el paquete. Si se baja la cantidad, sobran los
+  // últimos: se descartan para no cobrar por lo que no se va a publicar.
+  const videosContratados = Math.min(extras.video20 ?? 0, MAX_VIDEOS);
+  useEffect(() => {
+    setVideos((prev) => (prev.length > videosContratados ? prev.slice(0, videosContratados) : prev));
+  }, [videosContratados]);
+
   // Elige el PDF adjunto (valida tipo y tamaño ≤ 500 KB).
   const pickPdf = (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -394,6 +519,7 @@ const AdvertiserPublish = () => {
       toast({ title: "El PDF supera los 500 KB", description: "Sube un archivo más liviano.", variant: "destructive" });
       return;
     }
+    adjuntosAlDia.current = false;
     setPdfFile({ file: f, name: f.name });
   };
 
@@ -413,7 +539,10 @@ const AdvertiserPublish = () => {
   // obligatorio. La FOTO no lo es: quien no suba ninguna publica igual y su
   // aviso sale con la imagen de la marca (FALLBACK_IMG). Es mejor un aviso
   // publicado sin foto que un anunciante que abandona por no tener una a mano.
-  const canPublish = form.category && form.title && form.description && (isEmpleo || form.price) && form.department;
+  // Dentro del Perú hace falta el departamento (es por lo que se filtra); fuera
+  // no existe, y lo que ubica el aviso es la referencia escrita.
+  const ubicacionLista = esPeru(form.country) ? !!form.department : !!form.location.trim();
+  const canPublish = form.category && form.title && form.description && (isEmpleo || form.price) && ubicacionLista;
 
   // Guarda el aviso en la BD como borrador y devuelve su id. No navega ni avisa:
   // lo usan el botón "Guardar en mis borradores" y el pago-y-publica, que
@@ -422,14 +551,16 @@ const AdvertiserPublish = () => {
     const id = await saveListingDraft({
       form: formForSubmit, lat: coords?.lat ?? null, lng: coords?.lng ?? null,
       quantity, duration, extras,
-      mainPhoto: mainPhoto ? { file: mainPhoto.file, name: mainPhoto.name } : null,
+      mainPhoto: mainPhoto ? { file: mainPhoto.file, name: mainPhoto.name, comprimida: mainPhoto.comprimida } : null,
       extraPhotos: extraPhotos.slice(0, extraImageCount)
         .filter((p): p is PhotoItem => !!p)
-        .map((p) => ({ file: p.file, name: p.name })),
+        .map((p) => ({ file: p.file, name: p.name, comprimida: p.comprimida })),
       pdf: hasPdfInPackage && pdfFile ? { file: pdfFile.file, name: pdfFile.name } : null,
+      videos: videos.map((v) => ({ file: v.file, name: v.name })),
       draftId: draftListingId.current,
     });
     draftListingId.current = id;
+    adjuntosAlDia.current = true;
     // El borrador local ya no hace falta: la fuente de verdad pasa a ser la BD.
     localStorage.removeItem(DRAFT_KEY);
     return id;
@@ -471,13 +602,34 @@ const AdvertiserPublish = () => {
   };
 
   const openPublishFlow = () => {
-    if (!canPublish) {
-      toast({ title: "Completa los datos requeridos", description: "Faltan campos obligatorios o imágenes.", variant: "destructive" });
-      return;
-    }
-    // EFFE-097: publicar exige haber elegido una duración de forma explícita.
-    if (!durationChosen) {
-      toast({ title: "Elige la duración", description: "Selecciona cuántos días durará tu aviso antes de publicar.", variant: "destructive" });
+    // Un toast que dice "faltan campos" obliga a buscar cuál: ahora se marca el
+    // campo, se baja hasta él y se le da el foco. El toast queda de resumen.
+    const precioNum = Number(form.price);
+    const reglas = [
+      { campo: "categoria", ok: !!form.category, mensaje: "Elige la categoría de tu aviso." },
+      { campo: "titulo", ok: !!form.title.trim(), mensaje: "Ponle un título a tu aviso." },
+      { campo: "descripcion", ok: !!form.description.trim(), mensaje: "Describe lo que ofreces." },
+      {
+        campo: "precio",
+        ok: isEmpleo ? form.price === "" || (Number.isFinite(precioNum) && precioNum >= 0)
+                     : form.price !== "" && Number.isFinite(precioNum) && precioNum >= 0,
+        mensaje: form.price !== "" && precioNum < 0
+          ? "El precio no puede ser negativo."
+          : "Indica el precio del producto.",
+      },
+      {
+        campo: "ubicacion",
+        ok: ubicacionLista,
+        mensaje: esPeru(form.country)
+          ? "Marca la ubicación de tu aviso en el mapa."
+          : "Escribe la ciudad o referencia de tu aviso.",
+      },
+      // EFFE-097: publicar exige haber elegido una duración de forma explícita.
+      { campo: "duracion", ok: durationChosen, mensaje: "Selecciona cuántos días durará tu aviso." },
+    ];
+    if (!val.validar(reglas)) {
+      const fallo = reglas.find((r) => !r.ok)!;
+      toast({ title: "Falta un dato", description: fallo.mensaje, variant: "destructive" });
       return;
     }
     if (!session) {
@@ -501,7 +653,7 @@ const AdvertiserPublish = () => {
   // formulario completo que puede volver a enviar: `canPublish` pasa a false y
   // republicar el mismo aviso se vuelve imposible por construcción.
   const resetPublishForm = () => {
-    setForm({ category: "", title: "", description: "", price: "", currency: "PEN", department: "", location: "", condition: "nuevo" });
+    setForm({ category: "", title: "", description: "", price: "", currency: "PEN", department: "", location: "", condition: "nuevo", country: paisPreferido().code });
     setMainPhoto(null);
     setExtraPhotos(Array(MAX_EXTRA_IMAGES).fill(null));
     setCoords(null);
@@ -574,7 +726,33 @@ const AdvertiserPublish = () => {
     publishingRef.current = true;
     setPublishing(true);
     try {
-      // 1) Crear el aviso y publicarlo
+      // 1) Crear el aviso y publicarlo. Si ya existe en la BD con estos mismos
+      //    adjuntos (caso típico: se pagó el faltante y volvemos a rematar),
+      //    se salta la creación y las subidas y se publica y punto.
+      const datosDeCobro = {
+        quantity,
+        duration,
+        extras,
+        total,
+        receiptType: "boleta" as const,
+        email,
+        advertiserName: verifiedName || session?.name || "Anunciante",
+        docType: tipoDoc as "dni" | "ruc",
+        docNumber: docNumber || undefined,
+      };
+      if (draftListingId.current && adjuntosAlDia.current) {
+        const { published: yaPublicado } = await finalizeListingPublication(draftListingId.current, datosDeCobro);
+        setSuccessOpen({ open: true, number: "", email });
+        resetPublishForm();
+        void getCreditBalance().then(setCreditBalance).catch(() => {});
+        if (!yaPublicado) {
+          toast({
+            title: "Aviso pendiente de activación",
+            description: "Se descontó tu saldo, pero el aviso quedó pendiente de activación. Nuestro equipo lo revisará.",
+          });
+        }
+        return;
+      }
       const { listingId, published } = await createAndPublishListing({
         form: formForSubmit,
         lat: coords?.lat ?? null,
@@ -586,27 +764,30 @@ const AdvertiserPublish = () => {
         // Si ya se guardó como borrador, se publica ESE aviso: sin esto quedarían
         // dos, uno en borradores y otro activo.
         draftId: draftListingId.current,
-        mainPhoto: mainPhoto ? { file: mainPhoto.file, name: mainPhoto.name } : null,
+        mainPhoto: mainPhoto ? { file: mainPhoto.file, name: mainPhoto.name, comprimida: mainPhoto.comprimida } : null,
         extraPhotos: extraPhotos.slice(0, extraImageCount)
           .filter((p): p is PhotoItem => !!p)
-          .map((p) => ({ file: p.file, name: p.name })),
+          .map((p) => ({ file: p.file, name: p.name, comprimida: p.comprimida })),
         pdf: hasPdfInPackage && pdfFile ? { file: pdfFile.file, name: pdfFile.name } : null,
+      videos: videos.map((v) => ({ file: v.file, name: v.name })),
         receiptType: "boleta",
         email,
         advertiserName: verifiedName || session?.name || "Anunciante",
         docType: tipoDoc,
         docNumber: docNumber || undefined,
-      });
+      }, (hechas, totalFotos) => setSubiendo({ hechas, total: totalFotos }));
 
-      // 2) El saldo ya se descontó dentro de `publish_listing`, con un importe
-      //    calculado en el servidor. Aquí solo se refresca lo que se enseña.
-      setCreditBalance(await getCreditBalance());
-
-      // 3) Publicado y saldo descontado. NO se emite boleta al publicar: el
+      // 2) Publicado y saldo descontado. NO se emite boleta al publicar: el
       //    comprobante ya se emitió al comprar los créditos. Confirmamos y
       //    vaciamos el formulario para que no se pueda reenviar.
       setSuccessOpen({ open: true, number: "", email });
       resetPublishForm();
+
+      // 3) El saldo ya se descontó dentro de `publish_listing`. Refrescar lo que
+      //    se enseña va DESPUÉS del "¡Aviso publicado!": antes esta consulta se
+      //    esperaba antes de dar la buena noticia, y retrasaba el mensaje medio
+      //    segundo sin aportarle nada.
+      void getCreditBalance().then(setCreditBalance).catch(() => {});
       if (!published) {
         toast({
           title: "Aviso pendiente de activación",
@@ -619,7 +800,7 @@ const AdvertiserPublish = () => {
       if (e instanceof SaldoInsuficiente) {
         // El aviso ya existe (con sus fotos subidas): al reintentar hay que
         // publicar ESE. Sin esto, comprar saldo y volver a publicar dejaría dos.
-        if (e.listingId) draftListingId.current = e.listingId;
+        if (e.listingId) { draftListingId.current = e.listingId; adjuntosAlDia.current = true; }
         const saldoReal = await getCreditBalance();
         setCreditBalance(saldoReal);
         toast({
@@ -647,6 +828,7 @@ const AdvertiserPublish = () => {
     } finally {
       publishingRef.current = false;
       setPublishing(false);
+      setSubiendo(null);
     }
   };
 
@@ -659,7 +841,8 @@ const AdvertiserPublish = () => {
     const fields = [
       form.category, form.title, form.description,
       isEmpleo ? "n/a" : form.price, // el salario es opcional en Empleo
-      form.department,
+      // Fuera del Perú no hay departamento: cuenta la referencia escrita.
+      esPeru(form.country) ? form.department : form.location,
     ];
     const filled = fields.filter((v) => v && v.trim().length > 0).length;
     return Math.round((filled / fields.length) * 100);
@@ -721,7 +904,7 @@ const AdvertiserPublish = () => {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4 pt-5">
-                <div>
+                <div {...val.props("categoria")}>
                   <Label>Categoría *</Label>
                   <Select value={form.category} onValueChange={(v) => updateForm("category", v)}>
                     <SelectTrigger className="mt-1"><SelectValue placeholder="Selecciona una categoría" /></SelectTrigger>
@@ -729,8 +912,9 @@ const AdvertiserPublish = () => {
                       {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
+                  <MensajeDeError campo="categoria" errores={val.errores} />
                 </div>
-                <div>
+                <div {...val.props("titulo")}>
                   <Label>Título del aviso *</Label>
                   <Input
                     value={form.title}
@@ -740,6 +924,7 @@ const AdvertiserPublish = () => {
                     className="mt-1"
                   />
                   <p className="text-[11px] text-muted-foreground mt-1">{form.title.length}/80</p>
+                  <MensajeDeError campo="titulo" errores={val.errores} />
                 </div>
               </CardContent>
             </Card>
@@ -875,7 +1060,7 @@ const AdvertiserPublish = () => {
                         <span className="text-sm font-medium text-foreground truncate flex-1">{pdfFile.name}</span>
                         <button
                           type="button"
-                          onClick={() => setPdfFile(null)}
+                          onClick={() => { adjuntosAlDia.current = false; setPdfFile(null); }}
                           className="w-7 h-7 flex items-center justify-center text-destructive hover:bg-destructive hover:text-destructive-foreground"
                           aria-label="Quitar PDF"
                         >
@@ -897,6 +1082,54 @@ const AdvertiserPublish = () => {
                     )}
                   </div>
                 )}
+
+                {/* Vídeos — el apartado aparece solo si el adicional está activo. */}
+                {videosContratados > 0 && (
+                  <div className="sm:col-span-2 space-y-2">
+                    <input
+                      ref={videoFileRef}
+                      type="file"
+                      accept="video/mp4,video/quicktime,video/webm"
+                      className="hidden"
+                      onChange={(e) => { void pickVideo(e.target.files); if (videoFileRef.current) videoFileRef.current.value = ""; }}
+                    />
+                    {videos.map((v, i) => (
+                      <div key={`${v.name}-${i}`} className="flex items-center gap-3 p-3 border border-secondary/40 bg-secondary/5">
+                        <Video size={18} className="text-secondary shrink-0" />
+                        <span className="text-sm font-medium text-foreground truncate flex-1">{v.name}</span>
+                        <span className="text-[11px] text-muted-foreground shrink-0">{Math.round(v.duracion)} s</span>
+                        <button
+                          type="button"
+                          onClick={() => { adjuntosAlDia.current = false; setVideos((prev) => prev.filter((_, k) => k !== i)); }}
+                          className="w-7 h-7 flex items-center justify-center text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                          aria-label={`Quitar ${v.name}`}
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
+                    {videos.length < videosContratados && (
+                      <button
+                        type="button"
+                        onClick={() => videoFileRef.current?.click()}
+                        disabled={validandoVideo}
+                        className="w-full flex items-center justify-center gap-2 p-4 border-2 border-dashed border-border hover:border-secondary/60 hover:bg-muted/30 transition-colors disabled:opacity-60"
+                      >
+                        {validandoVideo
+                          ? <Loader2 size={22} className="animate-spin text-muted-foreground" />
+                          : <Video size={22} className="text-muted-foreground" />}
+                        <div className="text-left">
+                          <p className="text-sm font-semibold text-foreground">
+                            {validandoVideo ? "Revisando el video…" : `Agregar video (${videos.length}/${videosContratados})`}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            hasta {MAX_SEGUNDOS} segundos · MP4, MOV o WebM
+                          </p>
+                        </div>
+                      </button>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -910,7 +1143,7 @@ const AdvertiserPublish = () => {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="pt-5">
+              <CardContent className="pt-5" {...val.props("descripcion")}>
                 <Textarea
                   value={form.description}
                   onChange={(e) => updateForm("description", e.target.value)}
@@ -919,6 +1152,7 @@ const AdvertiserPublish = () => {
                   maxLength={2000}
                 />
                 <p className="text-[11px] text-muted-foreground mt-1">{form.description.length}/2000</p>
+                <MensajeDeError campo="descripcion" errores={val.errores} />
               </CardContent>
             </Card>
 
@@ -934,24 +1168,28 @@ const AdvertiserPublish = () => {
               </CardHeader>
               <CardContent className="pt-5 space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="sm:col-span-2">
+                  <div className="sm:col-span-2" {...val.props("precio")}>
                     <Label>{isEmpleo ? "Salario / Remuneración (opcional)" : "Precio del producto *"}</Label>
-                    <Input type="number" value={form.price} onChange={(e) => updateForm("price", e.target.value)} placeholder={isEmpleo ? "Opcional — déjalo vacío si es a convenir" : "0.00"} className="mt-1" />
+                    <Input type="number" min={0} step="0.01" inputMode="decimal" value={form.price} onChange={(e) => updateForm("price", e.target.value)} placeholder={isEmpleo ? "Opcional — déjalo vacío si es a convenir" : "0.00"} className="mt-1" />
+                    <MensajeDeError campo="precio" errores={val.errores} />
                   </div>
                   <div>
                     <Label>Moneda</Label>
                     <Select value={form.currency} onValueChange={(v) => updateForm("currency", v)}>
                       <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="PEN">PEN (S/.)</SelectItem>
+                        <SelectItem value="PEN">PEN (S/)</SelectItem>
                         <SelectItem value="USD">USD ($)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
+                <div {...val.props("ubicacion")}>
                 <LocationPicker
                   department={form.department || null}
                   onDepartmentChange={(v) => updateForm("department", v ?? "")}
+                  country={form.country || "PE"}
+                  onCountryChange={(code) => { updateForm("country", code); guardarPais(code); }}
                   location={form.location}
                   onLocationChange={(v) => updateForm("location", v)}
                   lat={coords?.lat ?? null}
@@ -961,6 +1199,8 @@ const AdvertiserPublish = () => {
                   }
                   required
                 />
+                <MensajeDeError campo="ubicacion" errores={val.errores} />
+                </div>
                 {conditionEnabled && (
                   <div className="sm:w-1/2">
                     <Label>Condición</Label>
@@ -991,7 +1231,7 @@ const AdvertiserPublish = () => {
               </CardHeader>
               <CardContent className="pt-5 space-y-6">
                 {/* Duración */}
-                <div>
+                <div {...val.props("duracion")}>
                   <Label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Duración del aviso</Label>
                   <div className="mt-2 grid grid-cols-3 md:grid-cols-6 gap-2">
                     {DURATIONS.map((d) => {
@@ -1013,6 +1253,7 @@ const AdvertiserPublish = () => {
                       );
                     })}
                   </div>
+                  <MensajeDeError campo="duracion" errores={val.errores} />
                 </div>
 
                 {/* Adicionales opcionales */}
@@ -1189,7 +1430,10 @@ const AdvertiserPublish = () => {
                   botón activo para que openPublishFlow explique QUÉ falta. */}
               <Button variant="hero" size="lg" className="w-full rounded-none" onClick={openPublishFlow} disabled={publishing || savingDraft}>
                 {publishing
-                  ? <><Loader2 size={16} className="mr-1 animate-spin" /> Publicando…</>
+                  ? <><Loader2 size={16} className="mr-1 animate-spin" />
+                      {subiendo && subiendo.hechas < subiendo.total
+                        ? `Subiendo imagen ${subiendo.hechas + 1} de ${subiendo.total}…`
+                        : "Publicando…"}</>
                   : <>Publicar aviso <ArrowRight size={16} className="ml-1" /></>}
               </Button>
 
@@ -1314,6 +1558,14 @@ const AdvertiserPublish = () => {
             {/* EFFE-066/090: publicar NO emite comprobante (solo descuenta
                 saldo). Antes aquí había un recuadro "Datos del comprobante" que
                 hacía creer que al publicar se emitía una boleta/factura. */}
+            {/* Si no alcanza, decirlo AQUÍ con la cifra exacta. Antes el usuario
+                confirmaba, esperaba, y recién entonces le saltaba un error de
+                saldo sin decirle cuánto le faltaba. */}
+            {creditBalance !== null && creditBalance < totalCredits && (
+              <p className="text-xs text-destructive font-medium">
+                Te faltan {formatCredits(Math.round((totalCredits - creditBalance) * 100) / 100)} — se cobrarán ahora con tarjeta.
+              </p>
+            )}
             <p className="text-xs text-muted-foreground">
               Se descontará de tu saldo al publicar. <span className="font-semibold text-foreground">Publicar no emite comprobante</span>: la boleta o factura se emite al comprar créditos.
             </p>

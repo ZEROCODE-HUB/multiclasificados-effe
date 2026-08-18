@@ -12,6 +12,8 @@ export interface ExtraPrices {
   urgente: number;
   destacado: number;
   confidencial: number;
+  /** Vídeo del aviso (hasta 20 s). Se cobra por día, como el resto. */
+  video20: number;
 }
 
 export interface PricingSettings {
@@ -40,6 +42,7 @@ export const DEFAULT_SETTINGS: PricingSettings = {
     urgente: 5,
     destacado: 5,
     confidencial: 0,    // gratuita (Excel: "Si")
+    video20: 5,         // vídeo de hasta 20 s — mismo precio y estilo que el PDF
   },
 };
 
@@ -123,6 +126,7 @@ export interface ExtrasSelection {
   urgente?: boolean | number;
   destacado?: boolean | number;
   confidencial?: boolean | number;
+  video20?: boolean | number;
 }
 
 // El adicional se cobra POR DÍA PUBLICADO: el precio de la tarifa es diario.
@@ -217,15 +221,27 @@ export function buildMatrix(s: PricingSettings = loadSettings()) {
 }
 
 export function formatSoles(v: number) {
-  return `S/ ${v.toFixed(2)}`;
+  const n = Number.isFinite(v) ? v : 0;
+  return `S/ ${n.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-// 1 crédito = 1 sol: el saldo y el costo de un aviso se muestran como dinero,
-// con la sigla "S/" ("S/ 16.14"). Los enteros no arrastran ".00": "S/ 8472".
+// 1 crédito = 1 sol: el saldo y el costo de un aviso se muestran como dinero.
+// Antes los enteros no arrastraban los decimales ("S/ 8472"), pero entonces el
+// saldo se veía con un formato y la boleta del mismo importe con otro.
 export function formatCredits(v: number) {
-  const n = Math.round(v * 100) / 100;
-  const cifra = Number.isInteger(n) ? String(n) : n.toFixed(2);
-  return `S/ ${cifra}`;
+  return formatSoles(Math.round(v * 100) / 100);
+}
+
+// Precio de un AVISO: lo que anuncia el usuario, no lo que nos paga a nosotros.
+// Fuente única — esta misma cuenta estaba copiada en seis componentes, cada uno
+// con su formato ("S/ 120000.00", "S/ 120,000.00", "S/ 120,000" convivían en la
+// misma app). Sin precio no se inventa un "S/ 0": el aviso sale "a convenir",
+// que es como se negocia de verdad en un clasificado.
+export function formatPrecioAviso(price: number, currency: string): string {
+  const n = Number.isFinite(price) ? price : 0;
+  if (n <= 0) return "Precio a convenir";
+  const sym = currency === "USD" ? "US$" : "S/";
+  return `${sym} ${n.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 // Precio COMPACTO para espacios chicos (p. ej. los pines del mapa). Abrevia solo
@@ -234,6 +250,7 @@ export function formatCredits(v: number) {
 export function formatCompactPrice(price: number, currency: string): string {
   const sym = currency === "USD" ? "US$" : "S/";
   const n = Number.isFinite(price) ? price : 0;
+  if (n <= 0) return "A convenir";
   if (n >= 1_000_000) return `${sym} ${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 10_000) return `${sym} ${Math.round(n / 1000)}K`;
   return `${sym} ${n.toLocaleString("es-PE")}`;

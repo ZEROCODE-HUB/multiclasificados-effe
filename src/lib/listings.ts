@@ -26,6 +26,8 @@ interface CardRow {
   category_id: string;
   location: string | null;
   department: string | null;
+  country?: string | null;
+  video_count?: number | null;
   lat: number | string | null;
   lng: number | string | null;
   featured: boolean;
@@ -51,6 +53,9 @@ export function mapCard(r: CardRow): Listing {
     category: r.category_id,
     location: r.location ?? "",
     department: r.department ?? null,
+    // Los avisos anteriores al soporte de países son peruanos.
+    country: r.country ?? "PE",
+    videoCount: Number(r.video_count ?? 0),
     lat: r.lat != null ? Number(r.lat) : null,
     lng: r.lng != null ? Number(r.lng) : null,
     // `||` y no `??`: una cadena vacía también significa "sin imagen", y con
@@ -85,6 +90,12 @@ export interface SearchFilters {
    * comparaba por distancia y se cambió por esto, que es exacto y predecible.
    */
   department?: string;
+  /**
+   * País del aviso (ISO-3166-1 alpha-2). Por defecto "PE": los avisos de
+   * siempre son peruanos y quien no toque este filtro ve lo mismo que antes.
+   * Vacío o null busca en todos los países.
+   */
+  country?: string;
   /**
    * Ubicación del dispositivo, solo con permiso concedido. NO filtra nada: se
    * usa únicamente para ordenar cuando `sort` es "distance".
@@ -194,6 +205,34 @@ export async function fetchListingById(id: string): Promise<Listing | null> {
 // Enlace (firmado, temporal) al PDF adjunto del aviso, si tiene uno. Cualquiera
 // puede pedirlo desde el detalle (política listing_docs_public_read). Devuelve
 // null si el aviso no tiene documento.
+export interface VideoDelAviso {
+  id: string;
+  url: string;
+  duracion: number | null;
+}
+
+/** Vídeos de un aviso, en el orden en que los subió su dueño. */
+export async function fetchListingVideos(id: string): Promise<VideoDelAviso[]> {
+  if (!isUuid(id)) return [];
+  try {
+    const { data, error } = await supabase
+      .from("listing_videos")
+      .select("id, url, duration_seconds")
+      .eq("listing_id", id)
+      .order("sort_order", { ascending: true });
+    if (error) throw error;
+    return ((data ?? []) as Array<Record<string, unknown>>).map((v) => ({
+      id: String(v.id),
+      url: String(v.url),
+      duracion: v.duration_seconds != null ? Number(v.duration_seconds) : null,
+    }));
+  } catch {
+    // Un aviso sin vídeos y un fallo al leerlos se ven igual: no es motivo para
+    // romper la ficha.
+    return [];
+  }
+}
+
 export async function fetchListingDocumentUrl(id: string): Promise<string | null> {
   if (!isUuid(id)) return null;
   try {
@@ -220,6 +259,7 @@ export async function searchListings(f: SearchFilters): Promise<Listing[]> {
       // El departamento también gobierna la prioridad: un aviso Urgente de otro
       // departamento aparece, pero no encabeza la búsqueda de quien mira este.
       p_department: f.department || null,
+      p_country: f.country === undefined ? "PE" : (f.country || null),
       p_sort: f.sort || "recent",
       p_lat: f.lat ?? null,
       p_lng: f.lng ?? null,

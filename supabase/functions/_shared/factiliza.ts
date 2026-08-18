@@ -37,7 +37,36 @@ export const TIPO_DOC_NOTA_CREDITO = "07";
 export const MOTIVO_NOTA = { anulacion: { cod: "01", des: "ANULACION DE LA OPERACION" } } as const;
 
 /** Catálogo 06 — tipo de documento de identidad del cliente. */
-export const TIPO_DOC_CLIENTE = { dni: "1", ruc: "6" } as const;
+export const TIPO_DOC_CLIENTE = {
+  dni: "1",
+  ce: "4",          // Carne de Extranjeria
+  ruc: "6",
+  pasaporte: "7",
+} as const;
+
+/** Documentos de identidad que puede tener un cliente. */
+export type ClienteDocTipo = keyof typeof TIPO_DOC_CLIENTE;
+
+// Como se llama cada documento cuando hay que explicarle al usuario que esta mal.
+const NOMBRE_DOC: Record<ClienteDocTipo, string> = {
+  dni: "DNI", ce: "carne de extranjeria", ruc: "RUC", pasaporte: "pasaporte",
+};
+
+// Formato de cada uno. El pasaporte y el carne llevan letras, y por eso no se
+// pueden limpiar "quitando lo que no sea un digito" como el DNI.
+const FORMATO_DOC: Record<ClienteDocTipo, RegExp> = {
+  dni: /^[0-9]{8}$/,
+  ruc: /^[0-9]{11}$/,
+  ce: /^[A-Za-z0-9]{9,12}$/,
+  pasaporte: /^[A-Za-z0-9]{6,12}$/,
+};
+
+const COMO_DEBERIA_SER: Record<ClienteDocTipo, string> = {
+  dni: "8 digitos",
+  ruc: "11 digitos",
+  ce: "entre 9 y 12 caracteres",
+  pasaporte: "entre 6 y 12 caracteres",
+};
 
 /** Catálogo 51 — tipo de operación. Venta interna. */
 const TIPO_OPERACION = "0101";
@@ -140,7 +169,7 @@ export interface DatosDelComprobante {
   fechaEmision: Date;
   moneda?: string;
   emisorRuc: string;
-  clienteDocTipo: "dni" | "ruc" | null;
+  clienteDocTipo: ClienteDocTipo | null;
   clienteDocNumero: string | null;
   clienteNombre: string;
   clienteDireccion?: string | null;
@@ -178,10 +207,13 @@ export function construirComprobante(d: DatosDelComprobante): Record<string, unk
   if (!d.clienteDocNumero) {
     throw new ComprobanteInvalido("Falta el documento del cliente.");
   }
-  const largoEsperado = d.clienteDocTipo === "ruc" ? 11 : 8;
-  if (!new RegExp(`^\\d{${largoEsperado}}$`).test(d.clienteDocNumero)) {
+  const tipoDoc = (d.clienteDocTipo ?? "dni") as ClienteDocTipo;
+  if (!FORMATO_DOC[tipoDoc]) {
+    throw new ComprobanteInvalido("Tipo de documento del cliente no admitido.");
+  }
+  if (!FORMATO_DOC[tipoDoc].test(d.clienteDocNumero)) {
     throw new ComprobanteInvalido(
-      `El documento del cliente debería tener ${largoEsperado} dígitos.`,
+      `El ${NOMBRE_DOC[tipoDoc]} del cliente debería tener ${COMO_DEBERIA_SER[tipoDoc]}.`,
     );
   }
   if (!/^\d{11}$/.test(d.emisorRuc ?? "")) {
@@ -217,7 +249,7 @@ export function construirComprobante(d: DatosDelComprobante): Record<string, unk
     fecha_Emision: fecha,
     empresa_Ruc: d.emisorRuc,
 
-    cliente_Tipo_Doc: d.clienteDocTipo === "ruc" ? TIPO_DOC_CLIENTE.ruc : TIPO_DOC_CLIENTE.dni,
+    cliente_Tipo_Doc: TIPO_DOC_CLIENTE[(d.clienteDocTipo ?? "dni") as ClienteDocTipo] ?? TIPO_DOC_CLIENTE.dni,
     cliente_Num_Doc: d.clienteDocNumero,
     cliente_Razon_Social: d.clienteNombre,
     // SUNAT admite la venta sin dirección del cliente en boletas; se manda vacío
@@ -271,7 +303,7 @@ export interface DatosDeLaNota {
   emisorRuc: string;
   /** El comprobante que se anula. */
   afectado: { tipo: "boleta" | "factura"; numero: string };
-  clienteDocTipo: "dni" | "ruc" | null;
+  clienteDocTipo: ClienteDocTipo | null;
   clienteDocNumero: string | null;
   clienteNombre: string;
   clienteDireccion?: string | null;
@@ -327,7 +359,7 @@ export function construirNotaDeCredito(d: DatosDeLaNota): Record<string, unknown
 
     empresa_Ruc: d.emisorRuc,
 
-    cliente_Tipo_Doc: d.clienteDocTipo === "ruc" ? TIPO_DOC_CLIENTE.ruc : TIPO_DOC_CLIENTE.dni,
+    cliente_Tipo_Doc: TIPO_DOC_CLIENTE[(d.clienteDocTipo ?? "dni") as ClienteDocTipo] ?? TIPO_DOC_CLIENTE.dni,
     cliente_Num_Doc: d.clienteDocNumero,
     cliente_Razon_Social: d.clienteNombre,
     cliente_Direccion: d.clienteDireccion ?? "",

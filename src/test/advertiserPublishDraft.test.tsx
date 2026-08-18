@@ -16,9 +16,12 @@ vi.mock("@/lib/credits", () => ({
 
 const createAndPublishListing = vi.fn();
 const saveListingDraft = vi.fn();
+// Publicar un aviso que YA está guardado con sus fotos: no se vuelve a subir nada.
+const finalizeListingPublication = vi.fn();
 vi.mock("@/lib/publish", () => ({
   createAndPublishListing: (...a: unknown[]) => createAndPublishListing(...a),
   saveListingDraft: (...a: unknown[]) => saveListingDraft(...a),
+  finalizeListingPublication: (...a: unknown[]) => finalizeListingPublication(...a),
   SaldoInsuficiente: class SaldoInsuficiente extends Error {},
 }));
 
@@ -133,7 +136,7 @@ describe("AdvertiserPublish — Guardar en mis borradores", () => {
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("S/ 1000");
+    await screen.findByText("S/ 1,000.00");
     uploadMainPhoto();
 
     fireEvent.click(draftButton());
@@ -143,9 +146,12 @@ describe("AdvertiserPublish — Guardar en mis borradores", () => {
     fireEvent.click(screen.getByRole("button", { name: /publicar aviso/i }));
     fireEvent.click(await screen.findByRole("button", { name: /confirmar y publicar/i }));
 
-    await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
-    // Clave: se publica el borrador ya creado.
-    expect(createAndPublishListing.mock.calls[0][0].draftId).toBe("L-DRAFT");
+    // Clave: se publica el borrador YA creado, y no se vuelve a crear ni a
+    // resubir nada. Antes esto borraba las fotos del borrador y las volvía a
+    // subir enteras, que es la mitad de la espera de publicar.
+    await waitFor(() => expect(finalizeListingPublication).toHaveBeenCalledTimes(1));
+    expect(finalizeListingPublication.mock.calls[0][0]).toBe("L-DRAFT");
+    expect(createAndPublishListing).not.toHaveBeenCalled();
   });
 
   it("sin título o sin categoría no guarda (son NOT NULL en la BD)", async () => {

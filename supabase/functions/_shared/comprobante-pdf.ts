@@ -61,7 +61,9 @@ const TITULO = {
   factura: "FACTURA ELECTRÓNICA",
 } as const;
 
-const DOC_LABEL: Record<string, string> = { dni: "DNI", ruc: "RUC", ce: "C.E." };
+const DOC_LABEL: Record<string, string> = {
+  dni: "DNI", ruc: "RUC", ce: "C.E.", pasaporte: "Pasaporte",
+};
 
 export function renderComprobantePDF(d: DatosComprobante): Uint8Array {
   const c = new Lienzo();

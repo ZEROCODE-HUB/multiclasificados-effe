@@ -18,6 +18,15 @@ export function normalizeDocNumber(value: string, maxLen: number): string {
   return value.replace(/\D/g, "").slice(0, maxLen);
 }
 
+/**
+ * Igual, pero para documentos que LLEVAN letras: carne de extranjeria y
+ * pasaporte. Quitarles las letras (que es lo que hace normalizeDocNumber) los
+ * dejaria irreconocibles en la boleta.
+ */
+export function normalizeDocAlfanumerico(value: string, maxLen: number): string {
+  return value.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, maxLen);
+}
+
 export interface VerifyDocResult {
   ok: boolean;
   nombre?: string; // Nombre completo (DNI) o razón social (RUC)

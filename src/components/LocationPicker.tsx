@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MapPin, Search, Loader2, Check } from "lucide-react";
 import { DEPARTAMENTOS, departamentoDeTexto, nombreDepartamento } from "@/lib/departamentos";
+import { PAISES, PAIS_POR_DEFECTO, esPeru, nombrePais } from "@/lib/paises";
 import {
   sugerirDirecciones,
   detalleDeLugar,
@@ -23,6 +24,12 @@ interface LocationPickerProps {
   /** Código de departamento del INEI. Es el dato por el que se filtra. */
   department: string | null;
   onDepartmentChange: (id: string | null) => void;
+  /**
+   * País del aviso (ISO alpha-2). Por defecto Perú. Fuera del Perú no hay
+   * departamentos del INEI que valgan: basta el país y la referencia escrita.
+   */
+  country?: string;
+  onCountryChange?: (code: string) => void;
   /** Referencia legible: distrito y provincia, o lo que escriba el anunciante. */
   location: string;
   onLocationChange: (v: string) => void;
@@ -50,6 +57,8 @@ interface LocationPickerProps {
 export function LocationPicker({
   department,
   onDepartmentChange,
+  country = PAIS_POR_DEFECTO,
+  onCountryChange,
   location,
   onLocationChange,
   lat,
@@ -58,6 +67,7 @@ export function LocationPicker({
   required,
 }: LocationPickerProps) {
   const pos = lat != null && lng != null ? { lat, lng } : null;
+  const enPeru = esPeru(country);
   const [deduciendo, setDeduciendo] = useState(false);
   // Se muestran los campos a mano solo si hacen falta: porque la deducción falló
   // o porque el anunciante ha pedido corregir algo.
@@ -66,7 +76,24 @@ export function LocationPicker({
   const [falloDeduccion, setFalloDeduccion] = useState(false);
 
   /** Aplica lo deducido: departamento, referencia y si hay que pedir ayuda. */
-  const aplicarZona = (region: string | null, referencia: string | null) => {
+  const aplicarZona = (region: string | null, referencia: string | null, paisDelPunto?: string | null) => {
+    // Si el punto cae en otro país, se cambia el país del aviso y se deja de
+    // hablar de departamentos: "La Libertad" también existe en Venezuela, y
+    // traducirlo a un código del INEI archivaría el aviso en Trujillo.
+    const paisPunto = (paisDelPunto ?? "").toUpperCase();
+    if (paisPunto && paisPunto !== country.toUpperCase()) {
+      onCountryChange?.(paisPunto);
+    }
+    const paisFinal = paisPunto || country;
+
+    if (!esPeru(paisFinal)) {
+      onDepartmentChange(null);
+      setFalloDeduccion(false);
+      setAMano(false);
+      if (referencia) onLocationChange(referencia);
+      return;
+    }
+
     const dep = departamentoDeTexto(region);
     if (dep) {
       onDepartmentChange(dep.id);
@@ -91,9 +118,9 @@ export function LocationPicker({
   const marcarPunto = async (la: number, ln: number) => {
     onCoordsChange(la, ln);
     setDeduciendo(true);
-    const { region, referencia } = await ubicacionDeCoordenadas(la, ln);
+    const { region, referencia, pais } = await ubicacionDeCoordenadas(la, ln);
     setDeduciendo(false);
-    aplicarZona(region, referencia);
+    aplicarZona(region, referencia, pais);
   };
 
   // ─── El mapa ────────────────────────────────────────────────────────────────
@@ -190,6 +217,7 @@ export function LocationPicker({
       const rs = await sugerirDirecciones(q, {
         sesion: sesion.current ?? undefined,
         sesgo: pos ? { lat: pos.lat, lng: pos.lng } : undefined,
+        pais: country,
       });
       if (mio !== turno.current) return; // llegó tarde: manda una posterior
       setBuscando(false);
@@ -224,7 +252,7 @@ export function LocationPicker({
       return;
     }
     onCoordsChange(lugar.lat, lugar.lng);
-    aplicarZona(lugar.region, lugar.referencia);
+    aplicarZona(lugar.region, lugar.referencia, lugar.pais);
   };
 
   const teclado = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -324,6 +352,34 @@ export function LocationPicker({
         </p>
       )}
 
+      {onCountryChange && (
+        <div>
+          <Label htmlFor="pais-aviso" className="text-xs">País</Label>
+          <Select
+            value={country}
+            onValueChange={(v) => {
+              onCountryChange(v);
+              // Cambiar de país invalida lo anterior: el departamento del INEI
+              // y el punto marcado son de otro sitio.
+              onDepartmentChange(null);
+              onCoordsChange(null, null);
+              onLocationChange("");
+              setFalloDeduccion(false);
+              setAMano(false);
+            }}
+          >
+            <SelectTrigger id="pais-aviso" className="mt-1.5">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PAISES.map((p) => (
+                <SelectItem key={p.code} value={p.code}>{p.nombre}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       <div className="h-56 w-full overflow-hidden rounded border border-border relative">
         <div ref={contenedor} className="w-full h-full" data-testid="mapa" />
         {avisoDelMapa && (
@@ -339,13 +395,16 @@ export function LocationPicker({
           <p className="flex items-center gap-1.5 text-muted-foreground">
             <Loader2 size={12} className="animate-spin shrink-0" /> Identificando la ubicación…
           </p>
-        ) : department ? (
+        ) : department || (!enPeru && (location || pos)) ? (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="flex items-center gap-1.5 text-foreground">
               <Check size={12} className="text-secondary shrink-0" />
               {location ? <strong>{location}</strong> : null}
               <span className="text-muted-foreground">
-                Aparecerá en las búsquedas de <strong className="text-foreground">{nombreDepartamento(department)}</strong>.
+                Aparecerá en las búsquedas de{" "}
+                <strong className="text-foreground">
+                  {enPeru ? nombreDepartamento(department) : nombrePais(country)}
+                </strong>.
               </span>
             </span>
             {!aMano && (
@@ -358,7 +417,7 @@ export function LocationPicker({
               </button>
             )}
           </div>
-        ) : falloDeduccion ? (
+        ) : falloDeduccion && enPeru ? (
           <p className="text-muted-foreground">
             No pudimos identificar esa zona. Complétala abajo para que tu aviso aparezca en las búsquedas.
           </p>
@@ -371,8 +430,13 @@ export function LocationPicker({
       </div>
 
       {/* Camino alternativo: solo cuando la deducción falla o se pide corregir. */}
-      {aMano && (
+      {/* Fuera del Perú la referencia escrita es la ÚNICA ubicación fina que hay
+          (no se pide provincia ni estado), así que su campo está siempre. */}
+      {(aMano || !enPeru) && (
         <div className="grid gap-3 sm:grid-cols-2 border-t border-border pt-3">
+          {/* El departamento es del INEI: fuera del Perú no existe, y basta la
+              referencia escrita. */}
+          {enPeru && (
           <div>
             <Label htmlFor="departamento-aviso" className="text-xs">Departamento {required && "*"}</Label>
             <Select
@@ -389,6 +453,7 @@ export function LocationPicker({
               </SelectContent>
             </Select>
           </div>
+          )}
           <div>
             <Label htmlFor="referencia-aviso" className="text-xs">Distrito o referencia</Label>
             <Input

@@ -13,6 +13,10 @@ export interface Listing {
   location: string;
   /** Código de departamento del INEI ("15" = Lima y Callao). Filtra el buscador. */
   department?: string | null;
+  /** País del aviso (ISO alpha-2). Sin valor = Perú, que es el caso normal. */
+  country?: string | null;
+  /** Cuántos vídeos trae el aviso. Solo para la insignia de la tarjeta. */
+  videoCount?: number;
   imageUrl: string;
   date: string;
   featured: boolean;

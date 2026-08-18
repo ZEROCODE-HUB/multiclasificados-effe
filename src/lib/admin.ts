@@ -190,6 +190,59 @@ export interface AdminCreditTx {
 // Tamaño de página del historial de transacciones (paginación en el servidor).
 export const CREDIT_TX_PAGE_SIZE = 20;
 
+export interface SaldoUsuario {
+  user_id: string;
+  full_name: string;
+  email: string;
+  doc_type: string | null;
+  doc_number: string | null;
+  balance: number;
+}
+
+export const SALDOS_PAGE_SIZE = 20;
+
+/**
+ * Reporte de saldos a favor: quién tiene dinero cargado sin gastar.
+ *
+ * Es la deuda viva de la plataforma con sus usuarios. El historial de
+ * transacciones cuenta los movimientos; esto cuenta lo que queda.
+ */
+export async function fetchSaldosUsuarios(opts: {
+  search?: string; soloConSaldo?: boolean; page?: number; pageSize?: number;
+} = {}): Promise<{ data: SaldoUsuario[]; total: number }> {
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = opts.pageSize ?? SALDOS_PAGE_SIZE;
+  try {
+    const { data, error } = await supabase.rpc("admin_saldos_usuarios", {
+      p_search: opts.search || null,
+      p_solo_con_saldo: opts.soloConSaldo ?? true,
+      p_limit: pageSize,
+      p_offset: (page - 1) * pageSize,
+    });
+    if (error) throw error;
+    const rows = (data ?? []) as Array<{
+      user_id: string; full_name: string | null; email: string | null;
+      doc_type: string | null; doc_number: string | null;
+      balance: number; total_count: number;
+    }>;
+    const total = rows.length ? Number(rows[0].total_count) || 0 : 0;
+    return {
+      data: rows.map((r): SaldoUsuario => ({
+        user_id: r.user_id,
+        // Una cuenta borrada no borra su saldo: el dinero sigue siendo suyo.
+        full_name: r.full_name ?? "Usuario eliminado",
+        email: r.email ?? `id ${r.user_id.slice(0, 8)}`,
+        doc_type: r.doc_type,
+        doc_number: r.doc_number,
+        balance: Number(r.balance) || 0,
+      })),
+      total,
+    };
+  } catch {
+    return { data: [], total: 0 };
+  }
+}
+
 // EFFE-054: historial de transacciones de crédito de TODOS los usuarios, con
 // búsqueda por usuario/correo, filtro de fechas y paginación. El RPC exige el
 // permiso 'Reportes'/'edit' (ver permissions.ts); sin ese permiso devuelve vacío.
@@ -299,18 +352,66 @@ interface InvoiceRow {
   orders?: RelOrder | RelOrder[] | null;
 }
 
-export async function fetchAllInvoices(): Promise<{ data: AdminInvoice[]; real: boolean }> {
+export interface FiltroComprobantes {
+  /** Número, anunciante, documento, correo o concepto. */
+  search?: string;
+  tipo?: "boleta" | "factura";
+  sunat?: string;
+  /** Fechas en formato YYYY-MM-DD. */
+  desde?: string;
+  hasta?: string;
+  soloAnulados?: boolean;
+  page?: number;
+  pageSize?: number;
+}
+
+export const INVOICES_PAGE_SIZE = 20;
+
+/**
+ * Comprobantes del panel.
+ *
+ * Antes traía TODOS sin límite y se paginaba en el navegador: con 89 boletas ya
+ * era lento y con unos miles no cargaría. Ahora filtra y pagina en el servidor.
+ * No hace falta RPC: la RLS de `invoices` ya decide quién ve qué.
+ */
+export async function fetchAllInvoices(
+  filtro: FiltroComprobantes = {},
+): Promise<{ data: AdminInvoice[]; real: boolean; total: number }> {
+  const page = Math.max(1, filtro.page ?? 1);
+  const pageSize = filtro.pageSize ?? INVOICES_PAGE_SIZE;
   try {
     if (await isAuthed()) {
-      const { data, error } = await supabase
+      let consulta = supabase
         .from("invoices")
         .select(
           "id, number, type, email, advertiser_name, doc_type, doc_number, factiliza_data, amount, detail, issued_at, " +
             "sunat_status, email_status, needs_review, sunat_last_error, sunat_attempts, es_prueba, " +
             "anulado_at, anulado_motivo, nota_number, nota_sunat_status, " +
-            "orders ( order_listings ( listings ( title ) ) )"
-        )
-        .order("issued_at", { ascending: false });
+            "orders ( order_listings ( listings ( title ) ) )",
+          { count: "exact" },
+        );
+
+      const q = (filtro.search ?? "").trim();
+      if (q) {
+        // El título del aviso no entra aquí: filtrar por una relación anidada no
+        // se puede en un `or`. Se busca por lo que identifica al comprobante.
+        const like = `%${q.replace(/[%,()]/g, " ")}%`;
+        consulta = consulta.or(
+          `number.ilike.${like},advertiser_name.ilike.${like},doc_number.ilike.${like},` +
+          `email.ilike.${like},detail.ilike.${like}`,
+        );
+      }
+      if (filtro.tipo) consulta = consulta.eq("type", filtro.tipo);
+      if (filtro.sunat) consulta = consulta.eq("sunat_status", filtro.sunat);
+      if (filtro.desde) consulta = consulta.gte("issued_at", filtro.desde);
+      // `hasta` es un día entero: sin el +1 se perderían los del mismo día.
+      if (filtro.hasta) consulta = consulta.lt("issued_at", `${filtro.hasta}T23:59:59.999Z`);
+      if (filtro.soloAnulados) consulta = consulta.not("anulado_at", "is", null);
+
+      const desde = (page - 1) * pageSize;
+      const { data, error, count } = await consulta
+        .order("issued_at", { ascending: false })
+        .range(desde, desde + pageSize - 1);
       if (error) throw error;
       const first = <T,>(v: T | T[] | null | undefined): T | undefined =>
         Array.isArray(v) ? v[0] : v ?? undefined;
@@ -342,7 +443,7 @@ export async function fetchAllInvoices(): Promise<{ data: AdminInvoice[]; real: 
           notaStatus: r.nota_sunat_status ?? null,
         };
       });
-      return { data: rows, real: true };
+      return { data: rows, real: true, total: count ?? rows.length };
     }
   } catch {
     /* fallback a comprobantes locales (modo demo) */
@@ -370,7 +471,7 @@ export async function fetchAllInvoices(): Promise<{ data: AdminInvoice[]; real: 
     notaNumber: null,
     notaStatus: null,
   }));
-  return { data: local, real: false };
+  return { data: local, real: false, total: local.length };
 }
 
 /**
@@ -831,6 +932,39 @@ export async function grantCredits(userId: string, credits: number, reason?: str
   const { data, error } = await supabase.rpc("admin_grant_credits", {
     p_user: userId, p_credits: credits, p_reason: reason ?? null,
   });
+  if (error) throw error;
+  return Number(data) || 0;
+}
+
+export interface AjusteDeSaldo {
+  saldo_anterior: number;
+  saldo: number;
+  delta: number;
+}
+
+/**
+ * Mueve el saldo de un usuario en cualquier sentido (0108).
+ *
+ * `delta` positivo otorga y negativo devuelve. El motivo es obligatorio: es
+ * dinero y tiene que quedar explicado en el historial y en la auditoría.
+ */
+export async function ajustarSaldo(userId: string, delta: number, motivo: string): Promise<AjusteDeSaldo> {
+  const { data, error } = await supabase.rpc("admin_ajustar_saldo", {
+    p_user: userId, p_delta: delta, p_motivo: motivo,
+  });
+  if (error) throw error;
+  const r = (data ?? {}) as Record<string, unknown>;
+  return {
+    saldo_anterior: Number(r.saldo_anterior) || 0,
+    saldo: Number(r.saldo) || 0,
+    delta: Number(r.delta) || 0,
+  };
+}
+
+// Saldo actual de un usuario. Hace falta una RPC porque `user_credits` tiene
+// RLS de "solo lo mío": el panel no puede leerlo directamente.
+export async function saldoDeUsuario(userId: string): Promise<number> {
+  const { data, error } = await supabase.rpc("admin_saldo_usuario", { p_user: userId });
   if (error) throw error;
   return Number(data) || 0;
 }

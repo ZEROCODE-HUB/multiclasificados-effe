@@ -124,7 +124,13 @@ export function notificationText(n: AppNotification): string {
       return `"${(p.listing_title as string) || "Tu aviso"}" volvió a estar visible`;
     case "listing_expiring": {
       const title = (p.listing_title as string) || "Tu aviso";
-      return `"${title}" está por vencer. Renuévalo para que siga visible.`;
+      // Desde la 0113 el aviso llega con tres días de antelación y trae cuántos
+      // quedan: decir "vence pronto" sin la cifra no ayuda a decidir.
+      const dias = Number(p.dias);
+      const cuando = Number.isFinite(dias) && dias > 0
+        ? `vence en ${dias} ${dias === 1 ? "día" : "días"}`
+        : "está por vencer";
+      return `"${title}" ${cuando}. Renuévalo o publica uno igual para que siga visible.`;
     }
     case "moderation_warning": {
       const reason = (p.reason as string) || "";
@@ -172,7 +178,7 @@ export function notificationLink(n: AppNotification, role: string): string {
     case "listing_disabled":
     case "listing_enabled":
     case "listing_expiring":
-      // El dueño revisa el estado/motivo en "Mis avisos".
+      // Va directo a sus avisos: ahí tiene "Renovar" y "Publicar uno igual".
       return "/dashboard/anunciante/avisos";
     case "invoice_voided":
       // Allí ve el comprobante marcado como anulado y su motivo.

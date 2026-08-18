@@ -3,6 +3,7 @@ import { imgUrl } from "@/lib/imageUrl";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { fetchAdminListing, type AdminListingDetail } from "@/lib/admin";
+import { formatPrecioAviso } from "@/lib/pricing";
 
 /**
  * El aviso denunciado, para que el moderador lo inspeccione sin salir de donde
@@ -19,8 +20,6 @@ const listingStatusLabel: Record<string, string> = {
   rejected: "Rechazado", draft: "Borrador", expired: "Expirado",
 };
 
-const money = (price: number, currency: string) =>
-  `${currency === "USD" ? "$" : "S/"} ${Number(price ?? 0).toLocaleString("es-PE", { minimumFractionDigits: 2 })}`;
 
 interface Props {
   /** Aviso a mostrar. `null` mantiene el diálogo cerrado. */
@@ -76,7 +75,7 @@ export function ListingPreviewDialog({ listingId, reason, fallbackTitle, onClose
               <Badge variant="outline">{listingStatusLabel[aviso.status] ?? aviso.status}</Badge>
               {aviso.featured && <Badge variant="outline">Destacado</Badge>}
               {aviso.urgent && <Badge variant="outline">Urgente</Badge>}
-              <span className="text-lg font-bold text-secondary ml-auto">{money(aviso.price, aviso.currency)}</span>
+              <span className="text-lg font-bold text-secondary ml-auto">{formatPrecioAviso(aviso.price ?? 0, aviso.currency)}</span>
             </div>
 
             {aviso.images.length > 0 && (

@@ -33,6 +33,7 @@ vi.mock("@/components/PaymentForm", () => ({
   PaymentForm: ({ onPaid }: { onPaid: () => void }) => (
     <button onClick={onPaid}>SIMULAR_PAGO</button>
   ),
+  precargarKrypton: () => {},
 }));
 
 import { BuyCreditsModal } from "@/components/BuyCreditsModal";
@@ -83,7 +84,7 @@ describe("BuyCreditsModal — flujo de pago con Izipay (web)", () => {
     const pagar = await screen.findByText("SIMULAR_PAGO");
     fireEvent.click(pagar);
 
-    await waitFor(() => expect(pollOrderStatus).toHaveBeenCalledWith("ord-1"));
+    await waitFor(() => expect(pollOrderStatus).toHaveBeenCalledWith("ord-1", expect.objectContaining({ signal: expect.anything() })));
     await waitFor(() => expect(getPurchaseResult).toHaveBeenCalledWith("ord-1"));
     await waitFor(() => expect(onPurchaseComplete).toHaveBeenCalledWith(116.14));
     expect(onClose).toHaveBeenCalled();
@@ -107,9 +108,11 @@ describe("BuyCreditsModal — flujo de pago con Izipay (web)", () => {
     fireEvent.change(screen.getByPlaceholderText("tu@correo.com"), { target: { value: "ana@correo.com" } });
     await screen.findByText(/Documento inválido/i);
 
+    // El botón se puede pulsar (antes quedaba muerto sin decir por qué), pero
+    // no se crea ninguna orden: se marca el campo que falta.
     const continuar = screen.getByRole("button", { name: /continuar al pago/i });
-    expect(continuar).toBeDisabled();
     fireEvent.click(continuar);
     expect(createPayment).not.toHaveBeenCalled();
+    await screen.findByText(/Ingresa tu DNI para emitir la boleta/i);
   });
 });

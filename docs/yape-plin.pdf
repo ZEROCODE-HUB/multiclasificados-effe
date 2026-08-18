@@ -1,0 +1,1097 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [5 0 R 7 0 R 9 0 R 11 0 R] /Count 4 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 6 0 R >>
+endobj
+6 0 obj
+<< /Length 3870 >>
+stream
+BT
+/F2 20 Tf
+0 g
+1 0 0 1 56 760 Tm
+(Yape y Plin en eFFe: qué se necesita y qué) Tj
+ET
+BT
+/F2 20 Tf
+0 g
+1 0 0 1 56 737 Tm
+(implica) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 703 Tm
+(Documento de decisión · 18 de agosto de 2026) Tj
+ET
+BT
+/F2 14 Tf
+0 g
+1 0 0 1 56 658 Tm
+(Resumen) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 633 Tm
+(Con la pasarela que tenemos hoy no se puede. Yape y Plin existen dentro de Izipay, pero) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 617 Tm
+(en una plataforma distinta de la que usa eFFe. Añadirlos no es activar una casilla: es) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 601 Tm
+(integrar un segundo medio de cobro, con su propia afiliación, sus propias credenciales, su) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 585 Tm
+(propia librería y su propio aviso de pago.) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 564 Tm
+(Es un trabajo acotado y de riesgo bajo —el núcleo de saldo, boletas y publicación no se) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 548 Tm
+(toca—, pero no puede empezar hasta que Izipay entregue las credenciales de prueba.) Tj
+ET
+0.8 g
+56 521 m 539 521 l S
+0 g
+BT
+/F2 14 Tf
+0 g
+1 0 0 1 56 480 Tm
+(Qué tenemos hoy) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 455 Tm
+(eFFe cobra a través de Lyra / micuentaweb.pe, la pasarela heredada \(tecnología PayZen\)) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 439 Tm
+(que Izipay comercializa. La tienda es la 96894874.) Tj
+ET
+0.93 g
+56 398 483 18 re f
+0 g
+BT
+/F2 9 Tf
+0 g
+1 0 0 1 60 404 Tm
+(Pieza) Tj
+ET
+BT
+/F2 9 Tf
+0 g
+1 0 0 1 301.5 404 Tm
+(Dónde vive) Tj
+ET
+0.85 g
+56 396 m 539 396 l S
+0 g
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 60 386 Tm
+(Creación del cobro) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 386 Tm
+(create-payment -> Charge/CreatePayment de) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 374 Tm
+(api.micuentaweb.pe) Tj
+ET
+0.85 g
+56 366 m 539 366 l S
+0 g
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 60 356 Tm
+(Formulario de tarjeta) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 356 Tm
+(Librería Krypton, servida desde) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 344 Tm
+(static.micuentaweb.pe) Tj
+ET
+0.85 g
+56 336 m 539 336 l S
+0 g
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 60 326 Tm
+(Confirmación del pago) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 326 Tm
+(payment-webhook, con firma HMAC-SHA256) Tj
+ET
+0.85 g
+56 318 m 539 318 l S
+0 g
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 60 308 Tm
+(Acreditación y publicación) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 308 Tm
+(settle_paid_order \(una sola función, idempotente\)) Tj
+ET
+0.85 g
+56 300 m 539 300 l S
+0 g
+BT
+/F2 14 Tf
+0 g
+1 0 0 1 56 261 Tm
+(Por qué Yape y Plin no entran ahí) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 236 Tm
+(Revisado contra la documentación oficial de esa plataforma:) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 215 Tm
+(·) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 72 215 Tm
+(Su lista de medios de pago compatibles con el formulario incrustado son solo) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 201 Tm
+(tarjetas: Visa, Visa Débit, Visa Electron, Mastercard, Mastercard Débit y Maestro.) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 185 Tm
+(·) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 72 185 Tm
+(Su sección de medios de pago solo añade pagoEfectivo. No hay billeteras.) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 171 Tm
+(·) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 72 171 Tm
+(El parámetro paymentMethods de su API existe, pero sus valores son de su propio) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 157 Tm
+(catálogo \(CARDS, PAYPAL…\). No hay ningún código de Yape.) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 141 Tm
+(·) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 72 141 Tm
+(El sitemap completo de su documentación \(2 537 páginas\) no contiene ni una sola con) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 127 Tm
+(las palabras "yape" o "plin".) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 111 Tm
+(·) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 72 111 Tm
+(Su generador de códigos QR tampoco sirve de atajo: produce un QR con una URL de su) Tj
+ET
+BT
+/F1 8 Tf
+0.45 g
+1 0 0 1 56 34 Tm
+(Yape y Plin en eFFe: qué se necesita y qué implica) Tj
+ET
+BT
+/F1 8 Tf
+0.45 g
+1 0 0 1 499 34 Tm
+(1 de 4) Tj
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 8 0 R >>
+endobj
+8 0 obj
+<< /Length 4016 >>
+stream
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 786 Tm
+(propio checkout, no un QR interoperable que las billeteras peruanas puedan leer.) Tj
+ET
+BT
+/F2 14 Tf
+0 g
+1 0 0 1 56 741 Tm
+(Dónde sí están) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 716 Tm
+(En la plataforma nueva de Izipay, Izipay Checkout \(Web-Core\).) Tj
+ET
+0.93 g
+56 675 483 18 re f
+0 g
+BT
+/F2 9 Tf
+0 g
+1 0 0 1 60 681 Tm
+() Tj
+ET
+BT
+/F2 9 Tf
+0 g
+1 0 0 1 221 681 Tm
+(Yape) Tj
+ET
+BT
+/F2 9 Tf
+0 g
+1 0 0 1 382 681 Tm
+(Plin \(Interbank\)) Tj
+ET
+0.85 g
+56 673 m 539 673 l S
+0 g
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 60 663 Tm
+(Cómo se cobra) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 221 663 Tm
+(El comprador teclea el código de) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 221 651 Tm
+(su app \(payMethod: YAPE_CODE\)) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 382 663 Tm
+(Medio propio del checkout) Tj
+ET
+0.85 g
+56 643 m 539 643 l S
+0 g
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 60 633 Tm
+(Límite por operación) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 221 633 Tm
+(S/ 2 000) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 382 633 Tm
+(S/ 5 000 o USD 1 500) Tj
+ET
+0.85 g
+56 625 m 539 625 l S
+0 g
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 610 Tm
+(Un detalle documentado que conviene tener presente: si un comercio tiene solo Yape) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 594 Tm
+(configurado y el importe supera su límite, el checkout no llega a mostrarse.) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 573 Tm
+(Nuestros importes habituales van de S/ 1 a unos S/ 50, así que esos límites no nos afectan.) Tj
+ET
+BT
+/F2 14 Tf
+0 g
+1 0 0 1 56 528 Tm
+(Qué hace falta de Izipay \(antes de escribir código\)) Tj
+ET
+BT
+/F2 10.5 Tf
+0 g
+1 0 0 1 56 503 Tm
+(1.) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 72 503 Tm
+(Afiliación a Izipay Checkout con el mismo RUC. Hay que preguntar expresamente si) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 489 Tm
+(puede convivir con la tienda de micuentaweb que ya opera, o si implica migrar.) Tj
+ET
+BT
+/F2 10.5 Tf
+0 g
+1 0 0 1 56 473 Tm
+(2.) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 72 473 Tm
+(Credenciales de prueba \(sandbox\): código de comercio, clave del botón de pago,) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 459 Tm
+(clave de firma y clave pública RSA.) Tj
+ET
+BT
+/F2 10.5 Tf
+0 g
+1 0 0 1 56 443 Tm
+(3.) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 72 443 Tm
+(Tabla de comisiones de Yape y Plin, que no está publicada. Es lo que decide si el) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 429 Tm
+(medio se ofrece para importes pequeños.) Tj
+ET
+BT
+/F2 14 Tf
+0 g
+1 0 0 1 56 384 Tm
+(Qué cambiaría en nuestro sistema) Tj
+ET
+BT
+/F2 11.5 Tf
+0 g
+1 0 0 1 56 337.5 Tm
+(Lo que NO se toca) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 315 Tm
+(El saldo, las boletas de Factiliza, la publicación del aviso y la conciliación de pagos) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 299 Tm
+(quedan exactamente igual. El pago nuevo entra por el mismo sitio que el actual: la función) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 283 Tm
+(settle_paid_order, que ya es idempotente y ya sabe acreditar, emitir y publicar.) Tj
+ET
+BT
+/F2 11.5 Tf
+0 g
+1 0 0 1 56 240.5 Tm
+(Lo que hay que construir) Tj
+ET
+0.93 g
+56 198 483 18 re f
+0 g
+BT
+/F2 9 Tf
+0 g
+1 0 0 1 60 204 Tm
+(Partida) Tj
+ET
+BT
+/F2 9 Tf
+0 g
+1 0 0 1 301.5 204 Tm
+(Qué es) Tj
+ET
+0.85 g
+56 196 m 539 196 l S
+0 g
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 60 186 Tm
+(Alta de la orden) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 186 Tm
+(Una Edge Function que pida el token de sesión a) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 174 Tm
+(Izipay y arme su configuración. El cálculo del) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 162 Tm
+(importe se reutiliza tal cual: ya vive en el) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 150 Tm
+(servidor.) Tj
+ET
+0.85 g
+56 142 m 539 142 l S
+0 g
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 60 132 Tm
+(Pantalla de pago) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 132 Tm
+(Un componente nuevo que cargue su SDK, conviviendo) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 120 Tm
+(con el formulario de tarjeta actual. El usuario) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 108 Tm
+(elige: tarjeta o Yape/Plin.) Tj
+ET
+0.85 g
+56 100 m 539 100 l S
+0 g
+BT
+/F1 8 Tf
+0.45 g
+1 0 0 1 56 34 Tm
+(Yape y Plin en eFFe: qué se necesita y qué implica) Tj
+ET
+BT
+/F1 8 Tf
+0.45 g
+1 0 0 1 499 34 Tm
+(2 de 4) Tj
+ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 10 0 R >>
+endobj
+10 0 obj
+<< /Length 4198 >>
+stream
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 60 778 Tm
+(Aviso de pago) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 778 Tm
+(Un webhook nuevo: su firma es distinta \(cuerpo en) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 766 Tm
+(base64 + firma aparte, en vez de HMAC sobre el) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 754 Tm
+(cuerpo\). Termina llamando a la misma) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 742 Tm
+(settle_paid_order.) Tj
+ET
+0.85 g
+56 734 m 539 734 l S
+0 g
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 60 724 Tm
+(Distinguir el origen) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 724 Tm
+(La columna orders.payment_provider ya existe; basta) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 712 Tm
+(un valor nuevo.) Tj
+ET
+0.85 g
+56 704 m 539 704 l S
+0 g
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 60 694 Tm
+(Conciliación) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 694 Tm
+(La verificación contra la pasarela que ya se hizo) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 682 Tm
+(para las órdenes colgadas hay que replicarla contra) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 670 Tm
+(la API nueva.) Tj
+ET
+0.85 g
+56 662 m 539 662 l S
+0 g
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 60 652 Tm
+(Pruebas) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 652 Tm
+(Sandbox, y después un cobro real de S/ 1 con cada) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 640 Tm
+(medio.) Tj
+ET
+0.85 g
+56 632 m 539 632 l S
+0 g
+BT
+/F2 14 Tf
+0 g
+1 0 0 1 56 593 Tm
+(Esfuerzo estimado) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 568 Tm
+(Suponiendo credenciales de sandbox ya entregadas y funcionando:) Tj
+ET
+0.93 g
+56 527 483 18 re f
+0 g
+BT
+/F2 9 Tf
+0 g
+1 0 0 1 60 533 Tm
+(Partida) Tj
+ET
+BT
+/F2 9 Tf
+0 g
+1 0 0 1 301.5 533 Tm
+(Estimación) Tj
+ET
+0.85 g
+56 525 m 539 525 l S
+0 g
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 60 515 Tm
+(Alta de la orden y token de sesión) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 515 Tm
+(1 día) Tj
+ET
+0.85 g
+56 507 m 539 507 l S
+0 g
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 60 497 Tm
+(Pantalla de pago y elección de medio) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 497 Tm
+(1,5 días) Tj
+ET
+0.85 g
+56 489 m 539 489 l S
+0 g
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 60 479 Tm
+(Webhook y validación de firma) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 479 Tm
+(1 día) Tj
+ET
+0.85 g
+56 471 m 539 471 l S
+0 g
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 60 461 Tm
+(Conciliación y pruebas en sandbox) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 461 Tm
+(1 día) Tj
+ET
+0.85 g
+56 453 m 539 453 l S
+0 g
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 60 443 Tm
+(Prueba real y ajustes) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 443 Tm
+(0,5 días) Tj
+ET
+0.85 g
+56 435 m 539 435 l S
+0 g
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 60 425 Tm
+(Total) Tj
+ET
+BT
+/F1 9 Tf
+0 g
+1 0 0 1 301.5 425 Tm
+(5 días de trabajo) Tj
+ET
+0.85 g
+56 417 m 539 417 l S
+0 g
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 402 Tm
+(Fuera de esa cuenta quedan los tiempos de Izipay: la afiliación y la entrega de) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 386 Tm
+(credenciales no dependen de nosotros y suelen ser el tramo más largo.) Tj
+ET
+BT
+/F2 14 Tf
+0 g
+1 0 0 1 56 341 Tm
+(Riesgos) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 316 Tm
+(·) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 72 316 Tm
+(La afiliación se demora. Es el riesgo principal y el que marca la fecha.) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 302 Tm
+(·) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 72 302 Tm
+(Convivencia de las dos plataformas. Si Izipay obliga a migrar en vez de sumar, el) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 288 Tm
+(trabajo crece: habría que mover también el cobro con tarjeta y rehacer la conciliación.) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 272 Tm
+(·) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 72 272 Tm
+(Comisiones. Si la comisión de la billetera es fija y alta, cobrar S/ 1 por ese medio) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 258 Tm
+(puede no tener sentido; convendría un importe mínimo distinto para Yape/Plin.) Tj
+ET
+BT
+/F2 14 Tf
+0 g
+1 0 0 1 56 213 Tm
+(Recomendación) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 188 Tm
+(Escribir al asesor comercial de Izipay pidiendo tres cosas concretas: alta en Izipay) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 172 Tm
+(Checkout, credenciales de sandbox, y la tabla de comisiones de Yape y Plin. Con eso en) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 156 Tm
+(mano, la integración son cinco días de trabajo con el resto del sistema intacto.) Tj
+ET
+0.8 g
+56 129 m 539 129 l S
+0 g
+BT
+/F1 8 Tf
+0.45 g
+1 0 0 1 56 34 Tm
+(Yape y Plin en eFFe: qué se necesita y qué implica) Tj
+ET
+BT
+/F1 8 Tf
+0.45 g
+1 0 0 1 499 34 Tm
+(3 de 4) Tj
+ET
+endstream
+endobj
+11 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 12 0 R >>
+endobj
+12 0 obj
+<< /Length 1811 >>
+stream
+BT
+/F2 11.5 Tf
+0 g
+1 0 0 1 56 764.5 Tm
+(Fuentes) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 742 Tm
+(·) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 72 742 Tm
+(Medios de pago compatibles \(micuentaweb\):) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 72 728 Tm
+(secure.micuentaweb.pe/doc/es-PE/rest/V4.0/javascript/redirection/compatible_payment_method.html) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 714 Tm
+(·) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 72 714 Tm
+(Seleccionar los medios de pago:) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 72 700 Tm
+(secure.micuentaweb.pe/doc/es-PE/rest/V4.0/javascript/redirection/custom_filter.html) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 686 Tm
+(·) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 72 686 Tm
+(Pagar con código QR:) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 72 672 Tm
+(secure.micuentaweb.pe/doc/es-PE/rest/V4.0/api/kb/create_qr_code.html) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 658 Tm
+(·) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 72 658 Tm
+(Pagar con Yape \(Izipay Web-Core\):) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 72 644 Tm
+(developers.izipay.pe/web-core/use-cases/pay_with_yape_code/) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 630 Tm
+(·) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 72 630 Tm
+(Medios y límites: developers.izipay.pe/web-core/use-cases/pay/) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 616 Tm
+(·) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 72 616 Tm
+(Inicio rápido Web-Core: developers.izipay.pe/web-core/quickstart/) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 602 Tm
+(·) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 72 602 Tm
+(Servicio de notificaciones: developers.izipay.pe/web-core/notifications/) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 56 588 Tm
+(·) Tj
+ET
+BT
+/F1 10.5 Tf
+0 g
+1 0 0 1 72 588 Tm
+(Afiliación: developers.izipay.pe/getting-started/) Tj
+ET
+BT
+/F1 8 Tf
+0.45 g
+1 0 0 1 56 34 Tm
+(Yape y Plin en eFFe: qué se necesita y qué implica) Tj
+ET
+BT
+/F1 8 Tf
+0.45 g
+1 0 0 1 499 34 Tm
+(4 de 4) Tj
+ET
+endstream
+endobj
+xref
+0 13
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000134 00000 n 
+0000000231 00000 n 
+0000000333 00000 n 
+0000000469 00000 n 
+0000004391 00000 n 
+0000004527 00000 n 
+0000008595 00000 n 
+0000008732 00000 n 
+0000012983 00000 n 
+0000013121 00000 n 
+trailer
+<< /Size 13 /Root 1 0 R >>
+startxref
+14985
+%%EOF

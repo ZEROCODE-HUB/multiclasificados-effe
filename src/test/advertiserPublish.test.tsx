@@ -28,6 +28,7 @@ vi.mock("@/lib/payments", () => ({
 }));
 vi.mock("@/components/PaymentForm", () => ({
   PaymentForm: ({ onPaid }: { onPaid: () => void }) => <button onClick={onPaid}>SIMULAR_PAGO</button>,
+  precargarKrypton: () => {},
 }));
 
 // Desde la migración 0091 el cobro ocurre DENTRO de `publish_listing`, en la
@@ -38,9 +39,12 @@ const createAndPublishListing = vi.fn();
 // Sin saldo, la pantalla guarda el aviso ANTES de cobrar: la orden de pago va
 // atada a él y es el servidor quien lo publica al confirmarse el pago.
 const saveListingDraft = vi.fn();
+// Publicar un aviso que YA está guardado con sus fotos: no se vuelve a subir nada.
+const finalizeListingPublication = vi.fn();
 vi.mock("@/lib/publish", () => ({
   createAndPublishListing: (...a: unknown[]) => createAndPublishListing(...a),
   saveListingDraft: (...a: unknown[]) => saveListingDraft(...a),
+  finalizeListingPublication: (...a: unknown[]) => finalizeListingPublication(...a),
   SaldoInsuficiente: class SaldoInsuficiente extends Error {},
 }));
 
@@ -130,6 +134,7 @@ beforeEach(() => {
     listingId: "L1", published: true,
   });
   saveListingDraft.mockReset().mockResolvedValue("L1");
+  finalizeListingPublication.mockReset().mockResolvedValue({ published: true });
   navigate.mockClear();
   toast.mockClear();
   fetchActivePromotions.mockReset().mockResolvedValue([]);
@@ -144,14 +149,14 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
 
     // El formulario se cargó (borrador restaurado) y el saldo se leyó (1000 créditos).
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("S/ 1000");
+    await screen.findByText("S/ 1,000.00");
 
     uploadMainPhoto();
     await clickPublish();
 
     // Publica directo: crea el aviso y descuenta el costo en créditos.
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
-    expect(createAndPublishListing).toHaveBeenCalledWith(expect.objectContaining({ total: COST_SOLES }));
+    expect(createAndPublishListing).toHaveBeenCalledWith(expect.objectContaining({ total: COST_SOLES }), expect.any(Function));
 
     // Muestra el éxito y NO abre el configurador de compra.
     await screen.findByText(/aviso publicado/i);
@@ -176,6 +181,7 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
     expect(createAndPublishListing).toHaveBeenCalledWith(
       expect.objectContaining({ duration: 90, total: 113.49 }),
+      expect.any(Function),
     );
   });
 
@@ -233,7 +239,7 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
 
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
     // Dinero: 16.14 × (1 − 0.50) = 8.07 soles.
-    expect(createAndPublishListing).toHaveBeenCalledWith(expect.objectContaining({ total: 8.07 }));
+    expect(createAndPublishListing).toHaveBeenCalledWith(expect.objectContaining({ total: 8.07 }), expect.any(Function));
   });
 
   // Paga en el modal (rellena comprobante → tarjeta → confirma por polling).
@@ -282,10 +288,12 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     await screen.findByText(/a pagar ahora/i);
     await pagarEnElModal();
 
-    // Se publica el MISMO aviso (el borrador ya creado), una sola vez.
-    await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
-    expect(createAndPublishListing).toHaveBeenCalledWith(
-      expect.objectContaining({ draftId: "L1", total: COST_SOLES }),
+    // Se publica el MISMO aviso (el borrador ya creado), una sola vez, y SIN
+    // volver a subir las fotos: ya están arriba desde el primer intento.
+    await waitFor(() => expect(finalizeListingPublication).toHaveBeenCalledTimes(1));
+    expect(finalizeListingPublication.mock.calls[0][0]).toBe("L1");
+    expect(finalizeListingPublication.mock.calls[0][1]).toEqual(
+      expect.objectContaining({ total: COST_SOLES }),
     );
     await screen.findByText(/aviso publicado/i);
   });
@@ -319,7 +327,7 @@ describe("AdvertiserPublish — un solo modal de confirmación (sin verificació
     fireEvent.click(await screen.findByRole("button", { name: /confirmar y publicar/i }));
 
     await waitFor(() => expect(createAndPublishListing).toHaveBeenCalledTimes(1));
-    expect(createAndPublishListing).toHaveBeenCalledWith(expect.objectContaining({ total: COST_SOLES }));
+    expect(createAndPublishListing).toHaveBeenCalledWith(expect.objectContaining({ total: COST_SOLES }), expect.any(Function));
     await screen.findByText(/aviso publicado/i);
   });
 });

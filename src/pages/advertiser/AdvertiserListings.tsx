@@ -23,6 +23,15 @@ import { supabase } from "@/lib/supabase";
 import { PlusCircle, ClipboardList, Eye, MessageSquare, TrendingUp, Search, SlidersHorizontal, ImagePlus, Loader2 } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
+import { useValidacion, MensajeDeError } from "@/hooks/useValidacion";
+import { expiryInfo } from "@/lib/listings";
+
+// ¿Al aviso le queda una semana o menos? Es cuando ofrecer renovar ayuda;
+// antes solo sería ruido.
+const porVencer = (expiresAt?: string | null): boolean => {
+  const info = expiryInfo(expiresAt ?? null);
+  return !!info && info.tone !== "normal";
+};
 import type { Listing } from "@/data/mockData";
 import { useCategories } from "@/hooks/useCategories";
 import {
@@ -67,6 +76,7 @@ interface EditState {
 }
 
 const AdvertiserListings = () => {
+  const val = useValidacion();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const categories = useCategories();
@@ -89,6 +99,8 @@ const AdvertiserListings = () => {
 
   // Borrador que se está publicando (cobro + activación) desde su fila.
   const [toPublish, setToPublish] = useState<MyListing | null>(null);
+  // Renovar usa el mismo diálogo, en otro modo: le suma días al aviso vivo.
+  const [toRenew, setToRenew] = useState<MyListing | null>(null);
   const session = useSession();
   const [userEmail, setUserEmail] = useState("");
 
@@ -144,8 +156,18 @@ const AdvertiserListings = () => {
 
   const saveEdit = async () => {
     if (!edit) return;
-    if (!edit.title.trim() || !edit.price.trim()) {
-      toast({ title: "Faltan datos", description: "El título y el precio son obligatorios.", variant: "destructive" });
+    const precioNum = Number(edit.price);
+    const reglas = [
+      { campo: "edit-titulo", ok: !!edit.title.trim(), mensaje: "El título es obligatorio." },
+      {
+        campo: "edit-precio",
+        ok: edit.price.trim() !== "" && Number.isFinite(precioNum) && precioNum >= 0,
+        mensaje: precioNum < 0 ? "El precio no puede ser negativo." : "El precio es obligatorio.",
+      },
+    ];
+    if (!val.validar(reglas)) {
+      const fallo = reglas.find((r) => !r.ok)!;
+      toast({ title: "Falta un dato", description: fallo.mensaje, variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -153,7 +175,7 @@ const AdvertiserListings = () => {
       await updateListing(edit.id, {
         title: edit.title.trim(),
         description: edit.description.trim(),
-        price: Number(edit.price) || 0,
+        price: Math.max(0, Number(edit.price) || 0),
         currency: edit.currency,
         department: edit.department || null,
         location: edit.location.trim(),
@@ -166,7 +188,7 @@ const AdvertiserListings = () => {
       setListings((prev) =>
         prev.map((l) =>
           l.id === edit.id
-            ? { ...l, title: edit.title.trim(), description: edit.description.trim(), price: Number(edit.price) || 0, currency: edit.currency, location: edit.location.trim(), lat: edit.lat, lng: edit.lng, category: edit.category || l.category, condition: edit.condition }
+            ? { ...l, title: edit.title.trim(), description: edit.description.trim(), price: Math.max(0, Number(edit.price) || 0), currency: edit.currency, location: edit.location.trim(), lat: edit.lat, lng: edit.lng, category: edit.category || l.category, condition: edit.condition }
             : l
         )
       );
@@ -265,6 +287,15 @@ const AdvertiserListings = () => {
                   // Solo los VENCIDOS se republican (EFFE-036). 'rejected'/'sold'
                   // caen en esta pestaña pero no deben republicarse aquí.
                   ? { onRepublish: () => setToPublish(listing) }
+                  : {})}
+                {...(listing.status === "active" && porVencer(listing.expiresAt)
+                  // Renovar aparece cuando ya urge (≤7 días): es el mismo dato
+                  // que la fila ya está pintando en "vence en X días". Sin fecha
+                  // de vencimiento no hay nada que renovar.
+                  ? { onRenew: () => setToRenew(listing) }
+                  : {})}
+                {...(listing.status !== "draft"
+                  ? { onDuplicate: () => navigate(`/dashboard/anunciante/publicar?copiar=${listing.id}`) }
                   : {})}
               />
             </div>
@@ -388,7 +419,7 @@ const AdvertiserListings = () => {
                   </div>
                 </div>
               </div>
-              <div>
+              <div {...val.props("edit-titulo")}>
                 <Label>Título *</Label>
                 <Input
                   value={edit.title}
@@ -396,6 +427,7 @@ const AdvertiserListings = () => {
                   onChange={(e) => setEdit({ ...edit, title: e.target.value })}
                   className="mt-1"
                 />
+                <MensajeDeError campo="edit-titulo" errores={val.errores} />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -429,21 +461,25 @@ const AdvertiserListings = () => {
                 />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="sm:col-span-2">
+                <div className="sm:col-span-2" {...val.props("edit-precio")}>
                   <Label>Precio *</Label>
                   <Input
                     type="number"
+                    min={0}
+                    step="0.01"
+                    inputMode="decimal"
                     value={edit.price}
                     onChange={(e) => setEdit({ ...edit, price: e.target.value })}
                     className="mt-1"
                   />
+                  <MensajeDeError campo="edit-precio" errores={val.errores} />
                 </div>
                 <div>
                   <Label>Moneda</Label>
                   <Select value={edit.currency} onValueChange={(v) => setEdit({ ...edit, currency: v })}>
                     <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="PEN">PEN (S/.)</SelectItem>
+                      <SelectItem value="PEN">PEN (S/)</SelectItem>
                       <SelectItem value="USD">USD ($)</SelectItem>
                     </SelectContent>
                   </Select>
@@ -496,6 +532,17 @@ const AdvertiserListings = () => {
         email={userEmail}
         fallbackName={session?.name ?? "Anunciante"}
         onClose={() => setToPublish(null)}
+        onPublished={reload}
+      />
+
+      {/* Renovar: le suma días al aviso SIN dejarlo caer, así conserva sus
+          visitas, sus favoritos y su enlace. */}
+      <PublishDraftDialog
+        draft={toRenew}
+        modo="renovar"
+        email={userEmail}
+        fallbackName={session?.name ?? "Anunciante"}
+        onClose={() => setToRenew(null)}
         onPublished={reload}
       />
     </DashboardLayout>

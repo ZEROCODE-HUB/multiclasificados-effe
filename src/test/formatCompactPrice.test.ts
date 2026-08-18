@@ -23,8 +23,9 @@ describe("formatCompactPrice", () => {
     expect(formatCompactPrice(1_000_000, "USD")).toBe("US$ 1.0M");
   });
 
-  it("0 y no-finitos no rompen", () => {
-    expect(formatCompactPrice(0, "USD")).toBe("US$ 0");
-    expect(formatCompactPrice(NaN, "PEN")).toBe("S/ 0");
+  it("sin precio, el pin dice 'A convenir' (no 'S/ 0')", () => {
+    expect(formatCompactPrice(0, "USD")).toBe("A convenir");
+    expect(formatCompactPrice(NaN, "PEN")).toBe("A convenir");
+    expect(formatCompactPrice(-5, "PEN")).toBe("A convenir");
   });
 });

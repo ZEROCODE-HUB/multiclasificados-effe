@@ -22,7 +22,8 @@ vi.mock("@/lib/admin", () => ({
   deleteCategory: vi.fn(),
   fetchSettings: () => Promise.resolve([]),
   setSetting: vi.fn(),
-  fetchAllInvoices: () => Promise.resolve({ data: [], real: true }),
+  fetchAllInvoices: () => Promise.resolve({ data: [], real: true, total: 0 }),
+  INVOICES_PAGE_SIZE: 20,
 }));
 
 const invalidateCategories = vi.fn().mockResolvedValue([]);

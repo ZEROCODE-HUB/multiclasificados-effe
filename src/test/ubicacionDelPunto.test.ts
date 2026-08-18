@@ -20,11 +20,17 @@ vi.stubEnv("VITE_GOOGLE_MAPS_API_KEY", "llave-de-prueba");
 const { ubicacionDeCoordenadas } = await import("@/lib/geocode");
 
 /** Construye la respuesta de Google a partir de sus componentes. */
+// Google devuelve el código ISO del país en `short_name`; es de donde sale el
+// país del aviso desde que se admiten avisos de fuera del Perú.
+const ISO: Record<string, string> = { "Perú": "PE", Peru: "PE", Bolivia: "BO" };
+
 const respuesta = (comp: Record<string, string>) => ({
   status: "OK",
   results: [{
     address_components: Object.entries(comp).map(([types, long_name]) => ({
-      long_name, types: types.split("+"),
+      long_name,
+      short_name: types === "country" ? (ISO[long_name] ?? long_name) : long_name,
+      types: types.split("+"),
     })),
   }],
 });
@@ -87,14 +93,16 @@ describe("qué hay en el punto del mapa", () => {
     expect(r.referencia).toBe("Trujillo");
   });
 
-  it("un punto fuera del Perú no devuelve nada", async () => {
-    // Si devolviera algo, un pin arrastrado sin querer a Bolivia acabaría
-    // archivando el aviso en un departamento peruano cualquiera.
+  it("un punto fuera del Perú se acepta, pero diciendo de qué país es", async () => {
+    // Antes se descartaba: un aviso no podía estar fuera del Perú. Ahora sí, y
+    // el país viaja con el resultado — es lo que impide que "La Paz" acabe
+    // archivada como un departamento peruano cualquiera.
     vi.stubGlobal("fetch", responder(respuesta({
       administrative_area_level_1: "La Paz", locality: "La Paz", country: "Bolivia",
     })));
     const r = await ubicacionDeCoordenadas(-16.5, -68.15);
-    expect(r).toEqual({ region: null, referencia: null });
+    expect(r.pais).toBe("BO");
+    expect(r.region).toBe("La Paz");
   });
 
   it("sin resultados devuelve vacío, no revienta", async () => {

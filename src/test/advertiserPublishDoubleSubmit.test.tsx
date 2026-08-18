@@ -32,13 +32,17 @@ vi.mock("@/lib/payments", () => ({
 }));
 vi.mock("@/components/PaymentForm", () => ({
   PaymentForm: ({ onPaid }: { onPaid: () => void }) => <button onClick={onPaid}>SIMULAR_PAGO</button>,
+  precargarKrypton: () => {},
 }));
 
 const createAndPublishListing = vi.fn();
 const saveListingDraft = vi.fn();
+// Publicar un aviso que YA está guardado con sus fotos: no se vuelve a subir nada.
+const finalizeListingPublication = vi.fn();
 vi.mock("@/lib/publish", () => ({
   createAndPublishListing: (...a: unknown[]) => createAndPublishListing(...a),
   saveListingDraft: (...a: unknown[]) => saveListingDraft(...a),
+  finalizeListingPublication: (...a: unknown[]) => finalizeListingPublication(...a),
   SaldoInsuficiente: class SaldoInsuficiente extends Error {
     listingId?: string;
   },
@@ -127,6 +131,7 @@ beforeEach(() => {
     listingId: "L1", published: true,
   });
   saveListingDraft.mockReset().mockResolvedValue("L1");
+  finalizeListingPublication.mockReset().mockResolvedValue({ published: true });
   navigate.mockClear();
   toast.mockClear();
   fetchActivePromotions.mockReset().mockResolvedValue([]);
@@ -137,7 +142,7 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("S/ 1000");
+    await screen.findByText("S/ 1,000.00");
 
     uploadMainPhoto();
     await publishConfirmed();
@@ -154,7 +159,12 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
 
     // Y aunque vuelva a pulsar el botón, no se publica ni se cobra otra vez.
     fireEvent.click(publishButton());
-    await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: "Completa los datos requeridos" })));
+    // Con el formulario vacío lo primero que falta es la categoría, y ahora el
+    // aviso lo dice por su nombre en vez de un genérico.
+    await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Falta un dato",
+      description: "Elige la categoría de tu aviso.",
+    })));
     expect(createAndPublishListing).toHaveBeenCalledTimes(1);
   });
 
@@ -168,7 +178,7 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("S/ 1000");
+    await screen.findByText("S/ 1,000.00");
     uploadMainPhoto();
     await openConfirm();
 
@@ -189,7 +199,7 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("S/ 1000");
+    await screen.findByText("S/ 1,000.00");
     uploadMainPhoto();
 
     const btn = publishButton();
@@ -207,7 +217,7 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("S/ 1000");
+    await screen.findByText("S/ 1,000.00");
     uploadMainPhoto();
 
     // Se captura el nodo antes: al publicar, el botón pasa a decir "Publicando…"
@@ -243,7 +253,7 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     seedDraft();
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
-    await screen.findByText("S/ 1000");
+    await screen.findByText("S/ 1,000.00");
     uploadMainPhoto();
 
     await publishConfirmed();
@@ -265,8 +275,10 @@ describe("AdvertiserPublish — no se puede publicar/cobrar dos veces", () => {
     expect(createPublishPayment).toHaveBeenCalledWith(expect.objectContaining({ listingId: "L1" }));
     await screen.findByText(/aviso publicado/i);
 
-    // Clave: el segundo intento reutiliza el aviso que ya existía.
-    expect(createAndPublishListing).toHaveBeenCalledTimes(2);
-    expect(createAndPublishListing).toHaveBeenNthCalledWith(2, expect.objectContaining({ draftId: "L1" }));
+    // Clave: el segundo intento reutiliza el aviso que ya existía, y encima ya no
+    // vuelve a crear nada ni a resubir las fotos: solo lo publica.
+    expect(createAndPublishListing).toHaveBeenCalledTimes(1);
+    expect(finalizeListingPublication).toHaveBeenCalledTimes(1);
+    expect(finalizeListingPublication.mock.calls[0][0]).toBe("L1");
   });
 });

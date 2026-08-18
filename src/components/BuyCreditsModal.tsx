@@ -7,22 +7,26 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Wallet, User, Building2, Check, CheckCircle2, AlertCircle, Loader2, Minus, Plus, CreditCard, ArrowLeft, Lock } from "lucide-react";
+import { Wallet, User, Building2, Globe, Check, CheckCircle2, AlertCircle, Loader2, Minus, Plus, CreditCard, ArrowLeft, Lock } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
   loadSettings, priceForDuration, extrasTotal, formatSoles, formatCredits, solesToCredits,
   type DurationDays, type ExtrasSelection, type PricingSettings, type ExtraPrices,
 } from "@/lib/pricing";
 import { fetchPricingSettings } from "@/lib/pricingRemote";
+import { enlaceDevolucionSaldo } from "@/lib/soporte";
+import { PAISES, paisPreferido } from "@/lib/paises";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useValidacion, MensajeDeError } from "@/hooks/useValidacion";
 import { useKeyboardInset } from "@/hooks/useKeyboardInset";
-import { verifyDocument, normalizeDocNumber } from "@/lib/verifyDoc";
+import { verifyDocument, normalizeDocNumber, normalizeDocAlfanumerico } from "@/lib/verifyDoc";
 import { fetchMyIdentity, saveMyIdentity } from "@/lib/identity";
 import {
   createPayment, createPublishPayment, pollOrderStatus, getPurchaseResult, hostedPaymentUrl,
   SaldoYaSuficiente,
   type PurchaseConfig, type CreatePaymentResult, type OrderOutcome,
 } from "@/lib/payments";
-import { PaymentForm } from "@/components/PaymentForm";
+import { PaymentForm, precargarKrypton } from "@/components/PaymentForm";
 
 // Correo válido para el comprobante.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -38,6 +42,8 @@ export interface PublishTarget {
   title: string;
   costCredits: number;
   durationDays: number;
+  /** "renew" suma días a un aviso vivo en vez de publicar uno en borrador. */
+  purpose?: "publish" | "renew";
 }
 
 interface Props {
@@ -86,13 +92,20 @@ export function BuyCreditsModal({
   const [extras, setExtras] = useState<ExtrasSelection>({});
 
   // Datos de comprobante
-  const [personType, setPersonType] = useState<"natural" | "juridica">("natural");
+  const [personType, setPersonType] = useState<"natural" | "juridica" | "extranjera">("natural");
   const [docNumber, setDocNumber] = useState("");
+  // Extranjero: no hay a quien preguntarle si el documento existe (RENIEC solo
+  // sabe de peruanos), asi que los datos los escribe la persona y van tal cual a
+  // su boleta. Se le dice con todas las letras.
+  const [nombreExtranjero, setNombreExtranjero] = useState("");
+  const [docExtranjero, setDocExtranjero] = useState<"pasaporte" | "ce">("pasaporte");
+  const [paisCliente, setPaisCliente] = useState<string>(() => paisPreferido().code);
   const [email, setEmail] = useState("");
   const [receiptType, setReceiptType] = useState<"boleta" | "factura">("boleta");
 
   // Verificación del documento con Factiliza (nombre/razón social + datos).
   const [verifiedName, setVerifiedName] = useState("");
+  const val = useValidacion();
   const [docData, setDocData] = useState<Record<string, unknown> | null>(null);
   const [verifyingDoc, setVerifyingDoc] = useState(false);
   const [docError, setDocError] = useState("");
@@ -121,6 +134,14 @@ export function BuyCreditsModal({
   // ni en esta sesión (`consultados`) ni entre sesiones (el servidor guarda 30
   // días, ver migración 0106).
   useEffect(() => {
+    // Un extranjero no se verifica contra nadie: su nombre lo escribe el.
+    if (personType === "extranjera") {
+      setDocError("");
+      setVerifyingDoc(false);
+      setDocData(null);
+      setVerifiedName(nombreExtranjero.trim());
+      return;
+    }
     const docType = personType === "natural" ? "dni" : "ruc";
     const requiredLen = personType === "natural" ? 8 : 11;
     setDocError("");
@@ -171,7 +192,7 @@ export function BuyCreditsModal({
     }, 600);
 
     return () => { cancelled = true; clearTimeout(t); };
-  }, [docNumber, personType]);
+  }, [docNumber, personType, nombreExtranjero]);
 
   const emailValid = EMAIL_RE.test(email.trim());
   // Campo de Factiliza; "" si no viene o viene vacío (varios llegan en blanco).
@@ -198,14 +219,25 @@ export function BuyCreditsModal({
         ["Tipo", docField("tipo_contribuyente")],
       ];
 
+  // Corta el sondeo del pago cuando el usuario cierra el cuadro. `pollOrderStatus`
+  // siempre aceptó una señal de cancelación, pero nadie se la pasaba: en el APK
+  // podía seguir consultando la orden hasta tres minutos después de cerrar.
+  const sondeo = useRef<{ aborted: boolean }>({ aborted: false });
+
   // Al abrir: recarga la matriz de precios vigente y reinicia el flujo de pago.
   useEffect(() => {
     if (open) {
+      sondeo.current = { aborted: false };
+      // El formulario de tarjeta vive en el CDN de la pasarela y son tres
+      // recursos encadenados: se piden ya, mientras se elige qué comprar.
+      precargarKrypton(undefined, (import.meta.env.VITE_IZIPAY_PUBLIC_KEY as string | undefined) ?? "");
       fetchPricingSettings().then(setSettings);
       setStep("config");
       setPayment(null);
       setConfirming(false);
       setSoloSaldo(false);
+    } else {
+      sondeo.current.aborted = true;
     }
   }, [open]);
 
@@ -313,21 +345,39 @@ export function BuyCreditsModal({
       toast({ title: "Selecciona qué comprar", variant: "destructive" });
       return null;
     }
-    if (!verifiedName) {
-      toast({
-        title: personType === "natural" ? "Verifica tu DNI" : "Verifica tu RUC",
-        description: "Ingresa un documento válido para continuar (se valida automáticamente).",
-        variant: "destructive",
-      });
+    // El botón ya no se queda muerto sin explicar por qué: se valida al pulsar
+    // y se señala el campo que falta.
+    const reglas = [
+      {
+        campo: "documento",
+        ok: personType === "extranjera"
+          ? nombreExtranjero.trim().length >= 3 && docNumber.trim().length >= 6
+          : !!verifiedName,
+        mensaje: personType === "extranjera"
+          ? (nombreExtranjero.trim().length < 3
+              ? "Escribe tu nombre completo tal como debe salir en la boleta."
+              : "Escribe el número de tu documento.")
+          : verifyingDoc
+            ? "Espera a que termine la verificación del documento."
+            : personType === "natural"
+              ? "Ingresa tu DNI para emitir la boleta."
+              : "Ingresa el RUC de la empresa para emitir la factura.",
+      },
+      { campo: "correo", ok: emailValid, mensaje: "Ingresa un correo válido para recibir el comprobante." },
+    ];
+    if (!val.validar(reglas)) {
+      const fallo = reglas.find((r) => !r.ok)!;
+      toast({ title: "Falta un dato", description: fallo.mensaje, variant: "destructive" });
       return null;
     }
-    if (!emailValid) { toast({ title: "Ingresa un correo válido", variant: "destructive" }); return null; }
     return {
       receiptType,
       email: email.trim(),
       advertiserName: verifiedName,
-      docType: (personType === "natural" ? "dni" : "ruc") as "dni" | "ruc",
+      docType: (personType === "natural" ? "dni" : personType === "juridica" ? "ruc" : docExtranjero) as
+        "dni" | "ruc" | "ce" | "pasaporte",
       docNumber: docNumber.trim(),
+      country: paisCliente,
       factilizaData: docData,
     };
   };
@@ -353,6 +403,7 @@ export function BuyCreditsModal({
             listingId: publishFor.listingId,
             duration: publishFor.durationDays,
             receipt,
+            purpose: publishFor.purpose ?? "publish",
           })
         : await createPayment(config);
 
@@ -361,7 +412,7 @@ export function BuyCreditsModal({
         const fallbackPk = (import.meta.env.VITE_IZIPAY_PUBLIC_KEY as string | undefined) ?? "";
         await Browser.open({ url: hostedPaymentUrl(result, fallbackPk) });
         setConfirming(true);
-        const outcome = await pollOrderStatus(result.orderId, { timeoutMs: 180000 });
+        const outcome = await pollOrderStatus(result.orderId, { timeoutMs: 180000, signal: sondeo.current });
         await Browser.close().catch(() => { /* el usuario pudo cerrarlo ya */ });
         await finishOutcome(outcome, result.orderId);
       } else {
@@ -389,7 +440,7 @@ export function BuyCreditsModal({
   const handlePaid = async () => {
     if (!payment) return;
     setConfirming(true);
-    const outcome = await pollOrderStatus(payment.orderId);
+    const outcome = await pollOrderStatus(payment.orderId, { signal: sondeo.current });
     await finishOutcome(outcome, payment.orderId);
     setConfirming(false);
   };
@@ -601,7 +652,7 @@ export function BuyCreditsModal({
             {/* Datos de comprobante */}
             <div className="space-y-3 border-t pt-3">
               <Label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Datos del comprobante</Label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <button type="button"
                   onClick={() => { setPersonType("natural"); setReceiptType("boleta"); setDocNumber(""); }}
                   className={`p-3 border text-left transition-all ${personType === "natural" ? "border-secondary bg-secondary/10" : "border-border hover:bg-muted/50"}`}>
@@ -616,11 +667,64 @@ export function BuyCreditsModal({
                   <p className="font-bold text-xs">Empresa</p>
                   <p className="text-[10px] text-muted-foreground">Factura · RUC</p>
                 </button>
+                <button type="button"
+                  onClick={() => { setPersonType("extranjera"); setReceiptType("boleta"); setDocNumber(""); }}
+                  className={`p-3 border text-left transition-all ${personType === "extranjera" ? "border-secondary bg-secondary/10" : "border-border hover:bg-muted/50"}`}>
+                  <Globe size={16} className="text-secondary mb-1" />
+                  <p className="font-bold text-xs">Extranjero</p>
+                  <p className="text-[10px] text-muted-foreground">Boleta · Pasaporte</p>
+                </button>
               </div>
-              <div>
+              {personType === "extranjera" ? (
+                <div {...val.props("documento")} className="space-y-3">
+                  <MensajeDeError campo="documento" errores={val.errores} />
+                  <div>
+                    <Label className="text-xs">Nombre completo <span className="text-destructive">*</span></Label>
+                    <Input value={nombreExtranjero} onFocus={scrollFocusedIntoView}
+                      onChange={(e) => setNombreExtranjero(e.target.value)}
+                      placeholder="Tal como debe salir en la boleta" className="mt-1" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-xs">Documento</Label>
+                      <Select value={docExtranjero} onValueChange={(v) => { setDocExtranjero(v as "pasaporte" | "ce"); setDocNumber(""); }}>
+                        <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pasaporte">Pasaporte</SelectItem>
+                          <SelectItem value="ce">Carné de extranjería</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Número <span className="text-destructive">*</span></Label>
+                      <Input value={docNumber} onFocus={scrollFocusedIntoView}
+                        onChange={(e) => setDocNumber(normalizeDocAlfanumerico(e.target.value, 12))}
+                        placeholder="AB123456" className="mt-1" />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs">País</Label>
+                    <Select value={paisCliente} onValueChange={setPaisCliente}>
+                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {PAISES.map((p) => <SelectItem key={p.code} value={p.code}>{p.nombre}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {/* Decirlo claro: nadie comprueba estos datos, y salen tal
+                      cual en un documento con valor tributario. */}
+                  <p className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
+                    <AlertCircle size={13} className="mt-0.5 shrink-0" />
+                    No verificamos este documento con RENIEC ni SUNAT: los datos que escribas
+                    salen tal cual en tu boleta.
+                  </p>
+                </div>
+              ) : (
+              <div {...val.props("documento")}>
                 <Label className="text-xs">
                   {personType === "natural" ? "DNI (8 dígitos)" : "RUC (11 dígitos)"} <span className="text-destructive">*</span>
                 </Label>
+                <MensajeDeError campo="documento" errores={val.errores} />
                 {/* Sin `maxLength`: recortaría el texto pegado antes de quitarle los
                     espacios. El tope lo aplica normalizeDocNumber, ya sobre dígitos. */}
                 <Input value={docNumber} onFocus={scrollFocusedIntoView}
@@ -666,7 +770,8 @@ export function BuyCreditsModal({
                   </div>
                 )}
               </div>
-              <div>
+              )}
+              <div {...val.props("correo")}>
                 <Label className="text-xs">Correo para el comprobante <span className="text-destructive">*</span></Label>
                 <Input type="email" value={email} onFocus={scrollFocusedIntoView}
                   onChange={(e) => setEmail(e.target.value)}
@@ -691,11 +796,20 @@ export function BuyCreditsModal({
               </button>
             )}
 
+            {/* La devolución no se puede automatizar (hay que verificar la cuenta
+                bancaria), así que se abre un correo con los datos ya escritos. */}
+            <a
+              href={enlaceDevolucionSaldo({ nombre: verifiedName, correo: email, saldo: currentBalance })}
+              className="text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground self-start"
+            >
+              Solicitar devolución de saldo
+            </a>
+
             <DialogFooter className="gap-2 pt-2">
               <Button variant="ghost" onClick={onClose} disabled={buying}>Cancelar</Button>
               <Button
                 onClick={handleContinue}
-                disabled={buying || (!modoPublicar && creditsToBuy <= 0) || verifyingDoc || !verifiedName || !emailValid}
+                disabled={buying || (!modoPublicar && creditsToBuy <= 0) || verifyingDoc}
                 className="gap-2"
               >
                 {buying

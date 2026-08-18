@@ -11,6 +11,7 @@ import { FavoritesProvider } from "@/hooks/useFavorites";
 import { RequireRole } from "@/components/RequireRole";
 import { StaffHomeRedirect } from "@/components/StaffHomeRedirect";
 import { IosSwipeBack } from "@/components/IosSwipeBack";
+import { ReconciliadorDePagos } from "@/components/ReconciliadorDePagos";
 import { AdminShell } from "@/components/AdminLayout";
 import { cargaDiferida } from "@/lib/cargaDiferida";
 
@@ -65,6 +66,8 @@ const App = () => (
       <BrowserRouter>
         {/* Swipe-back desde el borde izquierdo en iOS (no tiene botón físico). */}
         <IosSwipeBack />
+        {/* Rescata los pagos que se quedaron sin confirmar (webhook perdido). */}
+        <ReconciliadorDePagos />
         {/* Dentro del router: necesita la ruta para dejar pasar /auth/staff. */}
         <MaintenanceGate>
         <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><div className="w-9 h-9 rounded-full border-[3px] border-muted border-t-secondary animate-spin" /></div>}>

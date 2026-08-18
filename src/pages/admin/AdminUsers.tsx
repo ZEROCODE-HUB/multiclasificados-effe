@@ -11,7 +11,9 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Search, UserCheck, Ban, BadgeCheck, KeyRound, Trash2, ChevronLeft, ChevronRight, Coins, Copy, Check, Loader2 } from "lucide-react";
-import { fetchAdminUsers, setUserStatus, verifyUser, deleteUser, setUserRole, grantCredits, type AdminUser } from "@/lib/admin";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { fetchAdminUsers, setUserStatus, verifyUser, deleteUser, setUserRole, ajustarSaldo, saldoDeUsuario, type AdminUser } from "@/lib/admin";
 import { usePermissions } from "@/hooks/usePermissions";
 import { supabase } from "@/lib/supabase";
 import { formatCredits } from "@/lib/pricing";
@@ -56,8 +58,12 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
   const [r, setR] = useState("all");
   const [page, setPage] = useState(1);
   // Diálogo "Otorgar créditos": usuario objetivo + cantidad.
+  // Cuadro de saldo: otorgar o devolver, con el saldo actual a la vista.
   const [grantFor, setGrantFor] = useState<AdminUser | null>(null);
   const [grantAmount, setGrantAmount] = useState("");
+  const [grantModo, setGrantModo] = useState<"otorgar" | "quitar">("otorgar");
+  const [grantMotivo, setGrantMotivo] = useState("");
+  const [grantSaldo, setGrantSaldo] = useState<number | null>(null);
   // Diálogo "Enlace de restablecimiento": usuario, enlace generado y estado.
   const [resetFor, setResetFor] = useState<AdminUser | null>(null);
   const [resetLink, setResetLink] = useState<string | null>(null);
@@ -130,12 +136,23 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
     }
   };
 
+  const montoValido = Number(grantAmount) > 0;
+  const delta = grantModo === "quitar" ? -Number(grantAmount) : Number(grantAmount);
+  const saldoResultante = grantSaldo === null ? null : Math.round((grantSaldo + delta) * 100) / 100;
+  const puedeAjustar = montoValido && grantMotivo.trim().length > 0 && (saldoResultante === null || saldoResultante >= 0);
+
   const doGrant = () => {
-    if (!grantFor) return;
+    if (!grantFor || !puedeAjustar) return;
     const u = grantFor;
-    const amt = Number(grantAmount);
+    const monto = Number(grantAmount);
+    const motivo = grantMotivo.trim();
+    const quita = grantModo === "quitar";
     setGrantFor(null);
-    run(`Se otorgó ${formatCredits(amt)} de saldo`, u, () => grantCredits(u.id, amt).then(() => undefined));
+    run(
+      quita ? `Se devolvió ${formatCredits(monto)} de saldo` : `Se otorgó ${formatCredits(monto)} de saldo`,
+      u,
+      () => ajustarSaldo(u.id, quita ? -monto : monto, motivo).then(() => undefined),
+    );
   };
 
   const initials = (name: string) => (name || "?").split(" ").map((n) => n[0]).slice(0, 2).join("");
@@ -262,8 +279,17 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
           size={size}
           variant={Btn}
           className="text-secondary"
-          title="Otorgar saldo"
-          onClick={() => { setGrantFor(u); setGrantAmount(""); }}
+          title="Saldo"
+          onClick={() => {
+            setGrantFor(u);
+            setGrantAmount("");
+            setGrantMotivo("");
+            setGrantModo("otorgar");
+            setGrantSaldo(null);
+            // Sin esto se decide a ciegas: la RLS de user_credits no deja al
+            // panel leer el saldo de otro, hace falta la RPC.
+            if (isUuid(u.id)) saldoDeUsuario(u.id).then(setGrantSaldo).catch(() => setGrantSaldo(null));
+          }}
         >
           <Coins size={iconSize} />
         </Button>
@@ -434,33 +460,85 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
         </CardContent>
       </Card>
 
-      {/* Diálogo: otorgar créditos a un usuario */}
+      {/* Diálogo: saldo del usuario — otorgar o devolver */}
       <AlertDialog open={!!grantFor} onOpenChange={(o) => { if (!o) setGrantFor(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-              <Coins size={18} className="text-secondary" /> Otorgar saldo
+              <Coins size={18} className="text-secondary" /> Saldo de {grantFor?.full_name}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Se sumarán al saldo de <b>{grantFor?.full_name}</b> ({grantFor?.email}). Queda registrado en auditoría.
+              {grantFor?.email}. Todo movimiento queda en el historial del usuario y en la auditoría.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="py-1">
-            <Input
-              type="number"
-              min="1"
-              step="1"
-              autoFocus
-              placeholder="Monto en S/ (ej. 100)"
-              value={grantAmount}
-              onChange={(e) => setGrantAmount(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && Number(grantAmount) > 0) doGrant(); }}
-            />
+
+          <div className="space-y-3 py-1">
+            <div className="flex items-center justify-between border bg-muted/30 px-3 py-2">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">Saldo actual</span>
+              <span className="font-extrabold text-secondary">
+                {grantSaldo === null
+                  ? <Loader2 size={14} className="animate-spin" />
+                  : formatCredits(grantSaldo)}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant={grantModo === "otorgar" ? "default" : "outline"}
+                onClick={() => setGrantModo("otorgar")}
+              >
+                Otorgar
+              </Button>
+              <Button
+                type="button"
+                variant={grantModo === "quitar" ? "default" : "outline"}
+                onClick={() => setGrantModo("quitar")}
+              >
+                Quitar
+              </Button>
+            </div>
+
+            <div>
+              <Label className="text-xs">Monto en S/</Label>
+              <Input
+                type="number"
+                min="0.01"
+                step="0.01"
+                autoFocus
+                placeholder="Ej. 100"
+                value={grantAmount}
+                onChange={(e) => setGrantAmount(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && puedeAjustar) doGrant(); }}
+                className="mt-1"
+              />
+            </div>
+
+            <div>
+              <Label className="text-xs">Motivo <span className="text-destructive">*</span></Label>
+              {/* Obligatorio a propósito: dentro de un mes, "S/ 200 el día 12"
+                  sin explicación no se puede defender ante nadie. */}
+              <Textarea
+                placeholder="Ej. Devolución acordada por soporte / abono duplicado"
+                value={grantMotivo}
+                onChange={(e) => setGrantMotivo(e.target.value)}
+                className="mt-1 min-h-[64px]"
+              />
+            </div>
+
+            {montoValido && saldoResultante !== null && (
+              <p className={`text-xs ${saldoResultante < 0 ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                {saldoResultante < 0
+                  ? `No alcanza: el usuario solo tiene ${formatCredits(grantSaldo ?? 0)}.`
+                  : `Quedará en ${formatCredits(saldoResultante)}.`}
+              </p>
+            )}
           </div>
+
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={doGrant} disabled={!(Number(grantAmount) > 0)}>
-              Otorgar {Number(grantAmount) > 0 ? formatCredits(Number(grantAmount)) : ""}
+            <AlertDialogAction onClick={doGrant} disabled={!puedeAjustar}>
+              {grantModo === "quitar" ? "Quitar" : "Otorgar"} {montoValido ? formatCredits(Number(grantAmount)) : ""}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

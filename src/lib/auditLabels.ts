@@ -22,6 +22,7 @@ const ACTION_LABELS: Record<string, string> = {
   send_message: "Envió mensaje",
   broadcast: "Envió comunicado masivo",
   grant_credits: "Otorgó saldo",
+  revoke_credits: "Devolvió saldo",
   void_invoice: "Anuló un comprobante",
 };
 

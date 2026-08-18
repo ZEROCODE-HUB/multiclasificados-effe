@@ -13,7 +13,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Trash2, FileText, SlidersHorizontal, Save, GripVertical, Eye, Upload, RefreshCw, Ban } from "lucide-react";
+import { Plus, Pencil, Trash2, FileText, SlidersHorizontal, Save, GripVertical, Eye, Upload, RefreshCw, Ban, Search, FileSpreadsheet, Download } from "lucide-react";
 import { InvoiceDetailDialog } from "@/components/InvoiceDetailDialog";
 import { personKindLabel } from "@/lib/identity";
 import {
@@ -27,6 +27,8 @@ import { CSS } from "@dnd-kit/utilities";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { usePagination, TablePagination } from "@/components/TablePagination";
+import { exportRows } from "@/lib/exportReport";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
 import { cn } from "@/lib/utils";
@@ -34,7 +36,7 @@ import { formatSoles } from "@/lib/pricing";
 import { CATEGORY_ICON_NAMES as ICON_OPTIONS, CATEGORY_PHOTO_POOL, iconFor, invalidateCategories } from "@/lib/categories";
 import { imgUrlCover } from "@/lib/imageUrl";
 import {
-  fetchSettings, setSetting, fetchAllInvoices, retryInvoiceEmission,
+  fetchSettings, setSetting, fetchAllInvoices, INVOICES_PAGE_SIZE, retryInvoiceEmission,
   previsualizarAnulacion, anularComprobante, type PrevisualizacionAnulacion,
   fetchCategories, createCategory, updateCategory, deleteCategory, reorderCategories,
   uploadCategoryImage, uploadDefaultListingImage, removeDefaultListingImage,
@@ -570,12 +572,60 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
   const [invoicesLoading, setInvoicesLoading] = useState(true);
   const [invoiceDetail, setInvoiceDetail] = useState<AdminInvoice | null>(null);
   const [retrying, setRetrying] = useState<string | null>(null);
-  const invoicesPager = usePagination(invoices, 10, invoices.length);
+  // Buscador y filtros de comprobantes. La lista ya no se trae entera: se filtra
+  // y se pagina en el servidor, porque con unos miles de boletas la pantalla no
+  // llegaba a cargar.
+  const [invSearch, setInvSearch] = useState("");
+  const [invTipo, setInvTipo] = useState<"all" | "boleta" | "factura">("all");
+  const [invSunat, setInvSunat] = useState<string>("all");
+  const [invDesde, setInvDesde] = useState("");
+  const [invHasta, setInvHasta] = useState("");
+  const [invAnulados, setInvAnulados] = useState(false);
+  const [invPage, setInvPage] = useState(1);
+  const [invTotal, setInvTotal] = useState(0);
+  const invTotalPages = Math.max(1, Math.ceil(invTotal / INVOICES_PAGE_SIZE));
+
+  const filtroInvoices = () => ({
+    search: invSearch || undefined,
+    tipo: invTipo === "all" ? undefined : invTipo,
+    sunat: invSunat === "all" ? undefined : invSunat,
+    desde: invDesde || undefined,
+    hasta: invHasta || undefined,
+    soloAnulados: invAnulados || undefined,
+    page: invPage,
+  });
 
   /** Vuelve a leer los comprobantes. Lo usan el reintento y la anulación. */
+  /**
+   * Descarga los comprobantes que hay en pantalla… pero TODOS los que cumplen
+   * el filtro, no solo la página. Un reporte contable que trae 20 filas de 300
+   * no sirve para cuadrar nada.
+   */
+  const exportarComprobantes = async (formato: "xlsx" | "csv") => {
+    try {
+      const { data } = await fetchAllInvoices({ ...filtroInvoices(), page: 1, pageSize: 5000 });
+      const filas = data.map((inv) => ({
+        "N° Comprobante": inv.number,
+        Tipo: inv.type === "factura" ? "Factura" : "Boleta",
+        Fecha: inv.date.slice(0, 10),
+        Anunciante: inv.advertiser,
+        "DNI/RUC": inv.docNumber ?? "",
+        Correo: inv.email,
+        Concepto: inv.listingTitle,
+        Estado: inv.anuladoAt ? "Anulado" : inv.sunatStatus,
+        "Monto (S/)": Number(inv.amount.toFixed(2)),
+      }));
+      exportRows(formato, "comprobantes", "Boletas y facturas", filas, { landscape: true });
+      toast({ title: "Comprobantes exportados", description: `${filas.length} filas` });
+    } catch {
+      toast({ title: "No se pudo exportar", variant: "destructive" });
+    }
+  };
+
   const recargarInvoices = async () => {
-    const { data } = await fetchAllInvoices();
+    const { data, total } = await fetchAllInvoices(filtroInvoices());
     setInvoices(data);
+    setInvTotal(total);
   };
 
   // Devuelve el comprobante a la cola de emisión y de correo. El permiso lo
@@ -621,20 +671,29 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
   useEffect(() => {
     let mounted = true;
     const load = () => {
-      fetchAllInvoices().then(({ data }) => {
-        if (mounted) { setInvoices(data); setInvoicesLoading(false); }
+      fetchAllInvoices(filtroInvoices()).then(({ data, total }) => {
+        if (mounted) { setInvoices(data); setInvTotal(total); setInvoicesLoading(false); }
       });
     };
-    load();
+    // Debounce solo para lo que se teclea; los desplegables ya llegan resueltos.
+    const t = setTimeout(load, invSearch ? 300 : 0);
     // Refresca cuando se emite un comprobante nuevo (misma pestaña u otra).
     window.addEventListener("effe:invoices-updated", load);
     window.addEventListener("storage", load);
     return () => {
       mounted = false;
+      clearTimeout(t);
       window.removeEventListener("effe:invoices-updated", load);
       window.removeEventListener("storage", load);
     };
-  }, []);
+    // `filtroInvoices` se recrea en cada render: lo que importa son los
+    // filtros de la lista de abajo, que son sus únicas entradas.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invSearch, invTipo, invSunat, invDesde, invHasta, invAnulados, invPage]);
+
+  // Cambiar un filtro devuelve a la primera página: si no, se puede quedar
+  // mirando la página 5 de un resultado que ahora tiene una.
+  useEffect(() => { setInvPage(1); }, [invSearch, invTipo, invSunat, invDesde, invHasta, invAnulados]);
 
   const saveSettings = async () => {
     setSavingSettings(true);
@@ -926,10 +985,55 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
               </CardTitle>
             </CardHeader>
             <CardContent className="overflow-x-auto">
+              <div className="flex flex-wrap items-end gap-2 mb-4">
+                <div className="relative flex-1 min-w-[220px]">
+                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={invSearch}
+                    onChange={(e) => setInvSearch(e.target.value)}
+                    placeholder="N° comprobante, anunciante, DNI/RUC, correo…"
+                    className="h-9 pl-9"
+                  />
+                </div>
+                <Select value={invTipo} onValueChange={(v) => setInvTipo(v as "all" | "boleta" | "factura")}>
+                  <SelectTrigger className="h-9 w-36"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="boleta">Boletas</SelectItem>
+                    <SelectItem value="factura">Facturas</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={invSunat} onValueChange={setInvSunat}>
+                  <SelectTrigger className="h-9 w-44"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Cualquier estado</SelectItem>
+                    <SelectItem value="pendiente">Pendiente</SelectItem>
+                    <SelectItem value="emitido">Emitido</SelectItem>
+                    <SelectItem value="omitido">Interno (sin SUNAT)</SelectItem>
+                    <SelectItem value="vencido">Vencido</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input type="date" value={invDesde} onChange={(e) => setInvDesde(e.target.value)} className="h-9 w-40" />
+                <Input type="date" value={invHasta} onChange={(e) => setInvHasta(e.target.value)} className="h-9 w-40" />
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground h-9 px-1">
+                  <input type="checkbox" checked={invAnulados} onChange={(e) => setInvAnulados(e.target.checked)} />
+                  Solo anulados
+                </label>
+                <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => exportarComprobantes("xlsx")}>
+                  <FileSpreadsheet size={14} /> Excel
+                </Button>
+                <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => exportarComprobantes("csv")}>
+                  <Download size={14} /> CSV
+                </Button>
+              </div>
               {invoicesLoading ? (
                 <p className="text-sm text-muted-foreground text-center py-8">Cargando comprobantes…</p>
               ) : invoices.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">Aún no se han generado boletas.</p>
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  {invSearch || invTipo !== "all" || invSunat !== "all" || invDesde || invHasta || invAnulados
+                    ? "Ningún comprobante coincide con estos filtros."
+                    : "Aún no se han generado boletas."}
+                </p>
               ) : (
                 <Table>
                   {/* Alineación por tipo de dato, no por gusto: el texto a la
@@ -959,7 +1063,7 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {invoicesPager.pageItems.map((inv) => (
+                    {invoices.map((inv) => (
                       <TableRow key={inv.id} className={inv.needsReview ? "bg-destructive/5" : undefined}>
                         <TableCell className="font-mono text-xs whitespace-nowrap">
                           {inv.number}
@@ -1017,7 +1121,15 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
                 </Table>
               )}
               {!invoicesLoading && invoices.length > 0 && (
-                <TablePagination {...invoicesPager} noun="comprobantes" />
+                <TablePagination
+                  page={invPage}
+                  totalPages={invTotalPages}
+                  total={invTotal}
+                  from={invTotal === 0 ? 0 : (invPage - 1) * INVOICES_PAGE_SIZE + 1}
+                  to={Math.min(invPage * INVOICES_PAGE_SIZE, invTotal)}
+                  setPage={setInvPage}
+                  noun="comprobantes"
+                />
               )}
             </CardContent>
           </Card>

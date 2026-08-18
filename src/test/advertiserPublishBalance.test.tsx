@@ -17,7 +17,7 @@ vi.mock("@/lib/payments", () => ({
   createPayment: vi.fn(), pollOrderStatus: vi.fn(), getPurchaseResult: vi.fn(),
   hostedPaymentUrl: () => "https://x/pay",
 }));
-vi.mock("@/components/PaymentForm", () => ({ PaymentForm: () => null }));
+vi.mock("@/components/PaymentForm", () => ({ PaymentForm: () => null, precargarKrypton: () => {} }));
 vi.mock("@/lib/publish", () => ({
   createAndPublishListing: vi.fn(),
   SaldoInsuficiente: class SaldoInsuficiente extends Error {},

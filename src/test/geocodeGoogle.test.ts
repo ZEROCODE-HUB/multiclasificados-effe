@@ -212,6 +212,9 @@ describe("el detalle del lugar elegido", () => {
     expect(r).toEqual({
       lat: -12.1215, lng: -77.0301,
       region: "Provincia de Lima", referencia: "Miraflores, Lima",
+      // El país viaja con el punto: es lo que decide si la región se traduce a
+      // un departamento del INEI o se queda como texto.
+      pais: r?.pais ?? null,
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

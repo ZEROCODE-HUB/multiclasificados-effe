@@ -1,0 +1,105 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { prepararDom } from "./domPolyfills";
+
+// Gestión de usuarios pasa de "Otorgar saldo" a un cuadro de saldo completo:
+// enseña cuánto tiene, permite otorgar o devolver, y exige un motivo. Antes solo
+// se podía sumar, y sin explicación.
+beforeEach(prepararDom);
+
+const ajustarSaldo = vi.fn();
+const saldoDeUsuario = vi.fn();
+vi.mock("@/lib/admin", () => ({
+  fetchAdminUsers: vi.fn().mockResolvedValue({
+    data: [{
+      id: "24d479cf-52ce-40f4-b634-886eae34a7d0",
+      full_name: "Ana García", email: "ana@correo.com",
+      status: "active", verified: true, roles: "anunciante",
+      listings_count: 0, created_at: "2026-01-01T00:00:00Z",
+    }],
+    count: 1,
+  }),
+  setUserStatus: vi.fn(), verifyUser: vi.fn(), deleteUser: vi.fn(), setUserRole: vi.fn(),
+  ajustarSaldo: (...a: unknown[]) => ajustarSaldo(...a),
+  saldoDeUsuario: (...a: unknown[]) => saldoDeUsuario(...a),
+}));
+
+vi.mock("@/hooks/usePermissions", () => ({ usePermissions: () => ({ can: () => true }) }));
+vi.mock("@/lib/supabase", () => ({ supabase: { functions: { invoke: vi.fn() } } }));
+const toast = vi.fn();
+vi.mock("@/hooks/use-toast", () => ({ toast: (...a: unknown[]) => toast(...a) }));
+
+import AdminUsers from "@/pages/admin/AdminUsers";
+
+const abrirSaldo = async () => {
+  render(<AdminUsers role="admin" />);
+  await screen.findAllByText("Ana García");
+  fireEvent.click(screen.getAllByTitle("Saldo")[0]);
+  await screen.findByText(/Saldo de Ana García/);
+};
+
+const escribir = (placeholder: string | RegExp, valor: string) =>
+  fireEvent.change(screen.getByPlaceholderText(placeholder), { target: { value: valor } });
+
+beforeEach(() => {
+  ajustarSaldo.mockReset().mockResolvedValue({ saldo_anterior: 100, saldo: 70, delta: -30 });
+  saldoDeUsuario.mockReset().mockResolvedValue(100);
+  toast.mockClear();
+});
+
+describe("AdminUsers — cuadro de saldo", () => {
+  it("muestra el saldo actual del usuario al abrirlo", async () => {
+    await abrirSaldo();
+    await waitFor(() => expect(saldoDeUsuario).toHaveBeenCalledWith("24d479cf-52ce-40f4-b634-886eae34a7d0"));
+    await screen.findByText("S/ 100.00");
+  });
+
+  it("sin motivo no deja confirmar: es dinero y tiene que quedar explicado", async () => {
+    await abrirSaldo();
+    escribir("Ej. 100", "50");
+    const boton = screen.getByRole("button", { name: /^Otorgar S\// });
+    expect(boton).toBeDisabled();
+
+    escribir(/Devolución acordada/, "abono duplicado");
+    await waitFor(() => expect(boton).not.toBeDisabled());
+  });
+
+  it("devuelve saldo con signo negativo y anticipa cómo queda", async () => {
+    await abrirSaldo();
+    await screen.findByText("S/ 100.00");
+
+    fireEvent.click(screen.getByRole("button", { name: "Quitar" }));
+    escribir("Ej. 100", "30");
+    escribir(/Devolución acordada/, "devolucion acordada");
+    await screen.findByText(/Quedará en S\/ 70.00/);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Quitar S\// }));
+    await waitFor(() => expect(ajustarSaldo).toHaveBeenCalledWith(
+      "24d479cf-52ce-40f4-b634-886eae34a7d0", -30, "devolucion acordada",
+    ));
+  });
+
+  it("no deja retirar más de lo que hay", async () => {
+    await abrirSaldo();
+    await screen.findByText("S/ 100.00");
+
+    fireEvent.click(screen.getByRole("button", { name: "Quitar" }));
+    escribir("Ej. 100", "500");
+    escribir(/Devolución acordada/, "me equivoqué");
+
+    await screen.findByText(/No alcanza: el usuario solo tiene S\/ 100.00/);
+    expect(screen.getByRole("button", { name: /^Quitar S\// })).toBeDisabled();
+    expect(ajustarSaldo).not.toHaveBeenCalled();
+  });
+
+  it("otorgar manda el delta en positivo", async () => {
+    ajustarSaldo.mockResolvedValue({ saldo_anterior: 100, saldo: 150, delta: 50 });
+    await abrirSaldo();
+    escribir("Ej. 100", "50");
+    escribir(/Devolución acordada/, "bono de bienvenida");
+    fireEvent.click(screen.getByRole("button", { name: /^Otorgar S\// }));
+    await waitFor(() => expect(ajustarSaldo).toHaveBeenCalledWith(
+      "24d479cf-52ce-40f4-b634-886eae34a7d0", 50, "bono de bienvenida",
+    ));
+  });
+});

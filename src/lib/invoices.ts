@@ -45,17 +45,42 @@ interface Row {
   orders?: { order_listings?: Array<{ listings?: { title?: string | null } | null }> } | null;
 }
 
-export async function loadInvoicesFromDb(): Promise<DbInvoice[]> {
-  const { data, error } = await supabase
+export const MIS_COMPROBANTES_POR_PAGINA = 10;
+
+/**
+ * Comprobantes del usuario, con buscador y paginación.
+ *
+ * Antes se traían todos de golpe: alguien con dos años de compras se descargaba
+ * su historial entero cada vez que abría la pantalla. La RLS ya limita a los
+ * propios, así que no hace falta ninguna RPC.
+ */
+export async function loadInvoicesFromDb(
+  opts: { search?: string; page?: number; pageSize?: number } = {},
+): Promise<{ rows: DbInvoice[]; total: number }> {
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = opts.pageSize ?? MIS_COMPROBANTES_POR_PAGINA;
+  const desde = (page - 1) * pageSize;
+
+  let consulta = supabase
     .from("invoices")
     .select(
-      "number, type, email, advertiser_name, doc_type, doc_number, factiliza_data, amount, detail, issued_at, sunat_status, email_status, anulado_at, anulado_motivo, nota_number, orders(order_listings(listings(title)))"
-    )
-    .order("issued_at", { ascending: false });
+      "number, type, email, advertiser_name, doc_type, doc_number, factiliza_data, amount, detail, issued_at, sunat_status, email_status, anulado_at, anulado_motivo, nota_number, orders(order_listings(listings(title)))",
+      { count: "exact" },
+    );
+
+  const q = (opts.search ?? "").trim();
+  if (q) {
+    const like = `%${q.replace(/[%,()]/g, " ")}%`;
+    consulta = consulta.or(`number.ilike.${like},detail.ilike.${like},advertiser_name.ilike.${like}`);
+  }
+
+  const { data, error, count } = await consulta
+    .order("issued_at", { ascending: false })
+    .range(desde, desde + pageSize - 1);
 
   if (error) throw new Error(error.message);
 
-  return ((data as Row[] | null) ?? []).map((r) => {
+  const rows = ((data as Row[] | null) ?? []).map((r) => {
     const title = r.orders?.order_listings?.[0]?.listings?.title ?? "";
     return {
       number: r.number,
@@ -76,4 +101,6 @@ export async function loadInvoicesFromDb(): Promise<DbInvoice[]> {
       notaNumber: r.nota_number ?? null,
     };
   });
+
+  return { rows, total: count ?? rows.length };
 }

@@ -2,6 +2,7 @@ import { Plus, Minus, LocateFixed } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { pinAnclado } from "@/components/mapIcons";
 import { useMapaDeGoogle, textoDeEstadoDelMapa } from "@/lib/googleMaps";
+import { formatPrecioAviso } from "@/lib/pricing";
 
 interface ListingLocationMapProps {
   lat: number;
@@ -10,9 +11,6 @@ interface ListingLocationMapProps {
   currency: string;
 }
 
-// Mismo formato de precio que el mapa de búsqueda (ListingsMap).
-const formatPrice = (price: number, currency: string) =>
-  currency === "USD" ? `US$ ${price.toLocaleString()}` : `S/ ${price.toLocaleString()}`;
 
 const DEFAULT_ZOOM = 15; // ≈ barrio: se reconoce la manzana sin dar la puerta exacta.
 
@@ -50,7 +48,7 @@ export function ListingLocationMap({ lat, lng, price, currency }: ListingLocatio
     const m = new libs.marker.AdvancedMarkerElement({
       map: mapa,
       position: center,
-      content: pinAnclado(formatPrice(price, currency)),
+      content: pinAnclado(formatPrecioAviso(price, currency)),
     });
     marcador.current = m;
     return () => { m.map = null; marcador.current = null; };

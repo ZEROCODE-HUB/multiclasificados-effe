@@ -13,7 +13,7 @@ vi.mock("@/lib/payments", () => ({
   createPayment: vi.fn().mockResolvedValue({ orderId: "o1", formToken: "t", publicKey: "pk" }),
   pollOrderStatus: vi.fn(), getPurchaseResult: vi.fn(), hostedPaymentUrl: () => "https://x/pay",
 }));
-vi.mock("@/components/PaymentForm", () => ({ PaymentForm: () => <div>FORM_PAGO</div> }));
+vi.mock("@/components/PaymentForm", () => ({ PaymentForm: () => <div>FORM_PAGO</div>, precargarKrypton: () => {} }));
 vi.mock("@/hooks/use-toast", () => ({ toast: vi.fn() }));
 
 const verifyDocument = vi.fn();

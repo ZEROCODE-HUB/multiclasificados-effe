@@ -17,6 +17,7 @@ export interface ExtraPrices {
   urgente: number;
   destacado: number;
   confidencial: number;
+  video20: number;
 }
 
 export interface PricingSettings {
@@ -35,6 +36,7 @@ export interface ExtrasSelection {
   urgente?: boolean | number;
   destacado?: boolean | number;
   confidencial?: boolean | number;
+  video20?: boolean | number;
 }
 
 const DEFAULT_DESC_CANTIDAD = [0, 0, 0.06, 0.06, 0.06, 0.06, 0.06, 0.06, 0.06, 0.06, 0.06];
@@ -52,6 +54,7 @@ export const DEFAULT_SETTINGS: PricingSettings = {
     urgente: 5,
     destacado: 5,
     confidencial: 0,
+    video20: 5,
   },
 };
 

@@ -82,6 +82,23 @@ function loadKrypton(endpoint: string, publicKey: string): Promise<KrApi> {
   return krLoad;
 }
 
+/**
+ * Trae la librería del CDN antes de que haga falta.
+ *
+ * Son tres recursos encadenados (script → tema JS → configuración), así que
+ * cargarlos al llegar al paso de pago añadía 1-3 s de pantalla en blanco. Se
+ * pide al abrir el cuadro de compra, mientras el usuario elige qué comprar.
+ * Si falla no pasa nada: al montar el formulario se reintenta.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function precargarKrypton(endpoint: string | undefined, publicKey: string): void {
+  if (!publicKey) return;
+  const host = endpoint
+    || (import.meta.env.VITE_IZIPAY_STATIC_ENDPOINT as string | undefined)
+    || "https://static.micuentaweb.pe";
+  void loadKrypton(host, publicKey).catch(() => {});
+}
+
 interface Props {
   formToken: string;
   publicKey: string;

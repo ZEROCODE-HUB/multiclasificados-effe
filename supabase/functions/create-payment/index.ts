@@ -85,6 +85,10 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // effe_publish_listing; 'expired' es republicar).
 const PUBLICABLES = ["draft", "pending", "expired"];
 
+// Renovar es otra cosa: se le suman días a un aviso que sigue vivo (o que acaba
+// de vencer). Un borrador no se renueva, se publica.
+const RENOVABLES = ["active", "expired"];
+
 // Piso de cobro. Un cargo de S/ 0.14 es rechazo casi seguro del emisor, así que
 // cuando falta menos que esto se cobra el mínimo y la diferencia le queda al
 // usuario como saldo a favor.
@@ -248,9 +252,18 @@ Deno.serve(async (req) => {
     if (!EMAIL_RE.test(email)) return json({ success: false, error: "Correo del comprobante inválido." });
 
     const receiptType = receipt.receiptType === "factura" ? "factura" : "boleta";
-    const docType = ["dni", "ruc", "ce"].includes(String(receipt.docType)) ? String(receipt.docType) : "";
-    const docNumber = String(receipt.docNumber ?? "").replace(/\D/g, "");
+    const docType = ["dni", "ruc", "ce", "pasaporte"].includes(String(receipt.docType))
+      ? String(receipt.docType) : "";
+    // El DNI y el RUC son solo dígitos, pero el carné de extranjería y el
+    // pasaporte llevan letras: limpiarlos con `replace(/\D/g,"")` como antes
+    // habría partido todos los pasaportes por la mitad camino de la boleta.
+    const docNumber = (docType === "ce" || docType === "pasaporte")
+      ? String(receipt.docNumber ?? "").replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 12)
+      : String(receipt.docNumber ?? "").replace(/\D/g, "");
     const advertiserName = String(receipt.advertiserName ?? "").trim();
+    // País del pagador. Va al comprobante y a los datos de facturación de la
+    // pasarela; sin él, todo se emitía como si fuera peruano.
+    const paisCliente = String(receipt.country ?? "PE").trim().toUpperCase().slice(0, 2) || "PE";
 
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
 
@@ -263,7 +276,8 @@ Deno.serve(async (req) => {
     let listingCost: number | null = null;
 
     if (listingId) {
-      // ══ Modo B: pagar y publicar un aviso concreto ══
+      // ══ Modo B: pagar y publicar (o renovar) un aviso concreto ══
+      const esRenovacion = String(body?.purpose ?? "") === "renew";
       if (!UUID_RE.test(listingId)) return json({ success: false, error: "Aviso inválido." });
 
       const { data: listing } = await admin
@@ -275,8 +289,14 @@ Deno.serve(async (req) => {
       if (!listing || listing.owner_id !== userId) {
         return json({ success: false, error: "Aviso no encontrado." }, 403);
       }
-      if (!PUBLICABLES.includes(String(listing.status))) {
-        return json({ success: false, error: "Este aviso ya está publicado." }, 409);
+      const estadosValidos = esRenovacion ? RENOVABLES : PUBLICABLES;
+      if (!estadosValidos.includes(String(listing.status))) {
+        return json({
+          success: false,
+          error: esRenovacion
+            ? "Este aviso no se puede renovar."
+            : "Este aviso ya está publicado.",
+        }, 409);
       }
 
       // La duración que se cobra y la que se publica tienen que ser la MISMA, y
@@ -313,15 +333,16 @@ Deno.serve(async (req) => {
       const falta = round2(Math.max(listingCost - balance, 0));
       if (falta <= 0) {
         // Ya le alcanza: no hay nada que cobrar. El front publica directo.
-        return json({ success: false, code: "SALDO_SUFICIENTE", error: "Ya tienes saldo suficiente para publicar." });
+        return json({ success: false, code: "SALDO_SUFICIENTE",
+                     error: `Ya tienes saldo suficiente para ${esRenovacion ? "renovar" : "publicar"}.` });
       }
 
       total = Math.max(falta, MIN_CHARGE_PEN);
-      detail = `Publicación de aviso: ${String(listing.title ?? "").slice(0, 120)}`;
+      detail = `${esRenovacion ? "Renovación" : "Publicación"} de aviso: ${String(listing.title ?? "").slice(0, 120)}`;
       orderQty = Math.max(1, Number(listing.plan_quantity ?? 1));
       orderDuration = duration;
       purposeExtras = {
-        purpose: "publish",
+        purpose: esRenovacion ? "renew" : "publish",
         listing_id: listingId,
         duration_days: duration,
         listing_cost: listingCost,
@@ -391,6 +412,7 @@ Deno.serve(async (req) => {
             advertiserName,
             docType,
             docNumber,
+            country: paisCliente,
             factilizaData: receipt.factilizaData ?? null,
           },
         },
@@ -421,9 +443,12 @@ Deno.serve(async (req) => {
       firstName: advertiserName || undefined,
       esEmpresa,
       legalName: esEmpresa ? advertiserName || undefined : undefined,
+      country: paisCliente,
+      // "CE" cubre también al pasaporte: es el único valor no-DNI que Lyra
+      // acepta (ver el comentario de construirBillingDetails).
       identityType: esEmpresa || !docType
         ? undefined
-        : docType === "ce" ? "CE" : "DNI",
+        : docType === "dni" ? "DNI" : "CE",
       identityCode: esEmpresa ? undefined : docNumber || undefined,
     });
 

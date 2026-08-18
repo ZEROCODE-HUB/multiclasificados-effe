@@ -3,14 +3,17 @@
 // volver a pedir la verificación en un modal.
 import { supabase } from "@/lib/supabase";
 
-export type DocKind = "dni" | "ruc" | "ce";
+export type DocKind = "dni" | "ruc" | "ce" | "pasaporte";
 
 // "Usuario" (persona con DNI/CE) vs "Empresa" (RUC). Si no hay tipo guardado, se
 // infiere por la longitud del documento (11 dígitos = RUC = Empresa).
 export function personKindLabel(docType?: string | null, docNumber?: string | null): string {
   const t = (docType || "").toLowerCase();
   if (t === "ruc") return "Empresa";
-  if (t === "dni" || t === "ce") return "Usuario";
+  // Quien compra con carne de extranjeria o pasaporte no pasa por Factiliza:
+  // sus datos van tal cual al comprobante, y conviene que se vea de un vistazo.
+  if (t === "ce" || t === "pasaporte") return "Extranjero";
+  if (t === "dni") return "Usuario";
   const digits = (docNumber || "").replace(/\D/g, "");
   if (digits.length === 11) return "Empresa";
   if (digits.length > 0) return "Usuario";
@@ -22,6 +25,7 @@ export function docKindLabel(docType?: string | null, docNumber?: string | null)
   const t = (docType || "").toLowerCase();
   if (t === "ruc") return "RUC";
   if (t === "ce") return "CE";
+  if (t === "pasaporte") return "Pasaporte";
   if (t === "dni") return "DNI";
   return (docNumber || "").replace(/\D/g, "").length === 11 ? "RUC" : "DNI";
 }

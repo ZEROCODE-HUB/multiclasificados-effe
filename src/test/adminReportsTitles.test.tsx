@@ -23,6 +23,8 @@ vi.mock("@/lib/admin", () => ({
   fetchGrowthSeries: vi.fn().mockResolvedValue([]),
   fetchAdminCreditTransactions: vi.fn().mockResolvedValue({ data: [], total: 0 }),
   CREDIT_TX_PAGE_SIZE: 20,
+  SALDOS_PAGE_SIZE: 20,
+  fetchSaldosUsuarios: async () => ({ data: [], total: 0 }),
   getMyPermissions: vi.fn().mockResolvedValue({}),
 }));
 vi.mock("@/hooks/useCategories", () => ({ useCategories: () => [] }));

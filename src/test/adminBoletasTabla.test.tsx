@@ -46,7 +46,8 @@ const invoice = {
 vi.mock("@/lib/admin", () => ({
   fetchSettings: async () => [],
   setSetting: async () => {},
-  fetchAllInvoices: async () => ({ data: [invoice], real: true }),
+  fetchAllInvoices: async () => ({ data: [invoice], real: true, total: 1 }),
+  INVOICES_PAGE_SIZE: 20,
   fetchCategories: async () => ({ data: [], real: true }),
   createCategory: async () => {},
   updateCategory: async () => {},
