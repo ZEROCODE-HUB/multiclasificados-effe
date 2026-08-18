@@ -192,8 +192,11 @@ const AdvertiserDashboard = () => {
             <div className="border-t pt-3">
               <a
                 href={enlaceDevolucionSaldo({
-                  nombre: session?.user?.user_metadata?.full_name as string | undefined,
-                  correo: session?.user?.email,
+                  // `useSession` devuelve nuestro objeto de sesión, no el de
+                  // Supabase: leer `session.user.email` dejaba el correo vacío y
+                  // la solicitud llegaba a soporte con "(completar)".
+                  nombre: session?.name,
+                  correo: session?.email,
                   saldo: creditBalance ?? 0,
                 })}
                 className="text-xs text-muted-foreground underline underline-offset-2 hover:text-secondary"

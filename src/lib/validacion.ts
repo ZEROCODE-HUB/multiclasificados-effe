@@ -36,14 +36,40 @@ export function fallos(reglas: Regla[]): Record<string, string> {
  * El `focus` va con `preventScroll` para que no pelee con el desplazamiento
  * suave que acabamos de pedir.
  */
+const ventanaY = (): number =>
+  (typeof window !== "undefined" && (window.scrollY ?? window.pageYOffset)) || 0;
+
+/** ¿El elemento está dentro de la parte visible de la pantalla? */
+function estaALaVista(el: HTMLElement): boolean {
+  const alto = typeof window !== "undefined" ? window.innerHeight : 0;
+  if (!alto) return false; // sin ventana medible no se puede afirmar que se vea
+  const r = el.getBoundingClientRect();
+  return r.top >= 0 && r.top < alto;
+}
+
 export function enfocarCampo(campo: string, raiz: ParentNode = document): void {
   const el = raiz.querySelector<HTMLElement>(`[data-campo="${campo}"]`);
   if (!el) return;
+  // El desplazamiento suave es un adorno, y hay sitios donde el navegador
+  // simplemente lo ignora (pestaña en segundo plano, WebView, "reducir
+  // movimiento" activado). Comprobado en producción: con `behavior:"smooth"` la
+  // página no se movía ni un píxel, y sin él sí. Como lo que importa es que el
+  // campo se VEA, se pide el suave y, si no pasó nada, se remata sin animación.
+  const dondeEstaba = ventanaY();
   try {
     el.scrollIntoView({ block: "center", behavior: "smooth" });
   } catch {
     el.scrollIntoView(); // navegadores viejos sin opciones
   }
+  setTimeout(() => {
+    if (!estaALaVista(el) && ventanaY() === dondeEstaba) {
+      try {
+        el.scrollIntoView({ block: "center" });
+      } catch {
+        el.scrollIntoView();
+      }
+    }
+  }, 350);
   const enfocable =
     el.matches("input, textarea, select, button")
       ? el

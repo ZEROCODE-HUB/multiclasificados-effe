@@ -57,8 +57,12 @@ function resumir(texto: string, max: number): string {
 }
 
 function precio(a: Aviso): string {
+  // Mismo formato que la app (dos decimales y miles): la vista previa de
+  // WhatsApp decía "S/ 24,000" y la ficha "S/ 24,000.00" para el mismo aviso.
+  // No se importa `formatPrecioAviso` porque esto corre en el servidor de
+  // Vercel, fuera del bundle de la aplicación.
   if (typeof a.price !== "number" || a.price <= 0) return "";
-  const n = a.price.toLocaleString("es-PE");
+  const n = a.price.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return a.currency === "USD" ? `US$ ${n}` : `S/ ${n}`;
 }
 

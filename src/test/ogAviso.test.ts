@@ -61,13 +61,15 @@ describe("vista previa del aviso compartido", () => {
 
   it("pone el título con su precio y su ubicación", async () => {
     const { html } = await pedir();
-    expect(meta(html, "property", "og:title")).toBe("Rodillo Cat de 11 TN — S/ 45,000 · Guadalupe");
+    // Mismo formato que la app: la vista previa decía "S/ 45,000" y la ficha
+    // "S/ 45,000.00" para el mismo aviso.
+    expect(meta(html, "property", "og:title")).toBe("Rodillo Cat de 11 TN — S/ 45,000.00 · Guadalupe");
   });
 
   it("los dólares se muestran como US$", async () => {
     aviso = [{ ...AVISO, currency: "USD" }];
     const { html } = await pedir();
-    expect(meta(html, "property", "og:title")).toContain("US$ 45,000");
+    expect(meta(html, "property", "og:title")).toContain("US$ 45,000.00");
   });
 
   it("la descripción se resume y se le quitan los espacios de más", async () => {

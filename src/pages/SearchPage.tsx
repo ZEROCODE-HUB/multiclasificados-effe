@@ -21,7 +21,7 @@ import {
   DEPARTAMENTOS, departamentoPorId, departamentoGuardado, guardarDepartamento,
   type Departamento,
 } from "@/lib/departamentos";
-import { PAISES, PAIS_POR_DEFECTO, esPeru, paisPorCodigo, paisPreferido, guardarPais } from "@/lib/paises";
+import { PAISES, PAIS_POR_DEFECTO, esPeru, paisPorCodigo, paisPreferido, paisGuardado, guardarPais } from "@/lib/paises";
 import { toast } from "@/hooks/use-toast";
 import {
   Search,
@@ -88,6 +88,21 @@ export default function SearchPage() {
     () => (paisPorCodigo(params.get("pais")) ?? paisPreferido()).code,
   );
   const enPeru = esPeru(pais);
+  /**
+   * ¿El país lo eligió una persona, o lo dedujimos nosotros?
+   *
+   * La zona horaria acierta casi siempre, pero no siempre: un equipo con la
+   * hora mal configurada, una VPN o un viajero bastan para deducir mal. Y el
+   * precio de equivocarse es el peor posible en un clasificado — la pantalla
+   * vacía— así que un país deducido nunca puede dejar al usuario sin nada.
+   */
+  const paisElegido = useRef<boolean>(!!paisPorCodigo(params.get("pais")) || !!paisGuardado());
+  const elegirPais = (code: string) => {
+    paisElegido.current = true;
+    guardarPais(code);
+    setPais(code);
+    if (code !== PAIS_POR_DEFECTO) setDepartamento(null);
+  };
   // Moneda (EFFE-050): "" = todas. El RPC search_listings ya filtra por p_currency.
   const [currency, setCurrency] = useState<string>(params.get("cur") || "");
   const [sort, setSort] = useState<SortKey>((params.get("sort") as SortKey) || "recent");
@@ -163,7 +178,6 @@ export default function SearchPage() {
 
   // Recuerda el departamento para las próximas visitas.
   useEffect(() => { guardarDepartamento(departamento); }, [departamento]);
-  useEffect(() => { guardarPais(pais); }, [pais]);
 
   // EFFE-051/092: refleja los filtros EN la URL (replace, para no ensuciar el
   // historial en cada tecla) de modo que copiar el enlace y el botón "atrás"
@@ -261,7 +275,29 @@ export default function SearchPage() {
             lng: geo?.lng,
             sort,
           });
-      load.then((rows) => {
+      load.then(async (rows) => {
+        // Si el país lo pusimos nosotros y no hay ni un aviso, el filtro está
+        // estorbando: se repite la búsqueda sin él antes que enseñar una
+        // pantalla vacía por una suposición nuestra.
+        if (rows.length === 0 && !paisElegido.current && pais !== "" && !owner) {
+          const todos = await searchListings({
+            q: q || undefined,
+            category: category || undefined,
+            priceMin: priceMin ? Number(priceMin) : undefined,
+            priceMax: priceMax ? Number(priceMax) : undefined,
+            currency: currency || undefined,
+            country: "",
+            lat: geo?.lat,
+            lng: geo?.lng,
+            sort,
+          });
+          if (todos.length > 0) {
+            setPais("");
+            setListings(todos);
+            setActive(todos[0]?.id ?? null);
+            return;
+          }
+        }
         setListings(rows);
         setActive(rows[0]?.id ?? null);
       });
@@ -460,15 +496,12 @@ export default function SearchPage() {
       <div>
         <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">País</label>
         <Select
-          value={pais}
-          onValueChange={(v) => {
-            setPais(v);
-            // El departamento es del INEI: fuera del Perú no significa nada.
-            if (v !== PAIS_POR_DEFECTO) setDepartamento(null);
-          }}
+          value={pais || "todos"}
+          onValueChange={(v) => elegirPais(v === "todos" ? "" : v)}
         >
           <SelectTrigger className="mt-1.5 rounded-none"><SelectValue /></SelectTrigger>
           <SelectContent>
+            <SelectItem value="todos">Todos los países</SelectItem>
             {PAISES.map((p) => (
               <SelectItem key={p.code} value={p.code}>{p.nombre}</SelectItem>
             ))}
