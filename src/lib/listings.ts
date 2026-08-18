@@ -246,6 +246,19 @@ export async function fetchListingDocumentUrl(id: string): Promise<string | null
   }
 }
 
+/**
+ * ¿El error es "esa función no acepta ese parámetro"?
+ *
+ * Postgres contesta 42883 (función inexistente) y PostgREST PGRST202 cuando la
+ * firma no coincide. Pasa en la ventana entre desplegar la web y aplicar la
+ * migración, y no debe verse como "no hay avisos".
+ */
+function esParametroDesconocido(error: { code?: string; message?: string }): boolean {
+  const code = error?.code ?? "";
+  const msg = (error?.message ?? "").toLowerCase();
+  return code === "PGRST202" || code === "42883" || msg.includes("p_country");
+}
+
 // Buscador con filtros combinados (usa el RPC search_listings).
 export async function searchListings(f: SearchFilters): Promise<Listing[]> {
   try {
@@ -266,7 +279,31 @@ export async function searchListings(f: SearchFilters): Promise<Listing[]> {
       p_limit: Math.min(f.limit ?? TOPE_RESULTADOS, TOPE_RESULTADOS),
       p_offset: 0,
     });
-    if (error) throw error;
+    if (error) {
+      // La base puede ir por detrás del despliegue: mientras la migración de
+      // países no esté aplicada, `p_country` no existe y la llamada entera
+      // falla. En vez de dejar el buscador vacío —que es como se ve un error
+      // aquí— se repite la consulta sin ese filtro.
+      if (esParametroDesconocido(error)) {
+        const { data: previo, error: err2 } = await supabase.rpc("search_listings", {
+          p_query: f.q || null,
+          p_category: f.category || null,
+          p_subcategory: f.subcategory || null,
+          p_price_min: f.priceMin ?? null,
+          p_price_max: f.priceMax ?? null,
+          p_currency: f.currency || null,
+          p_department: f.department || null,
+          p_sort: f.sort || "recent",
+          p_lat: f.lat ?? null,
+          p_lng: f.lng ?? null,
+          p_limit: Math.min(f.limit ?? TOPE_RESULTADOS, TOPE_RESULTADOS),
+          p_offset: 0,
+        });
+        if (err2) throw err2;
+        return (previo ?? []).map((r) => mapCard(r as CardRow));
+      }
+      throw error;
+    }
     return (data ?? []).map((r) => mapCard(r as CardRow));
   } catch (e) {
     // Se sigue devolviendo una lista vacía —el buscador no debe romperse— pero
