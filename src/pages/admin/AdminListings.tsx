@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Search, Eye, ChevronLeft, ChevronRight, MapPin, Calendar, Tag, User, Ban, RotateCcw, Flag, CalendarClock, ExternalLink } from "lucide-react";
 import { AdminListingStatus } from "@/data/adminMockData";
 import { toast } from "@/hooks/use-toast";
-import { disableListing, loadDisabled } from "@/lib/pricing";
+import { disableListing, loadDisabled, formatPrecioAviso } from "@/lib/pricing";
 import { fetchAdminListings, setListingStatus, setListingPublishedAt, fetchReports, resolveReport, type AdminListingRow, type AdminReport } from "@/lib/admin";
 import { usePermissions } from "@/hooks/usePermissions";
 import { fetchListingImages } from "@/lib/listings";
@@ -63,7 +63,8 @@ const mapRow = (r: AdminListingRow): Listing => ({
   id: r.id, title: r.title, advertiser: r.advertiser ?? "Anunciante",
   category: r.category_id, status: toDisplayStatus(r),
   date: (r.created_at ?? "").slice(0, 10),
-  price: `${r.currency || "PEN"} ${Number(r.price || 0).toLocaleString()}`,
+  // Mismo criterio que en la app: sin precio, "Precio a convenir".
+  price: formatPrecioAviso(Number(r.price || 0), r.currency || "PEN"),
   publishedAt: r.published_at ?? null,
   expiresAt: r.expires_at ?? null,
 });

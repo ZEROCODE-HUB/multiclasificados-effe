@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Heart, Search, MessageSquare, Bell, Clock, MapPin, Star, ArrowRight, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
+import { formatPrecioAviso } from "@/lib/pricing";
 import { useSession } from "@/hooks/useSession";
 import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 import { useFavorites } from "@/hooks/useFavorites";
@@ -192,8 +193,7 @@ const SeekerDashboard = () => {
                         <MapPin size={12} /> {listing.location}
                       </p>
                       <p className="text-sm font-bold text-primary mt-1">
-                        <span className="text-xs text-secondary mr-1">{listing.currency}</span>
-                        {listing.price.toLocaleString()}
+                        {formatPrecioAviso(listing.price, listing.currency)}
                       </p>
                     </div>
                   </Link>

@@ -32,6 +32,22 @@ describe("moneda", () => {
     expect(culpables).toEqual([]);
   });
 
+  it("nadie formatea el precio de un aviso por su cuenta", () => {
+    // Un precio pintado a mano se salta el "Precio a convenir" del helper y
+    // enseña "PEN 0" o "S/ 0". Pasó en el panel de moderación y en el del
+    // buscador, y no se vio hasta probarlo en producción.
+    const aMano = [
+      /\.price\b[^\n]{0,40}\.toLocaleString\(/,
+      /price\s*\|\|\s*0\)\.toLocaleString\(/,
+    ];
+    const culpables = fuentes.filter((f) => {
+      if (f.endsWith(join("lib", "pricing.ts"))) return false;
+      const src = readFileSync(f, "utf8");
+      return aMano.some((re) => re.test(src));
+    });
+    expect(culpables).toEqual([]);
+  });
+
   it("solo pricing.ts arma la sigla con un importe", () => {
     // Busca plantillas del tipo `S/ ${...}` fuera del módulo de precios.
     const culpables = fuentes.filter((f) => {

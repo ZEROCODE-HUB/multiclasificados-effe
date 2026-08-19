@@ -74,6 +74,30 @@ export function paisPreferido(): Pais {
 }
 
 /**
+ * Pregunta al servidor de qué país viene la visita (lo sabe por la IP).
+ *
+ * Es más fiable que la zona horaria, que es lo único que se puede mirar sin
+ * salir del navegador: un equipo con la hora mal configurada hacía que el
+ * buscador filtrase por Venezuela. No pide permisos ni interrumpe a nadie.
+ *
+ * Devuelve null si no se puede saber (sin red, en local, detrás de una VPN que
+ * Vercel no resuelve). Quien llama se queda entonces con lo que ya tenía.
+ */
+export async function paisPorIP(): Promise<Pais | null> {
+  try {
+    const base = (import.meta.env.VITE_PUBLIC_SITE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
+    const res = await fetch(`${base}/api/pais`, { cache: "no-store" });
+    if (!res.ok) return null;
+    const { pais } = (await res.json()) as { pais?: string | null };
+    // Un país que no está en el catálogo (que no es la lista del mundo entero)
+    // no sirve para filtrar: mejor dejarlo como estaba.
+    return paisPorCodigo(pais ?? null);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Ubicación tal como se le enseña a quien mira el aviso.
  *
  * Dentro del Perú no se escribe el país (sobra), pero fuera es justo el dato

@@ -38,7 +38,12 @@ vi.mock("@/lib/admin", () => ({
   resolveReport: (...a: unknown[]) => resolveReport(...a),
   fetchAdminListing: async () => null,
 }));
-vi.mock("@/lib/pricing", () => ({ disableListing: async () => {}, loadDisabled: () => ({}) }));
+vi.mock("@/lib/pricing", () => ({
+  disableListing: async () => {},
+  loadDisabled: () => ({}),
+  formatPrecioAviso: (p: number, c: string) =>
+    p > 0 ? `${c === "USD" ? "US$" : "S/"} ${p.toFixed(2)}` : "Precio a convenir",
+}));
 vi.mock("@/lib/listings", () => ({ fetchListingImages: async () => [] }));
 vi.mock("@/hooks/usePermissions", () => ({ usePermissions: () => ({ can: () => true }) }));
 vi.mock("@/hooks/use-toast", () => ({ toast: () => {}, useToast: () => ({ toast: () => {} }) }));

@@ -21,7 +21,7 @@ import {
   DEPARTAMENTOS, departamentoPorId, departamentoGuardado, guardarDepartamento,
   type Departamento,
 } from "@/lib/departamentos";
-import { PAISES, PAIS_POR_DEFECTO, esPeru, paisPorCodigo, paisPreferido, paisGuardado, guardarPais } from "@/lib/paises";
+import { PAISES, PAIS_POR_DEFECTO, esPeru, paisPorCodigo, paisPreferido, paisGuardado, guardarPais, paisPorIP } from "@/lib/paises";
 import { toast } from "@/hooks/use-toast";
 import {
   Search,
@@ -175,6 +175,20 @@ export default function SearchPage() {
     const paisEnUrl = paisPorCodigo(params.get("pais"));
     if (paisEnUrl) setPais(paisEnUrl.code);
   }, [params]);
+
+  // El país que dedujimos de la zona horaria es un primer intento; el servidor
+  // sabe de dónde viene la visita por la IP, que acierta bastante más. Si el
+  // usuario ya eligió país a mano, no se le toca nada.
+  useEffect(() => {
+    if (paisElegido.current) return;
+    let vivo = true;
+    void paisPorIP().then((p) => {
+      if (!vivo || !p || paisElegido.current) return;
+      setPais(p.code);
+      if (p.code !== PAIS_POR_DEFECTO) setDepartamento(null);
+    });
+    return () => { vivo = false; };
+  }, []);
 
   // Recuerda el departamento para las próximas visitas.
   useEffect(() => { guardarDepartamento(departamento); }, [departamento]);
