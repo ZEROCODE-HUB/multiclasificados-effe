@@ -601,7 +601,7 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
    * el filtro, no solo la página. Un reporte contable que trae 20 filas de 300
    * no sirve para cuadrar nada.
    */
-  const exportarComprobantes = async (formato: "xlsx" | "csv") => {
+  const exportarComprobantes = async (formato: "xlsx" | "csv" | "pdf") => {
     try {
       const { data } = await fetchAllInvoices({ ...filtroInvoices(), page: 1, pageSize: 5000 });
       const filas = data.map((inv) => ({

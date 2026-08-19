@@ -275,6 +275,19 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
           // por el camino de siempre, que pide la identidad si hace falta.
           continuarPublicacion();
         }}
+        onPagoEnEspera={() => {
+          // Pagó por Yape/Plin: no hay nada más que hacer aquí. Se cierra todo
+          // —dejar abierto el diálogo de publicar invitaría a volver a pagar—
+          // y se dice en una línea qué va a pasar.
+          setBuyOpen(false);
+          onClose();
+          toast({
+            title: "Tu aviso está en camino",
+            description: esRenovar
+              ? "En cuanto confirmemos tu pago, tu aviso se renueva solo."
+              : "En cuanto confirmemos tu pago, tu aviso se publica solo. No tienes que hacer nada más.",
+          });
+        }}
         onPurchaseComplete={(newBalance) => {
           setBalance(newBalance);
           setBuyOpen(false);

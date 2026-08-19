@@ -46,6 +46,19 @@ export interface CreatePaymentResult {
   listingCost: number | null; // costo del aviso (solo en pagar-y-publicar)
 }
 
+// Yape/Plin: no hay formToken ni pasarela. El servidor deja la orden esperando
+// y devuelve a dónde transferir y a qué WhatsApp mandar el voucher.
+export interface PagoManualCreado {
+  manual: true;
+  orderId: string;
+  provider: "yape" | "plin";
+  amount: number;
+  listingCost: number | null;
+  cuentas: { metodo: "yape" | "plin"; numero: string; banco: string; titular: string }[];
+  whatsapp: string;
+  mensaje: string;
+}
+
 // El usuario ya tiene saldo de sobra: no hay nada que cobrar y hay que publicar
 // directo en vez de abrir la pasarela.
 export class SaldoYaSuficiente extends Error {
@@ -57,7 +70,7 @@ export class SaldoYaSuficiente extends Error {
 
 // Llama a la Edge Function create-payment: crea la orden 'pending' y devuelve el
 // formToken de Izipay. El monto lo recalcula el servidor (no se envía el precio).
-async function invokeCreatePayment(body: unknown): Promise<CreatePaymentResult> {
+async function invokeCreatePayment(body: unknown): Promise<CreatePaymentResult | PagoManualCreado> {
   const { data, error } = await supabase.functions.invoke("create-payment", { body });
 
   if (error) {
@@ -79,6 +92,21 @@ async function invokeCreatePayment(body: unknown): Promise<CreatePaymentResult> 
     if (data?.code === "SALDO_SUFICIENTE") throw new SaldoYaSuficiente();
     throw new Error(data?.error ?? "No se pudo iniciar el pago.");
   }
+  if (data.manual === true) {
+    return {
+      manual: true,
+      orderId: data.orderId as string,
+      provider: data.provider as "yape" | "plin",
+      amount: Number(data.amount ?? 0),
+      listingCost: data.listingCost === null || data.listingCost === undefined
+        ? null
+        : Number(data.listingCost),
+      cuentas: Array.isArray(data.cuentas) ? data.cuentas : [],
+      whatsapp: String(data.whatsapp ?? ""),
+      mensaje: String(data.mensaje ?? ""),
+    };
+  }
+
   return {
     orderId: data.orderId as string,
     formToken: data.formToken as string,
@@ -90,16 +118,29 @@ async function invokeCreatePayment(body: unknown): Promise<CreatePaymentResult> 
   };
 }
 
-export function createPayment(config: PurchaseConfig): Promise<CreatePaymentResult> {
+/** Distingue en tiempo de ejecución cuál de las dos respuestas llegó. */
+export function esPagoManual(r: CreatePaymentResult | PagoManualCreado): r is PagoManualCreado {
+  return (r as PagoManualCreado).manual === true;
+}
+
+// `provider` elige el medio: sin él, tarjeta por la pasarela; con "yape" o
+// "plin", la orden queda esperando la aprobación de una persona.
+export function createPayment(
+  config: PurchaseConfig & { provider?: "yape" | "plin" },
+): Promise<CreatePaymentResult | PagoManualCreado> {
   return invokeCreatePayment(config);
 }
 
-export function createPublishPayment(config: PublishPaymentConfig): Promise<CreatePaymentResult> {
+export function createPublishPayment(
+  config: PublishPaymentConfig & { provider?: "yape" | "plin" },
+): Promise<CreatePaymentResult | PagoManualCreado> {
   return invokeCreatePayment(config);
 }
 
 /** Pagar el faltante para RENOVAR un aviso: el servidor lo renueva al cobrar. */
-export function createRenewPayment(config: Omit<PublishPaymentConfig, "purpose">): Promise<CreatePaymentResult> {
+export function createRenewPayment(
+  config: Omit<PublishPaymentConfig, "purpose"> & { provider?: "yape" | "plin" },
+): Promise<CreatePaymentResult | PagoManualCreado> {
   return invokeCreatePayment({ ...config, purpose: "renew" });
 }
 

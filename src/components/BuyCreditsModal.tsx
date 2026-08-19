@@ -7,7 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Wallet, User, Building2, Globe, Check, CheckCircle2, AlertCircle, Loader2, Minus, Plus, CreditCard, ArrowLeft, Lock } from "lucide-react";
+import { Wallet, User, Building2, Globe, Check, CheckCircle2, AlertCircle, Loader2, Minus, Plus, CreditCard, ArrowLeft, Lock, Smartphone } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
   loadSettings, priceForDuration, extrasTotal, formatSoles, formatCredits, solesToCredits,
@@ -23,10 +23,15 @@ import { verifyDocument, normalizeDocNumber, normalizeDocAlfanumerico } from "@/
 import { fetchMyIdentity, saveMyIdentity } from "@/lib/identity";
 import {
   createPayment, createPublishPayment, pollOrderStatus, getPurchaseResult, hostedPaymentUrl,
-  SaldoYaSuficiente,
-  type PurchaseConfig, type CreatePaymentResult, type OrderOutcome,
+  SaldoYaSuficiente, esPagoManual,
+  type PurchaseConfig, type CreatePaymentResult, type PagoManualCreado, type OrderOutcome,
 } from "@/lib/payments";
 import { PaymentForm, precargarKrypton } from "@/components/PaymentForm";
+import { PagoManualPanel } from "@/components/PagoManualPanel";
+import {
+  configYapePlin, mediosDisponibles, NOMBRE_MEDIO, CONFIG_VACIA,
+  type ConfigYapePlin, type MedioManual,
+} from "@/lib/pagoManual";
 
 // Correo válido para el comprobante.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -58,6 +63,11 @@ interface Props {
   // ya está acreditado y quien llama debe rematar la publicación.
   publishFor?: PublishTarget;
   onPublished?: (published: boolean) => void;
+  // Yape/Plin: la compra quedó registrada y espera que el equipo confirme el
+  // pago. No es un éxito ni un fallo, es una tercera salida — y quien abrió
+  // este cuadro desde otro diálogo necesita cerrarlo también y explicar la
+  // espera, en vez de dejar al usuario delante de un "Publicar" que ya pulsó.
+  onPagoEnEspera?: (info: { orderId: string; medio: MedioManual }) => void;
 }
 
 const DURATIONS: DurationDays[] = [3, 7, 15, 30, 60, 90];
@@ -71,14 +81,19 @@ const EXTRA_DEFS: Array<{ key: keyof ExtraPrices; label: string; sub: string }> 
 ];
 
 export function BuyCreditsModal({
-  open, onClose, creditCost, currentBalance, onPurchaseComplete, publishFor, onPublished,
+  open, onClose, creditCost, currentBalance, onPurchaseComplete, publishFor, onPublished, onPagoEnEspera,
 }: Props) {
   const [settings, setSettings] = useState<PricingSettings>(() => loadSettings());
   const [buying, setBuying] = useState(false);
 
   // Paso del flujo: "config" (arma la compra) → "paying" (formulario Izipay web).
-  const [step, setStep] = useState<"config" | "paying">("config");
+  const [step, setStep] = useState<"config" | "paying" | "manual">("config");
   const [payment, setPayment] = useState<CreatePaymentResult | null>(null);
+  // Cómo se paga. La tarjeta es lo de siempre; Yape y Plin solo aparecen si
+  // están configurados con al menos una cuenta y un WhatsApp (0117).
+  const [medioPago, setMedioPago] = useState<"tarjeta" | MedioManual>("tarjeta");
+  const [cfgManual, setCfgManual] = useState<ConfigYapePlin>(CONFIG_VACIA);
+  const [manual, setManual] = useState<PagoManualCreado | null>(null);
   const [confirming, setConfirming] = useState(false); // polling del estado de la orden
 
   // Escape del modo pagar-y-publicar: quien prefiera cargar saldo por su cuenta
@@ -232,8 +247,11 @@ export function BuyCreditsModal({
       // recursos encadenados: se piden ya, mientras se elige qué comprar.
       precargarKrypton(undefined, (import.meta.env.VITE_IZIPAY_PUBLIC_KEY as string | undefined) ?? "");
       fetchPricingSettings().then(setSettings);
+      configYapePlin().then(setCfgManual);
       setStep("config");
       setPayment(null);
+      setManual(null);
+      setMedioPago("tarjeta");
       setConfirming(false);
       setSoloSaldo(false);
     } else {
@@ -398,14 +416,24 @@ export function BuyCreditsModal({
         extras: extras as Record<string, boolean | number>,
         receipt,
       };
+      const provider = medioPago === "tarjeta" ? undefined : medioPago;
       const result = modoPublicar && publishFor
         ? await createPublishPayment({
             listingId: publishFor.listingId,
             duration: publishFor.durationDays,
             receipt,
             purpose: publishFor.purpose ?? "publish",
+            provider,
           })
-        : await createPayment(config);
+        : await createPayment({ ...config, provider });
+
+      // Yape/Plin: no hay pasarela que abrir. La orden ya quedó esperando
+      // aprobación y ahora toca decirle a dónde transferir.
+      if (esPagoManual(result)) {
+        setManual(result);
+        setStep("manual");
+        return;
+      }
 
       if (Capacitor.isNativePlatform()) {
         // Redirect en móvil: el 3-D Secure corre en un navegador real, no en el WebView.
@@ -445,6 +473,9 @@ export function BuyCreditsModal({
     setConfirming(false);
   };
 
+  // Qué medios manuales se pueden ofrecer con la configuración actual.
+  const mediosManuales = useMemo(() => mediosDisponibles(cfgManual), [cfgManual]);
+
   const balanceAfter = currentBalance + creditsToBuy;
   const coversAd = balanceAfter >= creditCost;
 
@@ -460,7 +491,9 @@ export function BuyCreditsModal({
             {modoPublicar ? "Pagar y publicar" : "Comprar saldo"}
           </DialogTitle>
           <DialogDescription>
-            {step === "paying"
+            {step === "manual"
+              ? `Transfiere por ${manual ? NOMBRE_MEDIO[manual.provider] : "Yape"} y mándanos el voucher: nosotros hacemos el resto.`
+              : step === "paying"
               ? "Ingresa los datos de tu tarjeta en el formulario seguro de Izipay."
               : modoPublicar
                 ? "Pagas solo lo que falta para este aviso y, en cuanto se apruebe, se publica solo."
@@ -468,7 +501,24 @@ export function BuyCreditsModal({
           </DialogDescription>
         </DialogHeader>
 
-        {step === "paying" && payment ? (
+        {step === "manual" && manual ? (
+          /* ── Paso 2 (Yape/Plin): a dónde transferir y cómo avisarnos ── */
+          <PagoManualPanel
+            orderId={manual.orderId}
+            medio={manual.provider}
+            monto={manual.amount > 0 ? manual.amount : solesTotal}
+            cuentas={manual.cuentas}
+            whatsapp={manual.whatsapp}
+            mensaje={manual.mensaje}
+            nombre={verifiedName}
+            publicaAviso={modoPublicar}
+            onListo={() => {
+              if (onPagoEnEspera) onPagoEnEspera({ orderId: manual.orderId, medio: manual.provider });
+              else onClose();
+            }}
+            onVolver={() => { setStep("config"); setManual(null); }}
+          />
+        ) : step === "paying" && payment ? (
           /* ── Paso 2 (web): formulario embebido de Izipay ── */
           <div className="space-y-4">
             <div className="border border-secondary/30 bg-secondary/5 px-4 py-3 flex justify-between items-baseline gap-3">
@@ -649,6 +699,43 @@ export function BuyCreditsModal({
             </>
             )}
 
+            {/* ── Cómo se paga ──
+                Solo aparece si hay algún medio manual configurado: con nada que
+                elegir, un selector de una sola opción es ruido. */}
+            {mediosManuales.length > 0 && (
+              <div className="space-y-2 border-t pt-3">
+                <Label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">
+                  Cómo quieres pagar
+                </Label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button type="button"
+                    onClick={() => setMedioPago("tarjeta")}
+                    className={`p-3 border text-left transition-all ${medioPago === "tarjeta" ? "border-secondary bg-secondary/10" : "border-border hover:bg-muted/50"}`}>
+                    <CreditCard size={16} className="text-secondary mb-1" />
+                    <p className="font-bold text-xs">Tarjeta</p>
+                    <p className="text-[10px] text-muted-foreground">Al instante</p>
+                  </button>
+                  {mediosManuales.map((m) => (
+                    <button key={m} type="button"
+                      onClick={() => setMedioPago(m)}
+                      className={`p-3 border text-left transition-all ${medioPago === m ? "border-secondary bg-secondary/10" : "border-border hover:bg-muted/50"}`}>
+                      <Smartphone size={16} className="text-secondary mb-1" />
+                      <p className="font-bold text-xs">{NOMBRE_MEDIO[m]}</p>
+                      <p className="text-[10px] text-muted-foreground">Lo revisamos</p>
+                    </button>
+                  ))}
+                </div>
+                {medioPago !== "tarjeta" && (
+                  <p className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
+                    <AlertCircle size={13} className="mt-0.5 shrink-0" />
+                    {modoPublicar
+                      ? "Transfieres, nos mandas el voucher por WhatsApp y tu aviso se publica solo en cuanto confirmemos el pago."
+                      : "Transfieres, nos mandas el voucher por WhatsApp y el saldo entra en cuanto confirmemos el pago."}
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Datos de comprobante */}
             <div className="space-y-3 border-t pt-3">
               <Label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Datos del comprobante</Label>
@@ -814,7 +901,9 @@ export function BuyCreditsModal({
               >
                 {buying
                   ? <><Loader2 size={14} className="animate-spin" /> {confirming ? "Confirmando…" : "Procesando…"}</>
-                  : <><CreditCard size={14} /> {modoPublicar ? "Pagar y publicar" : "Continuar al pago"} · {formatSoles(solesTotal)}</>}
+                  : medioPago === "tarjeta"
+                    ? <><CreditCard size={14} /> {modoPublicar ? "Pagar y publicar" : "Continuar al pago"} · {formatSoles(solesTotal)}</>
+                    : <><Smartphone size={14} /> Pagar con {NOMBRE_MEDIO[medioPago]} · {formatSoles(solesTotal)}</>}
               </Button>
             </DialogFooter>
           </>

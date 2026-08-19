@@ -19,7 +19,12 @@ vi.mock("@/lib/publish", () => ({
   SaldoInsuficiente: class extends Error {},
 }));
 vi.mock("@/lib/credits", () => ({ getCreditBalance: vi.fn().mockResolvedValue(1000) }));
-vi.mock("@/lib/payments", () => ({
+// `importOriginal` en vez de enumerar: el módulo real exporta más cosas de las
+// que este test simula (SaldoYaSuficiente, esPagoManual…), y sin ellas el
+// componente revienta en cuanto añadimos una exportación nueva.
+vi.mock("@/lib/payments", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/payments")>()),
+
   createPayment: vi.fn(), createPublishPayment: vi.fn(), pollOrderStatus: vi.fn(),
   getPurchaseResult: vi.fn(), hostedPaymentUrl: () => "https://x/pay",
   SaldoYaSuficiente: class extends Error {},

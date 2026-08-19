@@ -11,16 +11,16 @@ import {
 
 const EXPECTED_IDS = [
   "Gestión de avisos", "Gestión de usuarios", "Configuración comercial", "Pagos y planes",
-  "Conversaciones reportadas", "Reportes", "Comunicaciones", "Auditoría y logs",
+  "Pagos Yape/Plin", "Conversaciones reportadas", "Reportes", "Comunicaciones", "Auditoría y logs",
 ];
 
 describe("catálogo de permisos", () => {
-  it("declara los 8 módulos con sus ids EXACTOS de la BD", () => {
+  it("declara los 9 módulos con sus ids EXACTOS de la BD", () => {
     expect(PERM_MODULES.map((m) => m.id)).toEqual(EXPECTED_IDS);
   });
 
   it("MATRIX_MODULES excluye los superadmin-only (Auditoría)", () => {
-    expect(MATRIX_MODULES).toHaveLength(7);
+    expect(MATRIX_MODULES).toHaveLength(8);
     expect(MATRIX_MODULES.map((m) => m.id)).not.toContain("Auditoría y logs");
   });
 
@@ -55,6 +55,13 @@ describe("catálogo de permisos", () => {
     for (const id of ["Configuración comercial", "Pagos y planes", "Comunicaciones"]) {
       expect(actionsFor(id).map((a) => a.key)).toEqual(["view", "edit"]);
     }
+  });
+
+  it("aprobar un pago de Yape/Plin es una acción aparte de verlo", () => {
+    // Aprobar acredita dinero y publica avisos: no puede ir en el mismo
+    // interruptor que "ver la bandeja".
+    expect(actionsFor("Pagos Yape/Plin").map((a) => a.key)).toEqual(["view", "approve"]);
+    expect(MODULE_BY_SUB["yape-plin"]).toBe("Pagos Yape/Plin");
   });
 
   it("usuarios declara las 4 acciones reales; avisos y reclamos, view+edit", () => {

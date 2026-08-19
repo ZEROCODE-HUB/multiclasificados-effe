@@ -11,7 +11,7 @@
 // de "acceso" con un único toggle (view) porque acceder = usar la sección.
 import type { LucideIcon } from "lucide-react";
 import {
-  ClipboardList, Users, Tags, DollarSign, Flag, FileBarChart, Send, ScrollText,
+  ClipboardList, Users, Tags, DollarSign, Flag, FileBarChart, Send, ScrollText, Smartphone,
 } from "lucide-react";
 
 export type PermAction = "view" | "edit" | "approve" | "delete";
@@ -72,6 +72,15 @@ export const PERM_MODULES: PermModuleDef[] = [
     actions: [
       A.access("Ver tarifas, promociones y paquetes de saldo."),
       { key: "edit", label: "Editar", description: "Guardar tarifas y gestionar promociones y paquetes de saldo." },
+    ],
+  },
+  {
+    id: "Pagos Yape/Plin", label: "Pagos Yape/Plin", icon: Smartphone, group: "Operación", sub: "yape-plin",
+    description: "Pagos por billetera que aprueba una persona.",
+    actions: [
+      A.access("Ver la bandeja de pagos por Yape y Plin."),
+      // Aprobar acredita dinero real y publica avisos: va aparte de "ver".
+      { key: "approve", label: "Aprobar o rechazar", description: "Confirmar un pago (acredita saldo, emite boleta y publica el aviso) o rechazarlo." },
     ],
   },
   {

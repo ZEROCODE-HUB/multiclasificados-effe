@@ -1499,6 +1499,19 @@ const AdvertiserPublish = () => {
             doPublish();
           }
         }}
+        onPagoEnEspera={() => {
+          // Pagó por Yape/Plin: el aviso ya está guardado y esperando que el
+          // equipo confirme el pago. Se cierra el formulario como en una
+          // publicación normal —insistir aquí solo llevaría a pagar dos veces—
+          // y se le dice dónde ver su aviso mientras tanto.
+          setBuyCreditsOpen(false);
+          setPagarPublicar(null);
+          resetPublishForm();
+          toast({
+            title: "Tu aviso está en camino",
+            description: "En cuanto confirmemos tu pago se publica solo. Lo tienes en Mis avisos, en Borradores.",
+          });
+        }}
         onPurchaseComplete={(newBalance) => {
           setCreditBalance(newBalance);
           setBuyCreditsOpen(false);

@@ -9,7 +9,12 @@ import { prepararDom } from "./domPolyfills";
 beforeEach(prepararDom);
 
 vi.mock("@/lib/pricingRemote", () => ({ fetchPricingSettings: () => new Promise(() => {}) }));
-vi.mock("@/lib/payments", () => ({
+// `importOriginal` en vez de enumerar: el módulo real exporta más cosas de las
+// que este test simula (SaldoYaSuficiente, esPagoManual…), y sin ellas el
+// componente revienta en cuanto añadimos una exportación nueva.
+vi.mock("@/lib/payments", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/payments")>()),
+
   createPayment: vi.fn().mockResolvedValue({ orderId: "o1", formToken: "t", publicKey: "pk" }),
   pollOrderStatus: vi.fn(), getPurchaseResult: vi.fn(), hostedPaymentUrl: () => "https://x/pay",
 }));

@@ -149,6 +149,31 @@ export function notificationText(n: AppNotification): string {
         : `Se anuló ${numero}`;
       return motivo ? `${base}. Motivo: ${motivo}` : `${base}.`;
     }
+    case "manual_payment_approved": {
+      // Lo que la persona estaba esperando: si pagó para publicar, saber que su
+      // aviso ya está fuera; si recargó, que el saldo entró.
+      const publicado = p.published === true;
+      const proposito = String(p.purpose ?? "");
+      if (proposito === "publish") {
+        return publicado
+          ? "Confirmamos tu pago y tu aviso ya está publicado."
+          : "Confirmamos tu pago y se acreditó tu saldo. Tu aviso está a un paso de publicarse.";
+      }
+      if (proposito === "renew") {
+        return publicado
+          ? "Confirmamos tu pago y tu aviso ya está renovado."
+          : "Confirmamos tu pago y se acreditó tu saldo.";
+      }
+      const monto = Number(p.monto ?? 0);
+      return monto > 0
+        ? `Confirmamos tu pago: se acreditaron S/ ${monto.toFixed(2)} a tu saldo.`
+        : "Confirmamos tu pago y se acreditó tu saldo.";
+    }
+    case "manual_payment_rejected": {
+      const motivo = (p.motivo as string) || "";
+      const base = "No pudimos confirmar tu pago";
+      return motivo ? `${base}: ${motivo}` : `${base}. Escríbenos para revisarlo.`;
+    }
     case "account_suspended": {
       const reason = (p.reason as string) || "";
       return reason
@@ -183,6 +208,14 @@ export function notificationLink(n: AppNotification, role: string): string {
     case "invoice_voided":
       // Allí ve el comprobante marcado como anulado y su motivo.
       return "/dashboard/anunciante/boletas";
+    case "manual_payment_approved":
+      // Si el pago era de un aviso, lo que quiere ver es el aviso; si fue una
+      // recarga, su comprobante.
+      return p.purpose === "publish" || p.purpose === "renew"
+        ? "/dashboard/anunciante/avisos"
+        : "/dashboard/anunciante/boletas";
+    case "manual_payment_rejected":
+      return "/dashboard/anunciante";
     default:
       return "#";
   }

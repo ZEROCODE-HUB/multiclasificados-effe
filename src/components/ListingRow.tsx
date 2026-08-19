@@ -32,6 +32,13 @@ interface ListingRowProps {
   onDuplicate?: (listing: Listing) => void;
   /** Motivo de rechazo de moderación; si viene, se muestra un aviso. */
   rejectionReason?: string | null;
+  /**
+   * Este aviso ya está pagado por Yape/Plin y espera que lo confirmemos.
+   *
+   * Sin esta marca, un borrador pagado se ve igual que uno a medio escribir: el
+   * usuario vuelve a pulsar "Publicar" y paga dos veces la misma cosa.
+   */
+  pagoEnEspera?: { metodo: string; confirmado: boolean } | null;
 }
 
 const statusStyles: Record<string, string> = {
@@ -49,7 +56,7 @@ const expiryStyles: Record<string, string> = {
   urgent: "text-destructive font-semibold",
 };
 
-export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEdit, onDelete, onTogglePause, onPublish, onRepublish, onRenew, onDuplicate, rejectionReason }: ListingRowProps) {
+export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEdit, onDelete, onTogglePause, onPublish, onRepublish, onRenew, onDuplicate, rejectionReason, pagoEnEspera }: ListingRowProps) {
   const hasActions = !!(onView || onEdit || onDelete || onTogglePause || onPublish || onRepublish || onRenew || onDuplicate);
   // El contador solo tiene sentido en un aviso activo (los vencidos ya caducaron).
   const expiry = status === "Activo" ? expiryInfo(expiresAt ?? null) : null;
@@ -155,6 +162,18 @@ export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEd
           <div className="mb-3 flex items-start gap-1.5 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
             <Ban size={12} className="mt-0.5 shrink-0" />
             <span><span className="font-semibold">Rechazado:</span> {rejectionReason}</span>
+          </div>
+        )}
+
+        {pagoEnEspera && (
+          <div className="mb-3 flex items-start gap-1.5 rounded-md border border-secondary/40 bg-secondary/10 px-2 py-1.5 text-xs">
+            <Clock size={12} className="mt-0.5 shrink-0 text-secondary" />
+            <span>
+              <span className="font-semibold">Pago por {pagoEnEspera.metodo} en revisión.</span>{" "}
+              {pagoEnEspera.confirmado
+                ? "En cuanto lo confirmemos, tu aviso se publica solo."
+                : "Mándanos el voucher por WhatsApp para que podamos confirmarlo."}
+            </span>
           </div>
         )}
 

@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ListingRow } from "@/components/ListingRow";
+import { misPagosEnEspera, NOMBRE_MEDIO } from "@/lib/pagoManual";
 import { PublishDraftDialog } from "@/components/PublishDraftDialog";
 import { LocationPicker } from "@/components/LocationPicker";
 import { useSession } from "@/hooks/useSession";
@@ -87,6 +88,19 @@ const AdvertiserListings = () => {
   const initialTab = (TAB_KEYS as readonly string[]).includes(paramTab) ? paramTab : "activos";
   const [listings, setListings] = useState<MyListing[]>([]);
   const [loading, setLoading] = useState(true);
+  // Avisos con un pago por Yape/Plin todavía sin confirmar: se marcan en su
+  // fila y no se les ofrece "Publicar", que sería pagar dos veces.
+  const [pagosEnEspera, setPagosEnEspera] = useState<Map<string, { metodo: string; confirmado: boolean }>>(new Map());
+
+  useEffect(() => {
+    void misPagosEnEspera().then((pagos) => {
+      const m = new Map<string, { metodo: string; confirmado: boolean }>();
+      for (const p of pagos) {
+        if (p.listingId) m.set(p.listingId, { metodo: NOMBRE_MEDIO[p.metodo], confirmado: p.confirmado });
+      }
+      setPagosEnEspera(m);
+    });
+  }, []);
   const [query, setQuery] = useState("");
 
   // Edición / eliminación
@@ -274,6 +288,12 @@ const AdvertiserListings = () => {
                 status={ROW_STATUS[tab]}
                 expiresAt={listing.expiresAt}
                 rejectionReason={listing.status === "rejected" ? listing.rejectionReason : null}
+                pagoEnEspera={pagosEnEspera.get(listing.id) ?? null}
+                {...(pagosEnEspera.has(listing.id)
+                  // Ya pagó: ofrecerle "Publicar" otra vez es invitarle a pagar
+                  // dos veces lo mismo.
+                  ? { onPublish: undefined }
+                  : {})}
                 onView={(l) => navigate(`/aviso/${l.id}`)}
                 onEdit={() => openEdit(listing)}
                 onDelete={() => setToDelete(listing)}

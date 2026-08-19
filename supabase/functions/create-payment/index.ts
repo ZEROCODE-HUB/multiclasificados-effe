@@ -79,6 +79,9 @@ const json = (body: unknown, status = 200) =>
 
 const DURATIONS = [3, 7, 15, 30, 60, 90];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Medios que se pagan fuera de la pasarela y aprueba una persona (0117).
+const MEDIOS_MANUALES = ["yape", "plin"];
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Estados desde los que un aviso puede publicarse (los mismos que acepta
@@ -228,12 +231,20 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
   try {
+    const body = await req.json().catch(() => ({}));
+
+    // Yape y Plin no pasan por la pasarela: el comprador transfiere desde su
+    // app, manda el voucher por WhatsApp y una persona lo aprueba. La orden se
+    // arma exactamente igual —mismo cálculo, mismo comprobante, mismo
+    // extras.purpose— y se queda esperando ese visto bueno.
+    const metodoManual = MEDIOS_MANUALES.includes(String(body?.provider ?? ""))
+      ? String(body?.provider)
+      : null;
+
     // Sin credenciales de Izipay no hay cobro posible: fallo claro ANTES de tocar la BD.
-    if (!IZIPAY_SHOP_ID || !IZIPAY_PASSWORD) {
+    if (!metodoManual && (!IZIPAY_SHOP_ID || !IZIPAY_PASSWORD)) {
       return json({ success: false, error: "Pasarela de pago no configurada." }, 503);
     }
-
-    const body = await req.json().catch(() => ({}));
 
     // Diagnóstico para staff: no crea orden ni cobra.
     if (body?.probe === true) {
@@ -401,7 +412,7 @@ Deno.serve(async (req) => {
         igv,
         total,
         status: "pending",
-        payment_provider: "izipay",
+        payment_provider: metodoManual ?? "izipay",
         extras: {
           credits,
           detail,
@@ -428,6 +439,33 @@ Deno.serve(async (req) => {
     // que si falla no se aborta el cobro.
     if (listingId) {
       await admin.from("order_listings").insert({ order_id: order.id, listing_id: listingId });
+    }
+
+    // ── Yape/Plin: la orden queda esperando aprobación ──
+    // Aquí termina el trabajo del servidor. Al comprador se le devuelven las
+    // cuentas a las que transferir y el WhatsApp al que mandar el voucher; la
+    // acreditación, la boleta y la publicación del aviso salen de
+    // `admin_aprobar_pago_manual`, que llama a la misma `settle_paid_order`.
+    if (metodoManual) {
+      const { data: cfg } = await admin.rpc("yape_plin_config");
+      const config = (cfg ?? {}) as Record<string, unknown>;
+      const cuentas = Array.isArray(config.cuentas) ? config.cuentas : [];
+      return json({
+        success: true,
+        manual: true,
+        provider: metodoManual,
+        orderId: order.id,
+        amount: total,
+        listingCost,
+        // Solo las cuentas del medio elegido: enseñar las de Plin a quien va a
+        // pagar por Yape es la forma más fácil de que el dinero acabe donde no
+        // se espera.
+        cuentas: cuentas.filter((c) =>
+          String((c as Record<string, unknown>)?.metodo ?? "").toLowerCase() === metodoManual
+        ),
+        whatsapp: String(config.whatsapp ?? ""),
+        mensaje: String(config.mensaje ?? ""),
+      });
     }
 
     // ── Pedir el formToken a Izipay (Charge/CreatePayment) ──

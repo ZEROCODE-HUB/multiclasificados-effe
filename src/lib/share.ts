@@ -52,8 +52,21 @@ async function openExternal(url: string): Promise<void> {
 // esquema no abre nada, así que se deja un respaldo por tiempo: si al segundo la
 // pantalla sigue visible (no hubo cambio de app), se abre `wa.me` como antes.
 export async function shareListingWhatsApp(title: string, listingId: string): Promise<void> {
-  const text = encodeURIComponent(shareMessage(title, listingUrl(listingId)));
-  const webUrl = `https://wa.me/?text=${text}`;
+  await abrirWhatsApp(shareMessage(title, listingUrl(listingId)));
+}
+
+/**
+ * Abre WhatsApp con un mensaje escrito, y opcionalmente hacia un número
+ * concreto (`telefono` en formato internacional sin signos: 51999888777).
+ *
+ * Sin número, WhatsApp pide a quién enviar — que es lo que hace falta al
+ * compartir un aviso. Con número va directo a esa conversación, que es lo que
+ * hace falta para mandarnos el voucher de un pago.
+ */
+export async function abrirWhatsApp(mensaje: string, telefono?: string): Promise<void> {
+  const text = encodeURIComponent(mensaje);
+  const numero = (telefono ?? "").replace(/\D/g, "");
+  const webUrl = `https://wa.me/${numero}?text=${text}`;
 
   if (!Capacitor.isNativePlatform()) {
     await openExternal(webUrl);
@@ -65,7 +78,9 @@ export async function shareListingWhatsApp(title: string, listingId: string): Pr
     if (document.visibilityState === "hidden") saltoAWhatsApp = true;
   };
   document.addEventListener("visibilitychange", marcarSalto);
-  window.location.assign(`whatsapp://send?text=${text}`);
+  window.location.assign(
+    `whatsapp://send?${numero ? `phone=${numero}&` : ""}text=${text}`,
+  );
 
   window.setTimeout(() => {
     document.removeEventListener("visibilitychange", marcarSalto);

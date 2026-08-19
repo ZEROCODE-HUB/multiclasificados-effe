@@ -18,7 +18,12 @@ const createPayment = vi.fn();
 const createPublishPayment = vi.fn();
 const pollOrderStatus = vi.fn();
 const getPurchaseResult = vi.fn();
-vi.mock("@/lib/payments", () => ({
+// `importOriginal` en vez de enumerar: el módulo real exporta más cosas de las
+// que este test simula (SaldoYaSuficiente, esPagoManual…), y sin ellas el
+// componente revienta en cuanto añadimos una exportación nueva.
+vi.mock("@/lib/payments", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/payments")>()),
+
   createPayment: (...a: unknown[]) => createPayment(...a),
   createPublishPayment: (...a: unknown[]) => createPublishPayment(...a),
   pollOrderStatus: (...a: unknown[]) => pollOrderStatus(...a),

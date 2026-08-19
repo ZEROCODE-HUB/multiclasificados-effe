@@ -12,6 +12,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { PERM_MODULES, MODULE_BY_SUB } from "@/lib/permissions";
+import { usePagosManualesPendientes } from "@/hooks/usePagosManualesPendientes";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -80,6 +81,12 @@ interface Props {
 
 export function AdminLayout({ children, role, title, breadcrumb, can }: Props) {
   const menu = buildMenu(role).filter((m) => (can ? can(m.module, "view") : true));
+  // Pagos por Yape/Plin esperando revisión. Es lo único del panel que hace
+  // esperar a una persona de verdad —su saldo o su aviso están detenidos— así
+  // que se marca en el menú en vez de esperar a que alguien entre a mirar.
+  const pagosPendientes = usePagosManualesPendientes(
+    can ? can("Pagos Yape/Plin", "view") : true,
+  );
   const isSuper = role === "superadmin";
   const groups = Array.from(new Set(menu.map((m) => m.group ?? "")));
 
@@ -130,7 +137,12 @@ export function AdminLayout({ children, role, title, breadcrumb, can }: Props) {
                     activeClassName="!bg-sidebar-accent !text-sidebar-primary-foreground shadow-sm relative before:absolute before:left-0 before:top-2 before:bottom-2 before:w-1 before:rounded-r before:bg-sidebar-primary"
                   >
                     <item.icon size={18} />
-                    <span>{item.title}</span>
+                    <span className="flex-1">{item.title}</span>
+                    {item.module === "Pagos Yape/Plin" && pagosPendientes > 0 && (
+                      <span className="shrink-0 min-w-5 h-5 px-1.5 rounded-full bg-secondary text-secondary-foreground text-[10px] font-bold grid place-items-center">
+                        {pagosPendientes > 99 ? "99+" : pagosPendientes}
+                      </span>
+                    )}
                   </NavLink>
                 ))}
               </nav>
@@ -222,6 +234,7 @@ const ADMIN_META: Record<string, { title: string; breadcrumb: string[] }> = {
   usuarios: { title: "Gestión de usuarios", breadcrumb: ["Operación", "Usuarios"] },
   comercial: { title: "Configuración comercial", breadcrumb: ["Operación", "Comercial"] },
   tarifas: { title: "Tarifas y Descuentos", breadcrumb: ["Operación", "Tarifas y Descuentos"] },
+  "yape-plin": { title: "Pagos con Yape y Plin", breadcrumb: ["Operación", "Yape/Plin"] },
   conversaciones: { title: "Reclamos / Moderación", breadcrumb: ["Operación", "Reclamos"] },
   reportes: { title: "Reportes", breadcrumb: ["Operación", "Reportes"] },
   comunicaciones: { title: "Comunicaciones", breadcrumb: ["Comunicaciones", "Centro"] },
