@@ -321,8 +321,10 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
         onPagoEnEspera={() => {
           // Pagó por Yape/Plin: no hay nada más que hacer aquí. Se cierra todo
           // —dejar abierto el diálogo de publicar invitaría a volver a pagar—
-          // y se dice en una línea qué va a pasar.
+          // y se refresca la lista, que es donde va a ver su aviso marcado
+          // "pago en revisión".
           setBuyOpen(false);
+          onPublished();
           onClose();
           toast({
             title: "Tu aviso está en camino",

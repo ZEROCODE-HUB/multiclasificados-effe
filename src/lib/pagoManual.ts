@@ -7,7 +7,7 @@
 // se publica solo, sin que el comprador vuelva a tocar nada. Ver la migración
 // 0117 y `admin_aprobar_pago_manual`.
 import { supabase } from "@/lib/supabase";
-import { abrirWhatsApp } from "@/lib/share";
+import { abrirWhatsAppAparte, enlaceWhatsApp } from "@/lib/share";
 import { formatSoles } from "@/lib/pricing";
 
 export type MedioManual = "yape" | "plin";
@@ -126,31 +126,43 @@ export function codigoDePago(orderId: string): string {
   return orderId.replace(/-/g, "").slice(0, 8).toUpperCase();
 }
 
-/** Avisa a la base de que el comprador dice haber pagado, y abre WhatsApp. */
-export async function confirmarPagoManual(opts: {
+export interface DatosDelVoucher {
   orderId: string;
   medio: MedioManual;
   monto: number;
   whatsapp: string;
   plantilla: string;
   nombre?: string;
-}): Promise<void> {
-  // Primero se marca, y después se abre WhatsApp: en el APK el salto a otra app
-  // puede congelar lo que quede pendiente aquí, y lo que no puede perderse es
-  // el aviso al equipo de que hay un pago esperando revisión.
+}
+
+/**
+ * Abre WhatsApp con el voucher escrito, EN OTRA PESTAÑA.
+ *
+ * Se llama de forma síncrona dentro del clic y antes de tocar la base: después
+ * de un `await`, el navegador móvil ya no considera que la apertura venga de un
+ * gesto del usuario y la bloquea. Devuelve false si aun así no se pudo abrir
+ * (bloqueador de ventanas emergentes), para poder ofrecer el enlace a mano.
+ */
+export function abrirVoucherEnWhatsApp(opts: DatosDelVoucher): boolean {
+  return abrirWhatsAppAparte(mensajeDeVoucher(opts), opts.whatsapp);
+}
+
+/** El enlace del voucher, para ofrecerlo cuando la pestaña no se pudo abrir. */
+export function enlaceDelVoucher(opts: DatosDelVoucher): string {
+  return enlaceWhatsApp(mensajeDeVoucher(opts), opts.whatsapp);
+}
+
+/**
+ * Marca que el comprador dice haber pagado.
+ *
+ * Va después de abrir WhatsApp, no antes: si esto falla, el pago sigue en la
+ * bandeja del administrador —la orden existe desde que se eligió Yape— y lo
+ * único que se pierde es el orden de la lista. Bloquear el envío del voucher
+ * por eso sería peor.
+ */
+export async function confirmarPagoManual(opts: { orderId: string }): Promise<void> {
   const { error } = await supabase.rpc("confirmar_pago_manual", { p_order: opts.orderId });
   if (error) throw error;
-
-  await abrirWhatsApp(
-    mensajeDeVoucher({
-      plantilla: opts.plantilla,
-      medio: opts.medio,
-      monto: opts.monto,
-      orderId: opts.orderId,
-      nombre: opts.nombre,
-    }),
-    opts.whatsapp,
-  );
 }
 
 /** Un pago propio que sigue esperando confirmación del equipo. */

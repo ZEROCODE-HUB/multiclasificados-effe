@@ -5,7 +5,10 @@ import {
 } from "@/lib/pagoManual";
 
 vi.mock("@/lib/supabase", () => ({ supabase: { rpc: vi.fn() } }));
-vi.mock("@/lib/share", () => ({ abrirWhatsApp: vi.fn() }));
+vi.mock("@/lib/share", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/share")>()),
+  abrirWhatsAppAparte: vi.fn().mockReturnValue(true),
+}));
 
 const cuenta = (metodo: string, numero = "999888777") =>
   ({ metodo, numero, banco: "BCP", titular: "eFFe SAC" });

@@ -93,15 +93,7 @@ const AdvertiserListings = () => {
   // fila y no se les ofrece "Publicar", que sería pagar dos veces.
   const [pagosEnEspera, setPagosEnEspera] = useState<Map<string, { metodo: string; confirmado: boolean }>>(new Map());
 
-  useEffect(() => {
-    void misPagosEnEspera().then((pagos) => {
-      const m = new Map<string, { metodo: string; confirmado: boolean }>();
-      for (const p of pagos) {
-        if (p.listingId) m.set(p.listingId, { metodo: NOMBRE_MEDIO[p.metodo], confirmado: p.confirmado });
-      }
-      setPagosEnEspera(m);
-    });
-  }, []);
+
   const [query, setQuery] = useState("");
 
   // Edición / eliminación
@@ -119,13 +111,25 @@ const AdvertiserListings = () => {
   const session = useSession();
   const [userEmail, setUserEmail] = useState("");
 
-  const reload = () => fetchMyListings().then(setListings);
+  // Los pagos en espera se recargan CON la lista: tras pagar por Yape hay que
+  // ver la marca "en revisión" sin recargar la página a mano.
+  const recargarPagosEnEspera = () =>
+    misPagosEnEspera().then((pagos) => {
+      const m = new Map<string, { metodo: string; confirmado: boolean }>();
+      for (const p of pagos) {
+        if (p.listingId) m.set(p.listingId, { metodo: NOMBRE_MEDIO[p.metodo], confirmado: p.confirmado });
+      }
+      setPagosEnEspera(m);
+    });
+
+  const reload = () => Promise.all([fetchMyListings().then(setListings), recargarPagosEnEspera()]);
 
   useEffect(() => {
     fetchMyListings().then((rows) => {
       setListings(rows);
       setLoading(false);
     });
+    void recargarPagosEnEspera();
     supabase.auth.getSession().then(({ data }) => setUserEmail(data.session?.user.email ?? ""));
   }, []);
 

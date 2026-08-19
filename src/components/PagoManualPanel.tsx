@@ -7,11 +7,11 @@
 //      tenga que volver a esta pantalla.
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Copy, Check, Loader2, Smartphone, ArrowLeft } from "lucide-react";
+import { Copy, Check, Loader2, Smartphone, ArrowLeft, AlertCircle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { formatSoles } from "@/lib/pricing";
 import {
-  NOMBRE_MEDIO, codigoDePago, confirmarPagoManual,
+  NOMBRE_MEDIO, codigoDePago, confirmarPagoManual, abrirVoucherEnWhatsApp, enlaceDelVoucher,
   type CuentaManual, type MedioManual,
 } from "@/lib/pagoManual";
 
@@ -36,6 +36,8 @@ export function PagoManualPanel({
 }: PagoManualPanelProps) {
   const [enviando, setEnviando] = useState(false);
   const [copiado, setCopiado] = useState<string | null>(null);
+  // El navegador bloqueó la pestaña de WhatsApp: hay que darle el enlace.
+  const [bloqueado, setBloqueado] = useState(false);
 
   const copiar = async (texto: string) => {
     try {
@@ -49,26 +51,37 @@ export function PagoManualPanel({
     }
   };
 
+  const datosVoucher = { orderId, medio, monto, whatsapp, plantilla: mensaje, nombre };
+
   const confirmar = async () => {
+    // WhatsApp se abre PRIMERO y en otra pestaña, dentro del propio clic: esta
+    // pantalla tiene que seguir viva para llevar al usuario a sus avisos. Antes
+    // se abría encima y, al volver con "atrás", seguía en el formulario de
+    // publicar como si no hubiera pasado nada.
+    const abierto = abrirVoucherEnWhatsApp(datosVoucher);
+    if (!abierto) setBloqueado(true);
+
     setEnviando(true);
     try {
-      await confirmarPagoManual({ orderId, medio, monto, whatsapp, plantilla: mensaje, nombre });
-      toast({
-        title: "Avisado, gracias",
-        description: publicaAviso
-          ? "En cuanto confirmemos tu pago, tu aviso se publica solo."
-          : "En cuanto confirmemos tu pago, el saldo entra en tu cuenta.",
-      });
-      onListo();
-    } catch (e) {
-      toast({
-        title: "No se pudo registrar",
-        description: e instanceof Error ? e.message : "Inténtalo de nuevo.",
-        variant: "destructive",
-      });
-    } finally {
-      setEnviando(false);
+      await confirmarPagoManual({ orderId });
+    } catch {
+      // El pago está en la bandeja igualmente: la orden existe desde que eligió
+      // Yape. Solo se pierde la marca de "ya avisó", así que no se le corta el
+      // paso por esto.
     }
+    setEnviando(false);
+
+    // Con la pestaña bloqueada, el usuario todavía tiene que mandar el voucher:
+    // se queda aquí con el enlace a mano en vez de irse sin haberlo enviado.
+    if (!abierto) return;
+
+    toast({
+      title: "Avisado, gracias",
+      description: publicaAviso
+        ? "En cuanto confirmemos tu pago, tu aviso se publica solo."
+        : "En cuanto confirmemos tu pago, el saldo entra en tu cuenta.",
+    });
+    onListo();
   };
 
   return (
@@ -132,6 +145,24 @@ export function PagoManualPanel({
           </div>
         </li>
       </ol>
+
+      {bloqueado && (
+        <p className="flex items-start gap-1.5 rounded-md bg-amber-50 p-2.5 text-xs text-amber-900
+                      dark:bg-amber-950/40 dark:text-amber-200">
+          <AlertCircle size={13} className="mt-0.5 shrink-0" />
+          <span>
+            Tu navegador bloqueó la ventana de WhatsApp.{" "}
+            <a
+              href={enlaceDelVoucher(datosVoucher)}
+              target="_blank" rel="noopener noreferrer"
+              className="font-semibold underline underline-offset-2"
+            >
+              Ábrelo desde aquí
+            </a>{" "}
+            para mandarnos tu voucher.
+          </span>
+        </p>
+      )}
 
       <div className="flex items-center justify-between gap-3 pt-1 border-t">
         {onVolver ? (

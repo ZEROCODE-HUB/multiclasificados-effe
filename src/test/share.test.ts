@@ -175,4 +175,50 @@ describe("share — hoja nativa del sistema (Web Share API)", () => {
 
     expect(await shareListingSystem("X", "1")).toBe(true);
   });
+
+  /**
+   * Confirmar un pago por Yape no puede llevarse la pestaña por delante.
+   *
+   * `abrirWhatsApp` navega en la misma pestaña cuando el dispositivo es táctil
+   * —correcto al compartir un aviso, porque detrás no queda nada que ver—, pero
+   * al mandar el voucher la página tiene que seguir viva para llevar al usuario
+   * a sus avisos. Comprobado en producción: se abría WhatsApp encima y al
+   * volver con "atrás" seguía en el formulario de publicar.
+   */
+  describe("abrirWhatsAppAparte", () => {
+    let openSpy: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      openSpy = vi.fn(() => ({}) as Window);
+      Object.defineProperty(window, "open", { value: openSpy, configurable: true, writable: true });
+    });
+
+    it("abre en otra pestaña incluso en un dispositivo táctil", async () => {
+      // `pointer: coarse` es lo que hace que `abrirWhatsApp` navegue en la
+      // misma pestaña; aquí NO debe pasar eso.
+      Object.defineProperty(window, "matchMedia", {
+        value: (q: string) => ({ matches: q.includes("coarse"), media: q, addEventListener() {}, removeEventListener() {} }),
+        configurable: true, writable: true,
+      });
+      const { abrirWhatsAppAparte } = await loadShare();
+
+      expect(abrirWhatsAppAparte("Hola", "51999888777")).toBe(true);
+      expect(assignSpy).not.toHaveBeenCalled();
+      const [url, destino] = openSpy.mock.calls[0];
+      expect(destino).toBe("_blank");
+      expect(String(url)).toContain("wa.me/51999888777");
+      expect(decodeURIComponent(String(url))).toContain("Hola");
+    });
+
+    it("avisa cuando el navegador bloquea la ventana", async () => {
+      openSpy.mockReturnValue(null);
+      const { abrirWhatsAppAparte } = await loadShare();
+      expect(abrirWhatsAppAparte("Hola", "51999888777")).toBe(false);
+    });
+
+    it("el número viaja sin signos ni espacios", async () => {
+      const { enlaceWhatsApp } = await loadShare();
+      expect(enlaceWhatsApp("Hola", "+51 999 888-777")).toContain("wa.me/51999888777");
+    });
+  });
 });

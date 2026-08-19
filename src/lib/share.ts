@@ -55,6 +55,38 @@ export async function shareListingWhatsApp(title: string, listingId: string): Pr
   await abrirWhatsApp(shareMessage(title, listingUrl(listingId)));
 }
 
+/** URL de WhatsApp Web con el mensaje escrito, y el destinatario si se sabe. */
+export function enlaceWhatsApp(mensaje: string, telefono?: string): string {
+  const numero = (telefono ?? "").replace(/\D/g, "");
+  return `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`;
+}
+
+/**
+ * Abre WhatsApp SIN abandonar la página actual, y devuelve si lo consiguió.
+ *
+ * `abrirWhatsApp` navega en la misma pestaña cuando el dispositivo es táctil
+ * (ver el comentario de `openExternal`): al compartir un aviso da igual, porque
+ * no queda nada que ver detrás. Al confirmar un pago sí importa — la página
+ * tiene que quedarse para llevar al usuario a sus avisos y enseñarle el suyo
+ * esperando confirmación. Comprobado en producción: se abría WhatsApp encima y
+ * al volver con "atrás" seguía en el formulario de publicar, como si no
+ * hubiera pasado nada.
+ *
+ * Es SÍNCRONA a propósito y hay que llamarla dentro del propio clic: después de
+ * un `await`, los navegadores móviles ya no consideran que la apertura venga de
+ * un gesto del usuario y la bloquean.
+ */
+export function abrirWhatsAppAparte(mensaje: string, telefono?: string): boolean {
+  const url = enlaceWhatsApp(mensaje, telefono);
+  try {
+    const ventana = window.open(url, "_blank", "noopener,noreferrer");
+    if (ventana) return true;
+  } catch {
+    /* bloqueador de ventanas emergentes */
+  }
+  return false;
+}
+
 /**
  * Abre WhatsApp con un mensaje escrito, y opcionalmente hacia un número
  * concreto (`telefono` en formato internacional sin signos: 51999888777).
@@ -66,7 +98,7 @@ export async function shareListingWhatsApp(title: string, listingId: string): Pr
 export async function abrirWhatsApp(mensaje: string, telefono?: string): Promise<void> {
   const text = encodeURIComponent(mensaje);
   const numero = (telefono ?? "").replace(/\D/g, "");
-  const webUrl = `https://wa.me/${numero}?text=${text}`;
+  const webUrl = enlaceWhatsApp(mensaje, telefono);
 
   if (!Capacitor.isNativePlatform()) {
     await openExternal(webUrl);

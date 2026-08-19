@@ -1521,16 +1521,19 @@ const AdvertiserPublish = () => {
         }}
         onPagoEnEspera={() => {
           // Pagó por Yape/Plin: el aviso ya está guardado y esperando que el
-          // equipo confirme el pago. Se cierra el formulario como en una
-          // publicación normal —insistir aquí solo llevaría a pagar dos veces—
-          // y se le dice dónde ver su aviso mientras tanto.
+          // equipo confirme el pago. WhatsApp se abrió en otra pestaña, así que
+          // ESTA se lleva a Mis avisos, donde ve el suyo marcado "en revisión".
+          // Dejarlo en el formulario de publicar era pedirle que lo publicara
+          // otra vez —y que pagara dos veces— sin nada que le dijera que ya
+          // estaba hecho.
           setBuyCreditsOpen(false);
           setPagarPublicar(null);
           resetPublishForm();
           toast({
             title: "Tu aviso está en camino",
-            description: "En cuanto confirmemos tu pago se publica solo. Lo tienes en Mis avisos, en Borradores.",
+            description: "En cuanto confirmemos tu pago se publica solo. No tienes que hacer nada más.",
           });
+          navigate("/dashboard/anunciante/avisos?tab=borradores");
         }}
         onPurchaseComplete={(newBalance) => {
           setCreditBalance(newBalance);
