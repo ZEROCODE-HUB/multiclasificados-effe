@@ -64,15 +64,19 @@ function isoHaceDias(days: number): string {
 // `show` decide qué controles se muestran, para NO exhibir filtros que no
 // aplican a la pestaña (el rango de fechas y categoría/región solo afectan a los
 // datos que sí se filtran; en las series globales no se muestran).
-function ReportFilters({ filters, setFilters, regions, onExport, show = { dates: true, catRegion: true } }: {
-  filters: Filters;
-  setFilters: React.Dispatch<React.SetStateAction<Filters>>;
-  regions: string[];
+// `nota` sustituye el texto por defecto: no todas las pestañas sin filtros son
+// series temporales, y anunciar "elige el período en el gráfico" donde no hay
+// gráfico confunde más que ayuda.
+function ReportFilters({ filters, setFilters, regions, onExport, show = { dates: true, catRegion: true }, nota }: {
+  filters?: Filters;
+  setFilters?: React.Dispatch<React.SetStateAction<Filters>>;
+  regions?: string[];
   onExport: (f: string) => void;
   show?: { dates?: boolean; catRegion?: boolean };
+  nota?: React.ReactNode;
 }) {
   const categories = useCategories();
-  const upd = (k: keyof Filters, v: string) => setFilters((f) => ({ ...f, [k]: v }));
+  const upd = (k: keyof Filters, v: string) => setFilters?.((f) => ({ ...f, [k]: v }));
   const anyFilter = show.dates || show.catRegion;
   return (
     <div className="flex flex-col lg:flex-row gap-3 lg:items-end justify-between border-b pb-4">
@@ -82,11 +86,11 @@ function ReportFilters({ filters, setFilters, regions, onExport, show = { dates:
             <>
               <div>
                 <Label className="text-xs">Desde</Label>
-                <Input type="date" className="h-9 mt-1" value={filters.from} onChange={(e) => upd("from", e.target.value)} />
+                <Input type="date" className="h-9 mt-1" value={filters?.from ?? ""} onChange={(e) => upd("from", e.target.value)} />
               </div>
               <div>
                 <Label className="text-xs">Hasta</Label>
-                <Input type="date" className="h-9 mt-1" value={filters.to} onChange={(e) => upd("to", e.target.value)} />
+                <Input type="date" className="h-9 mt-1" value={filters?.to ?? ""} onChange={(e) => upd("to", e.target.value)} />
               </div>
             </>
           )}
@@ -94,7 +98,7 @@ function ReportFilters({ filters, setFilters, regions, onExport, show = { dates:
             <>
               <div>
                 <Label className="text-xs">Categoría</Label>
-                <Select value={filters.cat} onValueChange={(v) => upd("cat", v)}>
+                <Select value={filters?.cat ?? ""} onValueChange={(v) => upd("cat", v)}>
                   <SelectTrigger className="h-9 mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todas</SelectItem>
@@ -104,11 +108,11 @@ function ReportFilters({ filters, setFilters, regions, onExport, show = { dates:
               </div>
               <div>
                 <Label className="text-xs">Región</Label>
-                <Select value={filters.region} onValueChange={(v) => upd("region", v)}>
+                <Select value={filters?.region ?? ""} onValueChange={(v) => upd("region", v)}>
                   <SelectTrigger className="h-9 mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todas</SelectItem>
-                    {regions.map((r) => <SelectItem key={r} value={r.toLowerCase()}>{r}</SelectItem>)}
+                    {(regions ?? []).map((r) => <SelectItem key={r} value={r.toLowerCase()}>{r}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -116,7 +120,7 @@ function ReportFilters({ filters, setFilters, regions, onExport, show = { dates:
           )}
         </div>
       ) : (
-        <p className="text-xs text-muted-foreground flex-1 self-center">Serie global de la plataforma; elige el período en el gráfico. Para filtrar por categoría o región usa el <b>Dashboard en tiempo real</b>.</p>
+        <p className="text-xs text-muted-foreground flex-1 self-center">{nota ?? <>Serie global de la plataforma; elige el período en el gráfico. Para filtrar por categoría o región usa el <b>Dashboard en tiempo real</b>.</>}</p>
       )}
       <div className="flex gap-2 flex-wrap">
         <Button size="sm" variant="outline" className="gap-1.5" onClick={() => onExport("csv")}><FileSpreadsheet size={14} /> CSV</Button>
@@ -328,7 +332,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
                   <CardHeader>
                     <CardTitle className="text-sm">Avisos con visibilidad por categoría</CardTitle>
                     <p className="text-xs text-muted-foreground">
-                      Total cobrado: <b className="text-secondary">S/ {visibilityByCategory.reduce((a, b) => a + b.monto, 0).toLocaleString()}</b>
+                      Total cobrado: <b className="text-secondary">{soles(visibilityByCategory.reduce((a, b) => a + b.monto, 0))}</b>
                     </p>
                   </CardHeader>
                   <CardContent className="h-64">
@@ -366,7 +370,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
                   <CardHeader>
                     <CardTitle className="text-sm">Avisos con visibilidad por región</CardTitle>
                     <p className="text-xs text-muted-foreground">
-                      Total cobrado: <b className="text-secondary">S/ {visibilityByRegion.reduce((a, b) => a + b.monto, 0).toLocaleString()}</b>
+                      Total cobrado: <b className="text-secondary">{soles(visibilityByRegion.reduce((a, b) => a + b.monto, 0))}</b>
                     </p>
                   </CardHeader>
                   <CardContent className="h-64">
@@ -539,7 +543,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
                 {tx.total > CREDIT_TX_PAGE_SIZE && (
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <p className="text-xs text-muted-foreground">
-                      {tx.total.toLocaleString()} transacciones · página {txPage} de {Math.max(1, Math.ceil(tx.total / CREDIT_TX_PAGE_SIZE))}
+                      {tx.total.toLocaleString("es-PE")} transacciones · página {txPage} de {Math.max(1, Math.ceil(tx.total / CREDIT_TX_PAGE_SIZE))}
                     </p>
                     <div className="flex gap-1.5">
                       <Button variant="outline" size="sm" className="gap-1" disabled={txPage <= 1} onClick={() => setTxPage((p) => Math.max(1, p - 1))}>
@@ -557,7 +561,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
             {/* SALDOS A FAVOR — lo que la plataforma le debe a sus usuarios */}
             {canTx && (
               <TabsContent value="saldos" className="mt-5 space-y-3">
-                <ReportFilters onExport={exp} show={{ dates: false, catRegion: false }} />
+                <ReportFilters onExport={exp} show={{ dates: false, catRegion: false }} nota="Saldo disponible de cada usuario, hoy. La exportación incluye a todos los que coincidan con el buscador, no solo la página en pantalla." />
                 <div className="flex flex-wrap items-end gap-2">
                   <div className="relative flex-1 min-w-[220px]">
                     <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -604,7 +608,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
                 {saldos.total > SALDOS_PAGE_SIZE && (
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <p className="text-xs text-muted-foreground">
-                      {saldos.total.toLocaleString()} usuarios con saldo · página {saldosPage} de {Math.max(1, Math.ceil(saldos.total / SALDOS_PAGE_SIZE))}
+                      {saldos.total.toLocaleString("es-PE")} usuarios con saldo · página {saldosPage} de {Math.max(1, Math.ceil(saldos.total / SALDOS_PAGE_SIZE))}
                     </p>
                     <div className="flex gap-1.5">
                       <Button variant="outline" size="sm" className="gap-1" disabled={saldosPage <= 1} onClick={() => setSaldosPage((p) => Math.max(1, p - 1))}>

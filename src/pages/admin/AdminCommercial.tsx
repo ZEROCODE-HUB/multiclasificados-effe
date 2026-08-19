@@ -1025,6 +1025,9 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
                 <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => exportarComprobantes("csv")}>
                   <Download size={14} /> CSV
                 </Button>
+                <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => exportarComprobantes("pdf")}>
+                  <FileText size={14} /> PDF
+                </Button>
               </div>
               {invoicesLoading ? (
                 <p className="text-sm text-muted-foreground text-center py-8">Cargando comprobantes…</p>

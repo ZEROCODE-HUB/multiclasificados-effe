@@ -60,6 +60,20 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // antes de tiempo le quitaría la posibilidad de terminar de pagar.
 const MINUTOS_ANTES_DE_DARLA_POR_FALLIDA = 15;
 
+// Códigos con que Izipay dice "no tengo ninguna transacción con ese id". Se dan
+// cuando el comprador abre el formulario y nunca llega a pagar: la orden existe
+// en nuestra base y jamás existió en la pasarela.
+const CODIGOS_ORDEN_INEXISTENTE = ["PSP_010", "PSP_100"];
+
+// Se cierra más tarde que una rechazada: un pago iniciado tarda en aparecer del
+// lado de Izipay, y no queremos cerrar una orden que el comprador aún tiene
+// abierta en otra pestaña.
+const MINUTOS_ANTES_DE_CERRAR_UNA_DESCONOCIDA = 60;
+
+// Centinela: "pregunté y la pasarela no la conoce", distinto de null, que es
+// "no pude preguntar".
+const DESCONOCIDA = { desconocida: true } as const;
+
 // Devuelve el id del usuario dueño del token, o null si no hay usuario real.
 async function authenticatedUserId(req: Request): Promise<string | null> {
   const header = req.headers.get("Authorization") ?? "";
@@ -89,6 +103,11 @@ async function consultarEnIzipay(orderId: string, paymentRef: string | null) {
     body: { orderId, operationType: "DEBIT" },
   });
 
+  // "La pasarela no conoce esa orden" no es lo mismo que "no pude preguntar":
+  // lo primero pasa siempre que alguien abre el formulario de pago y se va sin
+  // pagar, y no tiene arreglo por más veces que se reintente.
+  let desconocida = false;
+
   for (const intento of intentos) {
     try {
       const res = await fetch(intento.url, {
@@ -99,8 +118,9 @@ async function consultarEnIzipay(orderId: string, paymentRef: string | null) {
       const data = await res.json().catch(() => null);
       if (!res.ok || !data) continue;
       if (data.status === "ERROR") {
-        // Orden desconocida para Izipay: probamos el siguiente intento.
-        console.error("[verify-payment] Izipay respondió ERROR:", data?.answer?.errorCode, data?.answer?.errorMessage);
+        const codigo = String(data?.answer?.errorCode ?? "");
+        if (CODIGOS_ORDEN_INEXISTENTE.includes(codigo)) desconocida = true;
+        else console.error("[verify-payment] Izipay respondió ERROR:", codigo, data?.answer?.errorMessage);
         continue;
       }
       return readOrderGet(data.answer as Record<string, unknown>);
@@ -108,7 +128,7 @@ async function consultarEnIzipay(orderId: string, paymentRef: string | null) {
       console.error("[verify-payment] fallo consultando a Izipay:", e instanceof Error ? e.message : e);
     }
   }
-  return null;
+  return desconocida ? DESCONOCIDA : null;
 }
 
 Deno.serve(async (req) => {
@@ -149,7 +169,32 @@ Deno.serve(async (req) => {
   if (orden.status === "paid") return json({ success: true, status: "paid", settled: false, ya: true });
   if (orden.status === "failed") return json({ success: true, status: "failed", settled: false });
 
-  const estado = await consultarEnIzipay(orderId, (orden.payment_ref as string) ?? null);
+  const consulta = await consultarEnIzipay(orderId, (orden.payment_ref as string) ?? null);
+  const edadMinutos = (Date.now() - new Date(orden.created_at as string).getTime()) / 60000;
+
+  // La pasarela contestó, y contestó que esa orden no existe: nunca se pagó.
+  // Pasada la espera se cierra, en vez de reintentarla cada 5 minutos durante
+  // una semana. Si un aviso tardío la liquidara después, `settle_paid_order`
+  // sigue haciéndolo: su compuerta es `status <> 'paid'`.
+  if (consulta === DESCONOCIDA) {
+    if (edadMinutos >= MINUTOS_ANTES_DE_CERRAR_UNA_DESCONOCIDA) {
+      await admin.from("orders")
+        .update({
+          status: "failed",
+          verified_at: new Date().toISOString(),
+          verify_last_error: "La pasarela no registra ningún pago de esta orden",
+        })
+        .eq("id", orderId)
+        .eq("status", "pending");
+      return json({ success: true, status: "failed", settled: false });
+    }
+    await admin.from("orders")
+      .update({ verified_at: new Date().toISOString(), verify_last_error: null })
+      .eq("id", orderId);
+    return json({ success: true, status: "pending", settled: false });
+  }
+
+  const estado = consulta;
 
   if (!estado) {
     await admin.from("orders")
@@ -179,8 +224,7 @@ Deno.serve(async (req) => {
   }
 
   if (estado.refused) {
-    const edadMin = (Date.now() - new Date(orden.created_at as string).getTime()) / 60000;
-    if (edadMin >= MINUTOS_ANTES_DE_DARLA_POR_FALLIDA) {
+    if (edadMinutos >= MINUTOS_ANTES_DE_DARLA_POR_FALLIDA) {
       // `status <> 'paid'` en el filtro: si el IPN entra justo ahora y la
       // liquida, no la pisamos.
       await admin.from("orders")

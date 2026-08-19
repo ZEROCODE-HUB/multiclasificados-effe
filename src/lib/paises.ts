@@ -50,12 +50,26 @@ export function paisDeZonaHoraria(tz: string = zonaDelDispositivo()): Pais {
 // sería peor que no tenerlo (misma decisión que con el departamento).
 const CLAVE = "effe:pais";
 
-export function paisGuardado(): Pais | null {
+// "Ver los de todos los países" es una elección tan válida como elegir uno, y
+// tiene que sobrevivir a recargar la página y a compartir el enlace. Sin un
+// valor propio se confundía con "no ha elegido nada" y el buscador volvía solo
+// al Perú en cuanto se recargaba.
+export const TODOS_LOS_PAISES = "todos";
+
+/** El código que viaja en la URL y en el dispositivo, o null si no eligió. */
+export function codigoPaisGuardado(): string | null {
   try {
-    return paisPorCodigo(localStorage.getItem(CLAVE));
+    const guardado = (localStorage.getItem(CLAVE) ?? "").trim();
+    if (guardado.toLowerCase() === TODOS_LOS_PAISES) return TODOS_LOS_PAISES;
+    return paisPorCodigo(guardado)?.code ?? null;
   } catch {
     return null; // modo privado o almacenamiento bloqueado
   }
+}
+
+export function paisGuardado(): Pais | null {
+  const code = codigoPaisGuardado();
+  return code && code !== TODOS_LOS_PAISES ? paisPorCodigo(code) : null;
 }
 
 export function guardarPais(p: Pais | string | null): void {
@@ -71,6 +85,28 @@ export function guardarPais(p: Pais | string | null): void {
 /** Lo que el usuario eligió; si no eligió nada, lo que dice su zona horaria. */
 export function paisPreferido(): Pais {
   return paisGuardado() ?? paisDeZonaHoraria();
+}
+
+/**
+ * El filtro con el que arranca el buscador, leyendo la URL primero y el
+ * dispositivo después. Devuelve "" cuando la elección es "todos los países".
+ */
+export function filtroPaisInicial(enLaUrl: string | null): string {
+  const deUrl = (enLaUrl ?? "").trim();
+  if (deUrl.toLowerCase() === TODOS_LOS_PAISES) return "";
+  const paisUrl = paisPorCodigo(deUrl);
+  if (paisUrl) return paisUrl.code;
+
+  const guardado = codigoPaisGuardado();
+  if (guardado === TODOS_LOS_PAISES) return "";
+  return guardado ?? paisDeZonaHoraria().code;
+}
+
+/** ¿La elección la tomó el usuario, o la dedujimos nosotros? */
+export function hayPaisElegido(enLaUrl: string | null): boolean {
+  const deUrl = (enLaUrl ?? "").trim();
+  if (deUrl.toLowerCase() === TODOS_LOS_PAISES || paisPorCodigo(deUrl)) return true;
+  return codigoPaisGuardado() !== null;
 }
 
 /**

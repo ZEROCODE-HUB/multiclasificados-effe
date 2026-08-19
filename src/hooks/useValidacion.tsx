@@ -22,7 +22,19 @@ export function useValidacion() {
     if (!primero) return true;
     // Un frame de margen: en publicar hay un useLayoutEffect que corrige el
     // scroll al mostrar adicionales, y si enfocamos antes nos lo pisa.
-    requestAnimationFrame(() => enfocarCampo(primero.campo));
+    //
+    // El temporizador no es redundante: el navegador CONGELA
+    // requestAnimationFrame cuando la pestaña no está visible (comprobado), y
+    // entonces el usuario se queda con el campo marcado pero sin que la
+    // pantalla vaya hasta él. El que llegue primero enfoca; el otro no hace nada.
+    let hecho = false;
+    const enfocarUnaVez = () => {
+      if (hecho) return;
+      hecho = true;
+      enfocarCampo(primero.campo);
+    };
+    requestAnimationFrame(enfocarUnaVez);
+    setTimeout(enfocarUnaVez, 120);
     return false;
   }, []);
 

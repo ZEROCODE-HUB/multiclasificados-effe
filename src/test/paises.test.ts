@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import {
   paisPorCodigo, nombrePais, esPeru, paisDeZonaHoraria,
   paisGuardado, guardarPais, paisPreferido, PAISES,
+  filtroPaisInicial, hayPaisElegido, TODOS_LOS_PAISES,
 } from "@/lib/paises";
 
 describe("catálogo de países", () => {
@@ -92,5 +93,40 @@ describe("país recordado en el dispositivo", () => {
     expect(() => guardarPais("PE")).not.toThrow();
     expect(paisGuardado()).toBeNull();
     if (original) Object.defineProperty(window, "localStorage", original);
+  });
+
+  // Se descubrió probando en producción: elegir "Todos los países", recargar, y
+  // el buscador volvía al Perú. "Todos" se confundía con "no eligió nada".
+  describe("«todos los países» es una elección, no la ausencia de una", () => {
+    it("sobrevive a recargar la página", () => {
+      guardarPais(TODOS_LOS_PAISES);
+      expect(filtroPaisInicial(null)).toBe("");
+      expect(hayPaisElegido(null)).toBe(true);
+    });
+
+    it("viaja en el enlace que se comparte", () => {
+      expect(filtroPaisInicial("todos")).toBe("");
+      expect(hayPaisElegido("todos")).toBe(true);
+    });
+
+    it("la URL manda sobre lo guardado en el dispositivo", () => {
+      guardarPais("AR");
+      expect(filtroPaisInicial("CL")).toBe("CL");
+      expect(filtroPaisInicial("todos")).toBe("");
+    });
+
+    it("sin nada elegido, el filtro arranca en el país de la zona horaria", () => {
+      vi.stubGlobal("Intl", {
+        ...Intl,
+        DateTimeFormat: () => ({ resolvedOptions: () => ({ timeZone: "America/Bogota" }) }),
+      });
+      expect(filtroPaisInicial(null)).toBe("CO");
+      expect(hayPaisElegido(null)).toBe(false);
+    });
+
+    it("«todos» guardado no se confunde con un país", () => {
+      guardarPais(TODOS_LOS_PAISES);
+      expect(paisGuardado()).toBeNull();
+    });
   });
 });

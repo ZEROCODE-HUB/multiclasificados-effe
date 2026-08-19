@@ -21,7 +21,7 @@ import {
   DEPARTAMENTOS, departamentoPorId, departamentoGuardado, guardarDepartamento,
   type Departamento,
 } from "@/lib/departamentos";
-import { PAISES, PAIS_POR_DEFECTO, esPeru, paisPorCodigo, paisPreferido, paisGuardado, guardarPais, paisPorIP } from "@/lib/paises";
+import { PAISES, PAIS_POR_DEFECTO, TODOS_LOS_PAISES, esPeru, paisPorCodigo, filtroPaisInicial, hayPaisElegido, guardarPais, paisPorIP } from "@/lib/paises";
 import { toast } from "@/hooks/use-toast";
 import {
   Search,
@@ -84,9 +84,9 @@ export default function SearchPage() {
   // País: por defecto, el que se deduce de la zona horaria del dispositivo
   // (Perú de respaldo). Viaja en la URL (pais=PE) y se recuerda como el
   // departamento. Fuera del Perú el filtro de departamento no tiene sentido.
-  const [pais, setPais] = useState<string>(
-    () => (paisPorCodigo(params.get("pais")) ?? paisPreferido()).code,
-  );
+  // "" significa "todos los países", y es una elección con la misma dignidad
+  // que elegir uno: viaja en la URL como pais=todos y se recuerda igual.
+  const [pais, setPais] = useState<string>(() => filtroPaisInicial(params.get("pais")));
   const enPeru = esPeru(pais);
   /**
    * ¿El país lo eligió una persona, o lo dedujimos nosotros?
@@ -96,10 +96,10 @@ export default function SearchPage() {
    * precio de equivocarse es el peor posible en un clasificado — la pantalla
    * vacía— así que un país deducido nunca puede dejar al usuario sin nada.
    */
-  const paisElegido = useRef<boolean>(!!paisPorCodigo(params.get("pais")) || !!paisGuardado());
+  const paisElegido = useRef<boolean>(hayPaisElegido(params.get("pais")));
   const elegirPais = (code: string) => {
     paisElegido.current = true;
-    guardarPais(code);
+    guardarPais(code || TODOS_LOS_PAISES);
     setPais(code);
     if (code !== PAIS_POR_DEFECTO) setDepartamento(null);
   };
@@ -172,8 +172,11 @@ export default function SearchPage() {
     // el que ya tenga el usuario recordado del dispositivo.
     const enUrl = departamentoPorId(params.get("dep"));
     if (enUrl) setDepartamento(enUrl);
-    const paisEnUrl = paisPorCodigo(params.get("pais"));
-    if (paisEnUrl) setPais(paisEnUrl.code);
+    // Un "pais=todos" en la URL vale tanto como un código: es lo que hace que
+    // el enlace compartido enseñe lo mismo a quien lo abre.
+    const paisEnUrl = params.get("pais");
+    if (paisEnUrl?.trim().toLowerCase() === TODOS_LOS_PAISES) setPais("");
+    else if (paisPorCodigo(paisEnUrl)) setPais(paisPorCodigo(paisEnUrl)!.code);
   }, [params]);
 
   // El país que dedujimos de la zona horaria es un primer intento; el servidor
@@ -205,8 +208,9 @@ export default function SearchPage() {
     put("min", priceMin);
     put("max", priceMax);
     put("dep", enPeru ? departamento?.id ?? "" : "");
-    // "PE" no ensucia la URL: es el caso normal.
-    put("pais", pais === PAIS_POR_DEFECTO ? "" : pais);
+    // "PE" no ensucia la URL: es el caso normal. "Todos" sí tiene que aparecer,
+    // o al recargar se confundiría con "no eligió" y volvería al Perú.
+    put("pais", pais === PAIS_POR_DEFECTO ? "" : pais || TODOS_LOS_PAISES);
     put("cur", currency);
     if (sort && sort !== "recent") next.set("sort", sort); else next.delete("sort");
     if (next.toString() !== params.toString()) setParams(next, { replace: true });
