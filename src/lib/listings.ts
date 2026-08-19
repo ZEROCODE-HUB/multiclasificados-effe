@@ -466,6 +466,36 @@ export interface ListingPatch {
   condition?: ListingCondition;
 }
 
+/**
+ * Qué adjuntos tiene de verdad un aviso guardado.
+ *
+ * Hace falta antes de cobrar: los adicionales se contratan al armar el paquete
+ * y se suben después, así que un borrador puede tener tres videos pagados y
+ * ninguno subido. Ver `adicionalesQueFaltan`.
+ */
+export async function contarAdjuntosDelAviso(listingId: string): Promise<{
+  imagenesExtra: number;
+  tienePdf: boolean;
+  videos: number;
+}> {
+  const [imgs, doc, vids] = await Promise.all([
+    // sort_order 0 es la portada; las adicionales son las demás.
+    supabase.from("listing_images").select("sort_order", { count: "exact", head: true })
+      .eq("listing_id", listingId).gt("sort_order", 0),
+    supabase.from("listings").select("document_url").eq("id", listingId).maybeSingle(),
+    supabase.from("listing_videos").select("id", { count: "exact", head: true })
+      .eq("listing_id", listingId),
+  ]);
+
+  return {
+    imagenesExtra: imgs.count ?? 0,
+    tienePdf: !!(doc.data as { document_url?: string | null } | null)?.document_url,
+    // La tabla de videos es de la 0115: si aún no está aplicada, la consulta
+    // falla y se cuenta como cero en vez de bloquear la publicación.
+    videos: vids.error ? 0 : (vids.count ?? 0),
+  };
+}
+
 // Actualiza un aviso del usuario (RLS permite editar solo los propios).
 export async function updateListing(id: string, patch: ListingPatch): Promise<void> {
   const { error } = await supabase.from("listings").update(patch).eq("id", id);

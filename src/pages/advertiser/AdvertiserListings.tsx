@@ -26,6 +26,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
 import { useValidacion, MensajeDeError } from "@/hooks/useValidacion";
 import { expiryInfo } from "@/lib/listings";
+import { enfocarCampo } from "@/lib/validacion";
 
 // ¿Al aviso le queda una semana o menos? Es cuando ofrecer renovar ayuda;
 // antes solo sería ruido.
@@ -439,7 +440,7 @@ const AdvertiserListings = () => {
                   </div>
                 </div>
               </div>
-              <div {...val.props("edit-titulo")}>
+              <div {...val.props("edit-titulo")} data-campo="titulo">
                 <Label>Título *</Label>
                 <Input
                   value={edit.title}
@@ -450,7 +451,7 @@ const AdvertiserListings = () => {
                 <MensajeDeError campo="edit-titulo" errores={val.errores} />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
+                <div data-campo="categoria">
                   <Label>Categoría</Label>
                   <Select value={edit.category} onValueChange={(v) => setEdit({ ...edit, category: v })}>
                     <SelectTrigger className="mt-1"><SelectValue placeholder="Selecciona categoría" /></SelectTrigger>
@@ -471,7 +472,7 @@ const AdvertiserListings = () => {
                   </Select>
                 </div>
               </div>
-              <div>
+              <div data-campo="descripcion">
                 <Label>Descripción</Label>
                 <Textarea
                   value={edit.description}
@@ -481,7 +482,7 @@ const AdvertiserListings = () => {
                 />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="sm:col-span-2" {...val.props("edit-precio")}>
+                <div className="sm:col-span-2" {...val.props("edit-precio")} data-campo="precio">
                   <Label>Precio *</Label>
                   <Input
                     type="number"
@@ -505,6 +506,7 @@ const AdvertiserListings = () => {
                   </Select>
                 </div>
               </div>
+              <div data-campo="ubicacion">
               <LocationPicker
                 department={edit.department || null}
                 onDepartmentChange={(v) => setEdit({ ...edit, department: v ?? "" })}
@@ -514,6 +516,7 @@ const AdvertiserListings = () => {
                 lng={edit.lng}
                 onCoordsChange={(la, ln) => setEdit({ ...edit, lat: la, lng: ln })}
               />
+              </div>
             </div>
           )}
           <DialogFooter className="gap-2">
@@ -553,6 +556,14 @@ const AdvertiserListings = () => {
         fallbackName={session?.name ?? "Anunciante"}
         onClose={() => setToPublish(null)}
         onPublished={reload}
+        onEditar={(l, campo) => {
+          // Le falta un dato para publicar: en vez de dejarlo con un aviso y
+          // sin salida, se le abre el mismo aviso en edición y se le lleva al
+          // campo que falta.
+          setToPublish(null);
+          openEdit(l);
+          window.setTimeout(() => enfocarCampo(campo), 350);
+        }}
       />
 
       {/* Renovar: le suma días al aviso SIN dejarlo caer, así conserva sus

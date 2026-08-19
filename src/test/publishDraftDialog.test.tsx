@@ -50,12 +50,21 @@ vi.mock("@/lib/supabase", () => ({
 const toast = vi.fn();
 vi.mock("@/hooks/use-toast", () => ({ toast: (...a: unknown[]) => toast(...a) }));
 
+// Lo que el borrador tiene SUBIDO, que no es lo mismo que lo que contrató.
+const contarAdjuntosDelAviso = vi.fn();
+vi.mock("@/lib/listings", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/listings")>()),
+  contarAdjuntosDelAviso: (...a: unknown[]) => contarAdjuntosDelAviso(...a),
+}));
+
 import { PublishDraftDialog } from "@/components/PublishDraftDialog";
 import type { MyListing } from "@/lib/listings";
 
+// Un borrador COMPLETO: desde que publicar exige lo mismo que el formulario,
+// uno sin ubicación en el mapa ya no llega a cobrarse (ver los tests del final).
 const DRAFT = {
   id: "L-DRAFT", title: "Casa bonita", description: "d", price: 100, currency: "PEN",
-  category: "inmuebles", location: "Lima", lat: null, lng: null, imageUrl: "x",
+  category: "inmuebles", location: "Lima", lat: -12.04, lng: -77.03, imageUrl: "x",
   date: "2026-07-08", featured: false, advertiser: "", views: 0,
   status: "draft", expiresAt: null, condition: "nuevo",
   planDurationDays: 7, planQuantity: 1, planExtras: {},
@@ -85,6 +94,7 @@ beforeEach(() => {
   getCreditBalance.mockResolvedValue(1000);
   verifyDocument.mockResolvedValue({ ok: true, nombre: "JUAN PEREZ", data: {} });
   finalizeListingPublication.mockResolvedValue({ published: true });
+  contarAdjuntosDelAviso.mockResolvedValue({ imagenesExtra: 0, tienePdf: false, videos: 0 });
 });
 
 describe("PublishDraftDialog — publicar un borrador guardado", () => {
@@ -192,5 +202,69 @@ describe("PublishDraftDialog — publicar un borrador guardado", () => {
     await waitFor(() =>
       expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: "El aviso no se activó" })));
     expect(onPublished).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Publicar desde borradores se saltaba las reglas del formulario: cobraba y
+   * sacaba al público avisos sin descripción, y cobraba adicionales que el
+   * usuario había contratado pero nunca llegó a subir.
+   */
+  describe("no cobra un aviso que aún no está listo", () => {
+    const publicar = async () => {
+      await screen.findByText("Casa bonita");
+      fireEvent.click(await screen.findByRole("button", { name: /^publicar/i }));
+      await waitFor(() => expect(toast).toHaveBeenCalled());
+    };
+
+    it("sin descripción no cobra: lleva a completar el aviso", async () => {
+      const onEditar = vi.fn();
+      render(
+        <PublishDraftDialog
+          draft={{ ...DRAFT, description: "" } as MyListing}
+          email="a@b.com" fallbackName="Ana"
+          onClose={onClose} onPublished={onPublished} onEditar={onEditar}
+        />,
+      );
+      await publicar();
+
+      expect(finalizeListingPublication).not.toHaveBeenCalled();
+      expect(onEditar).toHaveBeenCalledWith(expect.objectContaining({ id: "L-DRAFT" }), "descripcion");
+    });
+
+    it("sin ubicación tampoco", async () => {
+      const onEditar = vi.fn();
+      render(
+        <PublishDraftDialog
+          draft={{ ...DRAFT, lat: null, lng: null } as MyListing}
+          email="a@b.com" fallbackName="Ana"
+          onClose={onClose} onPublished={onPublished} onEditar={onEditar}
+        />,
+      );
+      await publicar();
+
+      expect(finalizeListingPublication).not.toHaveBeenCalled();
+      expect(onEditar).toHaveBeenCalledWith(expect.anything(), "ubicacion");
+    });
+
+    it("con 3 videos contratados y ninguno subido no cobra", async () => {
+      renderDialog({ ...DRAFT, planExtras: { video20: 3 } } as MyListing);
+      await publicar();
+
+      expect(finalizeListingPublication).not.toHaveBeenCalled();
+      expect(toast).toHaveBeenCalledWith(
+        expect.objectContaining({ title: expect.stringMatching(/falta subir/i) }),
+      );
+    });
+
+    it("con los videos ya subidos sí publica", async () => {
+      contarAdjuntosDelAviso.mockResolvedValue({ imagenesExtra: 0, tienePdf: false, videos: 3 });
+      renderDialog({ ...DRAFT, planExtras: { video20: 3 } } as MyListing);
+      await screen.findByText("Casa bonita");
+      fireEvent.click(await screen.findByRole("button", { name: /^publicar/i }));
+
+      // Llega al paso siguiente (identidad), que es lo que prueba que no se
+      // quedó parado en la comprobación.
+      expect(await screen.findByText(/verifica tu identidad/i)).toBeInTheDocument();
+    });
   });
 });

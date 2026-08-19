@@ -38,6 +38,8 @@ import { fetchMyIdentity } from "@/lib/identity";
 import { getCreditBalance } from "@/lib/credits";
 import { fetchActivePromotions, bestPromoForCategory, applyDiscount, type Promotion } from "@/lib/promotions";
 import { fetchPricingSettings } from "@/lib/pricingRemote";
+import { adicionalesQueFaltan, resumenDeFaltantes } from "@/lib/adicionalesCompletos";
+import { enfocarCampo } from "@/lib/validacion";
 import { BuyCreditsModal, type PublishTarget } from "@/components/BuyCreditsModal";
 import { LocationPicker } from "@/components/LocationPicker";
 import { supabase } from "@/lib/supabase";
@@ -632,6 +634,24 @@ const AdvertiserPublish = () => {
       toast({ title: "Falta un dato", description: fallo.mensaje, variant: "destructive" });
       return;
     }
+    // Los adicionales se pagan por contratarlos, no por usarlos: publicar con
+    // tres huecos de video vacíos son tres videos cobrados. Se avisa y se para
+    // ANTES de cobrar nada.
+    const faltan = adicionalesQueFaltan(extras, {
+      imagenesExtra: extraPhotos.slice(0, extraImageCount).filter(Boolean).length,
+      tienePdf: !!pdfFile,
+      videos: videos.length,
+    });
+    if (faltan.length > 0) {
+      toast({
+        title: "Te falta subir lo que contrataste",
+        description: resumenDeFaltantes(faltan),
+        variant: "destructive",
+      });
+      enfocarCampo("adicionales");
+      return;
+    }
+
     if (!session) {
       persistDraftForLogin(true);
       toast({ title: "Inicia sesión para publicar", description: "Te llevamos al login y retomamos tu publicación." });
@@ -1257,7 +1277,7 @@ const AdvertiserPublish = () => {
                 </div>
 
                 {/* Adicionales opcionales */}
-                <div>
+                <div data-campo="adicionales">
                   <Label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Adicionales opcionales</Label>
                   {/* El precio del adicional es POR DÍA, así que hay que decirlo
                       donde se decide y no dejar que se descubra en el total. */}

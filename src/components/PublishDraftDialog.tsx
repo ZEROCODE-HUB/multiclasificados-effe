@@ -23,7 +23,9 @@ import {
 } from "@/lib/pricing";
 import { fetchPricingSettings } from "@/lib/pricingRemote";
 import { fetchActivePromotions, bestPromoForCategory, applyDiscount, type Promotion } from "@/lib/promotions";
-import type { MyListing } from "@/lib/listings";
+import { contarAdjuntosDelAviso, type MyListing } from "@/lib/listings";
+import { adicionalesQueFaltan, resumenDeFaltantes } from "@/lib/adicionalesCompletos";
+import { faltaEnElAviso } from "@/lib/avisoCompleto";
 
 const DURATIONS: DurationDays[] = [3, 7, 15, 30, 60, 90];
 
@@ -43,9 +45,16 @@ interface Props {
    * y su enlace. "publicar" es el de siempre (borrador o vencido).
    */
   modo?: "publicar" | "renovar";
+  /**
+   * Llevar al usuario a completar el aviso cuando le falta un dato.
+   *
+   * Sin esto solo se le podría decir "falta la descripción" y dejarlo ahí, que
+   * es exactamente el callejón sin salida que teníamos.
+   */
+  onEditar?: (draft: MyListing, campo: string) => void;
 }
 
-export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPublished, modo = "publicar" }: Props) {
+export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPublished, modo = "publicar", onEditar }: Props) {
   const open = draft !== null;
   // EFFE-036: el mismo diálogo publica un borrador o REPUBLICA un aviso vencido.
   const isRepublish = draft?.status === "expired";
@@ -63,13 +72,20 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
 
   // Al abrir con un borrador: precio vigente, promociones, saldo y el plan que
   // el usuario había elegido antes de guardar.
+  // Lo que el aviso tiene subido de verdad. Se pide al abrir para poder avisar
+  // ANTES de cobrar: un borrador puede llevar tres videos contratados y ninguno
+  // subido, y publicarlo así son tres videos pagados por nada.
+  const [adjuntos, setAdjuntos] = useState<{ imagenesExtra: number; tienePdf: boolean; videos: number } | null>(null);
+
   useEffect(() => {
     if (!draft) return;
     setDuration(asDuration(draft.planDurationDays));
     setIdentity(null);
+    setAdjuntos(null);
     fetchPricingSettings().then(setSettings);
     fetchActivePromotions().then(setPromos);
     getCreditBalance().then(setBalance);
+    contarAdjuntosDelAviso(draft.id).then(setAdjuntos).catch(() => setAdjuntos(null));
   }, [draft]);
 
   const extras = useMemo(() => draft?.planExtras ?? {}, [draft]);
@@ -173,6 +189,33 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
   };
 
   const onPublishClick = () => {
+    // Renovar no toca el contenido del aviso: ya está publicado y revisado.
+    if (!esRenovar && draft) {
+      // 1. ¿Está el aviso completo? Guardar un borrador solo exige título y
+      //    categoría —así debe ser—, pero publicarlo exige lo mismo que el
+      //    formulario, o saldría al público un aviso sin descripción.
+      const falta = faltaEnElAviso(draft);
+      if (falta) {
+        toast({ title: "Al aviso le falta un dato", description: falta.mensaje, variant: "destructive" });
+        onEditar?.(draft, falta.campo);
+        onClose();
+        return;
+      }
+
+      // 2. ¿Subió lo que contrató? Los adicionales se cobran por contratarlos.
+      if (adjuntos) {
+        const faltan = adicionalesQueFaltan(draft.planExtras, adjuntos);
+        if (faltan.length > 0) {
+          toast({
+            title: "Te falta subir lo que contrataste",
+            description: resumenDeFaltantes(faltan),
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+    }
+
     if (!enoughCredits) { setBuyOpen(true); return; }
     continuarPublicacion();
   };
