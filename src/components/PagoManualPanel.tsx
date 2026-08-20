@@ -112,11 +112,15 @@ export function PagoManualPanel({
                   <div className="flex flex-col items-center gap-1.5">
                     {/* Fondo blanco siempre: un QR con transparencia sobre el
                         tema oscuro no lo lee ninguna cámara. */}
+                    {/* Sin loading="lazy" a propósito, y esto se comprobó en
+                        producción: dentro del diálogo la imagen se quedaba sin
+                        cargar aunque estuviera a la vista, y el comprador veía
+                        un hueco donde va el QR. Son 26 KB y es lo principal de
+                        esta pantalla: no hay nada que diferir. */}
                     <img
                       src={c.qr}
                       alt={`Código QR para pagar con ${NOMBRE_MEDIO[medio]}`}
                       className="w-44 h-44 object-contain border bg-white p-2"
-                      loading="lazy"
                     />
                     <p className="text-xs text-muted-foreground">
                       {c.titular ? `A nombre de ${c.titular}` : "Escanéalo desde tu app"}

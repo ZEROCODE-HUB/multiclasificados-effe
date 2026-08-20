@@ -126,6 +126,14 @@ describe("pantalla de pago con Yape/Plin", () => {
       expect(screen.queryByRole("button", { name: /copiar/i })).not.toBeInTheDocument();
     });
 
+    it("el QR no se difiere: en el diálogo se quedaba sin cargar", () => {
+      // Con loading="lazy" el navegador no llegaba a pedir la imagen aunque
+      // estuviera a la vista, y quedaba un hueco donde va el QR. Comprobado en
+      // producción; jsdom no reproduce el atributo, así que se vigila aquí.
+      render(<PagoManualPanel {...conQr} />);
+      expect(screen.getByRole("img", { name: /código qr/i })).not.toHaveAttribute("loading", "lazy");
+    });
+
     it("Plin se anuncia como QR/Plin", () => {
       render(<PagoManualPanel {...conQr} />);
       expect(screen.getByText(/paga con qr\/plin/i)).toBeInTheDocument();
