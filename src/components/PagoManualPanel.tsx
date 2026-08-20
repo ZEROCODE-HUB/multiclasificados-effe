@@ -26,13 +26,15 @@ export interface PagoManualPanelProps {
   nombre?: string;
   /** true cuando el pago publica un aviso: cambia lo que se le promete. */
   publicaAviso?: boolean;
+  /** true si el aviso ya está fuera y lo que compra son días más. */
+  esRenovacion?: boolean;
   onListo: () => void;
   onVolver?: () => void;
 }
 
 export function PagoManualPanel({
   orderId, medio, monto, cuentas, whatsapp, mensaje,
-  nombre, publicaAviso, onListo, onVolver,
+  nombre, publicaAviso, esRenovacion, onListo, onVolver,
 }: PagoManualPanelProps) {
   const [enviando, setEnviando] = useState(false);
   const [copiado, setCopiado] = useState<string | null>(null);
@@ -81,9 +83,11 @@ export function PagoManualPanel({
 
     toast({
       title: "Avisado, gracias",
-      description: publicaAviso
-        ? "En cuanto confirmemos tu pago, tu aviso se publica solo."
-        : "En cuanto confirmemos tu pago, el saldo entra en tu cuenta.",
+      description: esRenovacion
+        ? "En cuanto confirmemos tu pago, tu aviso suma sus días nuevos."
+        : publicaAviso
+          ? "En cuanto confirmemos tu pago, tu aviso se publica solo."
+          : "En cuanto confirmemos tu pago, el saldo entra en tu cuenta.",
     });
     onListo();
   };
@@ -174,9 +178,11 @@ export function PagoManualPanel({
           <div className="flex-1">
             <p className="text-sm font-semibold leading-tight">Listo, nosotros nos encargamos</p>
             <p className="text-xs text-muted-foreground mt-1">
-              {publicaAviso
-                ? "Revisamos tu pago y tu aviso se publica solo. Te avisamos cuando esté."
-                : "Revisamos tu pago y el saldo entra en tu cuenta. Te avisamos cuando esté."}
+              {esRenovacion
+                ? "Revisamos tu pago y tu aviso suma sus días. Te avisamos cuando esté."
+                : publicaAviso
+                  ? "Revisamos tu pago y tu aviso se publica solo. Te avisamos cuando esté."
+                  : "Revisamos tu pago y el saldo entra en tu cuenta. Te avisamos cuando esté."}
             </p>
           </div>
         </li>

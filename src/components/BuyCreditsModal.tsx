@@ -100,6 +100,9 @@ export function BuyCreditsModal({
   // (para varios avisos, por ejemplo) vuelve al configurador de siempre.
   const [soloSaldo, setSoloSaldo] = useState(false);
   const modoPublicar = !!publishFor && !soloSaldo;
+  // Renovar NO publica: el aviso ya está fuera y lo que compra son días. Decirle
+  // "se publica" a quien renueva le hace dudar de si su aviso se cayó.
+  const esRenovar = modoPublicar && publishFor?.purpose === "renew";
 
   // Configurador de la compra
   const [quantity, setQuantity] = useState(1);
@@ -348,9 +351,11 @@ export function BuyCreditsModal({
     } else {
       toast({
         title: "Seguimos confirmando tu pago",
-        description: modoPublicar
-          ? "Si ya pagaste, tu aviso se publicará solo en unos minutos."
-          : "Si ya pagaste, tu saldo se acreditará en unos minutos.",
+        description: esRenovar
+          ? "Si ya pagaste, tu aviso sumará sus días en unos minutos."
+          : modoPublicar
+            ? "Si ya pagaste, tu aviso se publicará solo en unos minutos."
+            : "Si ya pagaste, tu saldo se acreditará en unos minutos.",
       });
       onClose();
     }
@@ -488,14 +493,16 @@ export function BuyCreditsModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Wallet size={18} className="text-secondary" />
-            {modoPublicar ? "Pagar y publicar" : "Comprar saldo"}
+            {esRenovar ? "Pagar y renovar" : modoPublicar ? "Pagar y publicar" : "Comprar saldo"}
           </DialogTitle>
           <DialogDescription>
             {step === "manual"
               ? `Transfiere por ${manual ? NOMBRE_MEDIO[manual.provider] : "Yape"} y mándanos el voucher: nosotros hacemos el resto.`
               : step === "paying"
               ? "Ingresa los datos de tu tarjeta en el formulario seguro de Izipay."
-              : modoPublicar
+              : esRenovar
+                ? "Pagas solo lo que falta y, en cuanto se apruebe, tu aviso suma los días nuevos."
+                : modoPublicar
                 ? "Pagas solo lo que falta para este aviso y, en cuanto se apruebe, se publica solo."
                 : "Arma tu compra: elige cantidad de avisos, duración y adicionales. Pagas justo lo que ves, en soles."}
           </DialogDescription>
@@ -512,6 +519,7 @@ export function BuyCreditsModal({
             mensaje={manual.mensaje}
             nombre={verifiedName}
             publicaAviso={modoPublicar}
+            esRenovacion={esRenovar}
             onListo={() => {
               if (onPagoEnEspera) onPagoEnEspera({ orderId: manual.orderId, medio: manual.provider });
               else onClose();
@@ -569,7 +577,9 @@ export function BuyCreditsModal({
               <div className="border p-3 bg-secondary/5 space-y-1.5">
                 <p className="font-bold text-sm leading-snug line-clamp-2">{publishFor.title}</p>
                 <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Publicación por {publishFor.durationDays} días</span>
+                  <span className="text-muted-foreground">
+                    {esRenovar ? "Renovación" : "Publicación"} por {publishFor.durationDays} días
+                  </span>
                   <span className="font-semibold">{formatCredits(publishFor.costCredits)}</span>
                 </div>
                 {currentBalance > 0 && (
@@ -589,7 +599,9 @@ export function BuyCreditsModal({
                 )}
                 <p className="flex items-start gap-1.5 text-[11px] text-success">
                   <CheckCircle2 size={13} className="mt-px shrink-0" />
-                  En cuanto se apruebe el pago, tu aviso se publica automáticamente.
+                  {esRenovar
+                    ? `En cuanto se apruebe el pago, tu aviso suma ${publishFor.durationDays} días a los que le quedan.`
+                    : "En cuanto se apruebe el pago, tu aviso se publica automáticamente."}
                 </p>
               </div>
             )}
@@ -728,7 +740,9 @@ export function BuyCreditsModal({
                 {medioPago !== "tarjeta" && (
                   <p className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
                     <AlertCircle size={13} className="mt-0.5 shrink-0" />
-                    {modoPublicar
+                    {esRenovar
+                      ? "Transfieres, nos mandas el voucher por WhatsApp y tu aviso suma sus días en cuanto confirmemos el pago."
+                      : modoPublicar
                       ? "Transfieres, nos mandas el voucher por WhatsApp y tu aviso se publica solo en cuanto confirmemos el pago."
                       : "Transfieres, nos mandas el voucher por WhatsApp y el saldo entra en cuanto confirmemos el pago."}
                   </p>
@@ -902,7 +916,7 @@ export function BuyCreditsModal({
                 {buying
                   ? <><Loader2 size={14} className="animate-spin" /> {confirming ? "Confirmando…" : "Procesando…"}</>
                   : medioPago === "tarjeta"
-                    ? <><CreditCard size={14} /> {modoPublicar ? "Pagar y publicar" : "Continuar al pago"} · {formatSoles(solesTotal)}</>
+                    ? <><CreditCard size={14} /> {esRenovar ? "Pagar y renovar" : modoPublicar ? "Pagar y publicar" : "Continuar al pago"} · {formatSoles(solesTotal)}</>
                     : <><Smartphone size={14} /> Pagar con {NOMBRE_MEDIO[medioPago]} · {formatSoles(solesTotal)}</>}
               </Button>
             </DialogFooter>

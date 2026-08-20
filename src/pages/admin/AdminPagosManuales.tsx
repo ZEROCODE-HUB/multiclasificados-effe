@@ -84,6 +84,7 @@ function AprobarDialog({ pago, onHecho }: { pago: PagoManual; onHecho: () => voi
   const valido = Number.isFinite(montoNum) && montoNum > 0;
   const corregido = valido && Math.abs(montoNum - pago.total) > 0.005;
   const publica = pago.proposito === "publish" || pago.proposito === "renew";
+  const renueva = pago.proposito === "renew";
 
   const confirmar = async () => {
     setEnviando(true);
@@ -167,7 +168,9 @@ function AprobarDialog({ pago, onHecho }: { pago: PagoManual; onHecho: () => voi
 
               <p className="text-xs text-muted-foreground">
                 Al aprobar se acredita el saldo y se emite su comprobante
-                {publica ? ", y el aviso se publica automáticamente." : "."}
+                {renueva
+                  ? ", y el aviso suma sus días automáticamente."
+                  : publica ? ", y el aviso se publica automáticamente." : "."}
               </p>
             </div>
           </AlertDialogDescription>

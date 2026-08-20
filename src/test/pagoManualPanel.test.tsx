@@ -97,6 +97,14 @@ describe("pantalla de pago con Yape/Plin", () => {
     expect(onListo).not.toHaveBeenCalled();
   });
 
+  it("al renovar no dice que se publica: el aviso ya está fuera", () => {
+    // Decirle "tu aviso se publica solo" a quien renueva le hace pensar que su
+    // aviso se cayó. Lo que compra son días.
+    render(<PagoManualPanel {...props} publicaAviso esRenovacion />);
+    expect(screen.getByText(/suma sus días/i)).toBeInTheDocument();
+    expect(screen.queryByText(/se publica solo/i)).not.toBeInTheDocument();
+  });
+
   describe("cuando la cuenta tiene QR", () => {
     const conQr = {
       ...props,
