@@ -105,7 +105,10 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
   // Activa el borrador. `finalizeListingPublication` NO crea el aviso ni emite
   // comprobante: activa el aviso y descuenta el saldo, las dos cosas dentro de
   // la misma transacción de la base de datos (migración 0091).
-  const publish = async (confirmed: ConfirmedIdentity) => {
+  // `confirmed` es null al renovar: no se emite comprobante, así que no hay
+  // identidad que confirmar. Antes se pasaba un objeto de mentira con el DNI
+  // vacío, que además no cuadraba con el tipo.
+  const publish = async (confirmed: ConfirmedIdentity | null) => {
     if (!draft || publishing) return;
     setPublishing(true);
     try {
@@ -120,6 +123,10 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
         onClose();
         return;
       }
+      // Publicar SÍ emite comprobante: sin identidad no se sigue. No debería
+      // pasar (solo se llama con null al renovar), pero antes que publicar una
+      // boleta a nombre de nadie, no publicar.
+      if (!confirmed) return;
       const { published } = await finalizeListingPublication(draft.id, {
         quantity, duration, extras, total: totalSoles,
         receiptType: confirmed.docType === "ruc" ? "factura" : "boleta",
@@ -183,7 +190,7 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
   const continuarPublicacion = () => {
     // Renovar no pide identidad: no emite comprobante ni crea nada nuevo, solo
     // le suma días a un aviso que ya es de quien está en sesión.
-    if (esRenovar) { publish(identity ?? { name: fallbackName, docType: "dni", docNumber: "" }); return; }
+    if (esRenovar) { publish(null); return; }
     if (identity) { publish(identity); return; }
     setVerifyOpen(true);
   };

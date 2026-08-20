@@ -52,7 +52,8 @@ vi.mock("@/hooks/use-toast", () => ({ toast: vi.fn() }));
 
 import MessagesPage from "@/pages/shared/MessagesPage";
 
-const montar = () => render(<MemoryRouter><MessagesPage /></MemoryRouter>);
+// `role` es obligatorio en la página real; montarla sin él no era el caso de uso.
+const montar = () => render(<MemoryRouter><MessagesPage role="anunciante" /></MemoryRouter>);
 
 describe("el correo del anunciante en un aviso confidencial", () => {
   it("se ve entero", async () => {

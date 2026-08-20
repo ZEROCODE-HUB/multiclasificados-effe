@@ -12,7 +12,7 @@ let maxEnVuelo = 0;
 const getUser = vi.fn().mockResolvedValue({ data: { user: { id: "u1" } } });
 const getSession = vi.fn().mockResolvedValue({ data: { session: { user: { id: "u1" } } } });
 
-const upload = vi.fn(async (path: string) => {
+const upload = vi.fn(async (path: string, _file?: unknown, _opts?: unknown) => {
   enVuelo++;
   maxEnVuelo = Math.max(maxEnVuelo, enVuelo);
   await new Promise((r) => setTimeout(r, 10));

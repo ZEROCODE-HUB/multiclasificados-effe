@@ -16,7 +16,7 @@ const S: PricingSettings = {
   descPorAviso: 0,
   descCantidad: [0, 0, 0.1, 0.5],
   saltos: { 15: 0, 30: 0, 60: 0, 90: 0 },
-  extras: { img100: 0, img500: 0, pdf100: 0, pdf500: 0, urgente: 0, destacado: 0, confidencial: 0 },
+  extras: { img100: 0, img500: 0, pdf100: 0, pdf500: 0, urgente: 0, destacado: 0, confidencial: 0, video20: 0 },
 };
 
 describe("Req 3 — descuento por cantidad REAL (por nivel, no promediado)", () => {

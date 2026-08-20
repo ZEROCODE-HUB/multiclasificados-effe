@@ -275,7 +275,9 @@ export async function renovarAviso(listingId: string, duration: number): Promise
 
 /** Lo que hace falta para volver a llenar el formulario con un aviso existente. */
 export interface AvisoCopiado {
-  form: ListingForm;
+  /** `country` va garantizado, a diferencia de `ListingForm`: la copia siempre
+   *  sabe de qué país es, sea el del original o Perú. */
+  form: ListingForm & { country: string };
   lat: number | null;
   lng: number | null;
   duration: number;
@@ -313,12 +315,12 @@ export async function cargarAvisoParaCopiar(listingId: string): Promise<AvisoCop
   const { data, error } = await supabase
     .from("listings")
     .select("title, description, price, currency, condition, category_id, department, location, lat, lng, " +
-            "plan_duration_days, plan_quantity, plan_extras, document_url, listing_images(url, sort_order)")
+            "country, plan_duration_days, plan_quantity, plan_extras, document_url, listing_images(url, sort_order)")
     .eq("id", listingId)
     .maybeSingle();
   if (error || !data) throw new Error("No se pudo cargar el aviso que quieres copiar.");
 
-  const r = data as Record<string, unknown>;
+  const r = data as unknown as Record<string, unknown>;
   const imagenes = ((r.listing_images ?? []) as Array<{ url?: string; sort_order?: number }>)
     .filter((i) => !!i.url)
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
@@ -342,6 +344,9 @@ export async function cargarAvisoParaCopiar(listingId: string): Promise<AvisoCop
       department: String(r.department ?? ""),
       location: String(r.location ?? ""),
       condition: CONDITION_INVERSA[String(r.condition ?? "na")] ?? "na",
+      // Sin esto la copia de un aviso de fuera del Perú salía con el país por
+      // defecto: mismo texto de ubicación, pero archivado en otro sitio.
+      country: String(r.country ?? "PE"),
     },
     lat: r.lat != null ? Number(r.lat) : null,
     lng: r.lng != null ? Number(r.lng) : null,

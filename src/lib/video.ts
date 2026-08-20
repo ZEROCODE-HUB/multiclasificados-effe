@@ -43,8 +43,13 @@ export function leerDuracionDeVideo(file: File): Promise<number> {
   });
 }
 
+// El `motivo?: undefined` de la rama buena no es adorno: este proyecto compila
+// SIN strictNullChecks, y en ese modo TypeScript no estrecha una unión por un
+// discriminante booleano. Sin esa línea, `if (!r.ok) ... r.motivo` no compila
+// aunque en ejecución sea correcto. Declararlo mantiene el tipo honesto: en la
+// rama buena no hay motivo.
 export type ValidacionVideo =
-  | { ok: true; duracion: number }
+  | { ok: true; duracion: number; motivo?: undefined }
   | { ok: false; motivo: string };
 
 /** Comprueba tipo, tamaño y duración. El motivo es lo que se le enseña al usuario. */

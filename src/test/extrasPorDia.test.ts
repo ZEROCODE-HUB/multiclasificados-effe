@@ -21,7 +21,7 @@ const TARIFA: PricingSettings = {
   descPorAviso: 0,
   descCantidad: [],
   saltos: { 15: 0, 30: 0, 60: 0, 90: 0 },
-  extras: { img100: 0, img500: 2, pdf100: 0, pdf500: 3, urgente: 4, destacado: 5, confidencial: 0 },
+  extras: { img100: 0, img500: 2, pdf100: 0, pdf500: 3, urgente: 4, destacado: 5, confidencial: 0, video20: 6 },
 };
 
 describe("el adicional se multiplica por los días", () => {

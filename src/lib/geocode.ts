@@ -377,7 +377,7 @@ function contextoDe(comp: Componente[] = [], titulo: string): string | undefined
  * el departamento es obligatorio y no puede depender de un servicio ajeno.
  */
 export async function ubicacionDeCoordenadas(lat: number, lng: number): Promise<UbicacionDelPunto> {
-  const vacio: UbicacionDelPunto = { region: null, referencia: null };
+  const vacio: UbicacionDelPunto = { region: null, referencia: null, pais: null };
   if (!hayGoogleMaps()) return vacio;
 
   const url = new URL(GEOCODING);

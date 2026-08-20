@@ -107,12 +107,12 @@ describe("qué hay en el punto del mapa", () => {
 
   it("sin resultados devuelve vacío, no revienta", async () => {
     vi.stubGlobal("fetch", responder({ status: "ZERO_RESULTS", results: [] }));
-    expect(await ubicacionDeCoordenadas(0, 0)).toEqual({ region: null, referencia: null });
+    expect(await ubicacionDeCoordenadas(0, 0)).toEqual({ region: null, referencia: null, pais: null });
   });
 
   it("si Google se cae devuelve vacío, no revienta", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("sin red")));
-    expect(await ubicacionDeCoordenadas(-12, -77)).toEqual({ region: null, referencia: null });
+    expect(await ubicacionDeCoordenadas(-12, -77)).toEqual({ region: null, referencia: null, pais: null });
   });
 
   it("pide una sola consulta, no una por dato", async () => {
