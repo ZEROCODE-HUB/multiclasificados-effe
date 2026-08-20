@@ -77,6 +77,18 @@ export function enlaceWhatsApp(mensaje: string, telefono?: string): string {
  * un gesto del usuario y la bloquean.
  */
 export function abrirWhatsAppAparte(mensaje: string, telefono?: string): boolean {
+  // En el APK y en el iPhone, `window.open` no vale: el WebView lo ignora o
+  // devuelve null, y el usuario se quedaba con el aviso de "ventana bloqueada"
+  // sin forma de mandarnos el voucher. El camino nativo ya existe y ya está
+  // probado en iOS (MOB-07): el esquema `whatsapp://` cambia de APP, así que la
+  // pantalla sigue viva detrás — que es justo lo que hace falta aquí— y el
+  // mensaje no se pierde por el camino. No se espera al await a propósito: la
+  // firma tiene que seguir siendo síncrona para no perder el gesto en web.
+  if (Capacitor.isNativePlatform()) {
+    void abrirWhatsApp(mensaje, telefono);
+    return true;
+  }
+
   const url = enlaceWhatsApp(mensaje, telefono);
   try {
     const ventana = window.open(url, "_blank", "noopener,noreferrer");

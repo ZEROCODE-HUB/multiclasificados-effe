@@ -216,6 +216,19 @@ describe("share — hoja nativa del sistema (Web Share API)", () => {
       expect(abrirWhatsAppAparte("Hola", "51999888777")).toBe(false);
     });
 
+    it("en el APK usa el esquema nativo, no window.open", async () => {
+      // En el WebView `window.open` no abre nada y devuelve null: el comprador
+      // se quedaba con el aviso de "ventana bloqueada" y sin forma de mandar su
+      // voucher. El esquema whatsapp:// cambia de APP, así que la pantalla
+      // sigue viva detrás, que es lo que hace falta aquí.
+      isNative.mockReturnValue(true);
+      const { abrirWhatsAppAparte } = await loadShare();
+
+      expect(abrirWhatsAppAparte("Hola", "51999888777")).toBe(true);
+      expect(openSpy).not.toHaveBeenCalled();
+      expect(String(assignSpy.mock.calls[0][0])).toContain("whatsapp://send?phone=51999888777");
+    });
+
     it("el número viaja sin signos ni espacios", async () => {
       const { enlaceWhatsApp } = await loadShare();
       expect(enlaceWhatsApp("Hola", "+51 999 888-777")).toContain("wa.me/51999888777");
