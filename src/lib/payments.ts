@@ -8,6 +8,7 @@
 // acredita ni publica: solo hace polling del estado de su propia orden.
 import { supabase } from "@/lib/supabase";
 import { getCreditBalance } from "@/lib/credits";
+import { normalizarCuentas, type CuentaManual } from "@/lib/pagoManual";
 
 export interface PurchaseReceipt {
   receiptType: "boleta" | "factura";
@@ -54,7 +55,7 @@ export interface PagoManualCreado {
   provider: "yape" | "plin";
   amount: number;
   listingCost: number | null;
-  cuentas: { metodo: "yape" | "plin"; numero: string; banco: string; titular: string }[];
+  cuentas: CuentaManual[];
   whatsapp: string;
   mensaje: string;
 }
@@ -101,7 +102,7 @@ async function invokeCreatePayment(body: unknown): Promise<CreatePaymentResult |
       listingCost: data.listingCost === null || data.listingCost === undefined
         ? null
         : Number(data.listingCost),
-      cuentas: Array.isArray(data.cuentas) ? data.cuentas : [],
+      cuentas: normalizarCuentas(data.cuentas),
       whatsapp: String(data.whatsapp ?? ""),
       mensaje: String(data.mensaje ?? ""),
     };

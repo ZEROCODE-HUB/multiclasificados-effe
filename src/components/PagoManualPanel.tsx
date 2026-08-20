@@ -53,6 +53,10 @@ export function PagoManualPanel({
 
   const datosVoucher = { orderId, medio, monto, whatsapp, plantilla: mensaje, nombre };
 
+  // Con QR el primer paso deja de ser "teclea este número", que es de donde
+  // salen los pagos a la cuenta equivocada.
+  const hayQr = cuentas.some((c) => !!c.qr);
+
   const confirmar = async () => {
     // WhatsApp se abre PRIMERO y en otra pestaña, dentro del propio clic: esta
     // pantalla tiene que seguir viva para llevar al usuario a sus avisos. Antes
@@ -98,20 +102,48 @@ export function PagoManualPanel({
           <span className="shrink-0 w-6 h-6 rounded-full bg-secondary text-secondary-foreground text-xs font-bold grid place-items-center">1</span>
           <div className="flex-1 space-y-2">
             <p className="text-sm font-semibold leading-tight">
-              Transfiere {formatSoles(monto)} desde tu app de {NOMBRE_MEDIO[medio]}
+              {hayQr
+                ? `Escanea el QR con tu app y transfiere ${formatSoles(monto)}`
+                : `Transfiere ${formatSoles(monto)} desde tu app de ${NOMBRE_MEDIO[medio]}`}
             </p>
-            {cuentas.map((c) => (
-              <div key={`${c.numero}-${c.titular}`} className="border p-3 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-mono font-bold text-base tracking-wide">{c.numero}</p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {c.titular}{c.banco ? ` · ${c.banco}` : ""}
-                  </p>
-                </div>
-                <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={() => copiar(c.numero)}>
-                  {copiado === c.numero ? <Check size={14} className="text-success" /> : <Copy size={14} />}
-                  {copiado === c.numero ? "Copiado" : "Copiar"}
-                </Button>
+            {cuentas.map((c, i) => (
+              <div key={`${c.numero}-${c.qr}-${i}`} className="border p-3 space-y-3">
+                {c.qr && (
+                  <div className="flex flex-col items-center gap-1.5">
+                    {/* Fondo blanco siempre: un QR con transparencia sobre el
+                        tema oscuro no lo lee ninguna cámara. */}
+                    <img
+                      src={c.qr}
+                      alt={`Código QR para pagar con ${NOMBRE_MEDIO[medio]}`}
+                      className="w-44 h-44 object-contain border bg-white p-2"
+                      loading="lazy"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {c.titular ? `A nombre de ${c.titular}` : "Escanéalo desde tu app"}
+                    </p>
+                  </div>
+                )}
+                {c.numero && (
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      {c.qr && (
+                        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                          O paga a este número
+                        </p>
+                      )}
+                      <p className="font-mono font-bold text-base tracking-wide">{c.numero}</p>
+                      {!c.qr && (
+                        <p className="text-xs text-muted-foreground truncate">
+                          {c.titular}{c.banco ? ` · ${c.banco}` : ""}
+                        </p>
+                      )}
+                    </div>
+                    <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={() => copiar(c.numero)}>
+                      {copiado === c.numero ? <Check size={14} className="text-success" /> : <Copy size={14} />}
+                      {copiado === c.numero ? "Copiado" : "Copiar"}
+                    </Button>
+                  </div>
+                )}
               </div>
             ))}
           </div>

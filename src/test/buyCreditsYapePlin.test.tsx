@@ -86,7 +86,7 @@ describe("elegir Yape o Plin al comprar saldo", () => {
   it("se ofrecen los dos medios cuando están configurados", async () => {
     abrir();
     expect(await screen.findByText("Yape")).toBeInTheDocument();
-    expect(screen.getByText("Plin")).toBeInTheDocument();
+    expect(screen.getByText("QR/Plin")).toBeInTheDocument();
     expect(screen.getByText("Tarjeta")).toBeInTheDocument();
   });
 

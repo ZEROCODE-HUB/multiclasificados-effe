@@ -14,9 +14,13 @@ export type MedioManual = "yape" | "plin";
 
 export const MEDIOS_MANUALES: MedioManual[] = ["yape", "plin"];
 
+// El valor guardado sigue siendo "plin" (está en `orders.payment_provider` y en
+// el CHECK de la 0117): lo que cambia es la etiqueta. Se llama "QR/Plin" porque
+// el mismo QR lo leen varias apps de banco, no solo Plin, y llamarlo solo
+// "Plin" hacía pensar que hacía falta esa app.
 export const NOMBRE_MEDIO: Record<MedioManual, string> = {
   yape: "Yape",
-  plin: "Plin",
+  plin: "QR/Plin",
 };
 
 /** Una cuenta a la que transferir, tal como la escribe el administrador. */
@@ -25,6 +29,12 @@ export interface CuentaManual {
   numero: string;
   banco: string;
   titular: string;
+  /**
+   * URL pública del QR de cobro (bucket `site-assets`). Vacío = solo se paga
+   * al número. Con QR el comprador no teclea nada, que es de donde salen los
+   * pagos a un número equivocado.
+   */
+  qr: string;
 }
 
 export interface ConfigYapePlin {
@@ -41,24 +51,34 @@ export const CONFIG_VACIA: ConfigYapePlin = {
   mensaje: "",
 };
 
+/**
+ * Normaliza la lista de cuentas venga de donde venga: del ajuste que escribe
+ * una persona a mano o de la respuesta de `create-payment`. Una configuración
+ * anterior al QR no trae el campo, y sin esto llegaría `undefined` a la vista.
+ */
+export function normalizarCuentas(raw: unknown): CuentaManual[] {
+  return (Array.isArray(raw) ? raw : [])
+    .map((c) => {
+      const x = (c ?? {}) as Record<string, unknown>;
+      const metodo = String(x.metodo ?? "").toLowerCase();
+      return {
+        metodo: (metodo === "plin" ? "plin" : "yape") as MedioManual,
+        numero: String(x.numero ?? "").trim(),
+        banco: String(x.banco ?? "").trim(),
+        titular: String(x.titular ?? "").trim(),
+        qr: String(x.qr ?? "").trim(),
+      };
+    })
+    // Sin número Y sin QR no hay a dónde pagar; con cualquiera de los dos sí.
+    .filter((c) => c.numero !== "" || c.qr !== "");
+}
+
 /** Normaliza lo que venga de la base: el ajuste lo escribe una persona a mano. */
 export function normalizarConfig(raw: unknown): ConfigYapePlin {
   const o = (raw ?? {}) as Record<string, unknown>;
-  const cuentas = Array.isArray(o.cuentas) ? o.cuentas : [];
   return {
     activo: o.activo === true,
-    cuentas: cuentas
-      .map((c) => {
-        const x = (c ?? {}) as Record<string, unknown>;
-        const metodo = String(x.metodo ?? "").toLowerCase();
-        return {
-          metodo: (metodo === "plin" ? "plin" : "yape") as MedioManual,
-          numero: String(x.numero ?? "").trim(),
-          banco: String(x.banco ?? "").trim(),
-          titular: String(x.titular ?? "").trim(),
-        };
-      })
-      .filter((c) => c.numero !== ""),
+    cuentas: normalizarCuentas(o.cuentas),
     whatsapp: String(o.whatsapp ?? "").trim(),
     mensaje: String(o.mensaje ?? "").trim(),
   };

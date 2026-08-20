@@ -25,12 +25,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Search, Check, X, Loader2, Plus, Trash2, Save, Smartphone, ExternalLink, AlertCircle,
+  QrCode, Upload,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
 import { formatSoles } from "@/lib/pricing";
 import { mensajeDeError } from "@/lib/errores";
-import { fetchSettings } from "@/lib/admin";
+import { fetchSettings, subirQrDePago, borrarQrDePago, motivoQrInvalido, QR_PAGO_TIPOS } from "@/lib/admin";
 import {
   fetchPagosManuales, aprobarPagoManual, rechazarPagoManual,
   guardarConfigYapePlin, normalizarConfig, codigoDePago,
@@ -301,7 +302,39 @@ const AdminPagosManuales = ({ role }: { role: AdminRole }) => {
   }, [puedeConfigurar]);
 
   const cuentaVacia = (metodo: MedioManual): CuentaManual =>
-    ({ metodo, numero: "", banco: "", titular: "" });
+    ({ metodo, numero: "", banco: "", titular: "", qr: "" });
+
+  // Qué cuenta está subiendo su QR (índice), para no bloquear las demás.
+  const [subiendoQr, setSubiendoQr] = useState<number | null>(null);
+
+  const elegirQr = async (i: number, file: File | undefined) => {
+    if (!file) return;
+    const motivo = motivoQrInvalido(file);
+    if (motivo) {
+      toast({ title: "Esa imagen no sirve", description: motivo, variant: "destructive" });
+      return;
+    }
+    setSubiendoQr(i);
+    try {
+      const url = await subirQrDePago(file, cfg.cuentas[i]?.qr);
+      actualizarCuenta(i, "qr", url);
+      toast({
+        title: "QR subido",
+        description: "Recuerda guardar la configuración para que los compradores lo vean.",
+      });
+    } catch (e) {
+      toast({ title: "No se pudo subir el QR", description: mensajeDeError(e, "Error"), variant: "destructive" });
+    } finally {
+      setSubiendoQr(null);
+    }
+  };
+
+  const quitarQr = async (i: number) => {
+    const url = cfg.cuentas[i]?.qr;
+    actualizarCuenta(i, "qr", "");
+    // Se borra del bucket sin esperar: si falla, queda un huérfano de 3 KB.
+    await borrarQrDePago(url);
+  };
 
   const actualizarCuenta = (i: number, campo: keyof CuentaManual, valor: string) =>
     setCfg((c) => ({
@@ -325,7 +358,7 @@ const AdminPagosManuales = ({ role }: { role: AdminRole }) => {
   // sin WhatsApp lo ofrece al comprador y lo deja sin a dónde pagar.
   const avisoConfig = useMemo(() => {
     if (!cfg.activo) return null;
-    if (!cfg.cuentas.some((c) => c.numero.trim())) return "Está activo pero no hay ninguna cuenta: nadie podrá pagar.";
+    if (!cfg.cuentas.some((c) => c.numero.trim() || c.qr.trim())) return "Está activo pero no hay ninguna cuenta: nadie podrá pagar.";
     if (!cfg.whatsapp.trim()) return "Está activo pero falta el WhatsApp: los vouchers no llegarían a ningún lado.";
     return null;
   }, [cfg]);
@@ -497,6 +530,57 @@ const AdminPagosManuales = ({ role }: { role: AdminRole }) => {
                         value={c.banco} onChange={(e) => actualizarCuenta(i, "banco", e.target.value)}
                         placeholder="Banco (opcional)" className="h-9"
                       />
+                    </div>
+
+                    {/* QR de cobro: quien paga escanea en vez de teclear, que es
+                        de donde salen los pagos a un número equivocado. */}
+                    <div className="flex items-center gap-3 border-t pt-3">
+                      {c.qr ? (
+                        <img
+                          src={c.qr} alt="QR de cobro"
+                          className="w-16 h-16 object-contain border bg-white p-1 shrink-0"
+                        />
+                      ) : (
+                        <div className="w-16 h-16 border border-dashed grid place-items-center text-muted-foreground shrink-0">
+                          <QrCode size={20} />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold">Código QR de cobro</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {c.qr
+                            ? "Se muestra al comprador junto al número."
+                            : "Opcional. PNG, JPG o WEBP, hasta 2 MB."}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button
+                          variant="outline" size="sm" className="gap-1.5"
+                          disabled={subiendoQr === i}
+                          onClick={() => document.getElementById(`qr-cuenta-${i}`)?.click()}
+                        >
+                          {subiendoQr === i
+                            ? <Loader2 size={14} className="animate-spin" />
+                            : <Upload size={14} />}
+                          {c.qr ? "Cambiar" : "Subir"}
+                        </Button>
+                        {c.qr && (
+                          <Button
+                            variant="ghost" size="sm" className="text-destructive"
+                            onClick={() => quitarQr(i)} title="Quitar el QR"
+                          >
+                            <Trash2 size={15} />
+                          </Button>
+                        )}
+                        <input
+                          id={`qr-cuenta-${i}`} type="file" className="hidden"
+                          accept={QR_PAGO_TIPOS.join(",")}
+                          onChange={(e) => {
+                            void elegirQr(i, e.target.files?.[0]);
+                            e.target.value = ""; // permite reelegir el mismo archivo
+                          }}
+                        />
+                      </div>
                     </div>
                   </div>
                 ))}

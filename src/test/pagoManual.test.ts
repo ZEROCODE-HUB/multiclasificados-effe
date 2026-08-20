@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   normalizarConfig, medioDisponible, mediosDisponibles,
-  mensajeDeVoucher, codigoDePago, CONFIG_VACIA,
+  mensajeDeVoucher, codigoDePago, CONFIG_VACIA, NOMBRE_MEDIO,
 } from "@/lib/pagoManual";
 
 vi.mock("@/lib/supabase", () => ({ supabase: { rpc: vi.fn() } }));
@@ -36,6 +36,22 @@ describe("configuración de Yape/Plin", () => {
   it("descarta las cuentas sin número: no llevan a ningún sitio", () => {
     const cfg = normalizarConfig({ activo: true, cuentas: [cuenta("yape", "  ")], whatsapp: "51999" });
     expect(cfg.cuentas).toHaveLength(0);
+  });
+
+  it("una cuenta con QR y sin número sí vale: se paga escaneando", () => {
+    const cfg = normalizarConfig({
+      activo: true,
+      cuentas: [{ metodo: "plin", numero: "", titular: "eFFe", qr: " https://x/qr.png " }],
+      whatsapp: "51999",
+    });
+    expect(cfg.cuentas).toHaveLength(1);
+    expect(cfg.cuentas[0].qr).toBe("https://x/qr.png");
+    expect(medioDisponible(cfg, "plin")).toBe(true);
+  });
+
+  it("sin QR el campo queda vacío, no undefined", () => {
+    const cfg = normalizarConfig({ activo: true, cuentas: [cuenta("yape")], whatsapp: "51999" });
+    expect(cfg.cuentas[0].qr).toBe("");
   });
 
   it("un ajuste vacío o roto no revienta", () => {
@@ -93,7 +109,12 @@ describe("el mensaje que llega por WhatsApp", () => {
   it("sin plantilla configurada sigue diciendo algo con sentido", () => {
     const texto = mensajeDeVoucher({ plantilla: "   ", medio: "plin", monto: 50, orderId });
     expect(texto.startsWith("Hola")).toBe(true);
-    expect(texto).toContain("Medio: Plin");
+    expect(texto).toContain("Medio: QR/Plin");
+  });
+
+  it("Plin se llama QR/Plin: el mismo QR lo leen varias apps de banco", () => {
+    expect(NOMBRE_MEDIO.plin).toBe("QR/Plin");
+    expect(NOMBRE_MEDIO.yape).toBe("Yape");
   });
 
   it("el código es corto y estable: se teclea desde el móvil", () => {

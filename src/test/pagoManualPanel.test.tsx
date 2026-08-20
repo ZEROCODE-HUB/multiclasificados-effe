@@ -25,7 +25,7 @@ const props = {
   orderId: "3f2b1c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
   medio: "yape" as const,
   monto: 16.14,
-  cuentas: [{ metodo: "yape" as const, numero: "999888777", banco: "BCP", titular: "eFFe SAC" }],
+  cuentas: [{ metodo: "yape" as const, numero: "999888777", banco: "BCP", titular: "eFFe SAC", qr: "" }],
   whatsapp: "51999888777",
   mensaje: "Hola, ya pagué",
   onListo: vi.fn(),
@@ -95,5 +95,40 @@ describe("pantalla de pago con Yape/Plin", () => {
     await waitFor(() => expect(screen.getByText(/bloqueó la ventana/i)).toBeInTheDocument());
     expect(screen.getByRole("link", { name: /ábrelo desde aquí/i })).toBeInTheDocument();
     expect(onListo).not.toHaveBeenCalled();
+  });
+
+  describe("cuando la cuenta tiene QR", () => {
+    const conQr = {
+      ...props,
+      medio: "plin" as const,
+      cuentas: [{
+        metodo: "plin" as const, numero: "903375308", banco: "",
+        titular: "eFFe SAC", qr: "https://cdn/qr-pagos/1.png",
+      }],
+    };
+
+    it("enseña el QR y pide escanearlo, no teclear el número", () => {
+      render(<PagoManualPanel {...conQr} />);
+      const img = screen.getByRole("img", { name: /código qr/i });
+      expect(img).toHaveAttribute("src", "https://cdn/qr-pagos/1.png");
+      expect(screen.getByText(/escanea el qr/i)).toBeInTheDocument();
+    });
+
+    it("el número sigue estando, pero como alternativa", () => {
+      render(<PagoManualPanel {...conQr} />);
+      expect(screen.getByText("903375308")).toBeInTheDocument();
+      expect(screen.getByText(/o paga a este número/i)).toBeInTheDocument();
+    });
+
+    it("una cuenta solo con QR no deja un hueco donde iba el número", () => {
+      render(<PagoManualPanel {...conQr} cuentas={[{ ...conQr.cuentas[0], numero: "" }]} />);
+      expect(screen.getByRole("img", { name: /código qr/i })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /copiar/i })).not.toBeInTheDocument();
+    });
+
+    it("Plin se anuncia como QR/Plin", () => {
+      render(<PagoManualPanel {...conQr} />);
+      expect(screen.getByText(/paga con qr\/plin/i)).toBeInTheDocument();
+    });
   });
 });

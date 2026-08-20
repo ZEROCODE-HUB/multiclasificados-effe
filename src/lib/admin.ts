@@ -713,6 +713,55 @@ export async function removeDefaultListingImage(url: string | null | undefined):
   try { await supabase.storage.from(SITE_BUCKET).remove([path]); } catch { /* idem */ }
 }
 
+// ------------------------------------------------------------------ QR de cobro (Yape / QR-Plin)
+export const QR_PAGO_TIPOS = ["image/png", "image/jpeg", "image/webp"];
+const QR_PAGO_MAX_BYTES = 2 * 1024 * 1024;
+
+/** Por qué no sirve este archivo como QR, o null si sirve. */
+export function motivoQrInvalido(file: File): string | null {
+  if (!QR_PAGO_TIPOS.includes(file.type)) return "El QR tiene que ser una imagen PNG, JPG o WEBP.";
+  if (file.size > QR_PAGO_MAX_BYTES) return "La imagen del QR no puede pasar de 2 MB.";
+  return null;
+}
+
+/**
+ * Sube el QR de cobro y devuelve su URL pública.
+ *
+ * A diferencia de las otras imágenes del sitio, esta NO pasa por
+ * `compressImage`: un QR es un patrón de píxeles que se lee con la cámara, y
+ * recodificarlo con pérdida es justo lo que puede volverlo ilegible en una
+ * pantalla pequeña. Son unos pocos KB, así que sube tal cual.
+ */
+export async function subirQrDePago(file: File, previousUrl?: string | null): Promise<string> {
+  const motivo = motivoQrInvalido(file);
+  if (motivo) throw new Error(motivo);
+
+  const ext = (file.type.split("/")[1] || "png").replace(/[^a-z0-9]/g, "") || "png";
+  // Nombre con marca de tiempo, como las demás: con nombre fijo el CDN seguiría
+  // sirviendo el QR anterior durante días, y aquí eso son pagos a otra cuenta.
+  const path = `qr-pagos/${Date.now()}.${ext}`;
+
+  const { error } = await supabase.storage.from(SITE_BUCKET).upload(path, file, {
+    upsert: true, cacheControl: "2592000", contentType: file.type || undefined,
+  });
+  if (error) throw error;
+
+  const old = siteAssetPath(previousUrl);
+  if (old && old !== path) {
+    try { await supabase.storage.from(SITE_BUCKET).remove([old]); } catch { /* un huérfano no rompe nada */ }
+  }
+
+  const { data: pub } = supabase.storage.from(SITE_BUCKET).getPublicUrl(path);
+  return pub.publicUrl;
+}
+
+/** Borra el QR del bucket al quitarlo desde el panel. */
+export async function borrarQrDePago(url: string | null | undefined): Promise<void> {
+  const path = siteAssetPath(url);
+  if (!path) return;
+  try { await supabase.storage.from(SITE_BUCKET).remove([path]); } catch { /* idem */ }
+}
+
 export async function deleteCategory(id: string) {
   // Las fotos de la categoría se van con ella; si falla, manda el borrado.
   try {
