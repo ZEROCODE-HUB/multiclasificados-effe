@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useCategories } from "@/hooks/useCategories";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { cerrarTeclado } from "@/lib/teclado";
 
 export function HeroSearch() {
   const navigate = useNavigate();
@@ -13,6 +14,7 @@ export function HeroSearch() {
   const [query, setQuery] = useState("");
 
   const submit = () => {
+    cerrarTeclado(); // el teclado tapaba los resultados recién pedidos
     const params = new URLSearchParams();
     if (cat) params.set("cat", cat);
     if (query.trim()) params.set("q", query.trim());
@@ -45,6 +47,7 @@ export function HeroSearch() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+            enterKeyHint="search"
             className="pl-10 h-[52px] border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-base rounded-none"
           />
         </div>

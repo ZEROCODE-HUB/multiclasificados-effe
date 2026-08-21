@@ -1,9 +1,10 @@
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate, Outlet } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { cerrarTecladoAlTocarFuera } from "@/lib/teclado";
 import { SupabaseAuthBridge } from "@/components/SupabaseAuthBridge";
 import { MaintenanceGate } from "@/components/MaintenanceGate";
 import { UpdateGate } from "@/components/UpdateGate";
@@ -56,6 +57,17 @@ const PaymentPage = cargaDiferida(() => import("./pages/PaymentPage.tsx"));
 
 const queryClient = new QueryClient();
 
+/**
+ * En el móvil, un toque fuera del campo cierra el teclado, como en cualquier
+ * app. Va aquí y no en cada pantalla porque el problema es de toda la app: se
+ * escribe en un buscador, llegan los resultados y el teclado sigue tapando
+ * media pantalla. No pinta nada.
+ */
+function CerrarTecladoAlTocarFuera() {
+  useEffect(() => cerrarTecladoAlTocarFuera(), []);
+  return null;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -63,6 +75,7 @@ const App = () => (
       <Sonner />
       <SupabaseAuthBridge />
       <UpdateGate />
+      <CerrarTecladoAlTocarFuera />
       <FavoritesProvider>
       <BrowserRouter>
         {/* Swipe-back desde el borde izquierdo en iOS (no tiene botón físico). */}

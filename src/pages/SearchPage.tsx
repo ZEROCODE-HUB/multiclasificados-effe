@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ListingCard } from "@/components/ListingCard";
 import { Navbar } from "@/components/Navbar";
+import { cerrarTeclado } from "@/lib/teclado";
 import { type Listing } from "@/data/mockData";
 import { useCategories } from "@/hooks/useCategories";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -613,11 +614,16 @@ export default function SearchPage() {
         <div className="container mx-auto px-4 py-2">
           <div className="flex items-center bg-muted/50 border border-border h-10 focus-within:border-secondary/40 focus-within:bg-card transition-colors">
             <Search size={16} className="ml-3 text-muted-foreground shrink-0" />
+            {/* `text-base` en móvil no es estética: por debajo de 16px iOS hace
+                zoom solo al enfocar el campo y deja la página descuadrada. */}
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") cerrarTeclado(); }}
+              type="search"
+              enterKeyHint="search"
               placeholder="Busca por título, descripción o ubicación…"
-              className="flex-1 bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground"
+              className="flex-1 bg-transparent px-3 text-base md:text-sm outline-none placeholder:text-muted-foreground"
             />
             {q && (
               <button

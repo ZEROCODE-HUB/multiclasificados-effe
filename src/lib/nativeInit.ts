@@ -8,6 +8,22 @@ import { supabase } from "@/lib/supabase";
 
 export async function initNative() {
   if (!Capacitor.isNativePlatform()) return;
+
+  // El pellizco para hacer zoom no pinta nada dentro de una app: descuadra la
+  // pantalla, deja la interfaz a medio salir y no hay forma evidente de
+  // deshacerlo. Se apaga AQUÍ y no en index.html a propósito: en la web sigue
+  // permitido, porque allí sí hay quien lo necesita para leer (WCAG 1.4.4) y
+  // bloquearlo sería empeorarle la vida. `viewport-fit=cover` se conserva: es
+  // lo que respeta el notch y la barra de gestos.
+  //
+  // El zoom que salta solo al enfocar un campo es otra cosa y no se arregla
+  // aquí: lo provoca iOS cuando la letra mide menos de 16px, y por eso Input,
+  // Textarea y los buscadores usan `text-base` en móvil.
+  const viewport = document.querySelector('meta[name="viewport"]');
+  viewport?.setAttribute(
+    "content",
+    "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover",
+  );
   // Registra notificaciones push (FCM) en el dispositivo.
   initPush();
   // OTA (Capgo): aplica un bundle web más nuevo si la BD lo indica. No-op si no

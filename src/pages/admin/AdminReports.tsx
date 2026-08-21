@@ -463,7 +463,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
                       value={txSearch}
                       onChange={(e) => setTxSearch(e.target.value)}
                       placeholder="Buscar por usuario, correo o id…"
-                      className="flex-1 min-w-0 bg-transparent px-2 text-sm outline-none"
+                      className="flex-1 min-w-0 bg-transparent px-2 text-base md:text-sm outline-none"
                     />
                   </div>
                   <Select value={txType} onValueChange={(v) => setTxType(v as "all" | "purchase" | "spend")}>

@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { useCategories } from "@/hooks/useCategories";
+import { cerrarTeclado } from "@/lib/teclado";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,6 +39,9 @@ export function Navbar() {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Sin esto el teclado del móvil se queda abierto tapando los resultados
+    // que se acaban de pedir.
+    cerrarTeclado();
     navigate(`/buscar${query ? `?q=${encodeURIComponent(query)}` : ""}`);
     setMobileOpen(false);
   };
@@ -126,7 +130,8 @@ export function Navbar() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar inmuebles, vehículos, empleos…"
-            className="flex-1 min-w-0 bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground"
+            enterKeyHint="search"
+            className="flex-1 min-w-0 bg-transparent px-3 text-base md:text-sm outline-none placeholder:text-muted-foreground"
           />
           <button type="submit" className="shrink-0 whitespace-nowrap px-4 h-full bg-secondary text-secondary-foreground hover:opacity-90 transition-opacity flex items-center justify-center text-xs font-bold uppercase tracking-wider">
             Buscar
@@ -282,7 +287,8 @@ export function Navbar() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Buscar en EFFE"
-                className="flex-1 bg-transparent px-3 text-sm outline-none"
+                enterKeyHint="search"
+                className="flex-1 bg-transparent px-3 text-base md:text-sm outline-none"
               />
               <button type="submit" className="px-4 h-full bg-secondary text-secondary-foreground text-xs font-bold uppercase">
                 Buscar
