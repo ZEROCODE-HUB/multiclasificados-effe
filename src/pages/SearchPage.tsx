@@ -13,7 +13,7 @@ import { type Listing } from "@/data/mockData";
 import { useCategories } from "@/hooks/useCategories";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useGridColumns } from "@/hooks/useFittingCount";
-import { searchListings, fetchListingsByOwner, topeAlcanzado, type SortKey } from "@/lib/listings";
+import { searchListings, fetchListingsByOwner, topeAlcanzado, avisosPorPais, type SortKey } from "@/lib/listings";
 import { formatPrecioAviso } from "@/lib/pricing";
 import { useSession } from "@/hooks/useSession";
 import { useFavorites } from "@/hooks/useFavorites";
@@ -22,7 +22,8 @@ import {
   DEPARTAMENTOS, departamentoPorId, departamentoGuardado, guardarDepartamento,
   type Departamento,
 } from "@/lib/departamentos";
-import { PAISES, PAIS_POR_DEFECTO, TODOS_LOS_PAISES, esPeru, paisPorCodigo, filtroPaisInicial, hayPaisElegido, guardarPais, paisPorIP } from "@/lib/paises";
+import { PAIS_POR_DEFECTO, TODOS_LOS_PAISES, esPeru, paisPorCodigo, filtroPaisInicial, hayPaisElegido, guardarPais, paisPorIP } from "@/lib/paises";
+import { SelectorDePais } from "@/components/SelectorDePais";
 import { toast } from "@/hooks/use-toast";
 import {
   Search,
@@ -104,6 +105,11 @@ export default function SearchPage() {
     setPais(code);
     if (code !== PAIS_POR_DEFECTO) setDepartamento(null);
   };
+  // Cuántos avisos hay en cada país, para el selector. Se pide una sola vez: el
+  // número no cambia de un segundo a otro, y si falla el selector sigue.
+  const [conteoPaises, setConteoPaises] = useState<Record<string, number>>({});
+  useEffect(() => { void avisosPorPais().then(setConteoPaises); }, []);
+
   // Moneda (EFFE-050): "" = todas. El RPC search_listings ya filtra por p_currency.
   const [currency, setCurrency] = useState<string>(params.get("cur") || "");
   const [sort, setSort] = useState<SortKey>((params.get("sort") as SortKey) || "recent");
@@ -514,18 +520,16 @@ export default function SearchPage() {
           respaldo), así que quien entra desde Lima no tiene que tocar nada. */}
       <div>
         <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">País</label>
-        <Select
-          value={pais || "todos"}
-          onValueChange={(v) => elegirPais(v === "todos" ? "" : v)}
-        >
-          <SelectTrigger className="mt-1.5 rounded-none"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos los países</SelectItem>
-            {PAISES.map((p) => (
-              <SelectItem key={p.code} value={p.code}>{p.nombre}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Con 249 países hace falta buscador, y el número de avisos al lado
+            evita elegir un país para descubrir que está vacío. */}
+        <SelectorDePais
+          value={pais}
+          onChange={elegirPais}
+          conteo={conteoPaises}
+          incluirTodos
+          className="mt-1.5 rounded-none"
+          aria-label="País"
+        />
       </div>
       {/* Ubicación: un desplegable de departamentos y nada más. Exacto y
           predecible — eliges Lima y ves Lima. Lima y Callao van juntos porque

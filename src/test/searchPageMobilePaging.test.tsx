@@ -24,6 +24,8 @@ vi.mock("@/lib/listings", () => ({
   // Estas pruebas trabajan con listas muy por debajo del tope, así que aquí
   // nunca se recorta nada.
   topeAlcanzado: () => false,
+  // El selector de país pide sus contadores al montarse; aquí no interesan.
+  avisosPorPais: vi.fn().mockResolvedValue({}),
 }));
 
 // Móvil: 10 por página.

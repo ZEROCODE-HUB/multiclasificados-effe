@@ -4,7 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MapPin, Search, Loader2, Check } from "lucide-react";
 import { DEPARTAMENTOS, departamentoDeTexto, nombreDepartamento } from "@/lib/departamentos";
-import { PAISES, PAIS_POR_DEFECTO, esPeru, nombrePais } from "@/lib/paises";
+import { PAIS_POR_DEFECTO, esPeru, nombrePais } from "@/lib/paises";
+import { SelectorDePais } from "@/components/SelectorDePais";
 import {
   sugerirDirecciones,
   detalleDeLugar,
@@ -355,9 +356,14 @@ export function LocationPicker({
       {onCountryChange && (
         <div>
           <Label htmlFor="pais-aviso" className="text-xs">País</Label>
-          <Select
+          {/* Sin contador: publicando da igual cuánta gente haya publicado ya
+              en ese país. Lo que hace falta es encontrar el tuyo entre 249. */}
+          <SelectorDePais
+            id="pais-aviso"
+            className="mt-1.5"
             value={country}
-            onValueChange={(v) => {
+            onChange={(v) => {
+              if (!v) return; // aquí no existe "todos los países"
               onCountryChange(v);
               // Cambiar de país invalida lo anterior: el departamento del INEI
               // y el punto marcado son de otro sitio.
@@ -367,16 +373,7 @@ export function LocationPicker({
               setFalloDeduccion(false);
               setAMano(false);
             }}
-          >
-            <SelectTrigger id="pais-aviso" className="mt-1.5">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {PAISES.map((p) => (
-                <SelectItem key={p.code} value={p.code}>{p.nombre}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          />
         </div>
       )}
 

@@ -575,3 +575,25 @@ export async function trackEvent(listingId: string, type: "view" | "contact_clic
     /* best-effort */
   }
 }
+
+/**
+ * Cuántos avisos activos hay en cada país, para el filtro de búsqueda.
+ *
+ * Se pide UNA vez al montar el filtro, no en cada tecla: el número no cambia de
+ * un segundo a otro y la lista tiene 249 entradas. Si falla se devuelve vacío y
+ * el selector funciona igual, solo que sin números — como la configuración de
+ * Yape/Plin: un adorno útil no puede tumbar la pantalla.
+ */
+export async function avisosPorPais(): Promise<Record<string, number>> {
+  try {
+    const { data, error } = await supabase.rpc("avisos_activos_por_pais");
+    if (error) throw error;
+    const conteo: Record<string, number> = {};
+    for (const fila of (data ?? []) as Array<{ country: string; total: number | string }>) {
+      if (fila?.country) conteo[String(fila.country).toUpperCase()] = Number(fila.total ?? 0);
+    }
+    return conteo;
+  } catch {
+    return {};
+  }
+}

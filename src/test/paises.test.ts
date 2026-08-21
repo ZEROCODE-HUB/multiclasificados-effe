@@ -19,7 +19,7 @@ describe("catálogo de países", () => {
   it("ninguna zona horaria está en dos países a la vez", () => {
     const vistas = new Set<string>();
     for (const p of PAISES) {
-      for (const z of p.zonas) {
+      for (const z of p.zonas ?? []) {
         expect(vistas.has(z)).toBe(false);
         vistas.add(z);
       }
@@ -36,6 +36,28 @@ describe("catálogo de países", () => {
   it("un código desconocido se muestra como 'Otro país', no como vacío", () => {
     expect(nombrePais("ZZ")).toBe("Otro país");
     expect(nombrePais(null)).toBe("Otro país");
+  });
+
+  it("están los 249 de la ISO, no una selección a dedo", () => {
+    expect(PAISES.length).toBe(249);
+  });
+
+  it("ya no hay cajón de sastre: el código XX no existe", () => {
+    // "Otro país" escondía el problema en vez de resolverlo: el mapa deducía el
+    // país real del punto y guardaba códigos que el selector no sabía enseñar.
+    expect(PAISES.some((p) => p.code === "XX")).toBe(false);
+  });
+
+  it("los países que dieron problemas en producción están: RO, y con su nombre", () => {
+    expect(paisPorCodigo("RO")?.nombre).toBe("Rumanía");
+  });
+
+  it("los países con presencia conocida conservan su zona horaria y su centro", () => {
+    const peru = paisPorCodigo("PE")!;
+    expect(peru.zonas).toContain("America/Lima");
+    expect(peru.centro).toBeTruthy();
+    // Y uno del montón nuevo no necesita ninguna de las dos cosas.
+    expect(paisPorCodigo("AF")?.zonas).toBeUndefined();
   });
 
   it("esPeru trata la ausencia de país como Perú (los avisos de siempre)", () => {

@@ -5,10 +5,10 @@
 // funciona igual en web y dentro del APK. La geolocalización sería más exacta,
 // pero pide un permiso que la mayoría no da (y en el WebView de iOS ya nos dio
 // problemas de callbacks que nunca responden). Si la zona no se reconoce, Perú.
-import { PAISES, PAIS_POR_DEFECTO, OTRO_PAIS, type Pais } from "@/data/paises";
+import { PAISES, PAIS_POR_DEFECTO, type Pais } from "@/data/paises";
 
 export type { Pais };
-export { PAISES, PAIS_POR_DEFECTO, OTRO_PAIS };
+export { PAISES, PAIS_POR_DEFECTO };
 
 export function paisPorCodigo(code: string | null | undefined): Pais | null {
   if (!code) return null;
@@ -16,6 +16,10 @@ export function paisPorCodigo(code: string | null | undefined): Pais | null {
   return PAISES.find((p) => p.code === c) ?? null;
 }
 
+/**
+ * El nombre del país. "Otro país" solo aparece ya con un código que no existe
+ * (una fila antigua, un dato de fuera): el catálogo tiene los 249 de la ISO.
+ */
 export function nombrePais(code: string | null | undefined): string {
   return paisPorCodigo(code)?.nombre ?? "Otro país";
 }
@@ -40,7 +44,9 @@ function zonaDelDispositivo(): string {
 export function paisDeZonaHoraria(tz: string = zonaDelDispositivo()): Pais {
   const zona = (tz ?? "").trim();
   if (zona) {
-    const encontrado = PAISES.find((p) => p.zonas.includes(zona));
+    // Solo los países con presencia conocida traen `zonas`; el resto no se
+    // deduce por horario, se elige a mano.
+    const encontrado = PAISES.find((p) => p.zonas?.includes(zona));
     if (encontrado) return encontrado;
   }
   return paisPorCodigo(PAIS_POR_DEFECTO)!;
@@ -125,8 +131,6 @@ export async function paisPorIP(): Promise<Pais | null> {
     const res = await fetch(`${base}/api/pais`, { cache: "no-store" });
     if (!res.ok) return null;
     const { pais } = (await res.json()) as { pais?: string | null };
-    // Un país que no está en el catálogo (que no es la lista del mundo entero)
-    // no sirve para filtrar: mejor dejarlo como estaba.
     return paisPorCodigo(pais ?? null);
   } catch {
     return null;

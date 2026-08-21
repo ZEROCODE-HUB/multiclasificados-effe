@@ -15,7 +15,8 @@ import {
 } from "@/lib/pricing";
 import { fetchPricingSettings } from "@/lib/pricingRemote";
 import { enlaceDevolucionSaldo } from "@/lib/soporte";
-import { PAISES, paisPreferido } from "@/lib/paises";
+import { paisPreferido } from "@/lib/paises";
+import { SelectorDePais } from "@/components/SelectorDePais";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useValidacion, MensajeDeError } from "@/hooks/useValidacion";
 import { useKeyboardInset } from "@/hooks/useKeyboardInset";
@@ -805,12 +806,12 @@ export function BuyCreditsModal({
                   </div>
                   <div>
                     <Label className="text-xs">País</Label>
-                    <Select value={paisCliente} onValueChange={setPaisCliente}>
-                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {PAISES.map((p) => <SelectItem key={p.code} value={p.code}>{p.nombre}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <SelectorDePais
+                      className="mt-1"
+                      value={paisCliente}
+                      onChange={(v) => { if (v) setPaisCliente(v); }}
+                      aria-label="País"
+                    />
                   </div>
                   {/* Decirlo claro: nadie comprueba estos datos, y salen tal
                       cual en un documento con valor tributario. */}
