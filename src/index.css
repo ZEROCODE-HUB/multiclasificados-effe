@@ -134,6 +134,15 @@
   a, button, [role="button"] {
     transition: all 0.2s ease;
   }
+  /* Los campos `type="search"` traen su propia "x" para borrar, que aparecía
+     pegada a la nuestra: dos botones de limpiar seguidos, y el del navegador
+     sin nuestro estilo ni etiqueta accesible. Se quita el suyo; el que se ve es
+     el que pintamos nosotros, que además solo aparece cuando hay texto. */
+  input[type="search"]::-webkit-search-cancel-button,
+  input[type="search"]::-webkit-search-decoration {
+    -webkit-appearance: none;
+    appearance: none;
+  }
 }
 
 @layer utilities {
