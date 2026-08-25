@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const uploads: string[] = [];
 const inserts: unknown[][] = [];
+const insertadosEnListings: Record<string, unknown>[] = [];
 let enVuelo = 0;
 let maxEnVuelo = 0;
 
@@ -33,6 +34,7 @@ vi.mock("@/lib/supabase", () => ({
     from: (tabla: string) => ({
       insert: (filas: unknown) => {
         if (tabla === "listing_images") inserts.push(Array.isArray(filas) ? filas : [filas]);
+        if (tabla === "listings") insertadosEnListings.push(filas as Record<string, unknown>);
         return {
           select: () => ({ single: async () => ({ data: { id: "L1" }, error: null }) }),
           then: (res: (v: unknown) => unknown) => res({ error: null }),
@@ -63,7 +65,7 @@ const draft = () => ({
 });
 
 beforeEach(() => {
-  uploads.length = 0; inserts.length = 0; enVuelo = 0; maxEnVuelo = 0;
+  uploads.length = 0; inserts.length = 0; insertadosEnListings.length = 0; enVuelo = 0; maxEnVuelo = 0;
   getUser.mockClear(); getSession.mockClear(); upload.mockClear();
 });
 
@@ -90,6 +92,81 @@ describe("guardar el aviso no encadena viajes al servidor", () => {
     const pasos: number[] = [];
     await saveListingDraft(draft(), (hechas) => pasos.push(hechas));
     expect(pasos.sort()).toEqual([1, 2, 3, 4]);
+  });
+});
+
+// Lo ya subido mientras el usuario rellenaba el formulario NO se vuelve a subir
+// (ver src/lib/subidaAnticipada.ts). Es el punto entero de la subida anticipada:
+// si publicar volviera a mandarlo, la espera seguiria siendo la misma.
+describe("no vuelve a subir lo que ya subio mientras se escribia", () => {
+  const yaSubida = (n: string, ranura: string) => ({
+    file: new File(["x"], n, { type: "image/webp" }),
+    name: n,
+    comprimida: true,
+    subido: { path: `u1/L1/${ranura}.webp`, url: `https://cdn/u1/L1/${ranura}.webp` },
+  });
+
+  it("con todo subido, publicar no manda ni un archivo", async () => {
+    await saveListingDraft({
+      ...draft(),
+      mainPhoto: yaSubida("portada.webp", "portada"),
+      extraPhotos: [yaSubida("a.webp", "foto-1"), yaSubida("b.webp", "foto-2")],
+    });
+    expect(uploads).toHaveLength(0);
+  });
+
+  it("y las filas apuntan a donde ya estan los archivos", async () => {
+    await saveListingDraft({
+      ...draft(),
+      mainPhoto: yaSubida("portada.webp", "portada"),
+      extraPhotos: [],
+    });
+    expect(inserts[0][0]).toMatchObject({
+      storage_path: "u1/L1/portada.webp",
+      url: "https://cdn/u1/L1/portada.webp",
+      sort_order: 0,
+    });
+  });
+
+  it("lo que no llego a subir si se manda, y en el orden correcto", async () => {
+    // Caso real: el usuario fue mas rapido que su conexion y pulso Publicar con
+    // una foto a medias. Esa se sube; las demas no se tocan.
+    await saveListingDraft({
+      ...draft(),
+      mainPhoto: yaSubida("portada.webp", "portada"),
+      extraPhotos: [foto("tarde.webp")],
+    });
+    expect(uploads).toHaveLength(1);
+    expect(uploads[0]).toContain("tarde.webp");
+    // La portada sigue siendo la primera aunque no se haya subido ahora.
+    expect(inserts[0][0]).toMatchObject({ sort_order: 0, storage_path: "u1/L1/portada.webp" });
+    expect(inserts[0][1]).toMatchObject({ sort_order: 1 });
+  });
+
+  it("un video ya subido tampoco se repite: son 15 MB", async () => {
+    await saveListingDraft({
+      ...draft(),
+      mainPhoto: null,
+      extraPhotos: [],
+      videos: [{
+        file: new File(["x"], "v.mp4", { type: "video/mp4" }),
+        name: "v.mp4",
+        subido: { path: "u1/L1/video-1.mp4", url: "https://cdn/u1/L1/video-1.mp4" },
+      }],
+    });
+    expect(uploads).toHaveLength(0);
+  });
+
+  it("el aviso se crea con el id que reservo el navegador", async () => {
+    // Si la base ignorara ese id, los archivos quedarian en la carpeta de un
+    // aviso que no existe y el aviso saldria sin fotos.
+    await saveListingDraft({ ...draft(), mainPhoto: null, extraPhotos: [], idReservado: "L1" });
+    expect(insertadosEnListings.at(-1)).toMatchObject({ id: "L1", status: "draft" });
+  });
+
+  it("sin id reservado, la base pone el suyo", async () => {
+    await saveListingDraft({ ...draft(), mainPhoto: null, extraPhotos: [] });
+    expect(insertadosEnListings.at(-1)).not.toHaveProperty("id");
   });
 });
 

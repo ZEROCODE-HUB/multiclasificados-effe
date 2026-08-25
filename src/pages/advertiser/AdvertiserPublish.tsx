@@ -43,8 +43,19 @@ import { enfocarCampo } from "@/lib/validacion";
 import { BuyCreditsModal, type PublishTarget } from "@/components/BuyCreditsModal";
 import { LocationPicker } from "@/components/LocationPicker";
 import { supabase } from "@/lib/supabase";
+import {
+  nuevoIdDeAviso, subirAdjunto, borrarAdjunto, porcentajeSubido, textoDePendiente,
+  type EstadoSubida,
+} from "@/lib/subidaAnticipada";
 
-interface PhotoItem { id: string; url: string; name: string; file: File; comprimida?: boolean; }
+interface PhotoItem {
+  id: string; url: string; name: string; file: File; comprimida?: boolean;
+  /** En qué va su subida al servidor (empieza al ELEGIRLA, no al publicar). */
+  estado?: EstadoSubida;
+}
+
+/** Un adjunto cualquiera del aviso, para contar el progreso por peso. */
+interface Adjunto { file: File; estado: EstadoSubida; }
 
 const DURATIONS: DurationDays[] = [3, 7, 15, 30, 60, 90];
 
@@ -140,10 +151,10 @@ const AdvertiserPublish = () => {
 
   // PDF adjunto (adicional "PDF adjunto por aviso"). Solo se muestra su apartado
   // si el adicional está activo; si se desactiva, el archivo elegido se descarta.
-  const [pdfFile, setPdfFile] = useState<{ file: File; name: string } | null>(null);
+  const [pdfFile, setPdfFile] = useState<{ file: File; name: string; estado?: EstadoSubida } | null>(null);
   // Vídeos elegidos, en el orden en que se verán. Se guardan ya validados
   // (tipo, tamaño y duración): lo que llega aquí es subible.
-  const [videos, setVideos] = useState<Array<{ file: File; name: string; duracion: number }>>([]);
+  const [videos, setVideos] = useState<Array<{ file: File; name: string; duracion: number; estado?: EstadoSubida }>>([]);
   const [validandoVideo, setValidandoVideo] = useState(false);
   const pdfFileRef = useRef<HTMLInputElement>(null);
   const videoFileRef = useRef<HTMLInputElement>(null);
@@ -181,6 +192,38 @@ const AdvertiserPublish = () => {
   // se resubían las cuatro fotos otra vez, justo cuando el usuario ya llevaba
   // medio minuto esperando.
   const adjuntosAlDia = useRef(false);
+
+  // ---- Subida anticipada (ver src/lib/subidaAnticipada.ts) ----
+  // El id del aviso se reserva EN EL NAVEGADOR la primera vez que hace falta,
+  // antes de que exista la fila: es lo que permite subir una foto en cuanto se
+  // elige, sin tener que crear un borrador en "Mis avisos" solo para eso.
+  const idReservado = useRef<string | null>(null);
+  const idDeAviso = () => {
+    if (!idReservado.current) idReservado.current = nuevoIdDeAviso();
+    return idReservado.current;
+  };
+  // Id del usuario, cacheado: se necesita para la ruta de CADA archivo y pedirlo
+  // en cada subida serían viajes de ida y vuelta por foto.
+  const userIdRef = useRef<string | null>(null);
+  const dameUserId = async (): Promise<string | null> => {
+    if (userIdRef.current) return userIdRef.current;
+    const { data } = await supabase.auth.getSession();
+    userIdRef.current = data.session?.user?.id ?? null;
+    return userIdRef.current;
+  };
+  // Cancela las subidas en vuelo al empezar un aviso nuevo: sin esto, la subida
+  // de la foto que acabas de descartar seguiría escribiendo en la ruta del aviso
+  // siguiente.
+  const abortoSubidas = useRef<AbortController>(new AbortController());
+  // Subidas todavia en marcha. "Publicar" espera a que acaben en vez de volver a
+  // mandar el archivo desde cero: sin esto, quien es rapido rellenando pagaria
+  // la subida entera igual que antes.
+  const subidasEnVuelo = useRef<Set<Promise<void>>>(new Set());
+  const esperarSubidas = async () => {
+    while (subidasEnVuelo.current.size) {
+      await Promise.allSettled([...subidasEnVuelo.current]);
+    }
+  };
   const [durationChosen, setDurationChosen] = useState(false);
   const [extras, setExtras] = useState<ExtrasCount>({});
 
@@ -347,6 +390,43 @@ const AdvertiserPublish = () => {
 
   const updateForm = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
+  /**
+   * Arranca la subida de un archivo y va contando su estado en el propio hueco.
+   *
+   * Se llama al ELEGIR el archivo, no al publicar: mientras el usuario escribe
+   * el titulo y el precio, el archivo ya esta viajando. `aplicar` es lo que sabe
+   * donde guardar el estado (portada, hueco N, video N, PDF) y comprueba que el
+   * hueco siga siendo el mismo: si lo cambio mientras subia, el resultado que
+   * llega tarde no debe pisar la foto nueva.
+   */
+  const arrancarSubida = (
+    tipo: "imagen" | "video" | "pdf",
+    ranura: string,
+    file: File,
+    aplicar: (estado: EstadoSubida) => void,
+  ) => {
+    const signal = abortoSubidas.current.signal;
+    aplicar({ fase: "subiendo" });
+    const tarea = (async () => {
+      try {
+        const userId = await dameUserId();
+        // Sin sesion no hay ruta posible. No es un error que mostrar: al pulsar
+        // "Publicar" se le manda a iniciar sesion y desde alli se sube.
+        if (!userId) { aplicar({ fase: "espera" }); return; }
+        const subido = await subirAdjunto(tipo, userId, idDeAviso(), ranura, file, { signal });
+        if (signal.aborted) return;
+        aplicar({ fase: "lista", subido });
+      } catch (e) {
+        if (signal.aborted) return;
+        // No se avisa al usuario: publicar lo reintentara. Molestarle con un
+        // error por algo que se va a arreglar solo seria ruido.
+        aplicar({ fase: "error", motivo: e instanceof Error ? e.message : "fallo al subir" });
+      }
+    })();
+    subidasEnVuelo.current.add(tarea);
+    void tarea.finally(() => subidasEnVuelo.current.delete(tarea));
+  };
+
   const pickPhoto = (slot: "main" | "extra", files: FileList | null) => {
     if (!files || files.length === 0) return;
     adjuntosAlDia.current = false;
@@ -409,6 +489,22 @@ const AdvertiserPublish = () => {
             return next;
           });
         }
+
+        // Y en cuanto esta optimizada, se manda. Aqui es donde se gana el tiempo
+        // que antes se pagaba entero en el clic de "Publicar".
+        const ranura = slot === "main" ? "portada" : `foto-${i + 1}`;
+        arrancarSubida("imagen", ranura, comprimida, (estado) => {
+          if (slot === "main") {
+            setMainPhoto((prev) => (prev?.id === item.id ? { ...prev, estado } : prev));
+          } else {
+            setExtraPhotos((prev) => {
+              if (prev[i]?.id !== item.id) return prev;
+              const next = [...prev];
+              next[i] = { ...next[i]!, estado };
+              return next;
+            });
+          }
+        });
       })
       .catch(() => {});
   };
@@ -428,14 +524,39 @@ const AdvertiserPublish = () => {
       return;
     }
     adjuntosAlDia.current = false;
-    setVideos((prev) => (prev.length >= videosContratados ? prev : [...prev, { file: f, name: f.name, duracion: r.duracion }]));
+    // La posicion que ocupara: hace falta ANTES de meterlo, para que la ruta del
+    // archivo y el hueco donde se guarda su estado sean el mismo.
+    let posicion = -1;
+    setVideos((prev) => {
+      if (prev.length >= videosContratados) return prev;
+      posicion = prev.length;
+      return [...prev, { file: f, name: f.name, duracion: r.duracion }];
+    });
+    if (posicion < 0) return; // ya tenia todos los que compro
+
+    // Un video son hasta 15 MB. Subirlo al elegirlo es lo que evita los minutos
+    // de espera al publicar: es el caso donde mas se nota, con diferencia.
+    arrancarSubida("video", `video-${posicion + 1}`, f, (estado) => {
+      setVideos((prev) => {
+        if (prev[posicion]?.file !== f) return prev; // lo quito mientras subia
+        const next = [...prev];
+        next[posicion] = { ...next[posicion], estado };
+        return next;
+      });
+    });
   };
 
   // Abre el selector de archivo para el slot adicional `i`.
   const openExtraPicker = (i: number) => { pickingSlot.current = i; extraFileRef.current?.click(); };
   const removeExtraPhoto = (i: number) => {
     adjuntosAlDia.current = false;
-    setExtraPhotos((prev) => { const next = [...prev]; next[i] = null; return next; });
+    setExtraPhotos((prev) => {
+      // Si ya estaba arriba, se borra del servidor: quitarla de la pantalla y
+      // dejar el archivo ocupando sitio para siempre no es quitarla.
+      const est = prev[i]?.estado;
+      if (est?.fase === "lista") void borrarAdjunto("imagen", est.subido.path);
+      const next = [...prev]; next[i] = null; return next;
+    });
   };
 
   // Tope por adicional: "Imagen adicional" hasta MAX_EXTRA_IMAGES; el resto a la
@@ -547,6 +668,9 @@ const AdvertiserPublish = () => {
     }
     adjuntosAlDia.current = false;
     setPdfFile({ file: f, name: f.name });
+    arrancarSubida("pdf", "documento", f, (estado) => {
+      setPdfFile((prev) => (prev?.file === f ? { ...prev, estado } : prev));
+    });
   };
 
   const persistDraftForLogin = (resumeAtSummary: boolean) => {
@@ -573,17 +697,49 @@ const AdvertiserPublish = () => {
   // Guarda el aviso en la BD como borrador y devuelve su id. No navega ni avisa:
   // lo usan el botón "Guardar en mis borradores" y el pago-y-publica, que
   // necesita que el aviso exista para poder atarle la orden.
+  /** Lo ya subido viaja con cada adjunto: publicar no vuelve a mandarlo. */
+  const subidoDe = (estado?: EstadoSubida) => (estado?.fase === "lista" ? estado.subido : undefined);
+
+  /** Los adjuntos del aviso tal como los espera publish.ts, con su subida hecha. */
+  const adjuntosParaGuardar = () => ({
+    mainPhoto: mainPhoto
+      ? { file: mainPhoto.file, name: mainPhoto.name, comprimida: mainPhoto.comprimida, subido: subidoDe(mainPhoto.estado) }
+      : null,
+    extraPhotos: extraPhotos.slice(0, extraImageCount)
+      .filter((p): p is PhotoItem => !!p)
+      .map((p) => ({ file: p.file, name: p.name, comprimida: p.comprimida, subido: subidoDe(p.estado) })),
+    pdf: hasPdfInPackage && pdfFile
+      ? { file: pdfFile.file, name: pdfFile.name, subido: subidoDe(pdfFile.estado) }
+      : null,
+    videos: videos.map((v) => ({ file: v.file, name: v.name, subido: subidoDe(v.estado) })),
+  });
+
+  /** Todos los adjuntos con su estado, para contar el progreso por peso. */
+  const adjuntosConEstado = (): Adjunto[] => {
+    const out: Adjunto[] = [];
+    const meter = (file: File | undefined, estado?: EstadoSubida) => {
+      if (file) out.push({ file, estado: estado ?? { fase: "espera" } });
+    };
+    meter(mainPhoto?.file, mainPhoto?.estado);
+    for (const p of extraPhotos.slice(0, extraImageCount)) meter(p?.file, p?.estado);
+    if (hasPdfInPackage) meter(pdfFile?.file, pdfFile?.estado);
+    for (const v of videos) meter(v.file, v.estado);
+    return out;
+  };
+
+  // Cuanto queda por subir. Se calcula una vez por render y se comparte: el
+  // estado de cada adjunto vive en su propio hueco y cambia por su cuenta.
+  const adjuntosAhora = adjuntosConEstado();
+  const avanceSubida = porcentajeSubido(adjuntosAhora);
+  const pendienteDeSubir = textoDePendiente(adjuntosAhora);
+
   const guardarBorradorEnBD = async (): Promise<string> => {
     const id = await saveListingDraft({
       form: formForSubmit, lat: coords?.lat ?? null, lng: coords?.lng ?? null,
       quantity, duration, extras,
-      mainPhoto: mainPhoto ? { file: mainPhoto.file, name: mainPhoto.name, comprimida: mainPhoto.comprimida } : null,
-      extraPhotos: extraPhotos.slice(0, extraImageCount)
-        .filter((p): p is PhotoItem => !!p)
-        .map((p) => ({ file: p.file, name: p.name, comprimida: p.comprimida })),
-      pdf: hasPdfInPackage && pdfFile ? { file: pdfFile.file, name: pdfFile.name } : null,
-      videos: videos.map((v) => ({ file: v.file, name: v.name })),
+      ...adjuntosParaGuardar(),
       draftId: draftListingId.current,
+      idReservado: idReservado.current,
     });
     draftListingId.current = id;
     adjuntosAlDia.current = true;
@@ -703,7 +859,16 @@ const AdvertiserPublish = () => {
     setCoords(null);
     setExtras({});
     setDuration(7);
+    setPdfFile(null);
+    setVideos([]);
     draftListingId.current = null; // el borrador ya se convirtió en aviso publicado
+    // Cortar lo que siguiera subiendo y soltar el id: el aviso siguiente es OTRO
+    // aviso, y si compartiera identificador sus fotos irian a la carpeta del que
+    // se acaba de publicar.
+    abortoSubidas.current.abort();
+    abortoSubidas.current = new AbortController();
+    subidasEnVuelo.current.clear();
+    idReservado.current = null;
     localStorage.removeItem(DRAFT_KEY);
   };
 
@@ -733,6 +898,7 @@ const AdvertiserPublish = () => {
     savingDraftRef.current = true;
     setSavingDraft(true);
     try {
+      await esperarSubidas();
       await guardarBorradorEnBD();
       toast({
         title: "Guardado en tus borradores",
@@ -770,6 +936,11 @@ const AdvertiserPublish = () => {
     publishingRef.current = true;
     setPublishing(true);
     try {
+      // Esperar lo que siga subiendo. En el caso normal esto no espera nada —los
+      // archivos ya subieron mientras el usuario rellenaba— y "Publicar" es
+      // instantaneo. Solo espera a quien fue mas rapido que su conexion, y
+      // entonces espera lo que falte, no la subida entera desde cero.
+      await esperarSubidas();
       // 1) Crear el aviso y publicarlo. Si ya existe en la BD con estos mismos
       //    adjuntos (caso típico: se pagó el faltante y volvemos a rematar),
       //    se salta la creación y las subidas y se publica y punto.
@@ -808,12 +979,8 @@ const AdvertiserPublish = () => {
         // Si ya se guardó como borrador, se publica ESE aviso: sin esto quedarían
         // dos, uno en borradores y otro activo.
         draftId: draftListingId.current,
-        mainPhoto: mainPhoto ? { file: mainPhoto.file, name: mainPhoto.name, comprimida: mainPhoto.comprimida } : null,
-        extraPhotos: extraPhotos.slice(0, extraImageCount)
-          .filter((p): p is PhotoItem => !!p)
-          .map((p) => ({ file: p.file, name: p.name, comprimida: p.comprimida })),
-        pdf: hasPdfInPackage && pdfFile ? { file: pdfFile.file, name: pdfFile.name } : null,
-      videos: videos.map((v) => ({ file: v.file, name: v.name })),
+        ...adjuntosParaGuardar(),
+        idReservado: idReservado.current,
         receiptType: "boleta",
         email,
         advertiserName: verifiedName || session?.name || "Anunciante",
@@ -1011,7 +1178,13 @@ const AdvertiserPublish = () => {
                         <span
                           role="button"
                           aria-label="Quitar imagen principal"
-                          onClick={(e) => { e.stopPropagation(); setMainPhoto(null); }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMainPhoto((prev) => {
+                              if (prev?.estado?.fase === "lista") void borrarAdjunto("imagen", prev.estado.subido.path);
+                              return null;
+                            });
+                          }}
                           className="absolute top-1.5 right-1.5 w-7 h-7 bg-white text-destructive flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground"
                         >
                           <X size={14} />
@@ -1470,14 +1643,39 @@ const AdvertiserPublish = () => {
                 vista previa, para que "Publicar aviso" quede siempre a la vista
                 en laptop (antes quedaba debajo del preview y podía no verse). */}
             <div className="flex flex-col gap-2">
+              {/* Barra de subida: cuenta TODOS los adjuntos y por PESO, no por
+                  numero. Con "subiendo 1 de 4", un video de 15 MB y una foto de
+                  200 KB valian lo mismo y la barra se quedaba clavada en el 25%
+                  durante minutos. Y hasta ahora el PDF y los videos ni se
+                  contaban: subian en silencio. */}
+              {pendienteDeSubir && !publishing && (
+                <div className="border border-secondary/30 bg-secondary/5 px-3 py-2 space-y-1.5" data-testid="progreso-subida">
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                      <Loader2 size={12} className="animate-spin text-secondary" />
+                      {pendienteDeSubir}
+                    </span>
+                    <span className="font-bold tabular-nums text-secondary">{avanceSubida}%</span>
+                  </div>
+                  <div className="h-1 w-full bg-muted overflow-hidden">
+                    <div className="h-full bg-secondary transition-[width] duration-300" style={{ width: `${avanceSubida}%` }} />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-tight">
+                    Puedes seguir rellenando: se sube solo mientras escribes.
+                  </p>
+                </div>
+              )}
+
               {/* `disabled` solo mientras se publica: si faltan campos dejamos el
                   botón activo para que openPublishFlow explique QUÉ falta. */}
               <Button variant="hero" size="lg" className="w-full rounded-none" onClick={openPublishFlow} disabled={publishing || savingDraft}>
                 {publishing
                   ? <><Loader2 size={16} className="mr-1 animate-spin" />
-                      {subiendo && subiendo.hechas < subiendo.total
-                        ? `Subiendo imagen ${subiendo.hechas + 1} de ${subiendo.total}…`
-                        : "Publicando…"}</>
+                      {pendienteDeSubir
+                        ? `Terminando de subir… ${avanceSubida}%`
+                        : subiendo && subiendo.hechas < subiendo.total
+                          ? `Subiendo imagen ${subiendo.hechas + 1} de ${subiendo.total}…`
+                          : "Publicando…"}</>
                   : <>Publicar aviso <ArrowRight size={16} className="ml-1" /></>}
               </Button>
 

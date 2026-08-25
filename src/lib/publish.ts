@@ -4,6 +4,7 @@
 import { supabase } from "@/lib/supabase";
 import { compressImage } from "@/lib/compressImage";
 import { fetchListingDocumentUrl } from "@/lib/listings";
+import type { AdjuntoSubido } from "@/lib/subidaAnticipada";
 
 export interface PublishPhoto {
   file: File;
@@ -15,6 +16,13 @@ export interface PublishPhoto {
    * congelada justo cuando el usuario espera.
    */
   comprimida?: boolean;
+  /**
+   * El archivo YA está en Storage, subido mientras se rellenaba el formulario
+   * (ver `subidaAnticipada.ts`). Cuando viene, publicar no vuelve a subirlo: solo
+   * apunta la fila a donde ya está. Es lo que hace que "Publicar" sea instantáneo
+   * en vez de esperar a que suban 46 MB de vídeo.
+   */
+  subido?: AdjuntoSubido;
 }
 
 export interface ListingForm {
@@ -56,6 +64,18 @@ export interface DraftInput {
   // Si viene, se actualiza ese borrador en vez de crear otro. Así "Guardar"
   // dos veces no deja dos avisos en "Mis borradores".
   draftId?: string | null;
+  /**
+   * Identificador con el que CREAR el aviso, reservado por el navegador antes de
+   * que exista la fila (ver `subidaAnticipada.ts`).
+   *
+   * Es lo que permite subir los adjuntos mientras el usuario escribe: la ruta de
+   * Storage necesita saber a qué aviso pertenece el archivo, y esperar a tener
+   * la fila obligaría a crear un borrador en "Mis avisos" solo para poder subir
+   * una foto. Con el id reservado, la ruta es desde el principio la definitiva.
+   *
+   * Se ignora si ya hay `draftId`: entonces el aviso existe y tiene el suyo.
+   */
+  idReservado?: string | null;
 }
 
 export interface PublishInput extends DraftInput {
@@ -137,6 +157,13 @@ async function uploadListingPhotos(
   const total = photos.length;
   const filas = await Promise.all(
     photos.map(async (p, sort) => {
+      // Ya subida mientras se rellenaba el formulario: solo hay que apuntar la
+      // fila a donde está. Es el caso normal desde la subida anticipada, y es lo
+      // que hace que "Publicar" no espere a ningún archivo.
+      if (p.subido) {
+        onProgress?.(++hechas, total);
+        return { listing_id: listingId, storage_path: p.subido.path, url: p.subido.url, sort_order: sort };
+      }
       // Si se comprimió al elegirla, no se vuelve a hacer: recodificar un WebP
       // ya reducido cuesta lo mismo y no gana nada.
       const file = p.comprimida ? p.file : await compressImage(p.file);
@@ -171,6 +198,11 @@ async function uploadListingVideos(
 
   const filas = await Promise.all(
     videos.map(async (v, sort) => {
+      // Un vídeo pesa hasta 15 MB: si ya subió mientras el usuario escribía, no
+      // se vuelve a mandar ni por asomo. Aquí es donde más se nota.
+      if (v.subido) {
+        return { listing_id: listingId, storage_path: v.subido.path, url: v.subido.url, sort_order: sort };
+      }
       const path = `${userId}/${listingId}/${sort}-${sanitize(v.name)}`;
       const { error } = await supabase.storage
         .from("listing-videos")
@@ -189,6 +221,11 @@ async function uploadListingVideos(
 // listings.document_url. La ruta empieza por el id del usuario (lo exige la RLS
 // del bucket). Si algo falla, no rompe la publicación: el aviso queda sin PDF.
 async function uploadListingDoc(userId: string, listingId: string, pdf: PublishPhoto): Promise<void> {
+  if (pdf.subido) {
+    const { error } = await supabase.from("listings").update({ document_url: pdf.subido.path }).eq("id", listingId);
+    if (error) console.error("[publish] No se pudo guardar la ruta del PDF:", error.message);
+    return;
+  }
   const path = `${userId}/${listingId}.pdf`;
   const { error: upErr } = await supabase.storage
     .from("listing-docs")
@@ -233,9 +270,15 @@ export async function saveListingDraft(
     return input.draftId;
   }
 
+  // El id va explícito cuando el navegador ya lo reservó y subió archivos a esa
+  // ruta. Si no se respetara, los adjuntos quedarían en la carpeta de un aviso
+  // que no existe y el aviso saldría sin fotos.
+  const fila: Record<string, unknown> = { ...listingRow(input), owner_id: userId, status: "draft" };
+  if (input.idReservado) fila.id = input.idReservado;
+
   const { data, error } = await supabase
     .from("listings")
-    .insert({ ...listingRow(input), owner_id: userId, status: "draft" })
+    .insert(fila)
     .select("id")
     .single();
   if (error || !data) throw new Error(error?.message ?? "No se pudo guardar el borrador.");
