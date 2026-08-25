@@ -249,7 +249,19 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
       ];
     } else if (activeTab === "transacciones") {
       title = "Transacciones de crédito";
-      rows = tx.data.map((r) => ({
+      // TODO lo filtrado, no solo la página en pantalla. Lo reportó el cliente:
+      // exportaba 20 filas y parecía que ese era el movimiento del período —
+      // un reporte contable que se queda corto y no lo dice es peor que no
+      // tenerlo. Mismo criterio que ya seguía "Saldos a favor".
+      const todas = await fetchAdminCreditTransactions({
+        search: txSearch || undefined,
+        type: txType === "all" ? undefined : txType,
+        from: filters.from || undefined,
+        to: filters.to || undefined,
+        page: 1,
+        pageSize: 5000,
+      });
+      rows = todas.data.map((r) => ({
         Usuario: r.full_name,
         Correo: r.email,
         Tipo: r.type === "purchase" ? "Compra" : "Gasto",
@@ -455,7 +467,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
                 permiso 'Reportes'/'edit' (dato financiero). */}
             {canTx && (
               <TabsContent value="transacciones" className="pt-4 space-y-4">
-                <ReportFilters filters={filters} setFilters={setFilters} regions={regionNames} onExport={exp} show={{ dates: true, catRegion: false }} />
+                <ReportFilters filters={filters} setFilters={setFilters} regions={regionNames} onExport={exp} show={{ dates: true, catRegion: false }} nota="La exportación incluye todas las transacciones que coincidan con los filtros, no solo la página en pantalla." />
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="flex items-center bg-muted/50 border border-border h-9 flex-1 min-w-[180px] max-w-sm">
                     <Search size={14} className="ml-3 text-muted-foreground shrink-0" />

@@ -54,6 +54,12 @@ const asDuracion = (d: number | null | undefined): DurationDays =>
 
 // "Imagen adicional" admite hasta 3 por aviso (además de la portada incluida).
 const MAX_EXTRA_IMAGES = 3;
+// Tope de peso de una foto YA optimizada. El original puede llegar pesado —una
+// foto de móvil son 3-8 MB y rechazarla sería rechazar casi cualquier foto—, se
+// reescala a 1600 px y se pasa a WebP, y es el resultado el que tiene que caber
+// aquí. Antes el texto prometía "hasta 100 KB" y se aceptaba cualquier cosa
+// hasta 10 MB sin comprobar nada: el cliente lo reportó y tenía razón.
+const MAX_FOTO_BYTES = 500 * 1024;
 
 // Extras del paquete (cantidad numérica por cada uno)
 type ExtraKey = "img500" | "pdf500" | "video20" | "urgente" | "destacado" | "confidencial";
@@ -374,6 +380,24 @@ const AdvertiserPublish = () => {
     // segundos de pantalla congelada). Si falla, se sube el original.
     void compressImage(f)
       .then((comprimida) => {
+        // Si ni optimizada cabe, se retira el hueco en vez de subirla igual: es
+        // el único momento en que se puede decir algo útil ("usa una más
+        // liviana"), y hacerlo callando dejaba avisos con fotos de megas.
+        if (comprimida.size > MAX_FOTO_BYTES) {
+          toast({
+            title: "Esa foto pesa demasiado",
+            description: `Incluso optimizada supera los ${Math.round(MAX_FOTO_BYTES / 1024)} KB. Prueba con otra imagen o con una versión más pequeña.`,
+            variant: "destructive",
+          });
+          if (slot === "main") setMainPhoto((prev) => (prev?.id === item.id ? null : prev));
+          else setExtraPhotos((prev) => {
+            if (prev[i]?.id !== item.id) return prev;
+            const next = [...prev];
+            next[i] = null;
+            return next;
+          });
+          return;
+        }
         const listo: PhotoItem = { ...item, file: comprimida, comprimida: true };
         if (slot === "main") {
           setMainPhoto((prev) => (prev?.id === item.id ? listo : prev));
@@ -997,12 +1021,12 @@ const AdvertiserPublish = () => {
                       <div className="text-center px-4">
                         <ImagePlus size={28} className="mx-auto text-muted-foreground mb-2" />
                         <p className="text-xs font-semibold text-foreground">Imagen principal</p>
-                        <p className="text-[11px] text-muted-foreground">Opcional · incluida · hasta 100 KB</p>
+                        <p className="text-[11px] text-muted-foreground">Opcional · incluida · la optimizamos por ti</p>
                       </div>
                     )}
                   </button>
                   <p className="mt-2 text-[11px] text-muted-foreground">
-                    <span className="font-semibold text-foreground">Imagen principal</span> — incluida sin costo, hasta 100 KB.
+                    <span className="font-semibold text-foreground">Imagen principal</span> — incluida sin costo. Súbela tal como la tienes: la optimizamos automáticamente.
                   </p>
                 </div>
 

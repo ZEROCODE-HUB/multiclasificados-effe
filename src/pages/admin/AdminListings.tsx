@@ -69,7 +69,10 @@ const mapRow = (r: AdminListingRow): Listing => ({
   expiresAt: r.expires_at ?? null,
 });
 
-const PAGE_SIZE = 5;
+// 20 filas por pantalla. Estaba en 5 y el cliente lo reportó: revisar cien
+// usuarios costaba veinte clics de paginación. La lista ya viene entera del
+// servidor y se corta en el navegador, así que subirlo no cuesta consultas.
+const PAGE_SIZE = 20;
 
 const DAY_MS = 86_400_000;
 

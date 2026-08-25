@@ -41,6 +41,21 @@ describe("Footer de la portada", () => {
     expect(document.querySelector('a[href^="mailto:"]')).toBeNull();
   });
 
+  // Auditoría de agosto, hallazgos 13 y 14: el pie enseñaba datos de relleno.
+  it("el correo de contacto es el de la empresa, no uno inventado", () => {
+    const { container } = renderHome();
+    const footer = container.querySelector("footer")!;
+    expect(within(footer).getByText("info@coleffe.com")).toBeInTheDocument();
+    // El anterior no existe: quien escribiera ahí no llegaba a nadie.
+    expect(footer.textContent).not.toContain("effemulticlasificados.pe");
+  });
+
+  it("no queda ningún teléfono de relleno", () => {
+    const { container } = renderHome();
+    const footer = container.querySelector("footer")!;
+    expect(footer.textContent).not.toMatch(/234\s*5678/);
+  });
+
   it("deja un único acceso a los términos", () => {
     const { container } = renderHome();
     const footer = container.querySelector("footer")!;

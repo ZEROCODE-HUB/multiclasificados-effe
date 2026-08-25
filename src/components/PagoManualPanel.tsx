@@ -40,6 +40,11 @@ export function PagoManualPanel({
   const [copiado, setCopiado] = useState<string | null>(null);
   // El navegador bloqueó la pestaña de WhatsApp: hay que darle el enlace.
   const [bloqueado, setBloqueado] = useState(false);
+  // Ya nos avisó de este pago. Reportado por el cliente: con la pestaña de
+  // WhatsApp bloqueada esta pantalla se quedaba viva con el botón otra vez
+  // activo, así que un segundo clic mandaba un segundo mensaje por el MISMO
+  // pago — y al equipo le llegaban dos vouchers de una sola transferencia.
+  const [avisado, setAvisado] = useState(false);
 
   const copiar = async (texto: string) => {
     try {
@@ -60,6 +65,7 @@ export function PagoManualPanel({
   const hayQr = cuentas.some((c) => !!c.qr);
 
   const confirmar = async () => {
+    if (avisado || enviando) return;
     // WhatsApp se abre PRIMERO y en otra pestaña, dentro del propio clic: esta
     // pantalla tiene que seguir viva para llevar al usuario a sus avisos. Antes
     // se abría encima y, al volver con "atrás", seguía en el formulario de
@@ -68,6 +74,7 @@ export function PagoManualPanel({
     if (!abierto) setBloqueado(true);
 
     setEnviando(true);
+    setAvisado(true);
     try {
       await confirmarPagoManual({ orderId });
     } catch {
@@ -206,17 +213,28 @@ export function PagoManualPanel({
         </p>
       )}
 
+      {/* Una vez avisado, "Volver" deja de tener sentido: llevaba de vuelta al
+          formulario de publicar, que es justo donde el usuario podía creer que
+          no había pasado nada y pagar otra vez. Se cambia por la salida buena. */}
       <div className="flex items-center justify-between gap-3 pt-1 border-t">
-        {onVolver ? (
+        {onVolver && !avisado ? (
           <Button variant="ghost" size="sm" onClick={onVolver} disabled={enviando} className="gap-1 -ml-2">
             <ArrowLeft size={14} /> Volver
           </Button>
         ) : <span />}
-        <Button onClick={confirmar} disabled={enviando} className="gap-2">
-          {enviando
-            ? <><Loader2 size={14} className="animate-spin" /> Abriendo WhatsApp…</>
-            : <><Smartphone size={14} /> Ya pagué, enviar voucher</>}
-        </Button>
+        {avisado ? (
+          <Button onClick={onListo} disabled={enviando} className="gap-2">
+            {enviando
+              ? <><Loader2 size={14} className="animate-spin" /> Un momento…</>
+              : <><Check size={14} /> {publicaAviso ? "Ver mis avisos" : "Ver mi saldo"}</>}
+          </Button>
+        ) : (
+          <Button onClick={confirmar} disabled={enviando} className="gap-2">
+            {enviando
+              ? <><Loader2 size={14} className="animate-spin" /> Abriendo WhatsApp…</>
+              : <><Smartphone size={14} /> Ya pagué, enviar voucher</>}
+          </Button>
+        )}
       </div>
     </div>
   );

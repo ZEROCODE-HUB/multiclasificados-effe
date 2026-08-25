@@ -98,7 +98,15 @@ export function Navbar() {
             <DropdownMenuTrigger className="flex items-center gap-1 px-3 py-2 text-sm font-semibold text-foreground hover:text-secondary transition-colors outline-none">
               Categorías <ChevronDown size={14} />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56 bg-card rounded-none">
+            {/* Alto máximo + scroll: en una pantalla baja (portátiles de 768 px
+                de alto, que es donde lo vio el cliente) la lista de categorías
+                se salía por debajo y las últimas quedaban fuera de la vista sin
+                forma de llegar a ellas. La variable la publica Radix con el
+                espacio real que queda hasta el borde. */}
+            <DropdownMenuContent
+              align="start"
+              className="w-56 bg-card rounded-none max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto"
+            >
               {categories.map((c) => (
                 <DropdownMenuItem key={c.id} onClick={() => navigate(`/buscar?cat=${c.id}`)} className="gap-2 cursor-pointer rounded-none">
                   <c.icon size={14} className="text-secondary" />

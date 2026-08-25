@@ -16,7 +16,7 @@
 >
 > **Estado al 15 de julio de 2026** · App v2.6 (versionCode 17) · Stack: React 18 + Vite + TypeScript + Supabase + Capacitor.
 > Documento vivo: marcá `[x]` a medida que se cierra cada ítem.
-> Este archivo **reemplaza** a `PENDIENTES.md` (fechado 23-jun-2026 y desactualizado: pagos, mapa real, reportes a tabla real, hilo de moderación y Factiliza/boletas ya están hechos).
+> Este archivo **reemplaza** a `PENDIENTES.md`, que se retiró del repositorio el 25-ago-2026 (fechado 23-jun-2026 y desactualizado: pagos, mapa real, reportes a tabla real, hilo de moderación y Factiliza/boletas ya estaban hechos). Convivir dos documentos de estado que se contradecían hizo que la auditoría externa diera por pendiente lo que ya estaba resuelto — sigue en el historial de git si hace falta consultarlo.
 
 **Leyenda de severidad:** 🔴 Bloqueante · 🟠 Importante · 🟡 Menor · 🔑 Solo configuración (sin código)
 
@@ -132,7 +132,7 @@
 - [x] 🟡 **Borrar `MapPage.tsx` huérfano.** ✅ *Hecho (15-jul).* Archivo eliminado (`/mapa` ya redirige a `/buscar?view=map`).
 - [x] 🟠 **Sacar el APK del repo.** ✅ *Hecho (15-jul).* `git rm --cached` del `.apk` (el `.gitignore` ya tenía `*.apk`).
 - [x] 🟡 **Mocks de demo aislados.** ✅ *Cerrado (15-jul).* `featuredListings` era **código muerto** (nunca se importa; la Home usa `fetchListings` real). Los KPIs/serie del dashboard admin ahora se **guardan por sesión**: `fetchAdminStats`/`fetchGrowthSeries` (`admin.ts`) devuelven ceros/serie vacía **reales** para un staff logueado si el RPC viene vacío/falla, y el mock queda solo para el modo demo sin sesión. Test `adminStatsDemoGuard.test.ts`. **Rating falso quitado:** el "0.0" fijo de la lista del mapa (`SearchPage`) se eliminó. **Reseñas ocultas (por ahora):** el bloque `ListingReviews` del detalle (estaba solo para empleos) se desmontó; el componente y su lib siguen ahí para reactivarlo con un `{isJobs && ...}`. `loadReviewMeta` se mantiene porque también carga `ownerId`.
-- [ ] 🟠 **Rotar secretos comprometidos.** `PENDIENTES.md:29-35` y `.env.example:3` mencionan que se compartieron por chat la contraseña de BD, la `service_role` key y tokens de GitHub. Rotar todos. *(Externo — ver `PLAN-IMPLEMENTACION.md`.)*
+- [ ] 🟠 **Rotar secretos comprometidos.** el retirado `PENDIENTES.md` y `.env.example:3` mencionan que se compartieron por chat la contraseña de BD, la `service_role` key y tokens de GitHub. Rotar todos. *(Externo — ver `PLAN-IMPLEMENTACION.md`.)*
 - [x] 🟡 **Moderación en `localStorage` — verificado, no es problema.** ✅ *Revisado (15-jul).* `AdminListings` usa la BD (`setListingStatus` → RPC) para avisos reales (`isUuid(id)`); el `effe_disabled` en `localStorage` **solo** respalda datos mock del modo demo. No diverge en producción.
 - [x] 🟡 **Actualizar `README.md`.** ✅ *Hecho (15-jul).* Reescrito con stack, setup, env vars, scripts, estructura, móvil y enlaces a los docs de estado.
 - [x] 🟡 **Code-splitting.** ✅ *Hecho (15-jul).* `manualChunks` en `vite.config.ts` (charts/maps/ui/supabase/router); chunk principal **1.1 MB → 411 KB**, sin warning de 500 KB.

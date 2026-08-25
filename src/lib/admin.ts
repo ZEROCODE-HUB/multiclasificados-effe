@@ -248,16 +248,19 @@ export async function fetchSaldosUsuarios(opts: {
 // permiso 'Reportes'/'edit' (ver permissions.ts); sin ese permiso devuelve vacío.
 export async function fetchAdminCreditTransactions(opts: {
   search?: string; type?: "purchase" | "spend"; from?: string; to?: string; page?: number;
+  /** Filas a traer. Solo la exportación lo sube: la pantalla usa el tamaño de página. */
+  pageSize?: number;
 }): Promise<{ data: AdminCreditTx[]; total: number }> {
   const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.max(1, opts.pageSize ?? CREDIT_TX_PAGE_SIZE);
   try {
     const { data, error } = await supabase.rpc("admin_credit_transactions", {
       p_search: opts.search || null,
       p_type: opts.type || null,
       p_from: opts.from || null,
       p_to: opts.to || null,
-      p_limit: CREDIT_TX_PAGE_SIZE,
-      p_offset: (page - 1) * CREDIT_TX_PAGE_SIZE,
+      p_limit: pageSize,
+      p_offset: (page - 1) * pageSize,
     });
     if (error) throw error;
     // `total_count` viaja en cada fila (el RPC pagina en el servidor).

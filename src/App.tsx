@@ -11,6 +11,7 @@ import { UpdateGate } from "@/components/UpdateGate";
 import { FavoritesProvider } from "@/hooks/useFavorites";
 import { RequireRole } from "@/components/RequireRole";
 import { StaffHomeRedirect } from "@/components/StaffHomeRedirect";
+import { IrArriba } from "@/components/IrArriba";
 import { IosSwipeBack } from "@/components/IosSwipeBack";
 import { ReconciliadorDePagos } from "@/components/ReconciliadorDePagos";
 import { AdminShell } from "@/components/AdminLayout";
@@ -78,6 +79,8 @@ const App = () => (
       <CerrarTecladoAlTocarFuera />
       <FavoritesProvider>
       <BrowserRouter>
+        {/* Cada pantalla nueva empieza por arriba (ver IrArriba.tsx). */}
+        <IrArriba />
         {/* Swipe-back desde el borde izquierdo en iOS (no tiene botón físico). */}
         <IosSwipeBack />
         {/* Rescata los pagos que se quedaron sin confirmar (webhook perdido). */}

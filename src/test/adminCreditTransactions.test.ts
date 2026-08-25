@@ -43,6 +43,20 @@ describe("fetchAdminCreditTransactions (EFFE-054)", () => {
     expect(res.data[0]).toMatchObject({ id: "t1", full_name: "Ana", credits: 100, type: "purchase" });
   });
 
+  // El reporte exportaba `tx.data`, o sea las 20 filas de la página en pantalla,
+  // y el archivo salía sin decir que faltaba el resto. Lo reportó el cliente en
+  // la auditoría de agosto: para exportar entero hay que poder pedir más de una
+  // página en una sola llamada.
+  it("acepta un tamaño de página propio, para exportar todo lo filtrado", async () => {
+    await fetchAdminCreditTransactions({ search: "ana", pageSize: 5000 });
+    expect(state.args).toMatchObject({ p_search: "ana", p_limit: 5000, p_offset: 0 });
+  });
+
+  it("sin pageSize sigue paginando de 20 en 20 (la pantalla no cambia)", async () => {
+    await fetchAdminCreditTransactions({ page: 2 });
+    expect(state.args).toMatchObject({ p_limit: CREDIT_TX_PAGE_SIZE, p_offset: CREDIT_TX_PAGE_SIZE });
+  });
+
   it("sin datos devuelve total 0", async () => {
     const res = await fetchAdminCreditTransactions({ page: 5 });
     expect(res).toEqual({ data: [], total: 0 });

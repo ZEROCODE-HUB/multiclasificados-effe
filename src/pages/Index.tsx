@@ -724,8 +724,17 @@ const Index = () => {
             <div>
               <h2 className="font-semibold mb-5 uppercase text-secondary" style={{ fontSize: "13px", letterSpacing: "0.08em" }}>Contacto</h2>
               <ul className="space-y-3 text-sm text-primary-foreground/70">
-                <li className="flex items-center gap-2 min-w-0"><CheckCircle2 size={14} className="text-secondary shrink-0" /> <span className="min-w-0 break-all">info@effemulticlasificados.pe</span></li>
-                <li className="flex items-center gap-2"><CheckCircle2 size={14} className="text-secondary" /> +51 1 234 5678</li>
+                {/* El correo real de la empresa. El que había (info@effemulticlasificados.pe)
+                    era de relleno y no existe: quien escribiera ahí no llegaba a nadie.
+                    El teléfono fijo "+51 1 234 5678" también era de relleno y se retiró
+                    a pedido del cliente; el contacto por voz va por WhatsApp.
+                    Va como texto y NO como `mailto:`, igual que en el chat (ad52fbb): en
+                    un equipo sin cliente de correo configurado, pulsarlo abre una ventana
+                    en blanco o Gmail sin sesión, y el usuario cree que escribió. */}
+                <li className="flex items-center gap-2 min-w-0">
+                  <CheckCircle2 size={14} className="text-secondary shrink-0" />
+                  <span className="min-w-0 break-all">info@coleffe.com</span>
+                </li>
                 <li className="flex items-center gap-2"><CheckCircle2 size={14} className="text-secondary" /> Lima, Perú</li>
               </ul>
             </div>

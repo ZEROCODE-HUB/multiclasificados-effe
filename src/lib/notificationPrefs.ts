@@ -11,9 +11,12 @@ export interface NotifPref {
   email: boolean;
 }
 
-// Cuando no hay fila explícita, `notify_user` asume in-app activado y push/email
-// apagados. La UI muestra ese mismo valor por defecto.
-export const DEFAULT_PREF: NotifPref = { in_app: true, push: false, email: false };
+// Cuando no hay fila explícita, `notify_user` da por activados los TRES canales
+// (migración 0121). La UI muestra ese mismo valor por defecto: si aquí dijera
+// otra cosa, el usuario vería apagado lo que en realidad le está llegando.
+// La decisión es del cliente: quien no quiere un canal lo apaga, pero nadie se
+// pierde un mensaje por una preferencia que nunca tocó.
+export const DEFAULT_PREF: NotifPref = { in_app: true, push: true, email: true };
 
 export type UserRole = "anunciante" | "buscador";
 

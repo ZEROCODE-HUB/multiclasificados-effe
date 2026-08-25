@@ -75,7 +75,10 @@ const DURATIONS: DurationDays[] = [3, 7, 15, 30, 60, 90];
 
 // Solo los adicionales con costo (>0 en la matriz por defecto).
 const EXTRA_DEFS: Array<{ key: keyof ExtraPrices; label: string; sub: string }> = [
-  { key: "img500", label: "2ª imagen", sub: "mayor a 100 KB" },
+  // Decía "2ª imagen · mayor a 100 KB" mientras la pantalla de publicar decía
+  // "Imagen adicional · hasta 500 KB · hasta 3" para el MISMO adicional. Manda
+  // lo que hace el sistema.
+  { key: "img500", label: "Imagen adicional", sub: "hasta 3 · hasta 500 KB" },
   { key: "pdf500", label: "Adjuntar PDF", sub: "hasta 500 KB" },
   { key: "urgente", label: "Etiqueta Urgente", sub: "resalta el aviso" },
   { key: "destacado", label: "Aviso Destacado", sub: "aparece arriba" },

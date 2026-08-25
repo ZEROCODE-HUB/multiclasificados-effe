@@ -97,6 +97,46 @@ describe("pantalla de pago con Yape/Plin", () => {
     expect(onListo).not.toHaveBeenCalled();
   });
 
+  // Reportado por el cliente en la auditoría de agosto: el botón se podía pulsar
+  // dos veces y al equipo le llegaban dos vouchers de una sola transferencia.
+  describe("una vez que ya nos avisó", () => {
+    it("no se puede volver a mandar el voucher del mismo pago", async () => {
+      abrirVoucher.mockReturnValue(false); // pestaña bloqueada: la pantalla sigue viva
+      render(<PagoManualPanel {...props} />);
+
+      fireEvent.click(screen.getByRole("button", { name: /ya pagué/i }));
+      await waitFor(() => expect(confirmar).toHaveBeenCalledTimes(1));
+
+      // El botón de enviar ya no está: en su sitio hay una salida.
+      expect(screen.queryByRole("button", { name: /ya pagué/i })).not.toBeInTheDocument();
+      expect(abrirVoucher).toHaveBeenCalledTimes(1);
+    });
+
+    it("ofrece ir a sus avisos en vez de «Volver» al formulario de publicar", async () => {
+      // "Volver" devolvía al formulario de publicar, que es justo donde el
+      // usuario podía creer que no se había enviado nada y pagar otra vez.
+      abrirVoucher.mockReturnValue(false);
+      const onVolver = vi.fn();
+      const onListo = vi.fn();
+      render(<PagoManualPanel {...props} publicaAviso onVolver={onVolver} onListo={onListo} />);
+
+      fireEvent.click(screen.getByRole("button", { name: /ya pagué/i }));
+
+      const salida = await screen.findByRole("button", { name: /ver mis avisos/i });
+      expect(screen.queryByRole("button", { name: /^volver$/i })).not.toBeInTheDocument();
+      fireEvent.click(salida);
+      expect(onListo).toHaveBeenCalled();
+      expect(onVolver).not.toHaveBeenCalled();
+    });
+
+    it("en una recarga la salida lleva al saldo, no a los avisos", async () => {
+      abrirVoucher.mockReturnValue(false);
+      render(<PagoManualPanel {...props} />);
+      fireEvent.click(screen.getByRole("button", { name: /ya pagué/i }));
+      expect(await screen.findByRole("button", { name: /ver mi saldo/i })).toBeInTheDocument();
+    });
+  });
+
   it("al renovar no dice que se publica: el aviso ya está fuera", () => {
     // Decirle "tu aviso se publica solo" a quien renueva le hace pensar que su
     // aviso se cayó. Lo que compra son días.

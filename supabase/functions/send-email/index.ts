@@ -14,16 +14,90 @@ const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") || "";
 const EMAIL_FROM = Deno.env.get("EMAIL_FROM") || "eFFe Clasificados <onboarding@resend.dev>";
 
-// Cuerpo legible del correo. Para mensajes del admin usa el texto tal cual.
+const SITE_URL = (Deno.env.get("PUBLIC_SITE_URL") || "https://www.coleffe.com").replace(/\/$/, "");
+
+/**
+ * Cuerpo legible del correo.
+ *
+ * Hasta la 0121 el canal de correo estaba apagado de fábrica y casi nadie lo
+ * encendía, así que todo lo que no fuera un mensaje del equipo caía en un
+ * "Tienes una nueva notificación" sin decir de qué ni adónde ir. Ahora el
+ * correo llega por defecto, y un correo sin contexto ni enlace es peor que no
+ * mandarlo: se marca como spam y arrastra al resto. Cada evento dice qué pasó y
+ * lleva su enlace, que es lo que pidió el cliente para los avisos por vencer.
+ */
 function bodyFor(type: string, payload: Record<string, unknown>): string {
   const p = payload || {};
+  const titulo = String(p.listing_title ?? "tu aviso");
+  const aviso = p.listing_id ? SITE_URL + "/aviso/" + String(p.listing_id) : null;
+  const misAvisos = SITE_URL + "/dashboard/anunciante/avisos";
+  // Una línea en blanco entre párrafos: la plantilla respeta los saltos.
+  const parrafos = (...partes: Array<string | null>) => partes.filter(Boolean).join("\n\n");
+
   switch (type) {
     case "admin_message":
       return String(p.body ?? "");
+
+    case "listing_expiring": {
+      const dias = Number(p.dias);
+      const plazo = Number.isFinite(dias) && dias > 0
+        ? `Te quedan ${dias} ${dias === 1 ? "día" : "días"} para renovarlo.`
+        : "Está a punto de caducar.";
+      return parrafos(
+        `Tu aviso "${titulo}" está por vencer. ${plazo}`,
+        aviso ? `Verlo: ${aviso}` : null,
+        `Renuévalo desde tus avisos: ${misAvisos}`,
+        "Cuando vence deja de aparecer en las búsquedas.",
+      );
+    }
+
+    case "new_message":
+      return parrafos(
+        String(p.preview ?? "Tienes un mensaje nuevo sobre uno de tus avisos."),
+        `Responder: ${SITE_URL}/dashboard/anunciante/mensajes`,
+      );
+
+    case "new_application":
+      return parrafos(
+        `Alguien postuló a tu aviso "${titulo}".`,
+        `Ver las postulaciones: ${SITE_URL}/dashboard/anunciante/postulaciones`,
+      );
+
+    case "application_status":
+      return parrafos(
+        `Cambió el estado de tu postulación${p.listing_title ? ` a "${titulo}"` : ""}.`,
+        `Ver: ${SITE_URL}/dashboard/buscador/postulaciones`,
+      );
+
+    case "new_review":
+      return parrafos(
+        `Recibiste una reseña${p.rating ? ` de ${String(p.rating)} estrellas` : ""}.`,
+        aviso ? `Verla en el aviso: ${aviso}` : `Ver tus avisos: ${misAvisos}`,
+      );
+
+    case "saved_search_match":
+      return parrafos(
+        "Hay avisos nuevos que coinciden con una de tus búsquedas guardadas.",
+        `Verlos: ${SITE_URL}/dashboard/buscador/busquedas`,
+      );
+
+    case "listing_disabled":
+      return parrafos(
+        `Tu aviso "${titulo}" fue deshabilitado por moderación${p.reason ? `: ${String(p.reason)}` : "."}`,
+        `Ver tus avisos: ${misAvisos}`,
+      );
+
+    case "listing_enabled":
+      return parrafos(
+        `Tu aviso "${titulo}" volvió a estar visible.`,
+        aviso ? `Verlo: ${aviso}` : `Tus avisos: ${misAvisos}`,
+      );
+
     default:
-      return String(p.body ?? p.preview ?? "Tienes una nueva notificación en eFFe Clasificados.");
+      return String(p.body ?? p.preview ?? `Tienes una notificación nueva en eFFe Clasificados: ${SITE_URL}`);
   }
 }
+
 
 // Plantilla HTML mínima y neutral (sin dependencias externas).
 function htmlEmail(title: string, body: string): string {

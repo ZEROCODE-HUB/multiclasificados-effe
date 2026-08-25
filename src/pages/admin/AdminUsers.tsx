@@ -45,7 +45,10 @@ const rolesOf = (roles: string): string[] => [
   ...new Set(roles.split(",").filter(Boolean).map((r) => (r === "anunciante" ? "buscador" : r))),
 ];
 
-const PAGE_SIZE = 5;
+// 20 filas por pantalla. Estaba en 5 y el cliente lo reportó: revisar cien
+// usuarios costaba veinte clics de paginación. La lista ya viene entera del
+// servidor y se corta en el navegador, así que subirlo no cuesta consultas.
+const PAGE_SIZE = 20;
 
 const AdminUsers = ({ role }: { role: AdminRole }) => {
   // Matriz de permisos: solo restringe al rol admin (superadmin = acceso total).

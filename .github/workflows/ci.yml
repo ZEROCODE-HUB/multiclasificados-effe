@@ -23,8 +23,13 @@ jobs:
       # así el CI compila lo mismo que la máquina de quien programó.
       - run: npm ci
 
+      # `npm run typecheck` y NO `npx tsc --noEmit`: el tsconfig.json de la raíz
+      # es solo un índice de referencias con "files": [], así que `tsc --noEmit`
+      # a secas compila CERO archivos y siempre sale en verde. Esta comprobación
+      # llevaba tiempo sin comprobar nada; el script apunta a tsconfig.app.json,
+      # que es donde está el código de verdad.
       - name: Tipos
-        run: npx tsc --noEmit
+        run: npm run typecheck
 
       - name: Lint
         run: npm run lint

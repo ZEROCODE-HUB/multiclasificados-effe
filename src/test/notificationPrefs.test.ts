@@ -31,9 +31,14 @@ describe("notificationPrefs — filtrado por rol", () => {
 });
 
 describe("notificationPrefs — valores por defecto", () => {
-  it("sin fila explícita usa el default (in-app on, push/email off)", () => {
+  it("sin fila explícita los TRES canales están encendidos", () => {
+    // Cambió en la 0121, a pedido del cliente: push y correo nacían apagados y
+    // un anunciante que nunca entró a Configuración no se enteraba de que su
+    // aviso vencía. Esto tiene que coincidir con el `coalesce` de `notify_user`
+    // en la base: si aquí dijera otra cosa, la pantalla mostraría apagado un
+    // canal por el que sí le están llegando avisos.
     expect(prefOrDefault({}, "new_message")).toEqual(DEFAULT_PREF);
-    expect(DEFAULT_PREF).toEqual({ in_app: true, push: false, email: false });
+    expect(DEFAULT_PREF).toEqual({ in_app: true, push: true, email: true });
   });
 
   it("con fila explícita respeta lo guardado", () => {
