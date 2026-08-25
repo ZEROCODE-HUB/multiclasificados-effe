@@ -17,8 +17,28 @@ const storage: {
   fallarVeces: number;
 } = { subidas: [], borrados: [], fallarVeces: 0 };
 
+const tus = { intentos: 0, fallar: false, ultimo: null as Record<string, unknown> | null };
+
+// La libreria se carga con import() dinamico solo al subir un video.
+vi.mock("tus-js-client", () => ({
+  Upload: class {
+    opts: Record<string, unknown>;
+    constructor(_file: File, opts: Record<string, unknown>) { this.opts = opts; tus.ultimo = opts; }
+    findPreviousUploads() { return Promise.resolve([]); }
+    resumeFromPreviousUpload() { /* no hay nada que retomar en las pruebas */ }
+    abort() { return Promise.resolve(); }
+    start() {
+      tus.intentos++;
+      if (tus.fallar) (this.opts.onError as (e: Error) => void)(new Error("tus caido"));
+      else (this.opts.onSuccess as () => void)();
+    }
+  },
+}));
+
 vi.mock("@/lib/supabase", () => ({
+  supabaseUrl: "https://proyecto.supabase.co",
   supabase: {
+    auth: { getSession: async () => ({ data: { session: { access_token: "jwt-de-prueba" } } }) },
     storage: {
       from: (bucket: string) => ({
         upload: async (path: string, file: File) => {
@@ -55,6 +75,7 @@ beforeEach(() => {
   storage.subidas = [];
   storage.borrados = [];
   storage.fallarVeces = 0;
+  tus.intentos = 0; tus.fallar = false; tus.ultimo = null;
 });
 
 describe("el identificador del aviso se reserva en el navegador", () => {
@@ -89,10 +110,13 @@ describe("subir un adjunto", () => {
   });
 
   it("cada tipo va a su bucket", async () => {
-    await subirAdjunto("imagen", USUARIO, AVISO, "portada", archivo("f.webp", "image/webp", 10));
-    await subirAdjunto("video", USUARIO, AVISO, "video-1", archivo("v.mp4", "video/mp4", 10));
-    await subirAdjunto("pdf", USUARIO, AVISO, "documento", archivo("d.pdf", "application/pdf", 10));
-    expect(storage.subidas.map((s) => s.bucket)).toEqual(["listing-images", "listing-videos", "listing-docs"]);
+    // El video no aparece aqui a proposito: va por la via reanudable, que se
+    // comprueba mas abajo. Lo que se fija aqui es que imagen y PDF no se crucen.
+    const img = await subirAdjunto("imagen", USUARIO, AVISO, "portada", archivo("f.webp", "image/webp", 10));
+    const pdf = await subirAdjunto("pdf", USUARIO, AVISO, "documento", archivo("d.pdf", "application/pdf", 10));
+    expect(storage.subidas.map((s) => s.bucket)).toEqual(["listing-images", "listing-docs"]);
+    expect(img.path).toContain(AVISO);
+    expect(pdf.path).toContain(AVISO);
   });
 
   it("la extensión sale del tipo, no del nombre", async () => {
@@ -140,6 +164,54 @@ describe("subir un adjunto", () => {
     ac.abort();
     await expect(
       subirAdjunto("imagen", USUARIO, AVISO, "portada", archivo("f.webp", "image/webp", 10), { signal: ac.signal }),
+    ).rejects.toThrow(/cancelada/);
+    expect(storage.subidas).toHaveLength(0);
+  });
+});
+
+describe("los videos van por la via reanudable", () => {
+  // Un video son hasta 15 MB. La subida normal es todo o nada: si se corta al
+  // 80 % vuelve a empezar por cero, y en una conexion movil peruana eso pasa a
+  // menudo. TUS retoma por donde iba.
+  it("un video no usa la subida del tiron", async () => {
+    await subirAdjunto("video", USUARIO, AVISO, "video-1", archivo("v.mp4", "video/mp4", 15 * 1024));
+    expect(tus.intentos).toBe(1);
+    expect(storage.subidas).toHaveLength(0); // no paso por la via normal
+  });
+
+  it("una foto NO la usa: para 200 KB es maquinaria de mas", async () => {
+    await subirAdjunto("imagen", USUARIO, AVISO, "portada", archivo("f.webp", "image/webp", 200));
+    expect(tus.intentos).toBe(0);
+    expect(storage.subidas).toHaveLength(1);
+  });
+
+  it("va al bucket y la ruta correctos, con la sesion del usuario", async () => {
+    await subirAdjunto("video", USUARIO, AVISO, "video-2", archivo("v.mp4", "video/mp4", 1024));
+    expect(tus.ultimo).toMatchObject({
+      endpoint: "https://proyecto.supabase.co/storage/v1/upload/resumable",
+      metadata: { bucketName: "listing-videos", objectName: `${USUARIO}/${AVISO}/video-2.mp4` },
+    });
+    expect((tus.ultimo!.headers as Record<string, string>).authorization).toBe("Bearer jwt-de-prueba");
+  });
+
+  it("el trozo es de 6 MB exactos: lo exige el servidor, no es una eleccion", async () => {
+    await subirAdjunto("video", USUARIO, AVISO, "video-1", archivo("v.mp4", "video/mp4", 1024));
+    expect(tus.ultimo!.chunkSize).toBe(6 * 1024 * 1024);
+  });
+
+  it("si la via reanudable falla, se sube del tiron igual", async () => {
+    // Es preferible una subida lenta a un adjunto que no llega nunca.
+    tus.fallar = true;
+    const r = await subirAdjunto("video", USUARIO, AVISO, "video-1", archivo("v.mp4", "video/mp4", 1024));
+    expect(r.path).toBe(`${USUARIO}/${AVISO}/video-1.mp4`);
+    expect(storage.subidas).toHaveLength(1);
+  });
+
+  it("pero si se cancelo, no se repliega: era cancelar, no fallar", async () => {
+    const ac = new AbortController();
+    ac.abort();
+    await expect(
+      subirAdjunto("video", USUARIO, AVISO, "video-1", archivo("v.mp4", "video/mp4", 1024), { signal: ac.signal }),
     ).rejects.toThrow(/cancelada/);
     expect(storage.subidas).toHaveLength(0);
   });

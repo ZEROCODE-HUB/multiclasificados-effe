@@ -19,7 +19,7 @@
 // desde el primer momento la definitiva —`<usuario>/<aviso>/…`, la misma de
 // siempre—, sin carpetas temporales que luego haya que mover ni limpiar, y sin
 // tener que crear un borrador en "Mis avisos" solo para poder subir una foto.
-import { supabase } from "@/lib/supabase";
+import { supabase, supabaseUrl } from "@/lib/supabase";
 
 /** Dónde acabó un archivo ya subido. */
 export interface AdjuntoSubido {
@@ -99,6 +99,66 @@ const BUCKET_DE: Record<"imagen" | "video" | "pdf", string> = {
 };
 
 /**
+ * Subida REANUDABLE, para los archivos que pesan de verdad (los vídeos).
+ *
+ * La subida normal es todo o nada: si se corta al 80 % de un vídeo de 15 MB,
+ * el reintento vuelve a empezar por cero. En una conexión móvil peruana eso pasa
+ * a menudo, y con tres vídeos el usuario puede quedarse sin llegar nunca al
+ * final. El protocolo TUS —que Supabase Storage habla de serie— retoma por donde
+ * iba en vez de repetirlo todo.
+ *
+ * La librería se carga SOLO al subir un vídeo (`import()` dinámico): quien no
+ * usa el adicional de vídeo, que son casi todos, no descarga ni un byte de esto.
+ * Y el trozo tiene que ser de 6 MB exactos: es lo que exige el servidor de
+ * Supabase, no una elección.
+ */
+const TROZO_TUS = 6 * 1024 * 1024;
+
+async function subirReanudable(
+  bucket: string,
+  path: string,
+  file: File,
+  signal?: AbortSignal,
+): Promise<void> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error("sin sesión");
+
+  const { Upload } = await import("tus-js-client");
+
+  await new Promise<void>((resolve, reject) => {
+    const subida = new Upload(file, {
+      endpoint: `${supabaseUrl}/storage/v1/upload/resumable`,
+      retryDelays: [0, 2000, 6000, 12000],
+      headers: { authorization: `Bearer ${token}`, "x-upsert": "true" },
+      uploadDataDuringCreation: true,
+      // Sin esto, dos vídeos distintos con el mismo nombre se pisarían al
+      // buscar una subida a medias que retomar.
+      removeFingerprintOnSuccess: true,
+      metadata: {
+        bucketName: bucket,
+        objectName: path,
+        contentType: file.type || "application/octet-stream",
+        cacheControl: "2592000",
+      },
+      chunkSize: TROZO_TUS,
+      onError: reject,
+      onSuccess: () => resolve(),
+    });
+
+    const cancelar = () => { void subida.abort(); reject(new Error("cancelada")); };
+    if (signal?.aborted) { cancelar(); return; }
+    signal?.addEventListener("abort", cancelar, { once: true });
+
+    // Si hay una subida de este mismo archivo a medias, se retoma; si no, empieza.
+    void subida.findPreviousUploads().then((previas) => {
+      if (previas.length) subida.resumeFromPreviousUpload(previas[0]);
+      subida.start();
+    });
+  });
+}
+
+/**
  * Sube UN adjunto y devuelve dónde quedó.
  *
  * Se reintenta una vez: en móvil, el primer intento se pierde a menudo al
@@ -117,6 +177,20 @@ export async function subirAdjunto(
 ): Promise<AdjuntoSubido> {
   const bucket = BUCKET_DE[tipo];
   const path = rutaDe(userId, listingId, ranura, file);
+
+  // Un vídeo pesa hasta 15 MB: va por la vía reanudable, que retoma en vez de
+  // repetir. Si esa vía falla por lo que sea (la librería no carga, el servidor
+  // no acepta el protocolo), se sigue por la de siempre: es preferible una
+  // subida lenta a un adjunto que no llega.
+  if (tipo === "video") {
+    try {
+      await subirReanudable(bucket, path, file, opciones?.signal);
+      return { path, url: supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl };
+    } catch (e) {
+      if (opciones?.signal?.aborted) throw e;
+      console.warn("[subida] La vía reanudable falló, se sube del tirón:", e);
+    }
+  }
 
   let ultimo: string | null = null;
   for (let intento = 0; intento < 2; intento++) {
