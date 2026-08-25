@@ -43,3 +43,7 @@ dist-ssr
 # producción, qué borrar antes— y perderlas al cambiar de máquina sería perder
 # documentación.
 !.claude/skills/
+
+# Lo genera `deno check` al revisar una Edge Function. No representa a las
+# nueve funciones ni lo usa el despliegue: solo ensucia el diff.
+deno.lock
