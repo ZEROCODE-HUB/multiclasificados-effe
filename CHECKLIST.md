@@ -274,6 +274,59 @@ pierde** — hay que volver a concederlos en la misma migración.
 6. 🚀 **El salto a producción** (skill `pasar-a-produccion`) y, al final del
    todo, **el APK y el IPA**.
 
+### 📦 Compilar para Google Play — revisado el 26-ago-2026
+
+**El flujo de release (`.github/workflows/release.yml`) está bien montado** y
+produce un AAB firmado. Comprobado contra el proyecto real:
+
+| | Estado |
+|---|---|
+| Los 15 secretos de GitHub | ✅ todos puestos |
+| `targetSdk` / `compileSdk` | ✅ 36 — muy por encima del mínimo de Play |
+| AGP 8.13 · Gradle 8.14.3 · JDK 21 | ✅ |
+| Firma con `upload-keystore.jks` | ✅ los 4 secretos del keystore existen |
+| Icono maestro `assets/icon.png` | ✅ 1024×1024, mipmaps generados |
+| `versionCode` / `versionName` | 19 / 2.8 — nunca publicados, así que libres |
+| Últimas 7 ejecuciones | ✅ todas en verde |
+
+El flujo hace algo poco común y que conviene conservar: **comprueba el
+resultado, no el comando** — busca la llave de Google dentro de `dist/` y falla
+si el build salió con la sitekey de prueba de hCaptcha. Mirar que el secreto
+exista no basta: puede llegar vacío o con comillas.
+
+**Lo que había mal, y ya está corregido:** el AAB no declaraba ningún permiso de
+ubicación, así que el botón "Ver los más cercanos" **no funcionaba en el APK** y
+fallaba en silencio. Se detectó descargando el AAB de Actions y abriéndolo, no
+leyendo el código. Corregido y verificado sobre el AAB siguiente.
+
+**Antes de subir a Play:**
+
+- [ ] **Formulario de Seguridad de los datos:** declarar la ubicación (en primer
+      plano, no necesita justificación en vídeo) y lo que se recoge de la cuenta.
+- [ ] **Comprobar que el `applicationId` `com.effe.multiclasificados`** es el
+      mismo con el que esté dada de alta la ficha en Play.
+- [ ] **Política de privacidad** con URL pública accesible.
+
+**Justo después de publicar**, actualizar en Variables del sistema, o el modal de
+actualización ofrecerá *bajar* de versión:
+
+- `app_latest_build`: 17 → **19**
+- `app_version_name`: "2.6" → **"2.8"**
+- `app_download_url`: sigue apuntando al APK v2.6 de GitHub Releases
+- `app_update_notes`: describe la 2.6
+
+⚠️ **Y no enciendas la OTA (Capgo) hasta después**: `app_ota_url`/`app_ota_version`
+están vacíos, y activarlos apuntando a un bundle viejo degradaría un APK recién
+instalado.
+
+**Un cabo suelto menor:** `release.yml` y `ci.yml` son flujos independientes y
+los dos se disparan con cada push a `main`. Es decir, **el AAB se compila y se
+firma aunque las pruebas estén en rojo** — nada lo impide, solo que `ci.yml`
+saldría en rojo al lado. Se arregla añadiendo `npm test` a `release.yml` antes de
+compilar (≈4 min más por ejecución).
+
+---
+
 ### La serie B001 y los siete rechazos del 19-ago
 
 Conviene dejarlo escrito, porque a simple vista asusta más de lo que es.
