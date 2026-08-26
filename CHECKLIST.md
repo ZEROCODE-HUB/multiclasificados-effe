@@ -124,15 +124,27 @@
 
 ---
 
-## 4. 🔑 Falta — Configuración de producción (sin código)
+## 4. 🔑 Configuración de producción (sin código)
 
-- [ ] 🔑 **Izipay (cobro real):** cargar secrets `IZIPAY_SHOP_ID`, `IZIPAY_PASSWORD`, `IZIPAY_HMAC_KEY` (Supabase) y `VITE_IZIPAY_PUBLIC_KEY` (`.env`), desde Back Office → Configuración › Tienda › Claves de API REST. Hasta entonces el modal muestra "Pasarela no configurada".
-- [ ] 🔑 **hCaptcha:** poner `VITE_HCAPTCHA_SITE_KEY` real (hoy cae a la sitekey de prueba `10000000-ffff-…` en `AuthPage.tsx:9`).
-- [ ] 🔑 **Resend (emails/reclamos):** `RESEND_API_KEY`. Sin él, los reclamos se guardan pero no se envía el correo (`send-reclamo/index.ts:156`).
-- [ ] 🔑 **admin-reset-password:** `SUPABASE_SERVICE_ROLE_KEY` en la Edge Function.
-- [ ] 🔑 **Google OAuth:** Redirect URLs del dominio de producción en Supabase → Authentication → URL Configuration.
-- [ ] 🔑 **Push/FCM:** credenciales FCM en producción (además de APNs para iOS, ver §3).
-- [ ] 🔑 **OTA (Capgo):** desactivado por defecto (`app_ota_url`/`app_ota_version` vacíos en `ota.ts`). Publicar bundle y fijar variables solo si se desea.
+> **Revisado el 26-ago-2026 contra el proyecto real** (Management API: `/secrets`, `/config/auth`, y `.env`).
+> Las siete líneas de abajo estaban sin marcar desde julio **y las siete ya estaban puestas**. Es el mismo
+> desfase que hizo que la auditoría externa clasificara APNs como hallazgo GRAVE (H-04) cuando llevaba
+> semanas funcionando: un documento de estado que se queda atrás no es neutral, produce hallazgos falsos
+> y hace perder días. **Si cambias una credencial, actualiza esta sección en el mismo commit.**
+
+- [x] 🔑 **Izipay:** `IZIPAY_SHOP_ID`, `IZIPAY_PASSWORD`, `IZIPAY_HMAC_KEY`, `IZIPAY_PUBLIC_KEY` en Supabase y `VITE_IZIPAY_PUBLIC_KEY` en el `.env`. ✅ Cargados. ⚠️ **Siguen siendo las de PRUEBAS** (`96894874:testpublickey_…`): el cobro real es parte del salto a producción, no una credencial que falte.
+- [x] 🔑 **hCaptcha:** `VITE_HCAPTCHA_SITE_KEY` real (`e0d418b8-…`, ya no la de prueba) + `HCAPTCHA_SECRET` en Supabase. ✅
+- [x] 🔑 **Resend (emails/reclamos):** `RESEND_API_KEY`, `EMAIL_FROM`, `RECLAMOS_FROM`, `RECLAMOS_TO`, `INVOICE_EMAIL_FROM`. ✅ Verificado enviando correo real el 12-ago.
+- [x] 🔑 **admin-reset-password:** `SUPABASE_SERVICE_ROLE_KEY` presente en los secrets de las Edge Functions. ✅ *(Ojo: está en el servidor, pero **nadie del equipo la tiene en claro** — la Management API solo devuelve resumen SHA-256. Para provisionar un superadmin hay que ir por SQL.)*
+- [x] 🔑 **Google OAuth:** habilitado, y el `uri_allow_list` ya incluye `https://www.coleffe.com/**`, `https://coleffe.com/**`, el dominio de Vercel y los dos esquemas nativos (`pe.effe.clasificados://`, `com.effe.multiclasificados://`). ✅
+- [x] 🔑 **Push/FCM + APNs:** `FCM_SERVICE_ACCOUNT` (Android) y `APNS_KEY_P8`/`APNS_KEY_ID`/`APNS_TEAM_ID`/`APNS_BUNDLE_ID`/`APNS_ENV` (iOS). ✅ Cargados. **Queda probarlo en un iPhone físico**, que es lo único que el simulador no puede decir.
+- [ ] 🔑 **OTA (Capgo):** desactivado a propósito (`app_ota_url`/`app_ota_version` vacíos en `ota.ts`). **No lo enciendas antes de subir el APK nuevo**: la OTA vigente degradaría a 2.6 un APK recién instalado.
+
+**Lo que sí queda por hacer en paneles ajenos:**
+
+- [ ] 🚨 **Restringir la llave de Google Maps** (`VITE_GOOGLE_MAPS_API_KEY`) por referer/aplicación y por APIs. Es el H-03 de la auditoría y el único GRAVE que sigue abierto: hoy la llave viaja en el bundle **sin restricción**, y cualquiera puede gastarla contra la tarjeta del proyecto.
+- [ ] 🚨 **Dar de alta el RUC 20616009061 en Factiliza.** Es el H-10, y ya no es teórico: **siete boletas B001 (000090–000096) rechazadas el 19-ago** con *"Su usuario no se encuentra configurado para el RUC"*. Mientras no se haga, cada emisión quema un correlativo sin emitir nada.
+- [ ] 🔑 **Rotar el token personal de Supabase** (`sbp_4816…`), compartido por chat durante el desarrollo.
 
 ---
 
