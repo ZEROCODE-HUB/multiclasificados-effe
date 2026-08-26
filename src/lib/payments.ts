@@ -269,9 +269,16 @@ export async function getPurchaseResult(
 
 // URL de la página de pago propia (ruta /pay) que se abre en el navegador del
 // sistema desde el APK. Lleva el formToken y la clave pública por query.
-export function hostedPaymentUrl(r: CreatePaymentResult, publicKeyFallback: string): string {
+//
+// La clave pública sale SIEMPRE de lo que devolvió el servidor. Antes había un
+// respaldo con la variable del build, y en el APK eso es justo lo que no puede
+// ser: el bundle va dentro del binario, así que cambiar la cuenta de cobro en
+// Supabase no habría llegado a las apps ya instaladas — habrían seguido
+// cobrando con la clave de pruebas hasta que alguien publicara una versión
+// nueva en la tienda. Si el servidor no la manda, `create-payment` ya habrá
+// respondido "Pasarela de pago no configurada" y aquí no se llega.
+export function hostedPaymentUrl(r: CreatePaymentResult): string {
   const base = (import.meta.env.VITE_PUBLIC_SITE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
-  const pk = r.publicKey || publicKeyFallback;
-  const q = new URLSearchParams({ orderId: r.orderId, token: r.formToken, pk });
+  const q = new URLSearchParams({ orderId: r.orderId, token: r.formToken, pk: r.publicKey ?? "" });
   return `${base}/pay?${q.toString()}`;
 }

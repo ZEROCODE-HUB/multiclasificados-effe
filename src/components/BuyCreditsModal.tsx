@@ -252,6 +252,10 @@ export function BuyCreditsModal({
       sondeo.current = { aborted: false };
       // El formulario de tarjeta vive en el CDN de la pasarela y son tres
       // recursos encadenados: se piden ya, mientras se elige qué comprar.
+      //
+      // La clave del build se usa AQUÍ y solo aquí, para traer el script del
+      // CDN antes de tener respuesta del servidor. No decide con qué cuenta se
+      // cobra: eso lo fija `PaymentForm` con la que devuelve `create-payment`.
       precargarKrypton(undefined, (import.meta.env.VITE_IZIPAY_PUBLIC_KEY as string | undefined) ?? "");
       fetchPricingSettings().then(setSettings);
       configYapePlin().then(setCfgManual);
@@ -446,8 +450,7 @@ export function BuyCreditsModal({
 
       if (Capacitor.isNativePlatform()) {
         // Redirect en móvil: el 3-D Secure corre en un navegador real, no en el WebView.
-        const fallbackPk = (import.meta.env.VITE_IZIPAY_PUBLIC_KEY as string | undefined) ?? "";
-        await Browser.open({ url: hostedPaymentUrl(result, fallbackPk) });
+        await Browser.open({ url: hostedPaymentUrl(result) });
         setConfirming(true);
         const outcome = await pollOrderStatus(result.orderId, { timeoutMs: 180000, signal: sondeo.current });
         await Browser.close().catch(() => { /* el usuario pudo cerrarlo ya */ });
@@ -548,7 +551,7 @@ export function BuyCreditsModal({
             ) : (
               <PaymentForm
                 formToken={payment.formToken}
-                publicKey={payment.publicKey || ((import.meta.env.VITE_IZIPAY_PUBLIC_KEY as string | undefined) ?? "")}
+                publicKey={payment.publicKey ?? ""}
                 onPaid={handlePaid}
                 onError={(m) => toast({ title: "Pago", description: m, variant: "destructive" })}
               />

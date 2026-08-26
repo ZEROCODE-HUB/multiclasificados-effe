@@ -31,7 +31,7 @@ Lo que queda **no es desarrollo pendiente**, son tres cosas de otra naturaleza:
 | | Qué es | Dónde se resuelve |
 |---|---|---|
 | 🚨 **Dos cosas de configuración** | Restringir la llave de Google Maps (H-03) y dar de alta el RUC en Factiliza (H-10) | Paneles de Google Cloud y de Factiliza — no es código |
-| 🔑 **El salto a producción** | Hoy `app_produccion = false`: todo cobro es de prueba y las boletas van a las series B066/F066. **No corre prisa: el cliente aún no ha pedido habilitar Factiliza ni Izipay en real** (decisión del 26-ago) | Skill `pasar-a-produccion` |
+| 🔑 **El salto a producción** | Hoy `app_produccion = false`: todo cobro es de prueba y las boletas van a las series B066/F066. **No corre prisa: el cliente aún no ha pedido habilitar Factiliza ni Izipay en real** (decisión del 26-ago). ✅ **No hace falta compilar ni pasar por las tiendas**: ver §4-bis | Skill `pasar-a-produccion` |
 | 📱 **El APK y el IPA** | Se dejan **para el final**, para que todas las correcciones entren en el binario que se sube a Play Store y TestFlight | Codemagic |
 
 ### Auditoría externa de agosto de 2026 (CORP LOZANOCHEFFER)
@@ -165,6 +165,50 @@ Lo que queda **no es desarrollo pendiente**, son tres cosas de otra naturaleza:
 - [x] 🔑 **Google OAuth:** habilitado, y el `uri_allow_list` ya incluye `https://www.coleffe.com/**`, `https://coleffe.com/**`, el dominio de Vercel y los dos esquemas nativos (`pe.effe.clasificados://`, `com.effe.multiclasificados://`). ✅
 - [x] 🔑 **Push/FCM + APNs:** `FCM_SERVICE_ACCOUNT` (Android) y `APNS_KEY_P8`/`APNS_KEY_ID`/`APNS_TEAM_ID`/`APNS_BUNDLE_ID`/`APNS_ENV` (iOS). ✅ Cargados. **Queda probarlo en un iPhone físico**, que es lo único que el simulador no puede decir.
 - [ ] 🔑 **OTA (Capgo):** desactivado a propósito (`app_ota_url`/`app_ota_version` vacíos en `ota.ts`). **No lo enciendas antes de subir el APK nuevo**: la OTA vigente degradaría a 2.6 un APK recién instalado.
+
+### 4-bis. 🔓 Pasar a producción NO exige compilar ni subir a las tiendas
+
+Verificado el 26-ago-2026. Todo lo que cambia al pasar a real vive **del lado
+del servidor**, y las Edge Functions leen sus secretos en cada invocación, así
+que surte efecto al instante:
+
+| Qué | Dónde se cambia |
+|---|---|
+| `app_produccion: false → true` | `system_settings` (Variables del sistema del panel) |
+| Token de Factiliza, RUC emisor | Secretos de Supabase |
+| Izipay: shop ID, password, HMAC | Secretos de Supabase |
+| **Clave pública de Izipay** | Secreto `IZIPAY_PUBLIC_KEY` |
+
+**La clave pública también es del servidor** — y esto hubo que arreglarlo. Es
+una variable `VITE_*`, o sea que se hornea en el bundle, y en el APK el bundle
+va **dentro del binario**: una clave decidida en tiempo de compilación se queda
+congelada en cada teléfono hasta que alguien publique en la tienda.
+
+`create-payment` ya la devolvía, pero **no gobernaba**: el script de Krypton se
+carga una sola vez y lleva la clave como atributo, y la precarga se hacía con la
+del build antes de hablar con el servidor. La del servidor llegaba tarde y se
+ignoraba en silencio. Corregido el 26-ago: `setFormConfig` refija
+`kr-public-key` en cada montaje, `create-payment` exige la clave como
+credencial obligatoria (503 si falta) y **se retiraron los respaldos** del
+formulario embebido y de la página `/pay` del APK.
+
+Nunca dio la cara porque hoy el build y el servidor tienen **la misma** clave
+(comprobado: los digestos SHA-256 coinciden). El fallo aparecía el día que se
+separan — justo al pasar a producción, cobrando con `testpublickey_` contra un
+backend real.
+
+**Lo que sí exige compilar** son los cambios de *código*, no de configuración.
+Android tiene OTA (Capgo, hoy apagada); **iOS no tiene OTA** — la directriz
+2.5.2 de Apple prohíbe descargar y ejecutar código, y el plugin se saca del
+build de iOS a propósito.
+
+⚠️ **No enciendas la OTA antes de subir el APK nuevo:** `app_ota_url` y
+`app_ota_version` están vacíos, y la configuración vigente apunta a la 2.6.
+Además `app_latest_build = 17` y `app_version_name = 2.6` mientras el repo va
+por **2.8 (build 19)**: si no se suben esos valores, el modal de actualización
+ofrecerá *bajar* de versión.
+
+---
 
 **Lo que sí queda por hacer en paneles ajenos:**
 

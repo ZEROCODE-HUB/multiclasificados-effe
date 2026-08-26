@@ -43,7 +43,8 @@
 // Secrets requeridos (Supabase → Edge Functions → Secrets):
 //   - IZIPAY_SHOP_ID      Número de tienda (~8 dígitos)
 //   - IZIPAY_PASSWORD     Clave de test/producción REST (password del Basic Auth)
-//   - IZIPAY_PUBLIC_KEY   (opcional) clave pública; si no, el frontend usa su VITE var
+//   - IZIPAY_PUBLIC_KEY   Clave pública. OBLIGATORIA: es la que decide contra qué
+//                         cuenta se cobra, y sale de aquí, no del build del cliente.
 //   - IZIPAY_API_HOST     (opcional) por defecto https://api.micuentaweb.pe
 //   - SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY (los inyecta Supabase)
 //
@@ -242,7 +243,13 @@ Deno.serve(async (req) => {
       : null;
 
     // Sin credenciales de Izipay no hay cobro posible: fallo claro ANTES de tocar la BD.
-    if (!metodoManual && (!IZIPAY_SHOP_ID || !IZIPAY_PASSWORD)) {
+    // La clave publica cuenta como credencial obligatoria, igual que las otras
+    // dos. No es un secreto —viaja al navegador—, pero SI determina contra que
+    // cuenta se cobra, y tiene que salir del mismo sitio que el resto de la
+    // configuracion. Si falta, el frontend caeria a la que lleve horneada en su
+    // build: en el APK eso significa cobrar con `testpublickey_` contra un
+    // backend de produccion, que falla de una forma que no hay quien depure.
+    if (!metodoManual && (!IZIPAY_SHOP_ID || !IZIPAY_PASSWORD || !IZIPAY_PUBLIC_KEY)) {
       return json({ success: false, error: "Pasarela de pago no configurada." }, 503);
     }
 
@@ -522,7 +529,7 @@ Deno.serve(async (req) => {
       success: true,
       orderId: order.id,
       formToken: result.answer.formToken as string,
-      publicKey: IZIPAY_PUBLIC_KEY || null, // el frontend puede usar su VITE var si esto es null
+      publicKey: IZIPAY_PUBLIC_KEY, // unica fuente: el frontend NO decide con que cuenta se cobra
       amount: total,
       listingCost,
     });

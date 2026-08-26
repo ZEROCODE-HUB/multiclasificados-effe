@@ -32,11 +32,25 @@ function krFromWindow(): KrApi | undefined {
 }
 
 // Carga (una sola vez) la librería Krypton con la clave pública dada.
+//
+// OJO CON EL CACHÉ: el script se carga UNA vez y la clave pública viaja como
+// atributo suyo (`kr-public-key`). Si más tarde alguien pide cargarlo con otra
+// clave, esto devuelve el que ya está y el atributo NO cambia. Eso convertía la
+// precarga —que se hace con la clave del build, antes de hablar con el
+// servidor— en la que mandaba de verdad: la clave que devuelve el backend
+// llegaba tarde y se ignoraba en silencio. En el APK eso significa cobrar con
+// `testpublickey_` contra un backend de producción.
+//
+// Lo que lo arregla de verdad está abajo, en `setFormConfig`, que refija la
+// clave definitiva sobre el script ya cargado. Aquí solo se guarda con cuál se
+// cargó para poder avisar si no coinciden.
 let krLoad: Promise<KrApi> | null = null;
+let krClaveCargada = "";
 function loadKrypton(endpoint: string, publicKey: string): Promise<KrApi> {
   const existing = krFromWindow();
   if (existing) return Promise.resolve(existing);
   if (krLoad) return krLoad;
+  krClaveCargada = publicKey;
 
   krLoad = new Promise<KrApi>((resolve, reject) => {
     // CSS del tema (no bloquea el flujo si falla).
@@ -75,6 +89,7 @@ function loadKrypton(endpoint: string, publicKey: string): Promise<KrApi> {
     };
     script.onerror = () => {
       krLoad = null; // permite reintentar
+      krClaveCargada = "";
       reject(new Error("No se pudo cargar el formulario de pago."));
     };
     document.head.appendChild(script);
@@ -89,6 +104,10 @@ function loadKrypton(endpoint: string, publicKey: string): Promise<KrApi> {
  * cargarlos al llegar al paso de pago añadía 1-3 s de pantalla en blanco. Se
  * pide al abrir el cuadro de compra, mientras el usuario elige qué comprar.
  * Si falla no pasa nada: al montar el formulario se reintenta.
+ *
+ * La clave que se le pasa aquí es la del build, y sirve ÚNICAMENTE para traer
+ * el script del CDN: no decide con qué cuenta se cobra. Eso lo fija después
+ * `PaymentForm` con la que devuelve el servidor.
  */
 // eslint-disable-next-line react-refresh/only-export-components
 export function precargarKrypton(endpoint: string | undefined, publicKey: string): void {
@@ -134,7 +153,22 @@ export function PaymentForm({ formToken, publicKey, endpoint, onPaid, onError }:
       try {
         const KR = await loadKrypton(host, publicKey);
         if (cancelled) return;
-        await KR.setFormConfig({ formToken, "kr-language": "es-ES" });
+        if (krClaveCargada && krClaveCargada !== publicKey) {
+          // La precarga trajo el script con otra clave (la del build). No es
+          // fatal —`setFormConfig` la refija justo aquí abajo— pero si pasa
+          // conviene verlo, porque significa que el build y el servidor no
+          // están de acuerdo en con qué cuenta se cobra.
+          console.warn(
+            "[pago] la clave pública del build no coincide con la del servidor; manda la del servidor",
+          );
+        }
+        // `kr-public-key` va SIEMPRE, no solo el formToken: es lo que hace que
+        // la clave del servidor gobierne aunque el script se cargara con otra.
+        await KR.setFormConfig({
+          formToken,
+          "kr-public-key": publicKey,
+          "kr-language": "es-ES",
+        });
         await KR.onSubmit((resp) => {
           if (resp?.clientAnswer?.orderStatus === "PAID") onPaidRef.current();
           else onErrorRef.current?.("El pago no se completó.");
