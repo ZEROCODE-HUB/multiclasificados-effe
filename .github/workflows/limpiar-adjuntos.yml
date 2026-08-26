@@ -5,7 +5,7 @@ name: Limpiar adjuntos huérfanos
 # Por qué existe: un archivo pertenece a un aviso por su ruta. Cuando el aviso se
 # borra, o cuando alguien empieza a publicar, sube una foto y se marcha sin
 # terminar, el archivo se queda ocupando sitio sin que nadie lo vea. Nada lo
-# limpiaba, y por eso había 26 archivos acumulados de avisos ya borrados.
+# limpiaba, y por eso había 26 archivos (3 MB) acumulados de avisos ya borrados.
 #
 # Por qué NO es un cron de la base de datos, que sería lo natural aquí: quitar la
 # fila de `storage.objects` no libera el archivo —se queda en el almacén, ahora
@@ -17,10 +17,14 @@ name: Limpiar adjuntos huérfanos
 # válido, comprueba que ese aviso no exista, y nunca toca nada de menos de tres
 # días. Un formulario a medio rellenar no está en riesgo: nadie tarda tres días.
 #
-# Necesita dos secretos en el repositorio. Sin ellos el trabajo falla a la vista
+# Necesita tres secretos en el repositorio. Sin ellos el trabajo falla a la vista
 # en vez de borrar a ciegas:
-#   SUPABASE_FUNCTIONS_URL  → https://<proyecto>.supabase.co/functions/v1
-#   PAYMENT_WORKER_SECRET   → el mismo que ya usa la emisión de comprobantes
+#   SUPABASE_FUNCTIONS_URL → https://<proyecto>.supabase.co/functions/v1
+#   SUPABASE_ANON_KEY      → la llave pública; el portal de Supabase la exige
+#                            además del secreto, y suma defensa en profundidad
+#   LIMPIEZA_SECRET        → credencial PROPIA de esta función. No se reutiliza
+#                            la de los pagos: si esta se filtra alguien puede
+#                            borrar archivos; si se filtra aquella, tocar cobros
 
 on:
   schedule:
@@ -40,20 +44,23 @@ jobs:
       - name: Barrer
         env:
           URL: ${{ secrets.SUPABASE_FUNCTIONS_URL }}
-          SECRETO: ${{ secrets.PAYMENT_WORKER_SECRET }}
+          SECRETO: ${{ secrets.LIMPIEZA_SECRET }}
+          ANON: ${{ secrets.SUPABASE_ANON_KEY }}
           # A mano manda la casilla; en el barrido semanal, siempre borra.
           APLICAR: ${{ github.event_name == 'schedule' && 'true' || inputs.aplicar }}
         run: |
-          if [ -z "$URL" ] || [ -z "$SECRETO" ]; then
-            echo "Faltan los secretos SUPABASE_FUNCTIONS_URL o PAYMENT_WORKER_SECRET."
+          if [ -z "$URL" ] || [ -z "$SECRETO" ] || [ -z "$ANON" ]; then
+            echo "Faltan secretos: SUPABASE_FUNCTIONS_URL, LIMPIEZA_SECRET o SUPABASE_ANON_KEY."
             exit 1
           fi
           respuesta=$(curl -sS -X POST "$URL/limpiar-adjuntos" \
             -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $ANON" \
             -H "x-worker-secret: $SECRETO" \
             -d "{\"aplicar\": $APLICAR}")
           echo "$respuesta"
           # Un fallo dentro de la función devuelve 200 con el motivo: si no se
           # mira, el trabajo saldría en verde sin haber limpiado nada.
-          echo "$respuesta" | grep -q '"error"' && exit 1
-          exit 0
+          if echo "$respuesta" | grep -q '"error"'; then
+            exit 1
+          fi

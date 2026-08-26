@@ -16,16 +16,19 @@
 //     Quien sube una foto y se marcha sin publicar deja esa foto suelta. Es el
 //     precio de que publicar sea instantáneo, y se paga barriendo después.
 //
-// SEGURIDAD. Exige el secreto del worker, igual que `emit-invoice`: es una
-// función que BORRA archivos de usuarios, así que no puede quedar abierta a
-// quien acierte la URL. Y por defecto no borra nada — hay que pedirlo con
-// `aplicar: true`; sin eso responde qué borraría, que es como conviene mirarlo
-// la primera vez.
+// SEGURIDAD. Exige un secreto propio, `LIMPIEZA_SECRET`, y no el de los pagos.
+// Se penso reutilizar aquel —ya existe y es el patron de `emit-invoice`— pero
+// son dos cosas de riesgo muy distinto: si el secreto de esta se filtra, alguien
+// puede borrar archivos; si se filtra el de los pagos, puede tocar cobros. Cada
+// uno con el suyo, y rotar uno no obliga a rotar el otro.
+//
+// Ademas, por defecto NO borra nada: hay que pedirlo con `aplicar: true`. Sin
+// eso responde que se llevaria, que es como conviene mirarlo la primera vez.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const WORKER_SECRET = Deno.env.get("PAYMENT_WORKER_SECRET") || "";
+const WORKER_SECRET = Deno.env.get("LIMPIEZA_SECRET") || "";
 
 // Días que un archivo tiene que llevar sin dueño antes de tocarlo. Tres es de
 // sobra: nadie tarda tres días en terminar de publicar un aviso, así que un
