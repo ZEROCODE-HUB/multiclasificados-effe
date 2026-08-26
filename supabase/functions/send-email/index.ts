@@ -31,6 +31,20 @@ function bodyFor(type: string, payload: Record<string, unknown>): string {
   const titulo = String(p.listing_title ?? "tu aviso");
   const aviso = p.listing_id ? SITE_URL + "/aviso/" + String(p.listing_id) : null;
   const misAvisos = SITE_URL + "/dashboard/anunciante/avisos";
+  /**
+   * "Mis avisos" con ESE aviso señalado: la pantalla se abre en su pestaña y lo
+   * resalta unos segundos (ver AdvertiserListings).
+   *
+   * Es a donde tiene que llevar el correo de "está por vencer", y no a la ficha
+   * pública. Motivo: la ficha sale de `listing_cards`, que solo trae los
+   * ACTIVOS. Basta con que el anunciante lea el correo unas horas tarde —o al
+   * día siguiente— para que el aviso ya haya caducado y el enlace no lleve a
+   * ninguna parte. Aquí, en cambio, el aviso está siempre: vencido o no, y es
+   * justo donde se renueva.
+   */
+  const avisoEnMisAvisos = p.listing_id
+    ? misAvisos + "?aviso=" + encodeURIComponent(String(p.listing_id))
+    : misAvisos;
   // Una línea en blanco entre párrafos: la plantilla respeta los saltos.
   const parrafos = (...partes: Array<string | null>) => partes.filter(Boolean).join("\n\n");
 
@@ -43,10 +57,12 @@ function bodyFor(type: string, payload: Record<string, unknown>): string {
       const plazo = Number.isFinite(dias) && dias > 0
         ? `Te quedan ${dias} ${dias === 1 ? "día" : "días"} para renovarlo.`
         : "Está a punto de caducar.";
+      // UN solo enlace, y al sitio donde se renueva. Antes iban dos —la ficha
+      // pública primero— y el primero es el que se pulsa: llevaba a un aviso
+      // que, si ya había caducado, ni siquiera se podía ver.
       return parrafos(
         `Tu aviso "${titulo}" está por vencer. ${plazo}`,
-        aviso ? `Verlo: ${aviso}` : null,
-        `Renuévalo desde tus avisos: ${misAvisos}`,
+        `Renuévalo aquí: ${avisoEnMisAvisos}`,
         "Cuando vence deja de aparecer en las búsquedas.",
       );
     }

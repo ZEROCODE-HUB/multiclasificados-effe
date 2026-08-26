@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
 import { notificationText, notificationLink, type AppNotification } from "@/lib/notifications";
 
 /**
@@ -54,5 +56,42 @@ describe("los otros avisos sobre un aviso también señalan cuál", () => {
   it("y cuando vuelve a estar visible", () => {
     expect(notificationLink(mk("listing_enabled", { listing_id: AVISO }), "anunciante"))
       .toBe(`/dashboard/anunciante/avisos?aviso=${AVISO}`);
+  });
+});
+
+describe("el CORREO va al mismo sitio que la campana", () => {
+  // Reportado abriendo el correo real: llevaba a la ficha pública del aviso, y
+  // esa sale de `listing_cards`, que solo trae los ACTIVOS. Basta leer el correo
+  // unas horas tarde —o al día siguiente— para que el aviso ya haya caducado y
+  // el enlace no lleve a ninguna parte: se veía una ficha vacía.
+  //
+  // "Mis avisos" tiene el aviso SIEMPRE, vencido o no, y es donde se renueva.
+  const CORREO = fs.readFileSync(
+    path.resolve(__dirname, "../../supabase/functions/send-email/index.ts"), "utf8",
+  );
+  const bloqueExpiring = CORREO.slice(
+    CORREO.indexOf('case "listing_expiring"'),
+    CORREO.indexOf('case "new_message"'),
+  );
+
+  it("enlaza a Mis avisos con el aviso señalado", () => {
+    expect(bloqueExpiring).toContain("avisoEnMisAvisos");
+    expect(CORREO).toMatch(/misAvisos \+ "\?aviso=" \+ encodeURIComponent/);
+  });
+
+  it("y ya NO enlaza a la ficha pública, que puede haber caducado", () => {
+    expect(bloqueExpiring).not.toMatch(/Verlo: \$\{aviso\}/);
+  });
+
+  it("un solo enlace: el primero es el que se pulsa", () => {
+    // Antes iban dos, y el primero era el roto.
+    const enlaces = bloqueExpiring.match(/\$\{(aviso|misAvisos|avisoEnMisAvisos)\}/g) ?? [];
+    expect(enlaces).toHaveLength(1);
+  });
+
+  it("la ficha pública sigue usándose donde el aviso SÍ está activo", () => {
+    // Una reseña nueva o un aviso rehabilitado: ahí el enlace directo es lo
+    // correcto y no hay que tocarlo.
+    expect(CORREO).toMatch(/case "new_review"[\s\S]*?\$\{aviso\}/);
   });
 });
