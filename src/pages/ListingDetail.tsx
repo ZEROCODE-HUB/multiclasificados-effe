@@ -52,6 +52,7 @@ import { useSession } from "@/hooks/useSession";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 import { ListingLocationMap } from "@/components/ListingLocationMap";
+import { VideoDialog } from "@/components/VideoDialog";
 import { fetchSellerInfo, fetchReviews, fetchAdvertiserStats, type AdvertiserStats } from "@/lib/reviews";
 import { applyToListing, fetchMyApplication, STATUS_LABEL, type ApplicationStatus } from "@/lib/applications";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -107,6 +108,8 @@ export default function ListingDetail() {
   const [listing, setListing] = useState<Listing>(EMPTY);
   const [docUrl, setDocUrl] = useState<string | null>(null);
   const [videos, setVideos] = useState<VideoDelAviso[]>([]);
+  // Cuál se está viendo. `null` = ninguno; el diálogo lo usa para abrirse.
+  const [videoAbierto, setVideoAbierto] = useState<VideoDelAviso | null>(null);
   const [related, setRelated] = useState<Listing[]>([]);
   const session = useSession();
   const { isFavorite, toggle } = useFavorites();
@@ -894,25 +897,36 @@ export default function ListingDetail() {
                 la pantalla — que es justo lo contrario de lo que se busca aquí.
                 Mismo aspecto que "Ver documento (PDF)" de arriba, a propósito:
                 son dos adjuntos del aviso y no hay razón para que uno grite y
-                el otro no. Se abre en una pestaña, como el PDF.
+                el otro no. El vídeo se abre en un diálogo (VideoDialog) para no
+                sacar al visitante de la ficha; el PDF sí abre pestaña, porque
+                un PDF se guarda y se imprime y un vídeo se mira y ya.
                 Ojo: se numeran solo si hay más de uno; "Ver video 1" cuando
                 solo hay uno hace pensar que falta el 2. */}
             {videos.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">
                 {videos.map((v, i) => (
-                  <a
+                  <button
                     key={v.id}
-                    href={v.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    type="button"
+                    onClick={() => setVideoAbierto(v)}
                     className="inline-flex items-center gap-2 px-4 py-2 border border-secondary/40 bg-secondary/5 text-secondary font-semibold text-sm hover:bg-secondary hover:text-secondary-foreground transition-colors"
                   >
                     <PlayCircle size={16} />
                     {videos.length > 1 ? `Ver video ${i + 1}` : "Ver video"}
-                  </a>
+                  </button>
                 ))}
               </div>
             )}
+
+            <VideoDialog
+              url={videoAbierto?.url ?? null}
+              onClose={() => setVideoAbierto(null)}
+              titulo={
+                videos.length > 1
+                  ? `Video ${videos.findIndex((v) => v.id === videoAbierto?.id) + 1} del aviso`
+                  : "Video del aviso"
+              }
+            />
           </section>
 
           {/* Spec table */}

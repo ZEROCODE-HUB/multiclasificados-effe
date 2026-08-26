@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { prepararDom } from "./domPolyfills";
 
@@ -105,22 +105,58 @@ describe("un aviso con un vídeo", () => {
 
   it("enseña un botón, no un reproductor ocupando media pantalla", async () => {
     pintar();
-    const boton = await screen.findByRole("link", { name: /ver video/i });
-    expect(boton).toHaveAttribute("href", "https://x/uno.mp4");
+    await screen.findByRole("button", { name: /ver video/i });
+    // Nada de reproductor en la ficha hasta que se pida.
     expect(document.querySelector("video")).toBeNull();
   });
 
-  it("se abre en otra pestaña, igual que el PDF", async () => {
+  it("al pulsarlo se abre el vídeo en un diálogo", async () => {
     pintar();
-    const boton = await screen.findByRole("link", { name: /ver video/i });
-    expect(boton).toHaveAttribute("target", "_blank");
-    // Sin `noopener`, la pestaña abierta puede tocar la que la abrió.
-    expect(boton.getAttribute("rel")).toContain("noopener");
+    fireEvent.click(await screen.findByRole("button", { name: /ver video/i }));
+    await waitFor(() => {
+      const v = document.querySelector("video");
+      expect(v).not.toBeNull();
+      expect(v).toHaveAttribute("src", "https://x/uno.mp4");
+    });
+  });
+
+  it("el diálogo tiene una X para cerrarlo, y cerrarlo quita el vídeo", async () => {
+    pintar();
+    fireEvent.click(await screen.findByRole("button", { name: /ver video/i }));
+    const cerrar = await screen.findByRole("button", { name: /cerrar/i });
+    fireEvent.click(cerrar);
+    await waitFor(() => expect(document.querySelector("video")).toBeNull());
   });
 
   it("no lo numera: «Ver video 1» a secas hace pensar que falta el 2", async () => {
     pintar();
-    expect(await screen.findByRole("link", { name: "Ver video" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Ver video" })).toBeInTheDocument();
+  });
+});
+
+describe("el vídeo no se desborda ni se queda sonando", () => {
+  beforeEach(() => {
+    videos.lista = [{ id: "v1", url: "https://x/vertical.mp4" }];
+  });
+
+  it("topa el ALTO, que es lo que desborda con un vídeo vertical", async () => {
+    // Los grabados con el móvil son 9:16. Limitar solo el ancho no sirve: el
+    // vídeo se sale por abajo. Y el tope descuenta el notch y la barra de iOS.
+    pintar();
+    fireEvent.click(await screen.findByRole("button", { name: /ver video/i }));
+    await waitFor(() => expect(document.querySelector("video")).not.toBeNull());
+    const clases = document.querySelector("video")?.className ?? "";
+    expect(clases).toContain("max-h-[calc(100dvh-6rem-var(--safe-top)-var(--safe-bottom))]");
+    expect(clases).toContain("object-contain");
+  });
+
+  it("va con playsInline: sin eso iPhone se lo lleva a pantalla completa solo", async () => {
+    pintar();
+    fireEvent.click(await screen.findByRole("button", { name: /ver video/i }));
+    await waitFor(() => expect(document.querySelector("video")).not.toBeNull());
+    // React lo pinta como `playsinline` en el DOM.
+    const v = document.querySelector("video");
+    expect(v?.hasAttribute("playsinline") || (v as HTMLVideoElement)?.playsInline).toBeTruthy();
   });
 });
 
@@ -136,22 +172,31 @@ describe("un aviso con tres vídeos", () => {
   it("son tres botones y ningún reproductor", async () => {
     // Incrustados eran 1 260 px de negro entre la descripción y el contacto.
     pintar();
-    expect((await screen.findAllByRole("link", { name: /ver video/i })).length).toBe(3);
+    expect((await screen.findAllByRole("button", { name: /ver video/i })).length).toBe(3);
     expect(document.querySelectorAll("video").length).toBe(0);
   });
 
   it("ahora sí van numerados, para poder distinguirlos", async () => {
     pintar();
-    expect(await screen.findByRole("link", { name: "Ver video 1" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Ver video 3" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Ver video 1" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ver video 3" })).toBeInTheDocument();
   });
 
-  it("cada uno apunta a su archivo", async () => {
+  it("cada botón abre SU vídeo, no siempre el primero", async () => {
+    // El fallo clásico de este patrón: un solo estado mal cableado y los tres
+    // botones acaban abriendo el mismo archivo.
     pintar();
-    const enlaces = await screen.findAllByRole("link", { name: /ver video/i });
-    expect(enlaces.map((e) => e.getAttribute("href"))).toEqual([
-      "https://x/uno.mp4", "https://x/dos.mp4", "https://x/tres.mp4",
-    ]);
+    const botones = await screen.findAllByRole("button", { name: /ver video/i });
+    fireEvent.click(botones[2]);
+    await waitFor(() =>
+      expect(document.querySelector("video")).toHaveAttribute("src", "https://x/tres.mp4"));
+  });
+
+  it("y solo se abre uno cada vez", async () => {
+    pintar();
+    const botones = await screen.findAllByRole("button", { name: /ver video/i });
+    fireEvent.click(botones[0]);
+    await waitFor(() => expect(document.querySelectorAll("video").length).toBe(1));
   });
 });
 
@@ -159,6 +204,7 @@ describe("un aviso sin vídeos", () => {
   it("no enseña ningún botón ni deja un hueco", async () => {
     pintar();
     await screen.findAllByText(AVISO.title);
-    expect(screen.queryByRole("link", { name: /ver video/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /ver video/i })).toBeNull();
+    expect(document.querySelector("video")).toBeNull();
   });
 });
