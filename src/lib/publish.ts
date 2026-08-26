@@ -445,7 +445,7 @@ export interface AvisoParaContinuar {
 export async function cargarAvisoParaContinuar(listingId: string): Promise<AvisoParaContinuar> {
   const { data, error } = await supabase
     .from("listings")
-    .select("title, description, price, currency, condition, category_id, department, location, lat, lng, " +
+    .select("status, title, description, price, currency, condition, category_id, department, location, lat, lng, " +
             "country, plan_duration_days, plan_quantity, plan_extras, document_url, " +
             "listing_images(url, storage_path, sort_order), listing_videos(url, storage_path, sort_order)")
     .eq("id", listingId)
@@ -453,6 +453,24 @@ export async function cargarAvisoParaContinuar(listingId: string): Promise<Aviso
   if (error || !data) throw new Error("No se pudo cargar el aviso.");
 
   const r = data as unknown as Record<string, unknown>;
+
+  // SOLO borradores. La puerta está aquí, al abrir, y no al final del proceso.
+  //
+  // La base de datos ya protege lo esencial —`publish_listing` solo actúa sobre
+  // draft/pending, y el cobro va en su misma transacción, así que un aviso
+  // activo no se puede cobrar dos veces—, pero sin este corte alguien que
+  // escriba `?continuar=<id-de-aviso-activo>` a mano se encuentra dos cosas
+  // desconcertantes:
+  //
+  //   · Al publicar, la RPC falla y la pantalla le dice «se descontó tu saldo,
+  //     pero el aviso quedó pendiente». Es MENTIRA: no se descontó nada.
+  //   · Al guardar, `saveListingDraft` filtra por `status = 'draft'`, así que no
+  //     actualiza nada y los cambios se pierden EN SILENCIO.
+  //
+  // Un aviso ya publicado se retoca desde su modal de edición, que no cobra.
+  if (String(r.status ?? "") !== "draft") {
+    throw new Error("Este aviso ya no es un borrador: edítalo desde «Mis avisos».");
+  }
 
   const ordenados = (filas: unknown, prefijo: string, ext: string): AdjuntoYaSubido[] =>
     ((filas ?? []) as Array<{ url?: string; storage_path?: string; sort_order?: number }>)

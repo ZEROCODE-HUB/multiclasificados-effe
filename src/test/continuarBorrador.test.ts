@@ -38,6 +38,7 @@ vi.mock("@/lib/supabase", () => ({
 import { cargarAvisoParaContinuar } from "@/lib/publish";
 
 const AVISO = {
+  status: "draft",
   title: "Toyota Corolla",
   description: "Full equipo",
   price: 45000,
@@ -133,6 +134,21 @@ describe("casos que no pueden romper la pantalla", () => {
     };
     const b = await cargarAvisoParaContinuar("L1");
     expect(b.mainPhoto).toBeNull();
+  });
+
+  it("un aviso YA PUBLICADO se rechaza al abrirlo, no al final", async () => {
+    // La base ya impide cobrarlo dos veces (publish_listing solo actúa sobre
+    // draft/pending y el cobro va en su transacción). Lo que evita este corte
+    // son dos cosas desconcertantes para quien escriba la URL a mano: que al
+    // publicar se le diga «se descontó tu saldo» siendo falso, y que al guardar
+    // los cambios se pierdan en silencio porque el update filtra por draft.
+    respuesta.data = { ...AVISO, status: "active" };
+    await expect(cargarAvisoParaContinuar("L1")).rejects.toThrow(/ya no es un borrador/i);
+  });
+
+  it("y un vencido tampoco: ese se republica, no se continúa", async () => {
+    respuesta.data = { ...AVISO, status: "expired" };
+    await expect(cargarAvisoParaContinuar("L1")).rejects.toThrow(/ya no es un borrador/i);
   });
 
   it("un aviso que no existe da un error que se entiende", async () => {
