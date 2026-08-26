@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ClipboardList, AlertTriangle, MessageSquare, Eye, Users, TrendingUp, BarChart3, PlusCircle, ArrowRight, Wallet, Flame, Star, EyeOff } from "lucide-react";
+import { ClipboardList, AlertTriangle, MessageSquare, Eye, Users, TrendingUp, BarChart3, PlusCircle, ArrowRight, Wallet, Flame, Star, EyeOff, LifeBuoy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ListingRow } from "@/components/ListingRow";
 import { LoadingState } from "@/components/LoadingState";
@@ -16,6 +16,7 @@ import { fetchApplicationsForOwner, STATUS_LABEL, type OwnerApplication } from "
 import { loadInvoices, formatSoles, formatCredits, avisosBreakdown } from "@/lib/pricing";
 import { getCreditBalance, getCreditsSpent } from "@/lib/credits";
 import { BuyCreditsModal } from "@/components/BuyCreditsModal";
+import { SolicitarSaldoDialog } from "@/components/SolicitarSaldoDialog";
 import { enlaceDevolucionSaldo } from "@/lib/soporte";
 
 const ROW_STATUS = (s: MyListing["status"]): "Activo" | "Pausado" | "Vencido" =>
@@ -43,6 +44,7 @@ const AdvertiserDashboard = () => {
   const [creditBalance, setCreditBalance] = useState<number | null>(null);
   const [creditsSpent, setCreditsSpent] = useState<number>(0);
   const [buyCreditsOpen, setBuyCreditsOpen] = useState(false);
+  const [solicitarSaldoOpen, setSolicitarSaldoOpen] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -128,9 +130,18 @@ const AdvertiserDashboard = () => {
             <CardTitle className="text-base md:text-lg flex items-center gap-2">
               <Wallet size={18} className="text-secondary" /> Mi saldo
             </CardTitle>
-            <Button size="sm" variant="outline" className="gap-2 text-secondary border-secondary/40" onClick={() => setBuyCreditsOpen(true)}>
-              <TrendingUp size={14} /> Comprar saldo
-            </Button>
+            {/* Dos vias, y la de la izquierda es la que faltaba: quien paga por
+                transferencia o necesita factura de empresa no puede usar la
+                pasarela, y hasta ahora no tenia por donde pedirlo (pendiente 11
+                de la auditoria). */}
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="ghost" className="gap-2 text-muted-foreground" onClick={() => setSolicitarSaldoOpen(true)}>
+                <LifeBuoy size={14} /> Solicitar saldo
+              </Button>
+              <Button size="sm" variant="outline" className="gap-2 text-secondary border-secondary/40" onClick={() => setBuyCreditsOpen(true)}>
+                <TrendingUp size={14} /> Comprar saldo
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -232,6 +243,14 @@ const AdvertiserDashboard = () => {
             getCreditsSpent().then(setCreditsSpent);
             setBuyCreditsOpen(false);
           }}
+        />
+
+        <SolicitarSaldoDialog
+          open={solicitarSaldoOpen}
+          onOpenChange={setSolicitarSaldoOpen}
+          nombre={session?.name ?? null}
+          correo={session?.email ?? null}
+          saldo={creditBalance}
         />
 
         {/* Recent listings */}
