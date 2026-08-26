@@ -256,6 +256,40 @@ describe("PublishDraftDialog — publicar un borrador guardado", () => {
       );
     });
 
+    it("y LLEVA a completarlo: decirle que falta sin dónde subirlo es un callejón", async () => {
+      // Este era el fallo de verdad. El aviso avisaba y hacía `return`, y el
+      // modal de editar no lleva adjuntos: el borrador quedaba imposible de
+      // publicar y de arreglar a la vez. Reportado con un aviso real
+      // ("Toyota Corolla") que se quedó atascado.
+      const onCompletar = vi.fn();
+      render(
+        <PublishDraftDialog
+          draft={{ ...DRAFT, planExtras: { video20: 3 } } as MyListing}
+          email="a@b.com" fallbackName="Ana"
+          onClose={onClose} onPublished={onPublished} onCompletar={onCompletar}
+        />,
+      );
+      await publicar();
+
+      expect(finalizeListingPublication).not.toHaveBeenCalled();
+      expect(onCompletar).toHaveBeenCalledWith(expect.objectContaining({ id: "L-DRAFT" }));
+    });
+
+    it("y se le dice que se le lleva, no solo que le falta", async () => {
+      const onCompletar = vi.fn();
+      render(
+        <PublishDraftDialog
+          draft={{ ...DRAFT, planExtras: { pdf500: 1 } } as MyListing}
+          email="a@b.com" fallbackName="Ana"
+          onClose={onClose} onPublished={onPublished} onCompletar={onCompletar}
+        />,
+      );
+      await publicar();
+      expect(toast).toHaveBeenCalledWith(
+        expect.objectContaining({ description: expect.stringMatching(/te llevamos/i) }),
+      );
+    });
+
     it("con los videos ya subidos sí publica", async () => {
       contarAdjuntosDelAviso.mockResolvedValue({ imagenesExtra: 0, tienePdf: false, videos: 3 });
       renderDialog({ ...DRAFT, planExtras: { video20: 3 } } as MyListing);

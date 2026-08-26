@@ -52,9 +52,19 @@ interface Props {
    * es exactamente el callejón sin salida que teníamos.
    */
   onEditar?: (draft: MyListing, campo: string) => void;
+  /**
+   * Llevar al usuario a COMPLETAR el aviso en el formulario entero.
+   *
+   * Distinto de `onEditar`: aquel abre el modal de edición y enfoca un campo,
+   * que sirve cuando falta la descripción o el precio. Pero cuando lo que falta
+   * es un ADJUNTO —el PDF, un vídeo, las fotos que contrató— el modal no tiene
+   * dónde subirlo, y sin esto el aviso se quedaba atascado: no se podía
+   * publicar y tampoco había manera de arreglarlo.
+   */
+  onCompletar?: (draft: MyListing) => void;
 }
 
-export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPublished, modo = "publicar", onEditar }: Props) {
+export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPublished, modo = "publicar", onEditar, onCompletar }: Props) {
   const open = draft !== null;
   // EFFE-036: el mismo diálogo publica un borrador o REPUBLICA un aviso vencido.
   const isRepublish = draft?.status === "expired";
@@ -213,11 +223,21 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
       if (adjuntos) {
         const faltan = adicionalesQueFaltan(draft.planExtras, adjuntos);
         if (faltan.length > 0) {
+          // Aquí antes solo había un `return`, y ese era el callejón: se le
+          // decía "te falta subir el vídeo" a alguien que no tenía **dónde**
+          // subirlo, porque el modal de editar no lleva adjuntos. El aviso
+          // quedaba imposible de publicar y de arreglar a la vez.
           toast({
             title: "Te falta subir lo que contrataste",
-            description: resumenDeFaltantes(faltan),
+            description: onCompletar
+              ? `${resumenDeFaltantes(faltan)} Te llevamos al aviso para que lo subas.`
+              : resumenDeFaltantes(faltan),
             variant: "destructive",
           });
+          if (onCompletar) {
+            onCompletar(draft);
+            onClose();
+          }
           return;
         }
       }

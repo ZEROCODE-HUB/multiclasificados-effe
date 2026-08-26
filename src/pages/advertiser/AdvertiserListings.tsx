@@ -342,7 +342,14 @@ const AdvertiserListings = () => {
                   ? { onPublish: undefined }
                   : {})}
                 onView={(l) => navigate(`/aviso/${l.id}`)}
-                onEdit={() => openEdit(listing)}
+                {...(listing.status === "draft"
+                  // En un BORRADOR, "Editar" es seguir haciendo el aviso: se
+                  // abre el formulario entero, con sus fotos, vídeos, PDF y
+                  // adicionales. El modal de aquí solo tiene texto y precio, y
+                  // un borrador al que le falta un vídeo contratado no se podía
+                  // arreglar ahí — quedaba imposible de publicar y de completar.
+                  ? { onEdit: () => navigate(`/dashboard/anunciante/publicar?continuar=${listing.id}`) }
+                  : { onEdit: () => openEdit(listing) })}
                 onDelete={() => setToDelete(listing)}
                 onTogglePause={tab === "activos" || tab === "pausados" ? togglePause : undefined}
                 {...(tab === "borradores" && listing.status === "draft"
@@ -609,6 +616,13 @@ const AdvertiserListings = () => {
           setToPublish(null);
           openEdit(l);
           window.setTimeout(() => enfocarCampo(campo), 350);
+        }}
+        onCompletar={(l) => {
+          // Le falta SUBIR algo que contrató. El modal de editar no lleva
+          // adjuntos, así que aquí hay que ir al formulario entero o el aviso
+          // se queda sin poder publicarse ni arreglarse.
+          setToPublish(null);
+          navigate(`/dashboard/anunciante/publicar?continuar=${l.id}`);
         }}
       />
 

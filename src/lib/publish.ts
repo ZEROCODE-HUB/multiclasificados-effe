@@ -403,6 +403,101 @@ export async function cargarAvisoParaCopiar(listingId: string): Promise<AvisoCop
   };
 }
 
+/** Un adjunto que YA está en el servidor: no hay que descargarlo ni resubirlo. */
+export interface AdjuntoYaSubido {
+  name: string;
+  subido: AdjuntoSubido;
+}
+
+export interface AvisoParaContinuar {
+  form: AvisoCopiado["form"];
+  lat: number | null;
+  lng: number | null;
+  duration: number;
+  quantity: number;
+  extras: Record<string, number | undefined>;
+  mainPhoto: AdjuntoYaSubido | null;
+  extraPhotos: AdjuntoYaSubido[];
+  videos: AdjuntoYaSubido[];
+  pdf: AdjuntoYaSubido | null;
+}
+
+/**
+ * Carga un BORRADOR para seguir editándolo en el formulario de publicar.
+ *
+ * En qué se diferencia de `cargarAvisoParaCopiar`, que a primera vista hace lo
+ * mismo: aquella **descarga** los archivos para crear un aviso nuevo con copias.
+ * Aquí el aviso es el mismo, sus archivos ya están en su sitio, y traérselos al
+ * navegador para volver a subirlos idénticos sería tirar el ancho de banda del
+ * usuario dos veces. Con tres vídeos son 46 MB de bajada y otros 46 de subida,
+ * y en datos móviles eso se paga.
+ *
+ * Así que en vez de archivos se devuelven referencias a lo ya subido. El
+ * formulario las marca como `{ fase: "lista" }` y `saveListingDraft` reinserta
+ * su fila apuntando al mismo sitio, sin tocar Storage.
+ *
+ * Por qué hace falta: los adicionales se contratan antes de subir el archivo,
+ * así que se puede guardar un borrador que ya pagó tres vídeos y no tiene
+ * ninguno. Al publicarlo salta el aviso de que falta subirlos, y hasta ahora el
+ * formulario de editar no tenía dónde hacerlo: el aviso quedaba atascado sin
+ * forma de arreglarlo ni de publicarlo.
+ */
+export async function cargarAvisoParaContinuar(listingId: string): Promise<AvisoParaContinuar> {
+  const { data, error } = await supabase
+    .from("listings")
+    .select("title, description, price, currency, condition, category_id, department, location, lat, lng, " +
+            "country, plan_duration_days, plan_quantity, plan_extras, document_url, " +
+            "listing_images(url, storage_path, sort_order), listing_videos(url, storage_path, sort_order)")
+    .eq("id", listingId)
+    .maybeSingle();
+  if (error || !data) throw new Error("No se pudo cargar el aviso.");
+
+  const r = data as unknown as Record<string, unknown>;
+
+  const ordenados = (filas: unknown, prefijo: string, ext: string): AdjuntoYaSubido[] =>
+    ((filas ?? []) as Array<{ url?: string; storage_path?: string; sort_order?: number }>)
+      .filter((f) => !!f.storage_path)
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+      .map((f, i) => ({
+        // El nombre solo se enseña; lo que cuenta es el `path`.
+        name: `${prefijo}-${i + 1}.${ext}`,
+        subido: { path: String(f.storage_path), url: String(f.url ?? "") },
+      }));
+
+  const fotos = ordenados(r.listing_images, "foto", "webp");
+  const videos = ordenados(r.listing_videos, "video", "mp4");
+
+  // El PDF vive en un bucket privado: en `document_url` está la RUTA, no una
+  // URL. Para enseñarlo hay que firmar un enlace temporal aparte.
+  const docPath = r.document_url ? String(r.document_url) : "";
+  const pdf: AdjuntoYaSubido | null = docPath
+    ? { name: "documento.pdf", subido: { path: docPath, url: "" } }
+    : null;
+
+  return {
+    form: {
+      category: String(r.category_id ?? ""),
+      title: String(r.title ?? ""),
+      description: String(r.description ?? ""),
+      price: r.price != null ? String(r.price) : "",
+      currency: r.currency === "USD" ? "USD" : "PEN",
+      department: String(r.department ?? ""),
+      location: String(r.location ?? ""),
+      condition: CONDITION_INVERSA[String(r.condition ?? "na")] ?? "na",
+      country: String(r.country ?? "PE"),
+    },
+    lat: r.lat != null ? Number(r.lat) : null,
+    lng: r.lng != null ? Number(r.lng) : null,
+    duration: Number(r.plan_duration_days) || 7,
+    quantity: Number(r.plan_quantity) || 1,
+    extras: (r.plan_extras ?? {}) as Record<string, number | undefined>,
+    mainPhoto: fotos[0] ?? null,
+    extraPhotos: fotos.slice(1),
+    videos,
+    pdf,
+  };
+}
+
 // Datos de cobro/comprobante para cerrar la publicación de un aviso que YA existe
 // en la BD (recién creado, o un borrador que el usuario retoma).
 export interface FinalizeInput {

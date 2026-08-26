@@ -27,7 +27,7 @@ import {
   loadSettings, priceForDuration, extrasTotal, formatSoles, formatCredits, avisosBreakdown, solesToCredits,
   type DurationDays, type PricingSettings, type ExtraPrices,
 } from "@/lib/pricing";
-import { cargarAvisoParaCopiar, createAndPublishListing, finalizeListingPublication, saveListingDraft, SaldoInsuficiente } from "@/lib/publish";
+import { cargarAvisoParaCopiar, cargarAvisoParaContinuar, createAndPublishListing, finalizeListingPublication, saveListingDraft, SaldoInsuficiente } from "@/lib/publish";
 import { urgenteAllowedFor, URGENTE_MAX_DAYS } from "@/lib/listingBadges";
 import { ListingCard } from "@/components/ListingCard";
 import { InfoHint } from "@/components/InfoHint";
@@ -352,6 +352,75 @@ const AdvertiserPublish = () => {
       .finally(() => { if (vivo) setCopiando(false); });
     return () => { vivo = false; };
     // Solo al montar: el parámetro de la URL se mira una vez.
+  }, []);
+
+  // "Continuar aviso": llega ?continuar=<id> desde Mis avisos › Borradores.
+  //
+  // Se parece a ?copiar= pero es lo contrario en lo que importa: aquí el aviso
+  // es EL MISMO. Se ata `draftListingId` para que guardar y publicar actúen
+  // sobre ese borrador en vez de crear otro, y los adjuntos que ya están en el
+  // servidor se marcan como "lista" en lugar de descargarlos: no hay nada que
+  // volver a subir.
+  //
+  // Existe porque los adicionales se contratan ANTES de subir el archivo, así
+  // que se puede guardar un borrador que ya pagó tres vídeos y no tiene
+  // ninguno. Al publicarlo saltaba el aviso de que faltaban y el modal de
+  // editar no tenía dónde subirlos: el aviso quedaba atascado, sin forma de
+  // completarlo ni de publicarlo. Aquí sí se puede.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("continuar");
+    if (!id) return;
+    let vivo = true;
+    setCopiando(true);
+    // Un adjunto que ya está arriba: sin bytes que subir, por eso el File va
+    // vacío. Su `size` es 0 a propósito — el progreso mide lo que FALTA.
+    const yaSubido = (a: { name: string; subido: { path: string; url: string } }, i: number) => ({
+      id: `sub-${i}-${a.subido.path}`,
+      url: a.subido.url,
+      name: a.name,
+      file: new File([], a.name),
+      comprimida: true,
+      estado: { fase: "lista" as const, subido: a.subido },
+    });
+    cargarAvisoParaContinuar(id)
+      .then((b) => {
+        if (!vivo) return;
+        setForm(b.form);
+        setCoords(b.lat != null && b.lng != null ? { lat: b.lat, lng: b.lng } : null);
+        setDuration(asDuracion(b.duration));
+        setDurationChosen(true);
+        setExtras(b.extras as ExtrasCount);
+        if (b.mainPhoto) setMainPhoto(yaSubido(b.mainPhoto, 0));
+        setExtraPhotos(b.extraPhotos.map((f, i) => yaSubido(f, i + 1)));
+        setVideos(b.videos.map((v) => ({
+          file: new File([], v.name),
+          name: v.name,
+          // No se vuelve a medir: ya pasó el control de duración al subirlo.
+          duracion: 0,
+          estado: { fase: "lista" as const, subido: v.subido },
+        })));
+        if (b.pdf) setPdfFile({ file: new File([], b.pdf.name), name: b.pdf.name, estado: { fase: "lista", subido: b.pdf.subido } });
+        // LA LÍNEA QUE LO DISTINGUE DE COPIAR: se sigue trabajando sobre este
+        // aviso. Sin esto se crearía un borrador nuevo y el atascado seguiría
+        // ahí, ahora por duplicado.
+        draftListingId.current = id;
+        adjuntosAlDia.current = true;
+        toast({
+          title: "Aviso cargado",
+          description: "Completa lo que falta y publícalo.",
+        });
+      })
+      .catch((e) => {
+        if (vivo) {
+          toast({
+            title: "No se pudo cargar el aviso",
+            description: e instanceof Error ? e.message : "Inténtalo de nuevo.",
+            variant: "destructive",
+          });
+        }
+      })
+      .finally(() => { if (vivo) setCopiando(false); });
+    return () => { vivo = false; };
   }, []);
 
   const packageBase = priceForDuration(quantity, duration, settings);
