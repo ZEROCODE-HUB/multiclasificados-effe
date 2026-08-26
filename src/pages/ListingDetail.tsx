@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { type Listing } from "@/data/mockData";
 import { useCategories } from "@/hooks/useCategories";
-import { fetchListingById, fetchListingImages, fetchListings, fetchListingDocumentUrl, fetchListingVideos, fetchAdvertiserPhone, trackEvent, urgentTimeLeft, type VideoDelAviso } from "@/lib/listings";
+import { fetchListingById, fetchListingImages, fetchListings, fetchListingDocumentUrl, fetchListingVideos, fetchAdvertiserPhone, porQueNoSeVeElAviso, trackEvent, urgentTimeLeft, type AvisoNoVisible, type VideoDelAviso } from "@/lib/listings";
 import { listingBadges, advertiserDisplayName } from "@/lib/listingBadges";
 import {
   ChevronRight,
@@ -106,6 +106,14 @@ export default function ListingDetail() {
     featured: false, advertiser: "", views: 0,
   };
   const [listing, setListing] = useState<Listing>(EMPTY);
+  // Por qué no se pudo cargar. `null` = aún no se sabe (o cargó bien).
+  //
+  // Sin esto la ficha se quedaba con `EMPTY` PARA SIEMPRE cuando el aviso no
+  // era visible: imagen rota, sin título, sin descripción y con "Precio a
+  // convenir" —porque el precio del hueco es 0—. Parecía un aviso roto en vez
+  // de uno vencido, y el correo de "tu aviso está por vencer" enlaza justo
+  // aquí: basta abrirlo un rato después para caer en ello.
+  const [noVisible, setNoVisible] = useState<AvisoNoVisible | null>(null);
   const [docUrl, setDocUrl] = useState<string | null>(null);
   const [videos, setVideos] = useState<VideoDelAviso[]>([]);
   // Cuál se está viendo. `null` = ninguno; el diálogo lo usa para abrirse.
@@ -192,7 +200,10 @@ export default function ListingDetail() {
     if (!id) return;
     let mounted = true;
     fetchListingById(id).then((l) => {
-      if (mounted && l) setListing(l);
+      if (!mounted) return;
+      if (l) { setListing(l); setNoVisible(null); return; }
+      // No está en la vista pública: puede ser tuyo y estar vencido.
+      void porQueNoSeVeElAviso(id).then((r) => { if (mounted) setNoVisible(r); });
     });
     fetchListingDocumentUrl(id).then((url) => mounted && setDocUrl(url));
     fetchListingVideos(id).then((vs) => mounted && setVideos(vs));
@@ -491,6 +502,47 @@ export default function ListingDetail() {
     "Si algo no cuadra, repórtalo: el equipo revisa cada denuncia.",
   ];
 
+
+  // El aviso no se puede enseñar: se dice qué pasó y a dónde ir. Antes esto no
+  // existía y la ficha se quedaba a medio pintar, que es lo peor de los dos
+  // mundos: ni enseña el aviso ni explica por qué.
+  if (noVisible) {
+    const vencido = noVisible.existe && noVisible.estado === "expired";
+    const mio = !!noVisible.esMio;
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <div className="container mx-auto px-4 py-16 max-w-lg text-center">
+          <Clock size={40} className="mx-auto text-muted-foreground" />
+          <h1 className="mt-4 text-2xl font-extrabold tracking-tight">
+            {vencido ? "Este aviso ya venció" : "Este aviso ya no está disponible"}
+          </h1>
+          {noVisible.titulo && (
+            <p className="mt-1 text-sm font-semibold text-muted-foreground">«{noVisible.titulo}»</p>
+          )}
+          <p className="mt-3 text-muted-foreground">
+            {vencido && mio
+              // Es el caso que llega desde el correo de "tu aviso está por
+              // vencer": el dueño abre el enlace cuando ya caducó.
+              ? "Renuévalo desde «Mis avisos» y vuelve a aparecer en las búsquedas."
+              : vencido
+                ? "El anunciante puede renovarlo y volverá a aparecer en las búsquedas."
+                : "Puede que se haya retirado o que el enlace ya no sea válido."}
+          </p>
+          <div className="mt-6 flex flex-wrap gap-2 justify-center">
+            {mio && (
+              <Button asChild>
+                <Link to="/dashboard/anunciante/avisos">Ir a mis avisos</Link>
+              </Button>
+            )}
+            <Button asChild variant={mio ? "outline" : "default"}>
+              <Link to="/buscar">Explorar avisos</Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">

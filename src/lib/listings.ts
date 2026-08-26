@@ -202,6 +202,53 @@ export async function fetchListingById(id: string): Promise<Listing | null> {
   return null;
 }
 
+/** Por qué un aviso no se puede enseñar. */
+export interface AvisoNoVisible {
+  /** false = no existe (o no es tuyo y no está activo). */
+  existe: boolean;
+  estado?: ListingStatus;
+  /** true si es del usuario con sesión: entonces se le puede ofrecer renovar. */
+  esMio?: boolean;
+  titulo?: string;
+}
+
+/**
+ * Por qué no se ve un aviso que `fetchListingById` no devolvió.
+ *
+ * `listing_cards` es la vista pública y solo trae los ACTIVOS. Un aviso vencido
+ * desaparece de ahí, y la ficha se quedaba con un aviso vacío para siempre:
+ * imagen rota, sin título, sin descripción y con "Precio a convenir" porque el
+ * precio del hueco es 0. Parecía un aviso roto, no uno vencido.
+ *
+ * Y no es un caso raro: el correo de "tu aviso está por vencer" enlaza al aviso,
+ * así que basta con abrirlo un rato después para caer justo aquí.
+ *
+ * La tabla `listings` sí deja al DUEÑO leer los suyos en cualquier estado
+ * (política `listings_select_public`: `status = 'active' or owner_id = auth.uid()
+ * or is_staff(...)`), así que con una consulta más se puede distinguir "este
+ * aviso venció, renuévalo" de "este enlace no lleva a ninguna parte".
+ */
+export async function porQueNoSeVeElAviso(id: string): Promise<AvisoNoVisible> {
+  if (!isUuid(id)) return { existe: false };
+  try {
+    const { data } = await supabase
+      .from("listings").select("status, owner_id, title").eq("id", id).maybeSingle();
+    if (!data) return { existe: false };
+    const { data: sesion } = await supabase.auth.getUser();
+    const r = data as { status?: string; owner_id?: string; title?: string };
+    return {
+      existe: true,
+      estado: r.status as ListingStatus | undefined,
+      esMio: !!sesion?.user?.id && sesion.user.id === r.owner_id,
+      titulo: r.title ?? undefined,
+    };
+  } catch {
+    // Si la consulta falla no se puede afirmar que no exista: se trata como
+    // "no visible" a secas, que es lo único que sabemos con certeza.
+    return { existe: false };
+  }
+}
+
 // Enlace (firmado, temporal) al PDF adjunto del aviso, si tiene uno. Cualquiera
 // puede pedirlo desde el detalle (política listing_docs_public_read). Devuelve
 // null si el aviso no tiene documento.
