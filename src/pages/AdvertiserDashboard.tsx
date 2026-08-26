@@ -17,7 +17,6 @@ import { loadInvoices, formatSoles, formatCredits, avisosBreakdown } from "@/lib
 import { getCreditBalance, getCreditsSpent } from "@/lib/credits";
 import { BuyCreditsModal } from "@/components/BuyCreditsModal";
 import { DevolucionSaldoDialog } from "@/components/DevolucionSaldoDialog";
-import { enlaceDevolucionSaldo } from "@/lib/soporte";
 
 const ROW_STATUS = (s: MyListing["status"]): "Activo" | "Pausado" | "Vencido" =>
   s === "active" ? "Activo" : s === "paused" ? "Pausado" : "Vencido";
@@ -199,23 +198,23 @@ const AdvertiserDashboard = () => {
                 <div className="h-full bg-secondary" style={{ width: `${publishedPct}%` }} />
               </div>
             </div>
-            {/* Devolver el saldo es un trámite manual (hay que verificar la cuenta
-                bancaria), así que no se automatiza: se abre un correo con los datos
-                ya escritos para que soporte pueda resolverlo sin preguntar nada. */}
+            {/* Aquí había un `<a href="mailto:…">` con este mismo texto, y NO
+                hacía nada: un `mailto:` falla EN SILENCIO cuando el equipo no
+                tiene cliente de correo configurado —lo normal en un Windows de
+                oficina—, así que se pulsaba y no pasaba nada.
+                Es justo el motivo por el que existe `DevolucionSaldoDialog`, que
+                enseña la dirección copiable además de ofrecer el enlace. Al
+                añadir el diálogo se quedaron los dos accesos, y el roto era el
+                que tenía el texto completo: el que la gente encuentra.
+                Ahora hay UNO, el botón de la cabecera de esta misma tarjeta. */}
             <div className="border-t pt-3">
-              <a
-                href={enlaceDevolucionSaldo({
-                  // `useSession` devuelve nuestro objeto de sesión, no el de
-                  // Supabase: leer `session.user.email` dejaba el correo vacío y
-                  // la solicitud llegaba a soporte con "(completar)".
-                  nombre: session?.name,
-                  correo: session?.email,
-                  saldo: creditBalance ?? 0,
-                })}
+              <button
+                type="button"
+                onClick={() => setDevolucionOpen(true)}
                 className="text-xs text-muted-foreground underline underline-offset-2 hover:text-secondary"
               >
                 Solicitar devolución de saldo
-              </a>
+              </button>
             </div>
             <div>
               <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">Comprobantes emitidos</p>
