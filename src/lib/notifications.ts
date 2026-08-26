@@ -203,8 +203,13 @@ export function notificationLink(n: AppNotification, role: string): string {
     case "listing_disabled":
     case "listing_enabled":
     case "listing_expiring":
-      // Va directo a sus avisos: ahí tiene "Renovar" y "Publicar uno igual".
-      return "/dashboard/anunciante/avisos";
+      // Va a sus avisos, y `?aviso=` lo lleva hasta ESE aviso: abre la pestaña
+      // donde esté, sube hasta su fila y la resalta. Antes dejaba en la lista
+      // general, y con veinte avisos había que ponerse a buscar cuál era —lo
+      // reportó el cliente en la auditoría de agosto (anexo B, punto 06).
+      return p.listing_id
+        ? `/dashboard/anunciante/avisos?aviso=${String(p.listing_id)}`
+        : "/dashboard/anunciante/avisos";
     case "invoice_voided":
       // Allí ve el comprobante marcado como anulado y su motivo.
       return "/dashboard/anunciante/boletas";

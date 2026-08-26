@@ -13,7 +13,7 @@ vi.mock("@/lib/supabase", () => ({
   },
 }));
 
-import { fetchAdminCreditTransactions, CREDIT_TX_PAGE_SIZE } from "@/lib/admin";
+import { fetchAdminCreditTransactions, metodoDePago, nombreDeTipo, CREDIT_TX_PAGE_SIZE } from "@/lib/admin";
 
 beforeEach(() => { state.args = null; state.data = []; });
 
@@ -55,6 +55,78 @@ describe("fetchAdminCreditTransactions (EFFE-054)", () => {
   it("sin pageSize sigue paginando de 20 en 20 (la pantalla no cambia)", async () => {
     await fetchAdminCreditTransactions({ page: 2 });
     expect(state.args).toMatchObject({ p_limit: CREDIT_TX_PAGE_SIZE, p_offset: CREDIT_TX_PAGE_SIZE });
+  });
+
+  // Pedido en la auditoria de agosto (anexo B, 05): con tres vias de cobro
+  // conviviendo, un reporte que no dice por donde entro el dinero obliga a
+  // cruzar a mano con la bandeja de pagos manuales para cuadrar cualquier dia.
+  describe("el modo de pago", () => {
+    it("traduce el proveedor al nombre que ve el comprador", () => {
+      expect(metodoDePago("izipay", "purchase").metodo).toBe("Tarjeta");
+      expect(metodoDePago("yape", "purchase").metodo).toBe("Yape");
+      // "QR/Plin" y no "Plin": es como se llama en la pantalla de pago, y si el
+      // administrador lee otra cosa, cuadrar cuesta mas de lo que hace falta.
+      expect(metodoDePago("plin", "purchase").metodo).toBe("QR/Plin");
+    });
+
+    it("un gasto se paga con el saldo, no con una tarjeta", () => {
+      // Publicar o renovar sale del saldo ya cargado. Ahi "Saldo" es la
+      // respuesta correcta, no un hueco del historial.
+      const m = metodoDePago(null, "spend");
+      expect(m.metodo).toBe("Saldo");
+      expect(m.desconocido).toBe(false);
+    });
+
+    it("una compra sin dato SI es un hueco, y se marca aparte", () => {
+      // Son las compras de antes de que se guardara el proveedor. Pintarlas
+      // igual que un gasto esconderia justo lo que habria que mirar.
+      const m = metodoDePago(null, "purchase");
+      expect(m.metodo).toBe("Sin registrar");
+      expect(m.desconocido).toBe(true);
+    });
+
+    it("el saldo otorgado a mano se distingue de un cobro real", () => {
+      expect(metodoDePago("creditos", "purchase").metodo).toBe("Otorgado por admin");
+    });
+
+    it("un proveedor que no conocemos se enseña tal cual, no se oculta", () => {
+      expect(metodoDePago("otro-banco", "purchase").metodo).toBe("otro-banco");
+    });
+
+    it("tolera mayusculas y espacios de la base", () => {
+      expect(metodoDePago("  IZIPAY ", "purchase").metodo).toBe("Tarjeta");
+    });
+
+    // Descubierto mirando los datos reales al aplicar la 0123: existe un TERCER
+    // tipo de movimiento, `refund`, que el reporte pintaba como "Gasto". La
+    // migracion 0101 le dio tipo propio justamente para que NO contara como
+    // gasto (inflaba lo "gastado" del usuario), y la pantalla lo colapsaba igual.
+    describe("las devoluciones no son gastos", () => {
+      it("se llaman por su nombre", () => {
+        expect(nombreDeTipo("purchase")).toBe("Compra");
+        expect(nombreDeTipo("spend")).toBe("Gasto");
+        expect(nombreDeTipo("refund")).toBe("Devolucion");
+      });
+
+      it("y no se marcan como un hueco del historial", () => {
+        // Una devolucion es saldo que sale, no dinero que entro por algun sitio:
+        // "Sin registrar" la haria parecer un dato que falta.
+        const m = metodoDePago(null, "refund");
+        expect(m.metodo).toBe("Devolucion");
+        expect(m.desconocido).toBe(false);
+      });
+    });
+
+    it("viaja en cada fila del reporte", async () => {
+      state.data = [{
+        id: "t1", user_id: "u1", full_name: "Ana", email: "a@x.com",
+        type: "purchase", credits: "100", description: "Compra",
+        listing_title: null, payment_provider: "plin",
+        created_at: "2026-07-20T10:00:00Z", total_count: "1",
+      }];
+      const res = await fetchAdminCreditTransactions({});
+      expect(res.data[0]).toMatchObject({ metodo: "QR/Plin", metodoDesconocido: false });
+    });
   });
 
   it("sin datos devuelve total 0", async () => {

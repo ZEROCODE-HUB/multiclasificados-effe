@@ -87,12 +87,28 @@ const AdvertiserListings = () => {
   const TAB_KEYS = ["activos", "pausados", "vencidos", "borradores"] as const;
   const paramTab = searchParams.get("tab") ?? "";
   const initialTab = (TAB_KEYS as readonly string[]).includes(paramTab) ? paramTab : "activos";
+  // Pestana activa. Deja de ser solo el valor inicial porque, al llegar con
+  // `?aviso=`, hay que MOVERSE a la pestana donde esta ese aviso: si el aviso
+  // esta en "Vencidos" y la pantalla abre en "Activos", el usuario ve una lista
+  // sin su aviso y da por hecho que se perdio.
+  const [tabActiva, setTabActiva] = useState(initialTab);
   const [listings, setListings] = useState<MyListing[]>([]);
   const [loading, setLoading] = useState(true);
   // Avisos con un pago por Yape/Plin todavía sin confirmar: se marcan en su
   // fila y no se les ofrece "Publicar", que sería pagar dos veces.
   const [pagosEnEspera, setPagosEnEspera] = useState<Map<string, { metodo: string; confirmado: boolean }>>(new Map());
 
+
+  // Aviso al que hay que llevar al usuario (`?aviso=<id>`): se abre su pestana,
+  // se sube hasta el y se resalta un momento.
+  //
+  // Lo pidio el cliente por dos caminos distintos que acaban en lo mismo: la
+  // campana de "tu aviso vence en X dias" dejaba en la lista general —con veinte
+  // avisos, a buscar cual era—, y al renovar tampoco se veia el aviso renovado.
+  // Con esto los dos terminan senalando el aviso concreto.
+  const avisoDestacado = searchParams.get("aviso") ?? "";
+  const [resaltado, setResaltado] = useState("");
+  const filaRef = useRef<HTMLDivElement | null>(null);
 
   const [query, setQuery] = useState("");
 
@@ -263,6 +279,26 @@ const AdvertiserListings = () => {
     { label: "Borradores", value: byTab("borradores").length, icon: TrendingUp, accent: "text-warning" },
   ];
 
+  // Llevar al usuario hasta el aviso de `?aviso=`: cambiar de pestana si hace
+  // falta, subir hasta la fila y resaltarla. Espera a que la lista este cargada,
+  // porque antes no hay ninguna fila a la que ir.
+  useEffect(() => {
+    if (!avisoDestacado || loading) return;
+    const suyo = listings.find((l) => l.id === avisoDestacado);
+    if (!suyo) return; // no es de este usuario, o ya no existe
+    const suPestana = TAB_OF[suyo.status];
+    if (suPestana) setTabActiva(suPestana);
+    setResaltado(avisoDestacado);
+    // El salto va tras el cambio de pestana: si se hace antes, la fila todavia
+    // no esta en el DOM y el desplazamiento no encuentra nada.
+    const irAlla = window.setTimeout(() => {
+      filaRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, 120);
+    // El resaltado se apaga solo: es para encontrarlo, no para dejarlo marcado.
+    const apagar = window.setTimeout(() => setResaltado(""), 2600);
+    return () => { window.clearTimeout(irAlla); window.clearTimeout(apagar); };
+  }, [avisoDestacado, loading, listings]);
+
   const renderList = (tab: TabKey) => {
     const rows = byTab(tab);
     if (loading) {
@@ -287,7 +323,13 @@ const AdvertiserListings = () => {
         </div>
         <div className="divide-y divide-border">
           {rows.map((listing) => (
-            <div key={listing.id} className="p-3 lg:p-4">
+            <div
+              key={listing.id}
+              ref={listing.id === (avisoDestacado || resaltado) ? filaRef : undefined}
+              className={`p-3 lg:p-4 transition-colors duration-500 ${
+                listing.id === resaltado ? "bg-secondary/10 ring-2 ring-inset ring-secondary/40" : ""
+              }`}
+            >
               <ListingRow
                 listing={listing}
                 status={ROW_STATUS[tab]}
@@ -362,7 +404,7 @@ const AdvertiserListings = () => {
           ))}
         </div>
 
-        <Tabs defaultValue={initialTab}>
+        <Tabs value={tabActiva} onValueChange={setTabActiva}>
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             {/* El margen negativo debe igualar el padding de <main> (px-3 en móvil).
                 Con -mx-4 la tira sobresalía 4px y la página entera scrolleaba en horizontal. */}
@@ -578,7 +620,23 @@ const AdvertiserListings = () => {
         email={userEmail}
         fallbackName={session?.name ?? "Anunciante"}
         onClose={() => setToRenew(null)}
-        onPublished={reload}
+        onPublished={() => {
+          // Tras renovar, ENSENAR el aviso renovado en vez de dejar al usuario
+          // buscandolo en la lista. Lo pidio el cliente (pendiente 15): la
+          // renovacion funcionaba, pero terminaba sin nada que confirmara que su
+          // aviso volvia a estar arriba —y si es Urgente o Destacado, ahi es
+          // justo donde se ve lo que acaba de pagar.
+          const renovado = toRenew?.id ?? "";
+          void reload();
+          if (renovado) {
+            setTabActiva("activos");
+            setResaltado(renovado);
+            window.setTimeout(() => {
+              filaRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+            }, 200);
+            window.setTimeout(() => setResaltado(""), 2800);
+          }
+        }}
       />
     </DashboardLayout>
   );

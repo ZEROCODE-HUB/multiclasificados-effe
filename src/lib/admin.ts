@@ -180,11 +180,66 @@ export interface AdminCreditTx {
   email: string;
   /** La cuenta ya no existe: el movimiento se conserva, el usuario no. */
   deleted: boolean;
-  type: "purchase" | "spend";
+  /**
+   * `refund` existe desde la 0101 y NO es un gasto: es saldo que sale sin
+   * haberse consumido (una anulacion de comprobante, o un retiro hecho por un
+   * administrador). Se creo como tipo aparte justamente para que no se sumara
+   * a lo "gastado" por el usuario, y el reporte lo pintaba como "Gasto" igual.
+   */
+  type: "purchase" | "spend" | "refund";
   credits: number;
   description: string | null;
   listing_title: string | null;
+  /**
+   * Por dónde entró el dinero, ya en el idioma del reporte ("Tarjeta", "Yape",
+   * "QR/Plin"). Un GASTO no tiene forma de pago —se paga con el saldo ya
+   * cargado— y viaja como "Saldo"; una COMPRA sin dato es un hueco real del
+   * historial y se marca aparte, porque enseñar lo mismo en los dos casos
+   * escondería justo lo que habria que mirar.
+   */
+  metodo: string;
+  /** true si es una compra de la que NO se sabe por dónde entró (dato antiguo). */
+  metodoDesconocido: boolean;
   created_at: string;
+}
+
+/**
+ * Cómo se llama cada forma de pago en el reporte.
+ *
+ * Los nombres coinciden con los que ve el comprador al pagar (ver
+ * `NOMBRE_MEDIO` en pagoManual.ts): si el administrador lee "plin" y el usuario
+ * pagó por lo que la pantalla llama "QR/Plin", cuadrar es más difícil de lo que
+ * hace falta.
+ */
+const NOMBRE_PROVEEDOR: Record<string, string> = {
+  izipay: "Tarjeta",
+  yape: "Yape",
+  plin: "QR/Plin",
+  creditos: "Otorgado por admin",
+  backfill: "Dato migrado",
+  simulado: "Prueba",
+};
+
+/** Como se llama cada tipo de movimiento en el reporte. */
+export function nombreDeTipo(tipo: "purchase" | "spend" | "refund"): string {
+  if (tipo === "purchase") return "Compra";
+  if (tipo === "refund") return "Devolucion";
+  return "Gasto";
+}
+
+/** Traduce el proveedor de la orden al texto del reporte. */
+export function metodoDePago(
+  provider: string | null | undefined,
+  tipo: "purchase" | "spend" | "refund",
+): { metodo: string; desconocido: boolean } {
+  // Un gasto es publicar o renovar: sale del saldo, no de una tarjeta.
+  if (tipo === "spend") return { metodo: "Saldo", desconocido: false };
+  // Una devolucion tampoco tiene forma de pago: es saldo que se retira.
+  // Marcarla como "sin registrar" la haria parecer un hueco del historial.
+  if (tipo === "refund") return { metodo: "Devolucion", desconocido: false };
+  const p = (provider ?? "").trim().toLowerCase();
+  if (!p) return { metodo: "Sin registrar", desconocido: true };
+  return { metodo: NOMBRE_PROVEEDOR[p] ?? p, desconocido: false };
 }
 
 // Tamaño de página del historial de transacciones (paginación en el servidor).
@@ -266,8 +321,9 @@ export async function fetchAdminCreditTransactions(opts: {
     // `total_count` viaja en cada fila (el RPC pagina en el servidor).
     const rows = (data ?? []) as Array<{
       id: string; user_id: string; full_name: string | null; email: string | null;
-      type: "purchase" | "spend"; credits: number; description: string | null;
-      listing_title: string | null; created_at: string; total_count: number;
+      type: "purchase" | "spend" | "refund"; credits: number; description: string | null;
+      listing_title: string | null; payment_provider: string | null;
+      created_at: string; total_count: number;
     }>;
     const total = rows.length ? Number(rows[0].total_count) || 0 : 0;
     return {
@@ -284,6 +340,10 @@ export async function fetchAdminCreditTransactions(opts: {
         credits: Number(r.credits) || 0,
         description: r.description ?? null,
         listing_title: r.listing_title ?? null,
+        ...(() => {
+          const m = metodoDePago(r.payment_provider, r.type);
+          return { metodo: m.metodo, metodoDesconocido: m.desconocido };
+        })(),
         created_at: r.created_at,
       })),
       total,

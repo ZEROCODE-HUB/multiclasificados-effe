@@ -16,7 +16,7 @@ import { useCategories } from "@/hooks/useCategories";
 import { usePermissions } from "@/hooks/usePermissions";
 import {
   fetchCategoryDistribution, fetchCategoryRevenue, fetchRegionDistribution,
-  fetchClaimsSummary, fetchGrowthSeries, fetchAdminCreditTransactions,
+  fetchClaimsSummary, fetchGrowthSeries, fetchAdminCreditTransactions, nombreDeTipo,
   fetchSaldosUsuarios, SALDOS_PAGE_SIZE, type SaldoUsuario,
   CREDIT_TX_PAGE_SIZE, GROWTH_RANGES,
   type ClaimsSummary, type GrowthPoint, type AdminCreditTx, type GrowthRange,
@@ -264,7 +264,8 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
       rows = todas.data.map((r) => ({
         Usuario: r.full_name,
         Correo: r.email,
-        Tipo: r.type === "purchase" ? "Compra" : "Gasto",
+        Tipo: nombreDeTipo(r.type),
+        "Modo de pago": r.metodo,
         "Monto (S/)": `${r.credits >= 0 ? "+" : "−"}${formatCredits(Math.abs(r.credits))}`,
         Detalle: r.description ?? (r.listing_title ? `Aviso: ${r.listing_title}` : ""),
         Fecha: r.created_at.slice(0, 19).replace("T", " "),
@@ -509,6 +510,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
                         <tr className="border-b bg-muted/30 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
                           <th className="px-4 py-2.5 font-semibold">Usuario</th>
                           <th className="px-4 py-2.5 font-semibold">Tipo</th>
+                          <th className="px-4 py-2.5 font-semibold whitespace-nowrap">Modo de pago</th>
                           <th className="px-4 py-2.5 font-semibold text-right whitespace-nowrap">Monto (S/)</th>
                           <th className="px-4 py-2.5 font-semibold">Descripción</th>
                           <th className="px-4 py-2.5 font-semibold whitespace-nowrap">Fecha</th>
@@ -516,9 +518,9 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
                       </thead>
                       <tbody className="divide-y divide-border">
                         {txLoading ? (
-                          <tr><td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">Cargando…</td></tr>
+                          <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">Cargando…</td></tr>
                         ) : tx.data.length === 0 ? (
-                          <tr><td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">No hay transacciones con estos filtros.</td></tr>
+                          <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">No hay transacciones con estos filtros.</td></tr>
                         ) : (
                           tx.data.map((r) => (
                             <tr key={r.id} className="hover:bg-muted/30">
@@ -532,8 +534,25 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
                                 <p className="text-[11px] text-muted-foreground">{r.email}</p>
                               </td>
                               <td className="px-4 py-2.5">
-                                <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${r.type === "purchase" ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"}`}>
-                                  {r.type === "purchase" ? "Compra" : "Gasto"}
+                                {/* Una devolucion NO es un gasto: es saldo que sale
+                                    sin haberse consumido. Se pintaba igual que un
+                                    gasto, que es justo lo que la 0101 evito en la
+                                    base al darle un tipo propio. */}
+                                <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  r.type === "purchase" ? "bg-success/15 text-success"
+                                  : r.type === "refund" ? "bg-warning/15 text-warning"
+                                  : "bg-muted text-muted-foreground"}`}>
+                                  {nombreDeTipo(r.type)}
+                                </span>
+                              </td>
+                              {/* Un GASTO se paga con el saldo ya cargado, asi que
+                                  "Saldo" es la respuesta correcta y no un hueco.
+                                  Una COMPRA sin dato si es un hueco del historial
+                                  —son las de antes de que se guardara— y se marca
+                                  aparte para que no se confunda con lo anterior. */}
+                              <td className="px-4 py-2.5 whitespace-nowrap">
+                                <span className={r.metodoDesconocido ? "italic text-muted-foreground" : "text-foreground"}>
+                                  {r.metodo}
                                 </span>
                               </td>
                               <td className={`px-4 py-2.5 text-right font-bold tabular-nums whitespace-nowrap ${r.credits >= 0 ? "text-success" : "text-destructive"}`}>
