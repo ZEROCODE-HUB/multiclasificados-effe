@@ -106,6 +106,14 @@ export default function ListingDetail() {
     featured: false, advertiser: "", views: 0,
   };
   const [listing, setListing] = useState<Listing>(EMPTY);
+  // Mientras no se sepa si el aviso existe NO se pinta la ficha.
+  //
+  // Antes se renderizaba con el aviso vacío desde el primer frame, así que el
+  // visitante veía unos segundos de imagen rota y "Precio a convenir" —la ficha
+  // corrupta— y solo después aparecía el mensaje. Son DOS viajes de red hasta
+  // saberlo (la vista pública primero, y la tabla después para averiguar por
+  // qué), y durante los dos se estaba enseñando algo falso.
+  const [cargando, setCargando] = useState(true);
   // Por qué no se pudo cargar. `null` = aún no se sabe (o cargó bien).
   //
   // Sin esto la ficha se quedaba con `EMPTY` PARA SIEMPRE cuando el aviso no
@@ -197,14 +205,21 @@ export default function ListingDetail() {
   }, [id]);
 
   useEffect(() => {
-    if (!id) return;
+    // Sin id no hay nada que cargar: dejar `cargando` en true sería un esqueleto
+    // eterno.
+    if (!id) { setCargando(false); return; }
     let mounted = true;
     fetchListingById(id).then((l) => {
       if (!mounted) return;
-      if (l) { setListing(l); setNoVisible(null); return; }
-      // No está en la vista pública: puede ser tuyo y estar vencido.
-      void porQueNoSeVeElAviso(id).then((r) => { if (mounted) setNoVisible(r); });
-    });
+      if (l) { setListing(l); setNoVisible(null); setCargando(false); return; }
+      // No está en la vista pública: puede ser tuyo y estar vencido. La ficha
+      // sigue SIN pintarse durante esta segunda consulta.
+      void porQueNoSeVeElAviso(id).then((r) => {
+        if (!mounted) return;
+        setNoVisible(r);
+        setCargando(false);
+      });
+    }).catch(() => { if (mounted) setCargando(false); });
     fetchListingDocumentUrl(id).then((url) => mounted && setDocUrl(url));
     fetchListingVideos(id).then((vs) => mounted && setVideos(vs));
     fetchListings({ limit: 8 }).then((rows) => {
@@ -502,6 +517,38 @@ export default function ListingDetail() {
     "Si algo no cuadra, repórtalo: el equipo revisa cada denuncia.",
   ];
 
+
+  // Todavía no se sabe si el aviso existe. Un esqueleto, NO la ficha con el
+  // aviso vacío: eso es lo que hacía que se vieran unos segundos de imagen rota
+  // y "Precio a convenir" antes de aparecer el mensaje de vencido.
+  //
+  // Se dibuja la forma de la ficha en gris en lugar de un girador centrado
+  // porque es lo que va a haber ahí: así el contenido no da un salto al llegar.
+  if (cargando) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <div className="container mx-auto px-4 py-6" aria-busy="true" aria-live="polite">
+          <span className="sr-only">Cargando el aviso…</span>
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
+            <div className="space-y-4">
+              <div className="aspect-[4/3] xl:h-[460px] xl:aspect-auto bg-muted animate-pulse rounded" />
+              <div className="h-7 w-3/4 bg-muted animate-pulse rounded" />
+              <div className="h-4 w-1/3 bg-muted animate-pulse rounded" />
+              <div className="space-y-2 pt-2">
+                <div className="h-4 w-full bg-muted animate-pulse rounded" />
+                <div className="h-4 w-5/6 bg-muted animate-pulse rounded" />
+              </div>
+            </div>
+            <div className="space-y-3">
+              <div className="h-32 bg-muted animate-pulse rounded" />
+              <div className="h-44 bg-muted animate-pulse rounded" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // El aviso no se puede enseñar: se dice qué pasó y a dónde ir. Antes esto no
   // existía y la ficha se quedaba a medio pintar, que es lo peor de los dos

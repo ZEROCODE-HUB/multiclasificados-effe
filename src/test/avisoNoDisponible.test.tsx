@@ -75,6 +75,37 @@ const pintar = () =>
     </MemoryRouter>,
   );
 
+describe("mientras se averigua, no se enseña nada falso", () => {
+  // Segundo reporte del mismo caso: "sale el anuncio vacío tal como antes, y
+  // después de unos segundos recién sale el aviso de vencido".
+  //
+  // Son DOS viajes de red hasta saberlo —la vista pública primero y la tabla
+  // después, para averiguar por qué—, y durante los dos se estaba pintando la
+  // ficha con el aviso vacío. Estas comprobaciones son SÍNCRONAS a propósito:
+  // miran el primer frame, que es donde estaba el problema.
+  beforeEach(() => {
+    estado.valor = { existe: true, estado: "expired", esMio: true, titulo: "Video prueba" };
+  });
+
+  it("ni imagen rota ni «Precio a convenir» en el primer frame", () => {
+    pintar();
+    expect(document.querySelector("img")).toBeNull();
+    expect(screen.queryByText(/precio a convenir/i)).toBeNull();
+  });
+
+  it("se ve un esqueleto, y se anuncia para quien no ve la pantalla", () => {
+    pintar();
+    expect(screen.getByText(/cargando el aviso/i)).toBeInTheDocument();
+  });
+
+  it("y tampoco los botones de contacto de un aviso que quizá no existe", () => {
+    // Ofrecer "Enviar mensaje" sobre un hueco vacío es peor que no ofrecer nada.
+    pintar();
+    expect(screen.queryByText(/enviar mensaje/i)).toBeNull();
+    expect(screen.queryByText(/mostrar teléfono/i)).toBeNull();
+  });
+});
+
 describe("mi aviso vencido, abierto desde el correo", () => {
   beforeEach(() => {
     estado.valor = { existe: true, estado: "expired", esMio: true, titulo: "Video prueba" };
