@@ -132,6 +132,16 @@ export function notificationText(n: AppNotification): string {
         : "está por vencer";
       return `"${title}" ${cuando}. Renuévalo o publica uno igual para que siga visible.`;
     }
+    case "complaint_new": {
+      // Se basta a sí mismo a propósito: no hay pantalla del Libro de
+      // Reclamaciones a la que enlazar (es el punto B-09, aparcado), así que el
+      // aviso lleva el código y el nombre para poder buscar el correo o llamar
+      // al consumidor sin depender de ninguna pantalla.
+      const resumen = (p.resumen as string) || "";
+      if (resumen) return `${resumen}. Tienes 30 días para responderlo.`;
+      const clase = p.kind === "queja" ? "queja" : "reclamo";
+      return `Entró un ${clase} nuevo en el Libro de Reclamaciones.`;
+    }
     case "moderation_warning": {
       const reason = (p.reason as string) || "";
       const note = (p.note as string) || "";
@@ -200,6 +210,11 @@ export function notificationLink(n: AppNotification, role: string): string {
     case "new_application":
       // El dueño revisa las postulaciones recibidas en su panel de anunciante.
       return "/dashboard/anunciante/postulaciones";
+    case "complaint_new":
+      // Sin destino: la pantalla del Libro de Reclamaciones no existe (B-09).
+      // Mandar al panel de inicio sería peor que no mover: quien pulsa espera
+      // ver el reclamo, no el escritorio. El aviso ya trae lo que hace falta.
+      return "#";
     case "listing_disabled":
     case "listing_enabled":
     case "listing_expiring":

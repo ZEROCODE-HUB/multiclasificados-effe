@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { verifyDocument } from "@/lib/verifyDoc";
 import {
   formatComplaintDate,
   submitComplaint,
@@ -89,6 +90,30 @@ export function LibroReclamaciones() {
     if (!form.description.trim() || !form.request.trim()) {
       toast.error("Describe el reclamo y tu pedido.");
       return;
+    }
+
+    // B-07 de la auditoría: comprobar el documento contra el registro.
+    //
+    // Solo DNI y RUC: son los únicos que se pueden consultar. El carné de
+    // extranjería y el pasaporte no están en ese registro, así que exigirles lo
+    // mismo dejaría fuera precisamente a quien no puede demostrarlo por aquí.
+    //
+    // Y se bloquea solo si el documento NO EXISTE, nunca si la consulta falla o
+    // topa el límite. La diferencia importa: el Libro de Reclamaciones es un
+    // derecho del consumidor y registrarlo es obligación nuestra. Impedir que
+    // alguien reclame porque un servicio de terceros esté caído no se sostiene
+    // ni ante Indecopi ni ante el sentido común. Si no se pudo comprobar, el
+    // reclamo entra igual y quien lo atienda lo verá.
+    if (form.docType === "DNI" || form.docType === "RUC") {
+      setSending(true);
+      const doc = await verifyDocument(form.docType === "DNI" ? "dni" : "ruc", form.docNumber);
+      setSending(false);
+      const noExiste = !doc.ok && !doc.rateLimited
+        && /no existe|no se encontr|no v[áa]lid|debe tener/i.test(doc.error ?? "");
+      if (noExiste) {
+        toast.error(doc.error ?? "Revisa tu número de documento.");
+        return;
+      }
     }
 
     setSending(true);
