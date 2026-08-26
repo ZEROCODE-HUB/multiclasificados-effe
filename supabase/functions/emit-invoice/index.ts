@@ -513,8 +513,28 @@ async function emitirEnSunat(invoiceId: string): Promise<string | null> {
   // duplicarlo. Sin esto, un fallo pasajero entre ellos y SUNAT dejaba el
   // comprobante muerto y había que pedirles el reproceso a mano.
   const { data: previo } = await admin
-    .from("invoices").select("sunat_hash").eq("id", id).maybeSingle();
-  const yaRegistrado = Boolean(previo?.sunat_hash);
+    .from("invoices").select("sunat_hash, sunat_last_error").eq("id", id).maybeSingle();
+
+  // EL BUCLE QUE ESTO CIERRA
+  //
+  // Mirar solo el hash no bastaba, y creaba un círculo del que no se salía:
+  //
+  //   1. Factiliza contesta «ya existe un documento»: SÍ está en su sistema.
+  //   2. Pero en ese error no viene el hash, así que no se guarda ninguno.
+  //   3. Sin hash, aquí se elegía `/send`… que vuelve a contestar «ya existe».
+  //   4. Y otra vez al 2.
+  //
+  // Se veía en producción: dos comprobantes con 57 y 60 intentos, los dos sin
+  // hash y con ese mismo mensaje. Cada reintento manual sumaba uno más y no
+  // llevaba a ninguna parte, y de paso se quedaban para siempre en la lista de
+  // «necesitan revisión» — que es como se consigue que esa lista deje de
+  // mirarse.
+  //
+  // La señal de que el documento está registrado no es el hash: es que ELLOS lo
+  // digan. Así que también se mira el último error.
+  const loDijeronEllos = /ya (existe un documento|est[áa] registrado)/i
+    .test(String(previo?.sunat_last_error ?? ""));
+  const yaRegistrado = Boolean(previo?.sunat_hash) || loDijeronEllos;
   const url = yaRegistrado ? urlDeFactiliza("resend") : FACTILIZA_URL;
 
   let httpStatus = 0;
