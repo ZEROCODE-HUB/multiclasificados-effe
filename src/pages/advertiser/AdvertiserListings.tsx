@@ -349,7 +349,16 @@ const AdvertiserListings = () => {
                   // un borrador al que le falta un vídeo contratado no se podía
                   // arreglar ahí — quedaba imposible de publicar y de completar.
                   ? { onEdit: () => navigate(`/dashboard/anunciante/publicar?continuar=${listing.id}`) }
-                  : { onEdit: () => openEdit(listing) })}
+                  : listing.status === "active" || listing.status === "paused"
+                    // Un aviso PUBLICADO también se edita en el formulario, pero
+                    // en modo editar: sin plan, sin cobro y con la categoría
+                    // bloqueada. Antes solo se podían tocar título, precio y
+                    // descripción; cambiar una foto mala o subir el PDF que
+                    // faltaba no había manera.
+                    ? { onEdit: () => navigate(`/dashboard/anunciante/publicar?editar=${listing.id}`) }
+                    // Vencidos, rechazados y vendidos: se quedan con el modal.
+                    // No se editan para volver a publicarse, se republican.
+                    : { onEdit: () => openEdit(listing) })}
                 onDelete={() => setToDelete(listing)}
                 onTogglePause={tab === "activos" || tab === "pausados" ? togglePause : undefined}
                 {...(tab === "borradores" && listing.status === "draft"

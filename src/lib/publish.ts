@@ -293,6 +293,72 @@ export async function saveListingDraft(
 }
 
 /**
+ * Guarda los cambios de un aviso YA PUBLICADO. No cobra y no toca el plan.
+ *
+ * QUÉ NO SE TOCA, Y POR QUÉ
+ *
+ * Ni `plan_duration_days`, ni `plan_quantity`, ni `plan_extras`, ni `status`, ni
+ * `expires_at`. Eso es lo que el usuario **pagó**, y editar no es comprar: si
+ * desde aquí se pudiera alargar la vigencia o añadir adicionales, editar sería
+ * una forma de contratar gratis. Y a la inversa, bajar de tres vídeos a uno no
+ * devuelve dinero, así que tampoco tiene sentido reescribirlo.
+ *
+ * La categoría tampoco: cambia el orden en el buscador y las promociones que le
+ * aplican. Un aviso que se compró como "Vehículos" se queda ahí.
+ *
+ * El filtro por estado va en el UPDATE y no antes: entre comprobarlo y
+ * escribirlo el aviso puede haber vencido, y entonces esto lo estaría
+ * resucitando por la puerta de atrás.
+ */
+export async function guardarCambiosDeAviso(
+  listingId: string,
+  input: DraftInput,
+  onProgress?: (hechas: number, total: number) => void,
+): Promise<void> {
+  const userId = await usuarioActual();
+  if (!userId) throw new Error("Debes iniciar sesión para editar el aviso.");
+  if (!input.form.title.trim()) throw new Error("El aviso necesita un título.");
+
+  const fila = listingRow(input);
+  const editables = {
+    title: fila.title,
+    description: fila.description,
+    price: fila.price,
+    currency: fila.currency,
+    condition: fila.condition,
+    country: fila.country,
+    department: fila.department,
+    location: fila.location,
+    lat: fila.lat,
+    lng: fila.lng,
+  };
+
+  const { data, error } = await supabase
+    .from("listings")
+    .update(editables)
+    .eq("id", listingId)
+    .eq("owner_id", userId)
+    .in("status", ["active", "paused"])
+    .select("id")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) {
+    // Sin esto el usuario vería "guardado" tras un update que no tocó ninguna
+    // fila: los cambios se perderían en silencio.
+    throw new Error("No se pudo guardar: el aviso ya no está activo o no es tuyo.");
+  }
+
+  // Los adjuntos van con `replace`: el usuario pudo quitar una foto, y sin
+  // reemplazar quedaría en el aviso. Los que ya estaban subidos se reinsertan
+  // apuntando al mismo sitio, sin volver a subir un byte.
+  await Promise.all([
+    uploadListingPhotos(userId, listingId, input, true, onProgress),
+    input.pdf ? uploadListingDoc(userId, listingId, input.pdf) : Promise.resolve(),
+    uploadListingVideos(userId, listingId, input.videos ?? [], true),
+  ]);
+}
+
+/**
  * Renueva un aviso activo o recién vencido: le suma días sin dejarlo caer.
  *
  * A diferencia de publicar, el aviso conserva su id, sus visitas, sus favoritos
@@ -442,7 +508,19 @@ export interface AvisoParaContinuar {
  * formulario de editar no tenía dónde hacerlo: el aviso quedaba atascado sin
  * forma de arreglarlo ni de publicarlo.
  */
-export async function cargarAvisoParaContinuar(listingId: string): Promise<AvisoParaContinuar> {
+export async function cargarAvisoParaContinuar(
+  listingId: string,
+  /**
+   * `continuar` = terminar un BORRADOR y publicarlo (cobra al final).
+   * `editar`    = retocar un aviso YA PUBLICADO (no cobra, no toca el plan).
+   *
+   * Va explícito y no deducido del estado del aviso: si se dedujera, abrir un
+   * borrador por la ruta de editar lo dejaría sin publicar nunca, y abrir un
+   * activo por la de continuar intentaría cobrarlo otra vez. Que lo diga quien
+   * llama es lo que hace imposible confundirlos.
+   */
+  modo: "continuar" | "editar" = "continuar",
+): Promise<AvisoParaContinuar> {
   const { data, error } = await supabase
     .from("listings")
     .select("status, title, description, price, currency, condition, category_id, department, location, lat, lng, " +
@@ -454,22 +532,26 @@ export async function cargarAvisoParaContinuar(listingId: string): Promise<Aviso
 
   const r = data as unknown as Record<string, unknown>;
 
-  // SOLO borradores. La puerta está aquí, al abrir, y no al final del proceso.
+  // La puerta está aquí, al ABRIR, y no al final del proceso.
   //
-  // La base de datos ya protege lo esencial —`publish_listing` solo actúa sobre
-  // draft/pending, y el cobro va en su misma transacción, así que un aviso
-  // activo no se puede cobrar dos veces—, pero sin este corte alguien que
-  // escriba `?continuar=<id-de-aviso-activo>` a mano se encuentra dos cosas
-  // desconcertantes:
-  //
-  //   · Al publicar, la RPC falla y la pantalla le dice «se descontó tu saldo,
-  //     pero el aviso quedó pendiente». Es MENTIRA: no se descontó nada.
-  //   · Al guardar, `saveListingDraft` filtra por `status = 'draft'`, así que no
-  //     actualiza nada y los cambios se pierden EN SILENCIO.
-  //
-  // Un aviso ya publicado se retoca desde su modal de edición, que no cobra.
-  if (String(r.status ?? "") !== "draft") {
+  // La base ya protege lo esencial —`publish_listing` solo actúa sobre
+  // draft/pending y el cobro va en su misma transacción, así que un aviso activo
+  // no se puede cobrar dos veces—, pero sin este corte quien escriba la URL a
+  // mano se encuentra dos cosas desconcertantes: que al publicar se le diga «se
+  // descontó tu saldo» siendo falso, y que al guardar los cambios se pierdan en
+  // silencio porque el update filtra por estado.
+  const estado = String(r.status ?? "");
+  if (modo === "continuar" && estado !== "draft") {
     throw new Error("Este aviso ya no es un borrador: edítalo desde «Mis avisos».");
+  }
+  if (modo === "editar" && estado !== "active" && estado !== "paused") {
+    // Un borrador se termina, no se «edita»: por esta vía nunca llegaría a
+    // publicarse. Y un vencido se republica, que es otro flujo con su cobro.
+    throw new Error(
+      estado === "draft"
+        ? "Este aviso es un borrador: termínalo desde «Mis avisos» para publicarlo."
+        : "Este aviso no se puede editar en su estado actual.",
+    );
   }
 
   const ordenados = (filas: unknown, prefijo: string, ext: string): AdjuntoYaSubido[] =>

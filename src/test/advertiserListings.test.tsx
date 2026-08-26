@@ -14,7 +14,11 @@ const replaceMainListingPhoto = vi.fn().mockResolvedValue("https://cdn/new-photo
 const listing = {
   id: "abc-123", title: "Original title", description: "desc", price: 100, currency: "PEN",
   category: "inmuebles", location: "Lima", imageUrl: "x", date: "2026-07-01", featured: false,
-  advertiser: "", views: 5, status: "active" as const, expiresAt: null, condition: "nuevo" as const,
+  // VENCIDO a propósito. Desde que "Editar" de un aviso activo abre el
+  // formulario entero (para poder cambiar fotos, vídeos o el PDF, que el modal
+  // no lleva), el modal solo se usa en los estados que no se editan ahí:
+  // vencido, rechazado y vendido. Estas pruebas son las del modal.
+  advertiser: "", views: 5, status: "expired" as const, expiresAt: null, condition: "nuevo" as const,
 };
 
 // Conserva los exports reales (expiryInfo, tipos) y solo sustituye la capa de red:
@@ -38,7 +42,10 @@ vi.mock("react-router-dom", async (orig) => {
   return {
     ...actual,
     useNavigate: () => navigate,
-    useSearchParams: () => [new URLSearchParams(), vi.fn()],
+    // `?aviso=` hace que la pantalla abra en la pestaña donde está ese aviso.
+    // Se usa aquí para llegar al vencido sin pelearse con las pestañas de Radix,
+    // que no cambian con un `fireEvent.click` en jsdom.
+    useSearchParams: () => [new URLSearchParams({ aviso: "abc-123" }), vi.fn()],
     Link: EnlaceFalso,
   };
 });
@@ -60,11 +67,13 @@ import AdvertiserListings from "@/pages/advertiser/AdvertiserListings";
 
 beforeEach(() => { updateListing.mockClear(); deleteListing.mockClear(); navigate.mockClear(); replaceMainListingPhoto.mockClear(); toast.mockClear(); });
 
+/** El aviso de prueba está vencido; `?aviso=` abre esa pestaña sola. */
+const abrirVencidos = () => screen.findByText("Original title");
+
 describe("AdvertiserListings — editar / eliminar / ver", () => {
   it("EDITAR: abre el formulario con los datos y guarda el patch correcto", async () => {
     render(<AdvertiserListings />);
-    // El aviso aparece en la pestaña activa
-    await screen.findByText("Original title");
+    await abrirVencidos();
 
     // Click en "Editar" (botón inline)
     fireEvent.click(screen.getAllByRole("button", { name: /editar/i })[0]);
@@ -93,7 +102,7 @@ describe("AdvertiserListings — editar / eliminar / ver", () => {
 
   it("EDITAR: no guarda si falta el título (validación)", async () => {
     render(<AdvertiserListings />);
-    await screen.findByText("Original title");
+    await abrirVencidos();
     fireEvent.click(screen.getAllByRole("button", { name: /editar/i })[0]);
     const titleInput = await screen.findByDisplayValue("Original title");
     fireEvent.change(titleInput, { target: { value: "   " } });
@@ -104,7 +113,7 @@ describe("AdvertiserListings — editar / eliminar / ver", () => {
 
   it("EDITAR: cambiar la foto llama a replaceMainListingPhoto con el archivo", async () => {
     render(<AdvertiserListings />);
-    await screen.findByText("Original title");
+    await abrirVencidos();
     fireEvent.click(screen.getAllByRole("button", { name: /editar/i })[0]);
     await screen.findByDisplayValue("Original title");
 
@@ -119,7 +128,7 @@ describe("AdvertiserListings — editar / eliminar / ver", () => {
 
   it("EDITAR: rechaza un archivo que no es imagen", async () => {
     render(<AdvertiserListings />);
-    await screen.findByText("Original title");
+    await abrirVencidos();
     fireEvent.click(screen.getAllByRole("button", { name: /editar/i })[0]);
     await screen.findByDisplayValue("Original title");
 
@@ -134,14 +143,14 @@ describe("AdvertiserListings — editar / eliminar / ver", () => {
 
   it("VER: navega al detalle del aviso", async () => {
     render(<AdvertiserListings />);
-    await screen.findByText("Original title");
+    await abrirVencidos();
     fireEvent.click(screen.getByRole("button", { name: /^ver$/i }));
     expect(navigate).toHaveBeenCalledWith("/aviso/abc-123");
   });
 
   it("ELIMINAR: pide confirmación y borra el aviso", async () => {
     render(<AdvertiserListings />);
-    await screen.findByText("Original title");
+    await abrirVencidos();
     fireEvent.click(screen.getAllByRole("button", { name: /eliminar/i })[0]);
     // Confirmación
     const confirmBtn = await screen.findByRole("button", { name: /^eliminar$/i });

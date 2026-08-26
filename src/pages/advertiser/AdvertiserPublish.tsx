@@ -27,7 +27,8 @@ import {
   loadSettings, priceForDuration, extrasTotal, formatSoles, formatCredits, avisosBreakdown, solesToCredits,
   type DurationDays, type PricingSettings, type ExtraPrices,
 } from "@/lib/pricing";
-import { cargarAvisoParaCopiar, cargarAvisoParaContinuar, createAndPublishListing, finalizeListingPublication, saveListingDraft, SaldoInsuficiente } from "@/lib/publish";
+import { mensajeDeError } from "@/lib/errores";
+import { cargarAvisoParaCopiar, cargarAvisoParaContinuar, createAndPublishListing, finalizeListingPublication, guardarCambiosDeAviso, saveListingDraft, SaldoInsuficiente } from "@/lib/publish";
 import { urgenteAllowedFor, URGENTE_MAX_DAYS } from "@/lib/listingBadges";
 import { ListingCard } from "@/components/ListingCard";
 import { InfoHint } from "@/components/InfoHint";
@@ -56,6 +57,28 @@ interface PhotoItem {
 
 /** Un adjunto cualquiera del aviso, para contar el progreso por peso. */
 interface Adjunto { file: File; estado: EstadoSubida; }
+
+/**
+ * Un adjunto que YA está en el servidor, listo para pintarlo en el formulario.
+ *
+ * El `File` va vacío y su `size` es 0 a propósito: no hay ni un byte que subir,
+ * y el progreso mide lo que FALTA por subir. Si se le pusiera el peso real, la
+ * barra empezaría en 0 % con todo ya arriba.
+ *
+ * Lo usan los dos modos que abren un aviso existente —continuar un borrador y
+ * editar uno publicado—, por eso vive aquí fuera y no dentro de uno de ellos.
+ */
+const yaSubido = (
+  a: { name: string; subido: { path: string; url: string } },
+  i: number,
+): PhotoItem => ({
+  id: `sub-${i}-${a.subido.path}`,
+  url: a.subido.url,
+  name: a.name,
+  file: new File([], a.name),
+  comprimida: true,
+  estado: { fase: "lista" as const, subido: a.subido },
+});
 
 const DURATIONS: DurationDays[] = [3, 7, 15, 30, 60, 90];
 
@@ -306,6 +329,9 @@ const AdvertiserPublish = () => {
   // formulario con ese aviso —incluidas sus fotos y su PDF— pero SIN atarlo:
   // es un aviso nuevo, el original sigue su curso.
   const [copiando, setCopiando] = useState(false);
+  // Editar un aviso YA PUBLICADO: misma pantalla, sin plan y sin cobro.
+  // Guarda el id porque es lo que distingue "guardar cambios" de "publicar".
+  const [editandoId, setEditandoId] = useState<string | null>(null);
   useEffect(() => {
     // Se lee de la URL directamente y no con `useSearchParams`: este parámetro
     // solo se mira al montar, y el hook obligaría a envolver la pantalla en un
@@ -354,6 +380,56 @@ const AdvertiserPublish = () => {
     // Solo al montar: el parámetro de la URL se mira una vez.
   }, []);
 
+  // "Editar aviso": llega ?editar=<id> desde Mis avisos, para un aviso ACTIVO
+  // o pausado.
+  //
+  // Es la misma pantalla que crear a propósito: las validaciones, la compresión
+  // de imágenes, el mapa y el control de adjuntos son idénticos, y tenerlos por
+  // duplicado garantiza que dentro de unos meses el aviso creado valide una
+  // cosa y el editado otra.
+  //
+  // Lo que NO se comparte es el cobro: en este modo el bloque de duración y
+  // adicionales ni se pinta, y el botón dice "Guardar cambios". Que la
+  // diferencia sea estructural y no una bandera dentro del mismo botón es
+  // deliberado: un botón que a veces cobra acaba cobrando cuando no debe.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("editar");
+    if (!id) return;
+    let vivo = true;
+    setCopiando(true);
+    cargarAvisoParaContinuar(id, "editar")
+      .then((b) => {
+        if (!vivo) return;
+        setForm(b.form);
+        setCoords(b.lat != null && b.lng != null ? { lat: b.lat, lng: b.lng } : null);
+        // La duración y los adicionales se cargan para saber CUÁNTOS adjuntos
+        // caben —es lo que se pagó—, pero no se pueden cambiar desde aquí.
+        setDuration(asDuracion(b.duration));
+        setDurationChosen(true);
+        setExtras(b.extras as ExtrasCount);
+        if (b.mainPhoto) setMainPhoto(yaSubido(b.mainPhoto, 0));
+        setExtraPhotos(b.extraPhotos.map((f, i) => yaSubido(f, i + 1)));
+        setVideos(b.videos.map((v) => ({
+          file: new File([], v.name), name: v.name, duracion: 0,
+          estado: { fase: "lista" as const, subido: v.subido },
+        })));
+        if (b.pdf) setPdfFile({ file: new File([], b.pdf.name), name: b.pdf.name, estado: { fase: "lista", subido: b.pdf.subido } });
+        setEditandoId(id);
+        adjuntosAlDia.current = true;
+      })
+      .catch((e) => {
+        if (vivo) {
+          toast({
+            title: "No se pudo abrir el aviso",
+            description: e instanceof Error ? e.message : "Inténtalo de nuevo.",
+            variant: "destructive",
+          });
+        }
+      })
+      .finally(() => { if (vivo) setCopiando(false); });
+    return () => { vivo = false; };
+  }, []);
+
   // "Continuar aviso": llega ?continuar=<id> desde Mis avisos › Borradores.
   //
   // Se parece a ?copiar= pero es lo contrario en lo que importa: aquí el aviso
@@ -372,16 +448,6 @@ const AdvertiserPublish = () => {
     if (!id) return;
     let vivo = true;
     setCopiando(true);
-    // Un adjunto que ya está arriba: sin bytes que subir, por eso el File va
-    // vacío. Su `size` es 0 a propósito — el progreso mide lo que FALTA.
-    const yaSubido = (a: { name: string; subido: { path: string; url: string } }, i: number) => ({
-      id: `sub-${i}-${a.subido.path}`,
-      url: a.subido.url,
-      name: a.name,
-      file: new File([], a.name),
-      comprimida: true,
-      estado: { fase: "lista" as const, subido: a.subido },
-    });
     cargarAvisoParaContinuar(id)
       .then((b) => {
         if (!vivo) return;
@@ -941,6 +1007,38 @@ const AdvertiserPublish = () => {
     localStorage.removeItem(DRAFT_KEY);
   };
 
+  /**
+   * Guarda los cambios de un aviso YA PUBLICADO. No cobra y no toca el plan.
+   *
+   * Reutiliza `adjuntosParaGuardar()`, así que lo que ya estaba subido se
+   * reinserta apuntando al mismo sitio y solo viaja lo que el usuario cambió.
+   */
+  const guardarEdicion = async () => {
+    if (!editandoId) return;
+    setSavingDraft(true);
+    try {
+      await guardarCambiosDeAviso(editandoId, {
+        form: form as never,
+        lat: coords?.lat ?? null,
+        lng: coords?.lng ?? null,
+        quantity,
+        duration,
+        extras,
+        ...adjuntosParaGuardar(),
+      });
+      toast({ title: "Cambios guardados", description: "Tu aviso se actualizó." });
+      navigate("/dashboard/anunciante/avisos");
+    } catch (e) {
+      toast({
+        title: "No se pudieron guardar los cambios",
+        description: mensajeDeError(e, "Inténtalo de nuevo."),
+        variant: "destructive",
+      });
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
   // "Guardar en mis borradores": deja el aviso en la BD con status=draft, sin
   // cobrar ni pedir identidad. Guardar dos veces actualiza el mismo aviso.
   const saveDraft = async () => {
@@ -1186,7 +1284,10 @@ const AdvertiserPublish = () => {
               <CardContent className="space-y-4 pt-5">
                 <div {...val.props("categoria")}>
                   <Label>Categoría *</Label>
-                  <Select value={form.category} onValueChange={(v) => updateForm("category", v)}>
+                  {/* Bloqueada al editar: cambiar de categoría mueve el aviso de
+                      sitio en el buscador y le cambia las promociones que le
+                      aplican. Lo que se compró como "Vehículos" se queda ahí. */}
+                  <Select value={form.category} onValueChange={(v) => updateForm("category", v)} disabled={!!editandoId}>
                     <SelectTrigger className="mt-1"><SelectValue placeholder="Selecciona una categoría" /></SelectTrigger>
                     <SelectContent>
                       {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
@@ -1504,7 +1605,12 @@ const AdvertiserPublish = () => {
               </CardContent>
             </Card>
 
-            {/* Step 5: Paquete (cantidad + duración + adicionales) */}
+            {/* Step 5: Paquete (cantidad + duración + adicionales).
+                EDITANDO no se pinta: la duración y los adicionales son lo que el
+                usuario PAGÓ. Si se pudieran tocar aquí, editar sería una forma
+                de alargar la vigencia o contratar adicionales gratis. Y a la
+                inversa, bajar de tres vídeos a uno no devuelve dinero. */}
+            {!editandoId && (
             <Card>
               <CardHeader className="border-b">
                 <div className="flex items-start gap-3">
@@ -1623,12 +1729,16 @@ const AdvertiserPublish = () => {
                 </div>
               </CardContent>
             </Card>
+            )}
           </div>
 
           {/* Sidebar: live total + actions.
               Sticky bajo el navbar (~76px) con scroll interno propio si supera el alto
               de pantalla, para que el botón "Publicar" siempre quede alcanzable. */}
           <div className="space-y-6 lg:sticky lg:top-24 lg:self-start lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:pr-1">
+            {/* Editando no hay nada que pagar, así que enseñar un "Costo" con un
+                total al lado del botón de guardar solo sirve para asustar. */}
+            {!editandoId && (
             <Card className="border-secondary/40 border-2">
               <CardHeader className="border-b bg-secondary/5">
                 <CardTitle className="text-sm uppercase tracking-widest text-secondary flex items-center gap-2">
@@ -1707,6 +1817,7 @@ const AdvertiserPublish = () => {
                 )}
               </CardContent>
             </Card>
+            )}
 
             {/* EFFE-089: las acciones van JUSTO debajo del costo, antes de la
                 vista previa, para que "Publicar aviso" quede siempre a la vista
@@ -1735,6 +1846,32 @@ const AdvertiserPublish = () => {
                 </div>
               )}
 
+              {/* EDITANDO un aviso publicado: ni se publica ni se cobra. Es un
+                  botón DISTINTO, no el mismo con una bandera: un botón que a
+                  veces cobra acaba cobrando cuando no debe. */}
+              {editandoId ? (
+                <>
+                  <Button variant="hero" size="lg" className="w-full rounded-none" onClick={guardarEdicion} disabled={savingDraft}>
+                    {savingDraft
+                      ? <><Loader2 size={16} className="mr-1 animate-spin" /> Guardando…</>
+                      : <><Save size={16} className="mr-1.5" /> Guardar cambios</>}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    className="w-full rounded-none"
+                    onClick={() => navigate("/dashboard/anunciante/avisos")}
+                    disabled={savingDraft}
+                  >
+                    Cancelar
+                  </Button>
+                  <p className="text-[11px] text-muted-foreground text-center">
+                    Estás editando un aviso publicado. No se cobra nada, y su
+                    duración y sus adicionales no cambian.
+                  </p>
+                </>
+              ) : (
+              <>
               {/* `disabled` solo mientras se publica: si faltan campos dejamos el
                   botón activo para que openPublishFlow explique QUÉ falta. */}
               <Button variant="hero" size="lg" className="w-full rounded-none" onClick={openPublishFlow} disabled={publishing || savingDraft}>
@@ -1761,6 +1898,8 @@ const AdvertiserPublish = () => {
                   ? <><Loader2 size={16} className="mr-1 animate-spin" /> Guardando…</>
                   : <><Save size={16} className="mr-1.5" /> Guardar en mis borradores</>}
               </Button>
+              </>
+              )}
 
               <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 justify-center text-center">
                 <Wallet size={12} className="text-secondary" /> Se descontará de tu saldo al publicar.
