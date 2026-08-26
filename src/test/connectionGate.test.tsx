@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 
 // En el iPhone de TestFlight la app arrancaba pero no dejaba iniciar sesión ni
 // mostraba avisos, y no decía nada: las variables del build tenían buena forma
@@ -46,6 +46,8 @@ describe("ConnectionGate", () => {
     render(<ConnectionGate><App /></ConnectionGate>);
 
     expect(await screen.findByText(/clave de conexión fue rechazada/i)).toBeTruthy();
+    // El mensaje del servidor es diagnóstico: vive tras "Ver detalles".
+    fireEvent.click(screen.getByRole("button", { name: /ver detalles/i }));
     expect(screen.getByText(/Invalid API key/)).toBeTruthy();
     expect(screen.queryByText("APP MONTADA")).toBeNull();
   });
@@ -75,6 +77,7 @@ describe("ConnectionGate", () => {
     render(<ConnectionGate><App /></ConnectionGate>);
 
     expect(await screen.findByText(/No se puede contactar con el servidor/i, undefined, { timeout: 5000 })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /ver detalles/i }));
     // Aparece en el checklist de variables y de nuevo en la explicación.
     expect(screen.getAllByText(/VITE_SUPABASE_URL/).length).toBeGreaterThan(0);
     expect(screen.getByText(/no corresponde a un proyecto de Supabase/i)).toBeTruthy();

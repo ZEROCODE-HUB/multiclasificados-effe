@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 
 vi.mock("@capacitor/core", () => ({ Capacitor: { getPlatform: () => "web" } }));
 
@@ -24,6 +24,7 @@ describe("BootErrorBoundary", () => {
       </BootErrorBoundary>,
     );
     expect(screen.getByText("No se pudo iniciar la app")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /ver detalles/i }));
     expect(screen.getByText(/explota-en-render/)).toBeTruthy();
   });
 

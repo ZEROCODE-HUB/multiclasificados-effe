@@ -155,6 +155,26 @@ export function BootError({
   const env = computeEnvDiagnostics();
   const [probe, setProbe] = useState<ProbeResult | "checking">("checking");
 
+  // El diagnóstico técnico NO se enseña de entrada.
+  //
+  // Esta pantalla nació para depurar, y hace su trabajo: es la que permitió
+  // encontrar el IPA que arrancaba y contestaba "Invalid API key" a todo. Pero
+  // quien se la encuentra en producción es un anunciante, y a él una lista de
+  // VITE_SUPABASE_ANON_KEY no le dice nada: le dice que la app está rota y que
+  // quien la hizo no lo previó.
+  //
+  // Así que la herramienta se queda entera y cambia la cara: mensaje corto,
+  // botón de reintentar, y las tripas detrás de "Ver detalles" — o de `?diag=1`,
+  // para poder pedirle a alguien que abra un enlace y mande una captura sin
+  // explicarle dónde pulsar.
+  const [verDetalle, setVerDetalle] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("diag") === "1";
+    } catch {
+      return false;
+    }
+  });
+
   // ── Caso especial: la app está desfasada, no rota ──
   // Pasa a quien tenía la pestaña abierta cuando se desplegó: los archivos que
   // pide su versión ya no existen. NO es un fallo de configuración ni de red, y
@@ -206,10 +226,15 @@ export function BootError({
           {copy
             ? copy.explicacion
             : variant === "config"
-              ? "Falta configuración de conexión. Revisa las variables del build."
-              : "Ocurrió un error durante el arranque. Detalles abajo."}
+              // Antes decía "revisa las variables del build". A quien lo lee no
+              // le toca revisar nada: le toca poder avisar de que no va.
+              ? "No pudimos conectar con el servidor. Vuelve a intentarlo en un momento; si sigue igual, escríbenos."
+              : "Algo falló al abrir la aplicación. Vuelve a intentarlo."}
         </p>
 
+        {/* ── A partir de aquí, SOLO con "Ver detalles" ── */}
+        {verDetalle && (
+        <>
         {/* Checklist de variables de entorno requeridas.
             No se pinta cuando lo único que pasa es que la versión está vieja:
             ahí las variables están bien y enseñarlas solo despista a quien lo
@@ -275,6 +300,30 @@ export function BootError({
         <div style={S.meta}>
           Plataforma: <b>{platform}</b> · {appVersionLabel()}
         </div>
+        </>
+        )}
+
+        {/* Discreto a propósito: quien tenga que usarlo sabe que está, y quien
+            no, no se distrae con él. La versión sí se deja siempre a la vista:
+            es el primer dato que se pregunta cuando alguien reporta un fallo, y
+            leerlo de una captura ahorra media conversación. */}
+        {!verDetalle && (
+          <div style={S.meta}>
+            {appVersionLabel()}
+            {" · "}
+            <button
+              type="button"
+              onClick={() => setVerDetalle(true)}
+              style={{
+                background: "none", border: "none", padding: 0,
+                color: "#64748b", textDecoration: "underline",
+                font: "inherit", cursor: "pointer",
+              }}
+            >
+              Ver detalles
+            </button>
+          </div>
+        )}
       </div>
 
       {/* `location.reload()` a secas puede devolver el MISMO index.html viejo
