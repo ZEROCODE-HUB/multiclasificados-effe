@@ -30,6 +30,7 @@ import {
   Send,
   ClipboardCheck,
   FileText,
+  PlayCircle,
   Upload,
   X,
   Loader2,
@@ -887,21 +888,28 @@ export default function ListingDetail() {
               </a>
             )}
 
-            {/* Vídeos del aviso. Sin miniatura, por decisión de producto: se
-                carga solo la primera imagen (`preload="metadata"`), así que no
-                cuestan datos hasta que alguien le da al play. `playsInline`
-                para que en iPhone no salte a pantalla completa solo. */}
+            {/* Vídeos del aviso, como BOTÓN y no como reproductor incrustado.
+                Un aviso con tres vídeos metía 1 260 px de reproductores negros
+                en mitad de la ficha y empujaba los datos y el contacto fuera de
+                la pantalla — que es justo lo contrario de lo que se busca aquí.
+                Mismo aspecto que "Ver documento (PDF)" de arriba, a propósito:
+                son dos adjuntos del aviso y no hay razón para que uno grite y
+                el otro no. Se abre en una pestaña, como el PDF.
+                Ojo: se numeran solo si hay más de uno; "Ver video 1" cuando
+                solo hay uno hace pensar que falta el 2. */}
             {videos.length > 0 && (
-              <div className="mt-4 space-y-3">
-                {videos.map((v) => (
-                  <video
+              <div className="mt-3 flex flex-wrap gap-2">
+                {videos.map((v, i) => (
+                  <a
                     key={v.id}
-                    src={v.url}
-                    controls
-                    preload="metadata"
-                    playsInline
-                    className="w-full max-h-[420px] bg-black"
-                  />
+                    href={v.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 border border-secondary/40 bg-secondary/5 text-secondary font-semibold text-sm hover:bg-secondary hover:text-secondary-foreground transition-colors"
+                  >
+                    <PlayCircle size={16} />
+                    {videos.length > 1 ? `Ver video ${i + 1}` : "Ver video"}
+                  </a>
                 ))}
               </div>
             )}
