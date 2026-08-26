@@ -24,9 +24,27 @@ name: Android Build & Sign
 # Google esté DENTRO de lo compilado. Comprobar que la variable existe no
 # basta —puede llegar vacía o con comillas—; lo que importa es lo que acabó
 # metido en la app.
+#
+# CUÁNDO SE COMPILA
+# ------------------
+# Antes se compilaba en CADA push a main: unos 2 min 40 s de firma y empaquetado
+# por cada corrección de un comentario. El AAB solo hace falta cuando se va a
+# publicar, así que ahora se dispara con lo que de verdad significa "voy a
+# publicar": que cambie la versión en android/app/build.gradle.
+#
+# ⚠️ EL MATIZ QUE IMPORTA: el AAB se compila con el commit que subió la versión,
+# no con el último de la rama. Si subes la versión y DESPUÉS sigues corrigiendo,
+# el artefacto que hay en Actions no lleva esas correcciones — y no hay nada que
+# avise, porque el flujo salió en verde. Por eso el paso final imprime el commit
+# exacto que se empaquetó: compruébalo antes de subir nada a Play.
+#
+# Por eso mismo se conserva `workflow_dispatch`: para compilar cuando quieras,
+# sobre el estado actual de la rama, sin tocar la versión.
 on:
   push:
     branches: [main]
+    paths:
+      - 'android/app/build.gradle'
   workflow_dispatch:
 
 jobs:
@@ -71,6 +89,13 @@ jobs:
             \"*|\'*) echo "ERROR: VITE_SUPABASE_ANON_KEY tiene comillas. Pégala limpia."; exit 1 ;;
           esac
           echo "Configuración del build completa."
+
+      - name: Pruebas
+        # La última red antes de firmar. `ci.yml` también las corre, pero son
+        # flujos INDEPENDIENTES: sin esto, un AAB se firmaba y se publicaba
+        # aunque las pruebas estuvieran en rojo, y lo único que lo delataba era
+        # otro flujo en rojo al lado que nadie mira cuando va a publicar.
+        run: npm test
 
       - name: Build React app
         env:
@@ -128,13 +153,19 @@ jobs:
             -Pandroid.injected.signing.key.alias=${{ secrets.ANDROID_KEY_ALIAS }} \
             -Pandroid.injected.signing.key.password=${{ secrets.ANDROID_KEY_PASSWORD }}
 
-      - name: Recordar el número de versión
-        # No se sube solo a propósito: el versionCode lo decide quien publica.
-        # Pero que quede escrito en el registro, porque Google Play RECHAZA un
-        # AAB cuyo versionCode ya se usó, y eso se descubre al subirlo.
+      - name: Qué se ha empaquetado exactamente
+        # El versionCode no se sube solo a propósito: lo decide quien publica.
+        # Pero que quede escrito, porque Google Play RECHAZA un AAB cuyo
+        # versionCode ya se usó y eso se descubre al subirlo, no antes.
         run: |
+          echo "Commit empaquetado: ${{ github.sha }}"
+          echo "Mensaje: $(git log -1 --pretty=%s)"
           grep -E "versionCode|versionName" android/app/build.gradle | sed 's/^[[:space:]]*/  /'
-          echo "  (Play rechaza repetir versionCode: súbelo en android/app/build.gradle antes de publicar)"
+          echo ""
+          echo "Antes de subirlo a Play, comprueba que ese commit es el que quieres publicar:"
+          echo "  · si subiste la versión y luego seguiste corrigiendo, este AAB NO lleva esas correcciones"
+          echo "  · en ese caso, lanza el flujo a mano (Run workflow) para compilar el estado actual"
+          echo "Y recuerda actualizar app_latest_build / app_version_name / app_download_url tras publicar."
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b
