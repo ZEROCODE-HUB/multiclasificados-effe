@@ -50,6 +50,7 @@ const AdminCommunications = cargaDiferida(() => import("./pages/admin/AdminCommu
 const AdminCommercial = cargaDiferida(() => import("./pages/admin/AdminCommercial.tsx"));
 const AdminReports = cargaDiferida(() => import("./pages/admin/AdminReports.tsx"));
 const AdminPagosManuales = cargaDiferida(() => import("./pages/admin/AdminPagosManuales.tsx"));
+const AdminReclamaciones = cargaDiferida(() => import("./pages/admin/AdminReclamaciones.tsx"));
 const SuperRoles = cargaDiferida(() => import("./pages/superadmin/SuperRoles.tsx"));
 const SuperAudit = cargaDiferida(() => import("./pages/superadmin/SuperAudit.tsx"));
 const SuperConversations = cargaDiferida(() => import("./pages/superadmin/SuperConversations.tsx"));
@@ -155,6 +156,10 @@ const App = () => (
             <Route path="/dashboard/admin/reportes" element={<AdminReports role="admin" />} />
             <Route path="/dashboard/admin/tarifas" element={<AdminPricing role="admin" />} />
             <Route path="/dashboard/admin/yape-plin" element={<AdminPagosManuales role="admin" />} />
+            {/* Libro de Reclamaciones (B-09). Módulo propio y no dentro de
+                "Conversaciones reportadas": aquél son denuncias entre usuarios;
+                éste trae documento y domicilio del consumidor y plazos legales. */}
+            <Route path="/dashboard/admin/reclamaciones" element={<AdminReclamaciones role="admin" />} />
           </Route>
 
           {/* Super Admin — shell persistente, solo rol superadmin */}
@@ -168,6 +173,10 @@ const App = () => (
             <Route path="/dashboard/superadmin/reportes" element={<AdminReports role="superadmin" />} />
             <Route path="/dashboard/superadmin/tarifas" element={<AdminPricing role="superadmin" />} />
             <Route path="/dashboard/superadmin/yape-plin" element={<AdminPagosManuales role="superadmin" />} />
+            {/* Libro de Reclamaciones (B-09). Módulo propio y no dentro de
+                "Conversaciones reportadas": aquél son denuncias entre usuarios;
+                éste trae documento y domicilio del consumidor y plazos legales. */}
+            <Route path="/dashboard/superadmin/reclamaciones" element={<AdminReclamaciones role="superadmin" />} />
             <Route path="/dashboard/superadmin/roles" element={<SuperRoles />} />
             <Route path="/dashboard/superadmin/auditoria" element={<SuperAudit />} />
           </Route>

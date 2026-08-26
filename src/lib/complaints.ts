@@ -79,3 +79,131 @@ export async function submitComplaint(input: ComplaintInput): Promise<ComplaintR
     ackSent: data?.ack_sent !== false,
   };
 }
+
+// --------------------------------------------------------------- Panel (B-09)
+
+/** Un reclamo tal como lo ve administración. */
+export interface ReclamoAdmin {
+  id: string;
+  code: number | null;
+  kind: ComplaintKind;
+  fullName: string;
+  docType: string;
+  docNumber: string;
+  email: string;
+  phone: string;
+  address: string;
+  goodType: string;
+  amount: string | null;
+  description: string;
+  request: string;
+  status: "pendiente" | "en_proceso" | "resuelto";
+  createdAt: string;
+  respuesta: string | null;
+  respondidaAt: string | null;
+  /** Si el correo de respuesta salió. `null` = todavía no se respondió. */
+  respuestaEmailStatus: string | null;
+  respuestaEmailError: string | null;
+  /** Si el acuse de recibo inicial llegó a salir. */
+  ackStatus: string | null;
+}
+
+export interface FiltroReclamos {
+  buscar?: string;
+  estado?: string;
+  desde?: string;
+  hasta?: string;
+}
+
+const mapReclamo = (r: Record<string, unknown>): ReclamoAdmin => ({
+  id: String(r.id),
+  code: r.code == null ? null : Number(r.code),
+  kind: r.kind === "queja" ? "queja" : "reclamo",
+  fullName: String(r.full_name ?? ""),
+  docType: String(r.doc_type ?? ""),
+  docNumber: String(r.doc_number ?? ""),
+  email: String(r.email ?? ""),
+  phone: String(r.phone ?? ""),
+  address: String(r.address ?? ""),
+  goodType: String(r.good_type ?? ""),
+  amount: (r.amount as string) ?? null,
+  description: String(r.description ?? ""),
+  request: String(r.request ?? ""),
+  status: (r.status as ReclamoAdmin["status"]) ?? "pendiente",
+  createdAt: String(r.created_at ?? ""),
+  respuesta: (r.respuesta as string) ?? null,
+  respondidaAt: (r.respondida_at as string) ?? null,
+  respuestaEmailStatus: (r.respuesta_email_status as string) ?? null,
+  respuestaEmailError: (r.respuesta_email_error as string) ?? null,
+  ackStatus: (r.ack_email_status as string) ?? null,
+});
+
+/**
+ * Los reclamos para el panel. Solo personal (lo impone la RLS del servidor).
+ *
+ * Devuelve la lista entera de lo filtrado, no una página: el Libro se consulta
+ * de tanto en tanto y se exporta completo para Indecopi. Paginar aquí obligaría
+ * a repetir la consulta para exportar, y ya nos pasó con las boletas que la
+ * exportación se llevara solo la primera página.
+ */
+export async function fetchReclamos(filtro: FiltroReclamos = {}): Promise<ReclamoAdmin[]> {
+  let consulta = supabase.from("complaints").select("*").order("created_at", { ascending: false });
+
+  if (filtro.estado && filtro.estado !== "all") consulta = consulta.eq("status", filtro.estado);
+  if (filtro.desde) consulta = consulta.gte("created_at", filtro.desde);
+  // `hasta` incluye el día entero: sin esto, filtrar "hasta hoy" dejaría fuera
+  // todo lo de hoy, que es justo lo que se busca al abrir esta pantalla.
+  if (filtro.hasta) consulta = consulta.lt("created_at", `${filtro.hasta}T23:59:59.999Z`);
+  if (filtro.buscar?.trim()) {
+    const q = filtro.buscar.trim();
+    consulta = consulta.or(
+      `full_name.ilike.%${q}%,doc_number.ilike.%${q}%,email.ilike.%${q}%`,
+    );
+  }
+
+  const { data, error } = await consulta;
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => mapReclamo(r as Record<string, unknown>));
+}
+
+/**
+ * Responde a un reclamo: guarda la respuesta y se la manda al consumidor.
+ *
+ * En ese orden a propósito. La respuesta se registra ANTES de enviarse porque
+ * el Reglamento obliga a poder acreditarla: si el correo falla, el expediente
+ * está completo y se puede reintentar. Al revés dejaría un consumidor
+ * respondido y un registro vacío.
+ */
+export async function responderReclamo(
+  id: string,
+  respuesta: string,
+  estado: "en_proceso" | "resuelto" = "resuelto",
+): Promise<{ correoEnviado: boolean; error?: string }> {
+  const { data, error } = await supabase.rpc("responder_reclamo", {
+    p_id: id, p_respuesta: respuesta, p_estado: estado,
+  });
+  if (error) throw new Error(error.message);
+
+  const d = (data ?? {}) as { email?: string; full_name?: string; code?: number; kind?: string };
+  try {
+    const { data: env } = await supabase.functions.invoke("send-reclamo", {
+      body: {
+        accion: "responder",
+        id, respuesta,
+        email: d.email, full_name: d.full_name, code: d.code, kind: d.kind,
+      },
+    });
+    const r = (env ?? {}) as { ok?: boolean; error?: string };
+    return { correoEnviado: r.ok === true, error: r.error };
+  } catch (e) {
+    // La respuesta ya está guardada: esto solo informa de que el correo no
+    // salió, no deshace nada.
+    return { correoEnviado: false, error: e instanceof Error ? e.message : "No se pudo enviar" };
+  }
+}
+
+/** Cambia el estado de un reclamo sin responderlo (p. ej. ponerlo en proceso). */
+export async function cambiarEstadoReclamo(id: string, estado: string): Promise<void> {
+  const { error } = await supabase.from("complaints").update({ status: estado }).eq("id", id);
+  if (error) throw new Error(error.message);
+}

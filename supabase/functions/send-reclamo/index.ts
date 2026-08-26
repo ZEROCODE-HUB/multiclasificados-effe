@@ -106,6 +106,69 @@ Deno.serve(async (req) => {
     const b = await req.json().catch(() => null);
     if (!b) return json({ error: "Cuerpo inválido" }, 400);
 
+    // ── RESPONDER un reclamo (B-09) ──
+    //
+    // Vive aquí y no en una función aparte porque necesita exactamente lo mismo:
+    // la clave de Resend, el remitente del Libro y el cliente con service role.
+    // Duplicar todo eso para un correo más era garantizar que el día que cambie
+    // el remitente se cambie en un sitio y no en el otro.
+    //
+    // La respuesta YA está guardada cuando se llega aquí (RPC
+    // `responder_reclamo`): esto solo la envía. Si el correo falla, el
+    // expediente sigue completo y se puede reintentar sin reescribirla.
+    if (b.accion === "responder") {
+      const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
+
+      // Solo personal. La RPC ya lo comprueba al guardar, pero esta rama manda
+      // un correo a un tercero: sin esta puerta, cualquiera con la anon key
+      // podría escribirle a un consumidor desde el buzón del Libro.
+      const authHeader = req.headers.get("Authorization") ?? "";
+      const { data: quien } = await admin.auth.getUser(authHeader.replace("Bearer ", ""));
+      if (!quien?.user?.id) return json({ error: "No autorizado" }, 401);
+      const { data: esStaff } = await admin.rpc("is_staff", { _uid: quien.user.id });
+      if (esStaff !== true) return json({ error: "No autorizado" }, 403);
+
+      const id = String(b.id ?? "");
+      const texto = String(b.respuesta ?? "").trim();
+      const para = String(b.email ?? "").trim();
+      if (!id || !texto || !para) return json({ error: "Faltan datos para responder" }, 400);
+
+      if (!RESEND_API_KEY) {
+        await admin.from("complaints")
+          .update({ respuesta_email_status: "error", respuesta_email_error: "RESEND_API_KEY no configurada" })
+          .eq("id", id);
+        return json({ ok: false, error: "Correo no configurado" }, 200);
+      }
+
+      const codigo = b.code ? `N.º ${String(b.code)}` : "";
+      const clase = b.kind === "queja" ? "queja" : "reclamo";
+      const env = await enviarPorResend(RESEND_API_KEY, {
+        from: FROM,
+        to: [para],
+        subject: `Respuesta a tu ${clase} ${codigo}`.trim(),
+        text: [
+          `Estimado(a) ${String(b.full_name ?? "consumidor")}:`,
+          "",
+          `En relación con su ${clase} ${codigo} registrado en nuestro Libro de Reclamaciones, le informamos lo siguiente:`,
+          "",
+          texto,
+          "",
+          "Quedamos atentos a cualquier consulta adicional.",
+          "",
+          "CORP LOZANOCHEFFER S.A.C. — eFFe Multiclasificados",
+        ].join("\n"),
+      });
+
+      await admin.from("complaints").update({
+        respuesta_email_status: env.ok ? "sent" : "error",
+        respuesta_email_error: env.ok ? null : env.error,
+      }).eq("id", id);
+
+      // 200 aunque el envío falle: la respuesta está guardada y el panel enseña
+      // el motivo. Devolver 500 haría pensar que se perdió todo.
+      return json({ ok: env.ok, error: env.ok ? undefined : env.error }, 200);
+    }
+
     // Validación de los campos obligatorios.
     const required = ["fullName", "docNumber", "email", "description", "request"];
     for (const f of required) {

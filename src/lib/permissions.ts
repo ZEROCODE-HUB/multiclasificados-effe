@@ -11,8 +11,7 @@
 // de "acceso" con un único toggle (view) porque acceder = usar la sección.
 import type { LucideIcon } from "lucide-react";
 import {
-  ClipboardList, Users, Tags, DollarSign, Flag, FileBarChart, Send, ScrollText, Smartphone,
-} from "lucide-react";
+  ClipboardList, Users, Tags, DollarSign, Flag, FileBarChart, Send, ScrollText, Smartphone, BookOpen } from "lucide-react";
 
 export type PermAction = "view" | "edit" | "approve" | "delete";
 
@@ -84,7 +83,20 @@ export const PERM_MODULES: PermModuleDef[] = [
     ],
   },
   {
-    id: "Conversaciones reportadas", label: "Reclamos", icon: Flag, group: "Operación", sub: "conversaciones",
+    // El Libro que exige Indecopi, no las denuncias entre usuarios: son cosas
+    // distintas y por eso van en módulos distintos. Este trae datos personales
+    // del consumidor (documento, domicilio) y plazos legales; quien modera un
+    // chat no tiene por qué verlos.
+    id: "Libro de Reclamaciones", label: "Libro de Reclamaciones", icon: BookOpen,
+    group: "Operación", sub: "reclamaciones",
+    description: "Reclamos y quejas del Libro de Reclamaciones, con su respuesta.",
+    actions: [
+      A.access("Consultar los reclamos registrados y su hoja."),
+      { key: "edit", label: "Responder", description: "Responder al consumidor y cerrar el reclamo. Compromete a la empresa en un plazo legal." },
+    ],
+  },
+  {
+    id: "Conversaciones reportadas", label: "Reclamos / chats", icon: Flag, group: "Operación", sub: "conversaciones",
     description: "Denuncias entre usuarios y su moderación.",
     actions: [
       A.access("Ver los reclamos y la conversación reportada."),
