@@ -1,25 +1,19 @@
 # ✅ Checklist de auditoría — eFFe Clasificados
 
-> ⚠️ **DESACTUALIZADO (revisado el 15-ago-2026).** Este documento se quedó en
-> julio y hoy engaña en las dos direcciones. Comprobado contra la base, la API y
-> el bundle en producción:
-> - La **§4 (configuración de producción) está HECHA**: los secretos de Izipay,
->   Resend, hCaptcha, FCM, service_role y Factiliza están cargados, las 9 Edge
->   Functions desplegadas, y en producción corren la sitekey real de hCaptcha y
->   el Map ID de Google. Ya no es pendiente.
-> - La **§5-bis miente**: `0080_search_priority_by_zone.sql` **ya no existe** —
->   se borró al cambiar cercanía por departamento— y `0081` está aplicada (no
->   queda ningún aviso activo sin coordenadas).
-> - **El push de iOS YA NO está pendiente** (comprobado el 25-ago-2026, ver §3):
->   los secretos de APNs están cargados, el código manda a Apple directamente y
->   el build pone el entitlement. El `GoogleService-Info.plist` no hace falta:
->   Firebase es solo para Android. Falta únicamente probarlo en un iPhone.
-> - **Lo que sí sigue pendiente:** restringir la llave de Google Maps, rotar los secretos,
->   y el alta del RUC en Factiliza.
+> **Última revisión: 26 de agosto de 2026.** Web v9.7 · App 2.8 (versionCode 19)
+> · React 18 + Vite + TypeScript + Supabase + Capacitor 8.
 >
-> **Estado al 15 de julio de 2026** · App v2.6 (versionCode 17) · Stack: React 18 + Vite + TypeScript + Supabase + Capacitor.
-> Documento vivo: marcá `[x]` a medida que se cierra cada ítem.
-> Este archivo **reemplaza** a `PENDIENTES.md`, que se retiró del repositorio el 25-ago-2026 (fechado 23-jun-2026 y desactualizado: pagos, mapa real, reportes a tabla real, hilo de moderación y Factiliza/boletas ya estaban hechos). Convivir dos documentos de estado que se contradecían hizo que la auditoría externa diera por pendiente lo que ya estaba resuelto — sigue en el historial de git si hace falta consultarlo.
+> **Este es el único documento de estado del proyecto.** `PENDIENTES.md` se
+> retiró el 25-ago-2026 (sigue en el historial de git). Que convivieran dos
+> documentos contradictorios es el hallazgo H-15 de la auditoría externa, y no
+> fue un problema cosmético: por leer un estado viejo, la auditoría clasificó el
+> push de iOS como hallazgo **GRAVE** cuando llevaba semanas funcionando, y dio
+> por pendientes siete credenciales que estaban cargadas.
+>
+> **La regla que sale de ahí:** un documento de estado desactualizado no es
+> neutral — fabrica hallazgos falsos y hace perder días en desmentirlos. Si
+> cierras algo, márcalo en el mismo commit; si revisas una sección contra el
+> sistema real, escribe la fecha.
 
 **Leyenda de severidad:** 🔴 Bloqueante · 🟠 Importante · 🟡 Menor · 🔑 Solo configuración (sin código)
 
@@ -27,11 +21,36 @@
 
 ## 0. Resumen ejecutivo
 
-- El **núcleo del marketplace está completo y funcionando**: auth, avisos, buscador real con mapa, mensajería en tiempo real, favoritos, reseñas, postulaciones, moderación, panel admin/superadmin con RBAC, créditos + pasarela Izipay cableada, Factiliza (DNI/RUC), boletas.
-- Lo que falta se divide en tres frentes:
-  1. **Un puñado de funcionalidades a medias** (sobre todo una pantalla de búsqueda prototipo y preferencias de notificación).
-  2. **Configuración de producción** (llaves/secrets que aún no se cargan: Izipay, hCaptcha real, Resend, FCM…).
-  3. **Preparación para iPhone/iOS** — quedan el icono maestro de 1024×1024 y probarlo en un iPhone físico. Las safe-areas, el URL scheme y el push APNs ya están resueltos (§3). Detalle en §5.
+**El producto está funcionalmente completo.** Auth, avisos, buscador con mapa,
+mensajería en tiempo real, favoritos, reseñas, postulaciones, moderación, panel
+admin/superadmin con RBAC, créditos con pasarela Izipay, Yape/Plin, Factiliza
+(DNI/RUC), boletas y facturas electrónicas, Libro de Reclamaciones.
+
+Lo que queda **no es desarrollo pendiente**, son tres cosas de otra naturaleza:
+
+| | Qué es | Dónde se resuelve |
+|---|---|---|
+| 🚨 **Dos cosas de configuración** | Restringir la llave de Google Maps (H-03) y dar de alta el RUC en Factiliza (H-10) | Paneles de Google Cloud y de Factiliza — no es código |
+| 🔑 **El salto a producción** | Hoy `app_produccion = false`: todo cobro es de prueba y las boletas van a las series B066/F066 | Skill `pasar-a-produccion` |
+| 📱 **El APK y el IPA** | Se dejan **para el final**, para que todas las correcciones entren en el binario que se sube a Play Store y TestFlight | Codemagic |
+
+### Auditoría externa de agosto de 2026 (CORP LOZANOCHEFFER)
+
+62 puntos revisados uno a uno contra el código real. Estado al 26-ago:
+
+- **Corregido:** todo lo que era bug o corrección dentro del alcance.
+- **Rebatido con pruebas (3):** H-04 (el push de iOS **no** está bloqueado; no
+  hace falta `GoogleService-Info.plist` porque iOS va directo a Apple, no por
+  Firebase), H-13 (Recharts **ya** estaba fuera del arranque — verificado en
+  `dist/index.html`) y B-21 (los datos de tarjeta no pueden persistir: viven
+  dentro del iframe de Lyra, fuera de nuestro alcance).
+- **Fuera de alcance por decisión del cliente:** B-01, B-02 (2.ª mitad), B-07,
+  B-08, B-09, B-10, B-18, B-25, H-18 (PWA).
+- **Descartados tras evaluarlos:** H-07 (Playwright en CI: no hay más gente
+  tocando el código), H-19 (política de seguridad: no puede promoverse porque
+  no hay endpoint que recoja los reportes), H-13 (ver arriba).
+- **Abiertos:** H-03 y H-10, arriba. H-14 (importaciones mixtas de Capacitor:
+  no afecta a la app nativa, donde el bundle va dentro del binario).
 
 ---
 
@@ -74,7 +93,9 @@
 - [x] **Pasarela Izipay/Lyra cableada** (Edge Functions `create-payment` + `payment-webhook`, RPC idempotente `settle_paid_order`, form embebido/redirect) — *requiere llaves, ver §4*
 - [x] Factiliza DNI/RUC — `verify-doc` + `src/lib/verifyDoc.ts`
 - [x] Libro de Reclamaciones — Edge Function `send-reclamo`
-- [x] 60+ migraciones SQL (`0001`–`0061`), RLS, RPCs, cron jobs (`expire-listings`, `saved-search-alerts`)
+- [x] 125 migraciones SQL (`0001`–`0124`), RLS, RPCs, cron jobs (`expire-listings`, `saved-search-alerts`, limpieza de adjuntos huérfanos)
+- [x] 🚨 **Límite de tasa contra ráfagas y spam (H-06).** ✅ *Hecho (26-ago-2026, migración `0124`).* Triggers en `listings` y `messages` que frenan por usuario en ventanas de hora y día. **Va en la base de datos, no en una Edge Function**: publicar y enviar mensajes no pasan por ninguna, y un intermediario sería esquivable llamando a PostgREST directamente con la anon key, que es pública. No hay tabla de contadores: se cuenta sobre los propios avisos y mensajes, así que el contador no puede desincronizarse de la realidad. Topes calibrados sobre uso real medido (máximo observado por una persona: 10 avisos/hora, 28/día; 20 mensajes/hora, 28/día) y configurables en `system_settings.limites_de_tasa` sin desplegar — **poner un tope en 0 lo desactiva**, que es la válvula de escape si le corta la publicación a un cliente real. El personal queda exento. 18 pruebas en `migration0124.test.ts`.
+- [ ] 🟠 **El registro no exige confirmar el correo** (`mailer_autoconfirm = true`): cualquiera crea cuentas con direcciones inventadas. Los topes de GoTrue (30 anónimos/hora) son la única barrera. ⚠️ **Activar el captcha nativo de Supabase Auth tumbaría el registro y el login**: el código solo manda token de captcha en el login de personal, así que habría que añadirlo antes en `AuthPage` — y en la app nativa hCaptcha está desactivado a propósito. No es un interruptor, es trabajo.
 
 ---
 
@@ -162,32 +183,75 @@
 
 ---
 
-## 5-bis. 🗄️ Migraciones pendientes de aplicar en Supabase
+## 5-bis. 🗄️ Migraciones
 
-Estas están **en el repo pero NO en la base de datos**. El código funciona sin
-ellas (degrada limpio), así que nada avisa de que faltan: hay que aplicarlas a
-mano y tachar la casilla aquí.
+> **Revisado el 26-ago-2026.** Lo que decía antes esta sección era falso:
+> daba por pendiente `0080_search_priority_by_zone.sql`, que **ya no existe**
+> (se borró al cambiar cercanía por departamento), y `0081`, que está aplicada.
 
-- [ ] **`0080_search_priority_by_zone.sql`** — los avisos Urgente/Destacado
-  encabezan la búsqueda solo dentro de 60 km de quien mira. Sin aplicarla, un
-  urgente de Piura le sigue saliendo primero a alguien de Trujillo.
-  ⚠️ *Implicación comercial:* el alcance de esos extras pasa a ser la zona del
-  anunciante. Avisar a quien los tenga contratados esperando alcance nacional.
-- [ ] **`0081_backfill_listing_coords.sql`** — pone coordenadas a los avisos
-  **activos** que no las tienen (los publicados antes del selector de zonas).
-  Sin ella, esos avisos no aparecen en ninguna búsqueda por cercanía.
-  Pesa ~355 KB: mejor por CLI (`supabase db push`) o psql que pegándola en el
-  editor web. Al terminar imprime cuántos avisos quedaron sin resolver — esos
-  hay que corregirlos a mano desde el panel.
+**125 migraciones en el repo, la última es `0124_limite_de_tasa.sql`.**
 
-## 6. 🎯 Qué queda (al 15-jul, tras la 2.ª sesión)
+⚠️ **No hay tabla de control de migraciones** (`supabase_migrations.schema_migrations`
+no existe en este proyecto): se aplican a mano por la Management API. Eso
+significa que **nada avisa si una se queda sin aplicar** — el código suele
+degradar limpio y el fallo aparece semanas después como "esa pantalla sale
+vacía". Al aplicar una, compruébalo consultando el objeto que crea.
 
-Casi todo el trabajo **de código** está hecho (Fases 0, 1, 2, 3 y 5 del plan — ver detalle en cada sección). Lo pendiente es:
+Verificado presente en producción el 26-ago: `0120` (avisos por país), `0122`
+(adjuntos huérfanos), `0123` (transacciones con modo de pago) y `0124` (límite
+de tasa, con sus dos triggers activos).
 
-1. **QA en un iPhone real** de las safe-areas y el teclado (código listo, falta verlo en pantalla).
-2. **Config de producción (§4):** cargar las llaves (Izipay, hCaptcha, Resend, service_role) y los **valores** de las env vars en Codemagic.
-3. ~~**Push en iOS:** requiere la clave APNs + `GoogleService-Info.plist` + trabajo en `send-push`.~~ **Resuelto** (25-ago-2026, ver §3). El `.plist` nunca hizo falta: iOS va directo a Apple, no por Firebase.
-4. **Assets iOS:** poner el master `assets/icon.png` 1024×1024.
-5. **Rotar los secretos comprometidos** (§5).
+**La trampa de la 0104:** desde esa migración, una función nueva nace **sin**
+EXECUTE para `anon`/`authenticated`. Si te olvidas del `grant`, el fallo es un
+`42501` silencioso en producción y la pantalla sale vacía sin decir por qué. Ya
+pasó una vez y dejó el buscador a cero. Y ojo: `create or replace` conserva los
+permisos, pero **cambiar el tipo de retorno obliga a DROP + CREATE, y eso los
+pierde** — hay que volver a concederlos en la misma migración.
 
-> 📋 El plan por fases y los **pendientes externos** (llaves, APNs, valores en Codemagic) están en [`PLAN-IMPLEMENTACION.md`](./PLAN-IMPLEMENTACION.md).
+## 6. 🎯 Qué queda (al 26-ago-2026)
+
+**De código, nada dentro del alcance.** Lo que falta, por orden de urgencia:
+
+1. 🚨 **Dar de alta el RUC 20616009061 en Factiliza** (H-10). Hasta que no esté,
+   `app_produccion` no se puede encender: cada emisión real será rechazada. Ver
+   la nota sobre la serie B001 más abajo.
+2. 🚨 **Restringir la llave de Google Maps** (H-03) por referer y por API.
+3. 🔑 **Rotar el token personal de Supabase** compartido por chat (H-02).
+4. 📱 **Probar el push en un iPhone físico.** Es lo único que el simulador no
+   puede responder; todo lo demás de APNs está verificado (§3).
+5. 🖼️ **El icono maestro** `assets/icon.png` de 1024×1024 para iOS.
+6. 🚀 **El salto a producción** (skill `pasar-a-produccion`) y, al final del
+   todo, **el APK y el IPA**.
+
+### La serie B001 y los siete rechazos del 19-ago
+
+Conviene dejarlo escrito, porque a simple vista asusta más de lo que es.
+
+La serie de producción `B001` llegó al correlativo 96 sin haber emitido nunca
+nada ante SUNAT:
+
+- **19–89 (62 comprobantes): estado `omitido`.** Se generaron cuando la emisión
+  electrónica no estaba configurada. No se enviaron, **no tienen PDF y no se
+  mandaron por correo**: nunca llegaron a manos de ningún cliente.
+- **90–96 (7 comprobantes): estado `rechazado`,** el 19-ago entre las 12:46 y
+  las 17:17, todos con *"Su usuario no se encuentra configurado para el RUC
+  '20616009061'"*. Fue la tarde en que se probó el modo producción antes de
+  tener el RUC de alta.
+
+**Ninguno llegó a SUNAT.** El rechazo es de Factiliza (HTTP 400, su propia
+validación): los siete están sin `sunat_hash`, sin CDR y sin `sunat_sent_at`, o
+sea que nunca se firmaron ni se enviaron. Para SUNAT esos números **no existen**
+y no hay nada declarado que corregir.
+
+**Ahora mismo no se está quemando numeración:** con `app_produccion = false`
+todo va por la serie de pruebas `B066`, y desde el 24-ago todas se aceptan.
+
+**Al saltar a producción hay que decidir la serie**, y es una decisión para
+consultar con el contador. La opción limpia es **abrir una serie nueva (`B002`)
+empezando en 1**, en vez de continuar `B001` desde el 97: así la serie declarada
+no arrastra 96 números que para SUNAT nunca existieron. Continuar en `B001-000097`
+también es válido —SUNAT no exige empezar en 1— pero deja una serie con un hueco
+inicial que habría que saber explicar en una fiscalización.
+
+---
+
