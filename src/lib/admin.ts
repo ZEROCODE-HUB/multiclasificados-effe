@@ -1483,3 +1483,43 @@ export async function fetchCommStats(): Promise<CommStats> {
   } catch { /* fallback */ }
   return { today: 0, total: 0, recent: [] };
 }
+
+// ------------------------------------------- Notificaciones de un usuario (B-02)
+
+/** Los tres canales de un evento, tal como los ve el panel. */
+export interface PrefCanales { in_app: boolean; push: boolean; email: boolean }
+
+/**
+ * Preferencias de notificación de un usuario, para poder ayudarle desde el panel.
+ *
+ * Devuelve SOLO las filas que existen. Las que no están valen los tres canales
+ * activados —así lo decidió la migración 0121— y quien pinte esto tiene que
+ * aplicar ese mismo criterio: si aquí se asumiera "apagado" para lo que falta,
+ * el panel enseñaría todo en gris a un usuario que sí recibe sus avisos.
+ */
+export async function fetchPrefsDeUsuario(userId: string): Promise<Record<string, PrefCanales>> {
+  const { data, error } = await supabase.rpc("admin_notification_prefs", { p_user: userId });
+  if (error) throw new Error(error.message);
+  const out: Record<string, PrefCanales> = {};
+  for (const f of (data ?? []) as Array<{ event_type: string; in_app: boolean; push: boolean; email: boolean }>) {
+    out[f.event_type] = { in_app: !!f.in_app, push: !!f.push, email: !!f.email };
+  }
+  return out;
+}
+
+/**
+ * Activa o desactiva un canal de un usuario desde el panel.
+ *
+ * Va por RPC y no escribiendo la tabla: se está tocando la configuración de
+ * otra persona sin que ella lo pida, y eso queda en la auditoría con el valor
+ * anterior. Si mañana pregunta por qué volvió a recibir correos, hay respuesta.
+ */
+export async function guardarPrefDeUsuario(
+  userId: string, evento: string, pref: PrefCanales,
+): Promise<void> {
+  const { error } = await supabase.rpc("admin_set_notification_pref", {
+    p_user: userId, p_event: evento,
+    p_in_app: pref.in_app, p_push: pref.push, p_email: pref.email,
+  });
+  if (error) throw new Error(error.message);
+}

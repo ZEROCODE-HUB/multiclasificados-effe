@@ -10,7 +10,8 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Search, UserCheck, Ban, BadgeCheck, KeyRound, Trash2, ChevronLeft, ChevronRight, Coins, Copy, Check, Loader2 } from "lucide-react";
+import { Search, UserCheck, Ban, BadgeCheck, KeyRound, Trash2, ChevronLeft, ChevronRight, Coins, Copy, Check, Loader2, Bell } from "lucide-react";
+import { PrefsNotificacionDialog } from "@/components/PrefsNotificacionDialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { fetchAdminUsers, setUserStatus, verifyUser, deleteUser, setUserRole, ajustarSaldo, saldoDeUsuario, type AdminUser } from "@/lib/admin";
@@ -63,6 +64,8 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
   // búsqueda —la lista ya viene entera— para que las tres se combinen sin ir y
   // volver al servidor en cada cambio.
   const [est, setEst] = useState("all");
+  // Usuario cuyas notificaciones se están mirando (B-02).
+  const [prefsDe, setPrefsDe] = useState<AdminUser | null>(null);
   const [page, setPage] = useState(1);
   // Diálogo "Otorgar créditos": usuario objetivo + cantidad.
   // Cuadro de saldo: otorgar o devolver, con el saldo actual a la vista.
@@ -283,6 +286,19 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
           onClick={() => openReset(u)}
         >
           <KeyRound size={iconSize} />
+        </Button>
+
+        {/* B-02: reactivar lo que el propio usuario apagó. El caso real es
+            alguien que llama diciendo que no le llegan los avisos y resulta que
+            se los desactivó él hace meses. */}
+        <Button
+          size={size}
+          variant={Btn}
+          className="text-primary"
+          title="Notificaciones"
+          onClick={() => setPrefsDe(u)}
+        >
+          <Bell size={iconSize} />
         </Button>
 
         <Button
@@ -641,6 +657,12 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <PrefsNotificacionDialog
+        userId={prefsDe?.id ?? null}
+        nombre={prefsDe?.full_name ?? ""}
+        puedeEditar={canEdit}
+        onClose={() => setPrefsDe(null)}
+      />
     </>
   );
 };
