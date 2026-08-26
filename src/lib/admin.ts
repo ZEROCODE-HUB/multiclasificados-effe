@@ -1042,10 +1042,17 @@ export interface AdminUser {
   rating: number; created_at: string;
 }
 
-export async function fetchAdminUsers(opts?: { search?: string; role?: string }): Promise<{ data: AdminUser[]; real: boolean }> {
+export async function fetchAdminUsers(
+  opts?: { search?: string; role?: string; status?: string },
+): Promise<{ data: AdminUser[]; real: boolean }> {
   try {
     const { data, error } = await supabase.rpc("admin_list_users", {
-      p_search: opts?.search || null, p_role: opts?.role || null, p_limit: 200, p_offset: 0,
+      p_search: opts?.search || null, p_role: opts?.role || null,
+      // B-01: filtrar Activos / Inactivos. Sin esto la baja existiría pero no
+      // se podría consultar, que es justo lo que pedirán SUNAT o el Poder
+      // Judicial cuando reclamen la relación de quienes contrataron.
+      p_status: opts?.status || null,
+      p_limit: 200, p_offset: 0,
     });
     if (error) throw error;
     if (data?.length || (await isAuthed())) return { data: (data ?? []) as AdminUser[], real: true };
@@ -1133,9 +1140,28 @@ export async function removeUserRole(userId: string, role: string) {
   if (error) throw error;
 }
 
-// Elimina al usuario de forma permanente (solo superadmin; borra auth + cascada).
-export async function deleteUser(userId: string) {
-  const { error } = await supabase.rpc("admin_delete_user", { p_user: userId });
+/**
+ * Da de baja a un usuario. Solo superadmin.
+ *
+ * Ya no borra siempre: si el usuario tiene historial comercial —algún aviso,
+ * orden o comprobante— se marca `inactive` y se conserva en el maestro de
+ * clientes, porque SUNAT o el Poder Judicial pueden pedir formalmente la
+ * relación de quienes contrataron (punto B-01 de la auditoría). Solo se borra
+ * de verdad a quien nunca contrató nada.
+ *
+ * Devuelve QUÉ hizo, para poder decírselo a quien pulsó el botón en vez de dar
+ * por hecho que borró.
+ */
+export async function deleteUser(userId: string): Promise<"desactivado" | "eliminado"> {
+  const { data, error } = await supabase.rpc("admin_delete_user", { p_user: userId });
+  if (error) throw error;
+  const r = (data ?? {}) as { accion?: string };
+  return r.accion === "desactivado" ? "desactivado" : "eliminado";
+}
+
+/** Devuelve a activo a un cliente dado de baja. */
+export async function reactivarUsuario(userId: string): Promise<void> {
+  const { error } = await supabase.rpc("admin_reactivar_usuario", { p_user: userId });
   if (error) throw error;
 }
 

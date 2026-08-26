@@ -59,6 +59,10 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [q, setQ] = useState("");
   const [r, setR] = useState("all");
+  // B-01: Activos / Inactivos / Todos. Se filtra en cliente como el rol y la
+  // búsqueda —la lista ya viene entera— para que las tres se combinen sin ir y
+  // volver al servidor en cada cambio.
+  const [est, setEst] = useState("all");
   const [page, setPage] = useState(1);
   // Diálogo "Otorgar créditos": usuario objetivo + cantidad.
   // Cuadro de saldo: otorgar o devolver, con el saldo actual a la vista.
@@ -81,16 +85,19 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
     () =>
       users.filter((u) =>
         (r === "all" || rolesOf(u.roles).includes(r)) &&
+        // `?? "active"`: hay filas antiguas sin estado, y son clientes activos.
+        // Sin esto, filtrar por "activos" las dejaría fuera.
+        (est === "all" || (u.status ?? "active") === est) &&
         (q === "" || (u.full_name ?? "").toLowerCase().includes(q.toLowerCase()) || (u.email ?? "").toLowerCase().includes(q.toLowerCase())),
       ),
-    [users, q, r],
+    [users, q, r, est],
   );
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const list = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   // Ejecuta una acción real contra la BD si el id es un usuario real (uuid);
   // si es un dato mock (sin backend) solo muestra el toast para no romper la demo.
-  const run = async (label: string, u: AdminUser, fn: () => Promise<void>) => {
+  const run = async (label: string, u: AdminUser, fn: () => Promise<unknown>) => {
     if (!isUuid(u.id)) { toast({ title: label, description: `${u.full_name} · ${u.email}` }); return; }
     try {
       await fn();
@@ -306,19 +313,43 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>¿Eliminar al usuario {u.full_name}?</AlertDialogTitle>
+              <AlertDialogTitle>¿Dar de baja a {u.full_name}?</AlertDialogTitle>
               <AlertDialogDescription>
-                Esta acción es <b>permanente e irreversible</b>: se borrará la cuenta junto con su perfil,
-                avisos, mensajes y demás datos. Solo el superadministrador puede hacerlo.
+                {/* Ya no promete un borrado que puede no ocurrir: desde el punto
+                    B-01, a quien ya contrató NO se le borra. Decir "permanente e
+                    irreversible" y luego desactivar sería mentir justo en el
+                    cuadro que pide confirmación. */}
+                Si este cliente <b>ya publicó avisos o compró saldo</b>, no se borra: queda
+                como <b>inactivo</b> y conserva su historial, porque SUNAT o el Poder Judicial
+                pueden pedir la relación de quienes contrataron. Sus avisos activos se pausan.
+                <br /><br />
+                Si nunca contrató nada, se elimina de forma permanente. Solo el
+                superadministrador puede hacerlo.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
               <AlertDialogAction
                 className="bg-destructive hover:bg-destructive/90"
-                onClick={() => run("Usuario eliminado", u, () => deleteUser(u.id))}
+                onClick={async () => {
+                  // El resultado decide el mensaje: dar por hecho "eliminado"
+                  // haría creer que se borró un cliente que sigue en la base.
+                  if (!isUuid(u.id)) { toast({ title: "Usuario dado de baja", description: u.full_name }); return; }
+                  try {
+                    const accion = await deleteUser(u.id);
+                    toast({
+                      title: accion === "desactivado" ? "Cliente desactivado" : "Usuario eliminado",
+                      description: accion === "desactivado"
+                        ? `${u.full_name} conserva su historial y sus avisos quedaron pausados.`
+                        : `${u.full_name} · ${u.email}`,
+                    });
+                    load();
+                  } catch (e) {
+                    toast({ title: "No se pudo completar", description: mensajeDeError(e, "Error"), variant: "destructive" });
+                  }
+                }}
               >
-                Eliminar definitivamente
+                Dar de baja
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -348,6 +379,21 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
                 {ASSIGNABLE_ROLES.map((x) => (
                   <SelectItem key={x.value} value={x.value}>{x.label}</SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+            {/* B-01: lo pide el punto tal cual — "que al momento de emitir
+                reportes se permita en los filtros colocar esa opción de
+                Activos/Inactivos". Es lo que van a pedir SUNAT o el Poder
+                Judicial, así que sin esto la baja existiría pero no se podría
+                consultar. */}
+            <Select value={est} onValueChange={(v) => { setEst(v); setPage(1); }}>
+              <SelectTrigger className="md:w-40"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los estados</SelectItem>
+                <SelectItem value="active">Activos</SelectItem>
+                <SelectItem value="inactive">Inactivos</SelectItem>
+                <SelectItem value="suspended">Suspendidos</SelectItem>
+                <SelectItem value="banned">Baneados</SelectItem>
               </SelectContent>
             </Select>
           </div>
