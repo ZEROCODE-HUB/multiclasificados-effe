@@ -6,7 +6,7 @@ import { formatCompactPrice } from "@/lib/pricing";
 import { pinDePrecio } from "@/components/mapIcons";
 import { crearAgrupador } from "@/components/mapCluster";
 import { useMapaDeGoogle, textoDeEstadoDelMapa } from "@/lib/googleMaps";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { MapPin } from "lucide-react";
 import type { Listing } from "@/data/mockData";
 
@@ -32,10 +32,34 @@ interface ListingsMapProps {
   hrefFor: (id: string) => string;
 }
 
-/** La tarjetita que sale al pulsar un pin. */
-function FichaDelPin({ l, href }: { l: GeoListing; href: string }) {
+/**
+ * La tarjetita que sale al pulsar un pin.
+ *
+ * OJO CON `<Link>`: esto NO se pinta dentro del árbol de la app. Se monta con
+ * `createRoot` sobre un nodo suelto que crea Google para el InfoWindow, y esa
+ * raíz no hereda ningún contexto — tampoco el del Router. Un `<Link>` ahí lanza
+ * "useHref() may be used only in the context of a <Router>", React aborta el
+ * render y el nodo se queda VACÍO: la ventanita salía en blanco, con la X y
+ * nada más. Así estaba en producción.
+ *
+ * Por eso es un `<a>` normal con la navegación inyectada desde fuera: el
+ * `href` de verdad conserva "abrir en pestaña nueva" y el clic izquierdo se
+ * queda en la aplicación, sin recargarla.
+ */
+export function FichaDelPin(
+  { l, href, ir }: { l: GeoListing; href: string; ir: (href: string) => void },
+) {
   return (
-    <Link to={href} className="block w-52 no-underline">
+    <a
+      href={href}
+      className="block w-52 no-underline"
+      onClick={(e) => {
+        // Con Ctrl/Cmd o el botón central, que el navegador haga lo suyo.
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+        e.preventDefault();
+        ir(href);
+      }}
+    >
       <div className="aspect-[4/3] bg-muted overflow-hidden rounded-t">
         <img src={imgUrl(l.imageUrl, 300)} alt={l.title} loading="lazy" decoding="async" className="w-full h-full object-cover" />
       </div>
@@ -47,11 +71,14 @@ function FichaDelPin({ l, href }: { l: GeoListing; href: string }) {
         </p>
         <p className="text-base font-extrabold text-primary mt-1">{formatPrice(l.price, l.currency)}</p>
       </div>
-    </Link>
+    </a>
   );
 }
 
 export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMapProps) {
+  // Este componente SÍ está dentro del Router; la ficha del pin no. Se le pasa
+  // la navegación en una prop porque allí no hay contexto que valga.
+  const navigate = useNavigate();
   const points = useMemo(() => listings.filter(hasCoords), [listings]);
   const missing = listings.length - points.length;
 
@@ -155,8 +182,19 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
         nodo,
       };
     }
-    ficha.current.raiz.render(<FichaDelPin l={l} href={hrefFor(l.id)} />);
+    ficha.current.raiz.render(
+      <FichaDelPin l={l} href={hrefFor(l.id)} ir={(h) => navigate(h)} />,
+    );
     ficha.current.ventana.open({ map: mapa, anchor: marcador });
+
+    // `render()` de React 18 no pinta en el acto, y Google mide el contenido
+    // JUSTO al abrir: sin esto la ventana se dimensiona sobre un nodo todavía
+    // vacío y sale del tamaño de un sello aunque la ficha se pinte después.
+    // Volver a pasarle el nodo la obliga a medir de nuevo, ya con contenido.
+    const f = ficha.current;
+    requestAnimationFrame(() => {
+      if (ficha.current === f) f.ventana.setContent(f.nodo);
+    });
   }
 
   // Al desmontar, la raíz de React de la ficha se desmonta aparte: vive en un
