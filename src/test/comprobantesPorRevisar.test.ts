@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
 
 /**
  * Que los comprobantes que se quedaron a medias salten a la vista.
@@ -108,5 +110,32 @@ describe("el filtro de la lista usa la MISMA condición", () => {
   it("sin pedirlo, la lista no filtra por eso", async () => {
     await fetchAllInvoices({});
     expect(condicionDe(consulta.filtros)).toBeUndefined();
+  });
+});
+
+describe("reintentar no puede tirar el filtro", () => {
+  // Lo reportó el uso real: al pulsar "Reintentar" en un comprobante rechazado,
+  // la tabla se repoblaba con TODOS y parecía que el filtro se había apagado
+  // solo —o peor, que los rechazados se habían arreglado de golpe—.
+  //
+  // El motivo era una llamada a `fetchAllInvoices()` SIN argumentos, que
+  // consulta sin filtros: se perdían también la búsqueda, el rango de fechas y
+  // el total de la paginación. Se prueba sobre el código porque lo que hay que
+  // fijar es cuál de las dos funciones se llama.
+  const PANTALLA = fs.readFileSync(
+    path.resolve(__dirname, "../pages/admin/AdminCommercial.tsx"), "utf8",
+  );
+
+  it("tras reintentar se recarga CON los filtros puestos", () => {
+    const cuerpo = PANTALLA.slice(PANTALLA.indexOf("const reintentar ="));
+    const hasta = cuerpo.slice(0, cuerpo.indexOf("const ", 10));
+    expect(hasta).toContain("recargarInvoices()");
+  });
+
+  it("y no queda ninguna consulta sin filtros en la pantalla", () => {
+    // `fetchAllInvoices()` a pelo trae los primeros 20 de todo, sin importar lo
+    // que el administrador tenga puesto en pantalla. Se busca la LLAMADA (con
+    // su `await`), no la mención: el comentario que explica esto la nombra.
+    expect(PANTALLA).not.toMatch(/await\s+fetchAllInvoices\(\s*\)/);
   });
 });

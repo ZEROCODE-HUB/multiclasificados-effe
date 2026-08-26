@@ -646,8 +646,13 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
         title: "Comprobante en cola",
         description: `${inv.number} se volverá a enviar en unos instantes.`,
       });
-      const { data } = await fetchAllInvoices();
-      setInvoices(data);
+      // `recargarInvoices()` y no `fetchAllInvoices()` a secas: sin argumentos
+      // la consulta va SIN FILTROS, así que al reintentar uno se repoblaba la
+      // tabla con todos los comprobantes y parecía que el filtro se había
+      // desactivado solo —o peor, que los rechazados se habían arreglado de
+      // golpe—. También se perdían la búsqueda, el rango de fechas y el total
+      // de la paginación, que aquí ni se actualizaba.
+      await recargarInvoices();
     } catch (e) {
       toast({
         title: "No se pudo reintentar",
