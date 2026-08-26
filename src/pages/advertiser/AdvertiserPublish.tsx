@@ -918,11 +918,21 @@ const AdvertiserPublish = () => {
     }
   };
 
-  const openPublishFlow = () => {
-    // Un toast que dice "faltan campos" obliga a buscar cuál: ahora se marca el
-    // campo, se baja hasta él y se le da el foco. El toast queda de resumen.
+  /**
+   * Lo que un aviso necesita para salir al público.
+   *
+   * Vive aparte porque lo usan PUBLICAR y GUARDAR CAMBIOS, y tienen que exigir
+   * lo mismo: si editar validara menos, se podría dejar sin descripción un aviso
+   * que ya está en el escaparate. Se entra con un aviso completo y se sale con
+   * uno peor.
+   *
+   * `conDuracion` es la única diferencia: al editar no se elige duración —el
+   * bloque ni se pinta, es lo que ya se pagó—, así que exigirla dejaría el
+   * guardado bloqueado por un campo que no está en pantalla.
+   */
+  const reglasDelAviso = (conDuracion: boolean) => {
     const precioNum = Number(form.price);
-    const reglas = [
+    return [
       { campo: "categoria", ok: !!form.category, mensaje: "Elige la categoría de tu aviso." },
       { campo: "titulo", ok: !!form.title.trim(), mensaje: "Ponle un título a tu aviso." },
       { campo: "descripcion", ok: !!form.description.trim(), mensaje: "Describe lo que ofreces." },
@@ -941,9 +951,17 @@ const AdvertiserPublish = () => {
           ? "Marca la ubicación de tu aviso en el mapa."
           : "Escribe la ciudad o referencia de tu aviso.",
       },
-      // EFFE-097: publicar exige haber elegido una duración de forma explícita.
-      { campo: "duracion", ok: durationChosen, mensaje: "Selecciona cuántos días durará tu aviso." },
+      ...(conDuracion
+        // EFFE-097: publicar exige haber elegido una duración de forma explícita.
+        ? [{ campo: "duracion", ok: durationChosen, mensaje: "Selecciona cuántos días durará tu aviso." }]
+        : []),
     ];
+  };
+
+  const openPublishFlow = () => {
+    // Un toast que dice "faltan campos" obliga a buscar cuál: ahora se marca el
+    // campo, se baja hasta él y se le da el foco. El toast queda de resumen.
+    const reglas = reglasDelAviso(true);
     if (!val.validar(reglas)) {
       const fallo = reglas.find((r) => !r.ok)!;
       toast({ title: "Falta un dato", description: fallo.mensaje, variant: "destructive" });
@@ -1015,6 +1033,31 @@ const AdvertiserPublish = () => {
    */
   const guardarEdicion = async () => {
     if (!editandoId) return;
+
+    // Las MISMAS reglas que publicar. El aviso ya está en el escaparate: salir
+    // de aquí con menos de lo que exigía entrar sería empeorarlo.
+    const reglas = reglasDelAviso(false);
+    if (!val.validar(reglas)) {
+      const fallo = reglas.find((r) => !r.ok)!;
+      toast({ title: "Falta un dato", description: fallo.mensaje, variant: "destructive" });
+      return;
+    }
+    // Y lo contratado sigue teniendo que estar: si al editar se pudiera quitar
+    // el vídeo que se pagó, el aviso quedaría cobrado y sin él.
+    const faltan = adicionalesQueFaltan(extras, {
+      imagenesExtra: extraPhotos.slice(0, extraImageCount).filter(Boolean).length,
+      tienePdf: !!pdfFile,
+      videos: videos.length,
+    });
+    if (faltan.length > 0) {
+      toast({
+        title: "Te falta subir lo que contrataste",
+        description: resumenDeFaltantes(faltan),
+        variant: "destructive",
+      });
+      return;
+    }
+
     setSavingDraft(true);
     try {
       await guardarCambiosDeAviso(editandoId, {
