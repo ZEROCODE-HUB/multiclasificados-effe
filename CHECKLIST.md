@@ -31,7 +31,7 @@ Lo que queda **no es desarrollo pendiente**, son tres cosas de otra naturaleza:
 | | Qué es | Dónde se resuelve |
 |---|---|---|
 | 🚨 **Dos cosas de configuración** | Restringir la llave de Google Maps (H-03) y dar de alta el RUC en Factiliza (H-10) | Paneles de Google Cloud y de Factiliza — no es código |
-| 🔑 **El salto a producción** | Hoy `app_produccion = false`: todo cobro es de prueba y las boletas van a las series B066/F066 | Skill `pasar-a-produccion` |
+| 🔑 **El salto a producción** | Hoy `app_produccion = false`: todo cobro es de prueba y las boletas van a las series B066/F066. **No corre prisa: el cliente aún no ha pedido habilitar Factiliza ni Izipay en real** (decisión del 26-ago) | Skill `pasar-a-produccion` |
 | 📱 **El APK y el IPA** | Se dejan **para el final**, para que todas las correcciones entren en el binario que se sube a Play Store y TestFlight | Codemagic |
 
 ### Auditoría externa de agosto de 2026 (CORP LOZANOCHEFFER)
@@ -45,7 +45,9 @@ Lo que queda **no es desarrollo pendiente**, son tres cosas de otra naturaleza:
   `dist/index.html`) y B-21 (los datos de tarjeta no pueden persistir: viven
   dentro del iframe de Lyra, fuera de nuestro alcance).
 - **Fuera de alcance por decisión del cliente:** B-01, B-02 (2.ª mitad), B-07,
-  B-08, B-09, B-10, B-18, B-25, H-18 (PWA).
+  B-08, B-09, B-10, B-18, B-25, H-18 (PWA). Y **B-24** (miniaturas de vídeo):
+  el punto estaba redactado como pregunta —*"si reduce espacio, por favor
+  aplicarlo"*— y la respuesta del cliente el 26-ago fue que no hace falta.
 - **Descartados tras evaluarlos:** H-07 (Playwright en CI: no hay más gente
   tocando el código), H-19 (política de seguridad: no puede promoverse porque
   no hay endpoint que recoja los reportes), H-13 (ver arriba).
@@ -95,7 +97,10 @@ Lo que queda **no es desarrollo pendiente**, son tres cosas de otra naturaleza:
 - [x] Libro de Reclamaciones — Edge Function `send-reclamo`
 - [x] 125 migraciones SQL (`0001`–`0124`), RLS, RPCs, cron jobs (`expire-listings`, `saved-search-alerts`, limpieza de adjuntos huérfanos)
 - [x] 🚨 **Límite de tasa contra ráfagas y spam (H-06).** ✅ *Hecho (26-ago-2026, migración `0124`).* Triggers en `listings` y `messages` que frenan por usuario en ventanas de hora y día. **Va en la base de datos, no en una Edge Function**: publicar y enviar mensajes no pasan por ninguna, y un intermediario sería esquivable llamando a PostgREST directamente con la anon key, que es pública. No hay tabla de contadores: se cuenta sobre los propios avisos y mensajes, así que el contador no puede desincronizarse de la realidad. Topes calibrados sobre uso real medido (máximo observado por una persona: 10 avisos/hora, 28/día; 20 mensajes/hora, 28/día) y configurables en `system_settings.limites_de_tasa` sin desplegar — **poner un tope en 0 lo desactiva**, que es la válvula de escape si le corta la publicación a un cliente real. El personal queda exento. 18 pruebas en `migration0124.test.ts`.
-- [ ] 🟠 **El registro no exige confirmar el correo** (`mailer_autoconfirm = true`): cualquiera crea cuentas con direcciones inventadas. Los topes de GoTrue (30 anónimos/hora) son la única barrera. ⚠️ **Activar el captcha nativo de Supabase Auth tumbaría el registro y el login**: el código solo manda token de captcha en el login de personal, así que habría que añadirlo antes en `AuthPage` — y en la app nativa hCaptcha está desactivado a propósito. No es un interruptor, es trabajo.
+- [x] ✅ **DECIDIDO (26-ago-2026): el captcha va SOLO en el login de administración, y el correo se autoconfirma.** No son huecos, son decisiones del cliente, y quedan escritas aquí para que no vuelvan a aparecer como hallazgo en la próxima auditoría.
+  - El captcha **no debe ir en el login ni en el registro de usuarios**: la fricción en el público cuesta más que lo que protege. En el de personal ya está y se queda.
+  - `mailer_autoconfirm = true` **se deja así a propósito**: registrarse no exige confirmar el correo. La barrera contra el alta masiva son los topes de GoTrue (30 anónimos/hora) y, desde la `0124`, el límite de tasa de avisos y mensajes — que es donde el abuso hace daño de verdad.
+  - ⚠️ **Y por si alguien lo intenta:** activar el captcha nativo de Supabase Auth (`security_captcha_enabled`) **tumbaría el registro y el login de usuarios**, porque el código solo manda token de captcha en el login de personal (`requireCaptcha`) y en la app nativa hCaptcha está desactivado a propósito. No es un interruptor inocuo.
 
 ---
 
@@ -212,9 +217,11 @@ pierde** — hay que volver a concederlos en la misma migración.
 
 **De código, nada dentro del alcance.** Lo que falta, por orden de urgencia:
 
-1. 🚨 **Dar de alta el RUC 20616009061 en Factiliza** (H-10). Hasta que no esté,
-   `app_produccion` no se puede encender: cada emisión real será rechazada. Ver
-   la nota sobre la serie B001 más abajo.
+1. 🔑 **Dar de alta el RUC 20616009061 en Factiliza** (H-10) — *cuando se vaya a
+   producción, no antes.* **No es urgente** (decisión del 26-ago: nadie ha pedido
+   todavía habilitar la emisión real). Lo que sí hay que saber es que
+   `app_produccion` **no se puede encender hasta que esté**, o cada emisión real
+   será rechazada. Ver la nota sobre la serie B001 más abajo.
 2. 🚨 **Restringir la llave de Google Maps** (H-03) por referer y por API.
 3. 🔑 **Rotar el token personal de Supabase** compartido por chat (H-02).
 4. 📱 **Probar el push en un iPhone físico.** Es lo único que el simulador no
