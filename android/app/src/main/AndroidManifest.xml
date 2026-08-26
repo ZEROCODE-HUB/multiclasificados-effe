@@ -47,4 +47,31 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+      Ubicación: la usa el botón "Ver los más cercanos" del buscador, que llama a
+      `navigator.geolocation` desde el WebView (SearchPage.tsx). No hay plugin de
+      geolocalización: es la API del navegador.
+
+      Sin estas dos líneas la función NO funciona en el APK, y falla de la peor
+      manera posible: en silencio. Capacitor pide los permisos en tiempo de
+      ejecución (BridgeWebChromeClient.onGeolocationPermissionsShowPrompt), y
+      Android DENIEGA de inmediato —sin enseñar diálogo— cualquier permiso que no
+      esté declarado aquí. El usuario pulsa, espera, y le sale "no se pudo
+      obtener tu ubicación" sin que nadie le haya preguntado nada.
+
+      Comprobado sobre el AAB del 26-ago-2026 descargado de Actions: llevaba
+      POST_NOTIFICATIONS (lo aporta Firebase al fusionar manifests) pero ningún
+      permiso de ubicación.
+
+      Van las dos porque Capacitor las pide juntas. Basta con que el usuario
+      conceda la aproximada: el buscador pide `enableHighAccuracy: false` y solo
+      ordena por cercanía — el filtro sigue siendo el departamento.
+
+      ⚠️ Al publicar en Play hay que declararlo en el formulario de Seguridad de
+      los datos. Es ubicación en primer plano, así que no requiere el permiso
+      especial de segundo plano ni justificación en vídeo.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 </manifest>
