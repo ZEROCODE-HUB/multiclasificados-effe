@@ -10,7 +10,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Users, ClipboardList, CheckCircle2, XCircle, DollarSign, ArrowUpRight, Flag, AlertTriangle } from "lucide-react";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from "recharts";
 import {
   fetchAdminStats, fetchGrowthSeries, fetchCategoryDistribution,
   fetchAdminListings, fetchRecentActivity, GROWTH_RANGES,
@@ -20,8 +20,10 @@ import {
 } from "@/lib/admin";
 import { auditEntityLabel, lowercaseFirst } from "@/lib/auditLabels";
 
-const COLORS = ["hsl(220 56% 20%)", "hsl(24 95% 53%)", "hsl(166 60% 45%)", "hsl(220 56% 45%)", "hsl(40 95% 55%)", "hsl(220 14% 60%)"];
+// Los colores viven en `@/lib/coloresGrafico`: los usa más de un gráfico del
+// panel, y exportarlos desde aquí rompería la recarga rápida de Vite.
 
+import { colorDeTrozo } from "@/lib/coloresGrafico";
 interface Props { role: AdminRole }
 
 // Fecha completa (la lista solo muestra el tiempo relativo, ej. "hace 2 h").
@@ -38,6 +40,14 @@ const AdminDashboard = ({ role }: Props) => {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [series, setSeries] = useState<{ mes: string; ingresos: number; usuarios: number }[]>([]);
   const [catDist, setCatDist] = useState<{ name: string; value: number }[]>([]);
+  // De mayor a menor. Sin esto el donut sale en el orden que devuelva la
+  // consulta y hay que recorrer quince líneas para encontrar la categoría
+  // grande, que es justo el dato por el que se abre este gráfico. También fija
+  // el color de cada trozo: el más grande siempre lleva el azul de la marca.
+  const catOrdenadas = useMemo(
+    () => [...catDist].sort((a, b) => b.value - a.value),
+    [catDist],
+  );
   const [listings, setListings] = useState<AdminListingRow[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   // Actividad abierta en el cuadro de detalle (solo lectura).
@@ -249,16 +259,48 @@ const AdminDashboard = ({ role }: Props) => {
           <CardHeader className="p-4 pb-2">
             <CardTitle className="text-base md:text-lg">Avisos por categoría</CardTitle>
           </CardHeader>
-          <CardContent className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={catDist} dataKey="value" nameKey="name" innerRadius={45} outerRadius={80} paddingAngle={3}>
-                  {catDist.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                </Pie>
-                <Tooltip />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-              </PieChart>
-            </ResponsiveContainer>
+          {/* La leyenda es NUESTRA, no la de Recharts.
+              Con quince categorías de nombres largos, la suya ocupaba dos
+              tercios de la tarjeta y dejaba el donut del tamaño de una moneda,
+              descolocándose además en cada ancho de pantalla. Y solo decía el
+              color: aquí cada categoría lleva su número, que es el dato por el
+              que se mira este gráfico. */}
+          <CardContent className="p-4 pt-0">
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={catOrdenadas} dataKey="value" nameKey="name" innerRadius="55%" outerRadius="85%" paddingAngle={3}>
+                    {catOrdenadas.map((_, i) => <Cell key={i} fill={colorDeTrozo(i)} />)}
+                  </Pie>
+                  <Tooltip
+                    formatter={(v: number) => [`${v} aviso${v === 1 ? "" : "s"}`, ""]}
+                    contentStyle={{ fontSize: 12 }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Una columna en móvil y dos en cuanto hay sitio. Con tope de alto
+                y scroll propio: así la tarjeta mide lo mismo tenga cinco
+                categorías o treinta, y no empuja lo que viene debajo. */}
+            <ul className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 max-h-32 overflow-y-auto pr-1">
+              {catOrdenadas.map((c, i) => (
+                <li key={c.name} className="flex items-center gap-2 text-xs min-w-0">
+                  <span
+                    className="w-2.5 h-2.5 shrink-0 rounded-sm"
+                    style={{ background: colorDeTrozo(i) }}
+                    aria-hidden
+                  />
+                  {/* `truncate` + `title`: "Equipos y Maquinaria Pesada,
+                      Industrial y Herramientas" no cabe en ningún ancho, y
+                      partirlo en tres líneas descuadraba la rejilla entera. */}
+                  <span className="truncate flex-1 min-w-0 text-muted-foreground" title={c.name}>
+                    {c.name}
+                  </span>
+                  <span className="font-bold tabular-nums shrink-0">{c.value}</span>
+                </li>
+              ))}
+            </ul>
           </CardContent>
         </Card>
       </div>
