@@ -424,11 +424,54 @@ export interface FiltroComprobantes {
   desde?: string;
   hasta?: string;
   soloAnulados?: boolean;
+  /** Solo los que se quedaron a medias y hay que atender a mano. */
+  soloAtencion?: boolean;
   page?: number;
   pageSize?: number;
 }
 
 export const INVOICES_PAGE_SIZE = 20;
+
+/**
+ * Qué es un comprobante "que necesita atención".
+ *
+ * Vive en UNA constante a propósito: la usan el contador del panel y el filtro
+ * de la lista, y si cada uno decidiera por su cuenta acabarían discrepando —el
+ * aviso diría "3" y al pulsarlo saldrían 5, que es la forma más rápida de que
+ * nadie vuelva a hacer caso al aviso.
+ *
+ * Un anulado no cuenta aunque su emisión fuera mal: ya se resolvió por otra vía
+ * y no hay nada que reintentar.
+ */
+const ATENCION_SUNAT = ["rechazado", "error", "vencido"];
+const FILTRO_ATENCION =
+  `sunat_status.in.(${ATENCION_SUNAT.join(",")}),email_status.eq.error,needs_review.eq.true`;
+
+/**
+ * Cuántos comprobantes se quedaron a medias.
+ *
+ * El panel comercial ya enseñaba el estado de cada uno y hasta ofrecía
+ * reintentarlo, pero paginado de 20 en 20: un rechazo de hace tres semanas está
+ * en la página 4 y nadie lo ve. Una boleta que SUNAT rechazó y nadie mira es un
+ * problema tributario esperando a que el cliente reclame.
+ *
+ * Ante cualquier error devuelve 0: es un aviso, y un aviso que revienta la
+ * pantalla de inicio del administrador sería peor que no tenerlo.
+ */
+export async function contarComprobantesConProblema(): Promise<number> {
+  try {
+    if (!(await isAuthed())) return 0;
+    const { count, error } = await supabase
+      .from("invoices")
+      .select("id", { count: "exact", head: true })
+      .is("anulado_at", null)
+      .or(FILTRO_ATENCION);
+    if (error) throw error;
+    return count ?? 0;
+  } catch {
+    return 0;
+  }
+}
 
 /**
  * Comprobantes del panel.
@@ -466,6 +509,9 @@ export async function fetchAllInvoices(
       }
       if (filtro.tipo) consulta = consulta.eq("type", filtro.tipo);
       if (filtro.sunat) consulta = consulta.eq("sunat_status", filtro.sunat);
+      // Misma condición que el contador del panel: ver arriba por qué comparten
+      // constante en vez de repetirse.
+      if (filtro.soloAtencion) consulta = consulta.is("anulado_at", null).or(FILTRO_ATENCION);
       if (filtro.desde) consulta = consulta.gte("issued_at", filtro.desde);
       // `hasta` es un día entero: sin el +1 se perderían los del mismo día.
       if (filtro.hasta) consulta = consulta.lt("issued_at", `${filtro.hasta}T23:59:59.999Z`);

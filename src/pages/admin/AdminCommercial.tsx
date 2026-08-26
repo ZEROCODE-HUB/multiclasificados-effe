@@ -581,6 +581,13 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
   const [invDesde, setInvDesde] = useState("");
   const [invHasta, setInvHasta] = useState("");
   const [invAnulados, setInvAnulados] = useState(false);
+  // Llegar con `?atencion=1` desde el aviso del panel abre la lista ya filtrada
+  // a los que se quedaron a medias. Sin esto, el aviso decia "3 comprobantes
+  // necesitan revision" y soltaba al administrador en la lista entera, a
+  // buscarlos entre veinte por pagina — que es justo el problema que resuelve.
+  const [invAtencion, setInvAtencion] = useState(
+    () => new URLSearchParams(window.location.search).get("atencion") === "1",
+  );
   const [invPage, setInvPage] = useState(1);
   const [invTotal, setInvTotal] = useState(0);
   const invTotalPages = Math.max(1, Math.ceil(invTotal / INVOICES_PAGE_SIZE));
@@ -592,6 +599,7 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
     desde: invDesde || undefined,
     hasta: invHasta || undefined,
     soloAnulados: invAnulados || undefined,
+    soloAtencion: invAtencion || undefined,
     page: invPage,
   });
 
@@ -689,11 +697,11 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
     // `filtroInvoices` se recrea en cada render: lo que importa son los
     // filtros de la lista de abajo, que son sus únicas entradas.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [invSearch, invTipo, invSunat, invDesde, invHasta, invAnulados, invPage]);
+  }, [invSearch, invTipo, invSunat, invDesde, invHasta, invAnulados, invAtencion, invPage]);
 
   // Cambiar un filtro devuelve a la primera página: si no, se puede quedar
   // mirando la página 5 de un resultado que ahora tiene una.
-  useEffect(() => { setInvPage(1); }, [invSearch, invTipo, invSunat, invDesde, invHasta, invAnulados]);
+  useEffect(() => { setInvPage(1); }, [invSearch, invTipo, invSunat, invDesde, invHasta, invAnulados, invAtencion]);
 
   const saveSettings = async () => {
     setSavingSettings(true);
@@ -1019,6 +1027,14 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
                   <input type="checkbox" checked={invAnulados} onChange={(e) => setInvAnulados(e.target.checked)} />
                   Solo anulados
                 </label>
+                {/* Tiene que poder APAGARSE desde aqui: quien llega por el aviso
+                    del panel llega filtrado, y si no ve por que solo salen tres
+                    comprobantes, lo siguiente que piensa es que se perdieron los
+                    demas. */}
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground h-9 px-1">
+                  <input type="checkbox" checked={invAtencion} onChange={(e) => setInvAtencion(e.target.checked)} />
+                  Solo los que necesitan revisión
+                </label>
                 <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => exportarComprobantes("xlsx")}>
                   <FileSpreadsheet size={14} /> Excel
                 </Button>
@@ -1033,7 +1049,7 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
                 <p className="text-sm text-muted-foreground text-center py-8">Cargando comprobantes…</p>
               ) : invoices.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-8">
-                  {invSearch || invTipo !== "all" || invSunat !== "all" || invDesde || invHasta || invAnulados
+                  {invSearch || invTipo !== "all" || invSunat !== "all" || invDesde || invHasta || invAnulados || invAtencion
                     ? "Ningún comprobante coincide con estos filtros."
                     : "Aún no se han generado boletas."}
                 </p>

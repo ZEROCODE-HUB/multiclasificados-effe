@@ -25,6 +25,9 @@ vi.mock("@/lib/admin", () => ({
   // dashboard consuma tiene que estar aquí o el render revienta antes de pintar
   // nada. Ya pasó con GROWTH_RANGES (PR #14) y con la variación de los KPIs.
   STATS_WINDOW_DAYS: 30,
+  // Aviso de comprobantes que se quedaron a medias. Sin cero aqui, el panel
+  // pintaria una barra de alerta que estas pruebas no esperan.
+  contarComprobantesConProblema: async () => 0,
   // La real, no un stub: si el cálculo cambia, que se vea aquí también.
   variacionPct: (a: number, p: number | null | undefined) =>
     p === null || p === undefined || p === 0 || !Number.isFinite(p) || !Number.isFinite(a)

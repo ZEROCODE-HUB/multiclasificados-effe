@@ -9,13 +9,14 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Users, ClipboardList, CheckCircle2, XCircle, DollarSign, ArrowUpRight, Flag } from "lucide-react";
+import { Users, ClipboardList, CheckCircle2, XCircle, DollarSign, ArrowUpRight, Flag, AlertTriangle } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
 import {
   fetchAdminStats, fetchGrowthSeries, fetchCategoryDistribution,
   fetchAdminListings, fetchRecentActivity, GROWTH_RANGES,
   variacionPct, formatVariacion, STATS_WINDOW_DAYS,
   type AdminStats, type AdminListingRow, type ActivityItem, type GrowthRange,
+  contarComprobantesConProblema,
 } from "@/lib/admin";
 import { auditEntityLabel, lowercaseFirst } from "@/lib/auditLabels";
 
@@ -41,6 +42,16 @@ const AdminDashboard = ({ role }: Props) => {
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   // Actividad abierta en el cuadro de detalle (solo lectura).
   const [detail, setDetail] = useState<ActivityItem | null>(null);
+  // Comprobantes que se quedaron a medias. El panel comercial ya los enseñaba
+  // —con su motivo y su botón de reintentar— pero paginado de 20 en 20: un
+  // rechazo de hace tres semanas esta en la pagina 4 y nadie lo ve. Una boleta
+  // que SUNAT rechazo y nadie mira es un problema tributario esperando.
+  const [porRevisar, setPorRevisar] = useState(0);
+  useEffect(() => {
+    let vivo = true;
+    void contarComprobantesConProblema().then((n) => { if (vivo) setPorRevisar(n); });
+    return () => { vivo = false; };
+  }, []);
 
   // Datos reales de Supabase (con fallback a mock dentro de la capa admin).
   useEffect(() => {
@@ -112,6 +123,32 @@ const AdminDashboard = ({ role }: Props) => {
 
   return (
     <>
+      {/* Lo unico que interrumpe: algo se quedo a medias y hay que atenderlo a
+          mano. Va ARRIBA DEL TODO y no como una tarjeta mas entre las metricas,
+          porque el resto de esta pantalla se mira cuando uno quiere y esto hay
+          que verlo aunque no lo estuvieras buscando. */}
+      {porRevisar > 0 && (
+        <button
+          type="button"
+          onClick={() => navigate("/dashboard/admin/comercial?atencion=1")}
+          className="w-full mb-3 flex items-center gap-3 rounded-2xl border-2 border-warning/50 bg-warning/10
+                     px-4 py-3 text-left transition-colors hover:bg-warning/20"
+        >
+          <AlertTriangle size={18} className="text-warning shrink-0" />
+          <span className="flex-1 min-w-0">
+            <span className="block text-sm font-bold text-foreground">
+              {porRevisar === 1
+                ? "1 comprobante necesita revisión"
+                : `${porRevisar} comprobantes necesitan revisión`}
+            </span>
+            <span className="block text-xs text-muted-foreground">
+              SUNAT los rechazó o no salió el correo. Se pueden reintentar desde Comercial.
+            </span>
+          </span>
+          <ArrowUpRight size={16} className="text-warning shrink-0" />
+        </button>
+      )}
+
       {/* Greeting */}
       <div className="relative overflow-hidden rounded-2xl gradient-hero text-primary-foreground p-4 md:p-5">
         <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-secondary/30 blur-3xl" />

@@ -43,6 +43,16 @@ vi.mock("react-router-dom", async (orig) => {
   };
 });
 
+// La consulta de pagos en espera resolvia DESPUES de que la prueba terminara, y
+// React intentaba actualizar un componente ya desmontado: la suite pasaba en
+// verde pero dejaba un error suelto al final, y solo a veces —depende de si esa
+// promesa gana o pierde la carrera con el desmontaje. Es la clase de rojo
+// intermitente que acaba ensenando a ignorar los rojos. Aqui no se prueba eso.
+vi.mock("@/lib/pagoManual", async (orig) => ({
+  ...(await (orig() as Promise<Record<string, unknown>>)),
+  misPagosEnEspera: () => Promise.resolve([]),
+}));
+
 const toast = vi.fn();
 vi.mock("@/hooks/use-toast", () => ({ toast: (...a: unknown[]) => toast(...a) }));
 
