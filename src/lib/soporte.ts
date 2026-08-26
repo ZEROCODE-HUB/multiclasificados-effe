@@ -14,37 +14,6 @@ export interface DatosDevolucion {
 }
 
 export const ASUNTO_DEVOLUCION = "Solicitud de devolución de saldo";
-export const ASUNTO_SOLICITUD = "Solicitud de recarga de saldo";
-
-/**
- * `mailto:` para PEDIR saldo, que no es lo mismo que pedir que lo devuelvan.
- *
- * Son las dos direcciones del mismo dinero y conviene no confundirlas: aquí el
- * anunciante quiere que le carguemos saldo —normalmente porque paga por
- * transferencia o con factura a nombre de su empresa, fuera de la pasarela— y el
- * equipo se lo otorga desde Gestión de Usuarios. La devolución es la contraria:
- * quiere que le saquemos el dinero que ya tiene dentro.
- *
- * El cuerpo lleva escrito lo que hace falta preguntar de todas formas (cuánto y
- * cómo va a pagar) para que la solicitud no sean tres correos de ida y vuelta.
- */
-export function enlaceSolicitudDeSaldo(d: DatosDevolucion = {}): string {
-  const saldo = typeof d.saldo === "number" && Number.isFinite(d.saldo) ? d.saldo : 0;
-  const cuerpo = [
-    "Hola, quiero solicitar una recarga de saldo para mi cuenta.",
-    "",
-    `Nombre: ${d.nombre?.trim() || "(completar)"}`,
-    `Correo de la cuenta: ${d.correo?.trim() || "(completar)"}`,
-    `Saldo actual: S/ ${saldo.toFixed(2)}`,
-    "",
-    "Monto que necesito recargar: ",
-    "Forma de pago (transferencia, depósito, otra): ",
-    "¿Necesito factura? (sí / no; si es sí, indicar RUC y razón social): ",
-    "",
-    "Gracias.",
-  ].join("\n");
-  return `mailto:${CORREO_SOPORTE}?subject=${encodeURIComponent(ASUNTO_SOLICITUD)}&body=${encodeURIComponent(cuerpo)}`;
-}
 
 /**
  * `mailto:` para pedir la devolución del saldo.
