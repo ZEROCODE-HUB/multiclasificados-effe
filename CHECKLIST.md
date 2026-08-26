@@ -10,8 +10,11 @@
 > - La **§5-bis miente**: `0080_search_priority_by_zone.sql` **ya no existe** —
 >   se borró al cambiar cercanía por departamento— y `0081` está aplicada (no
 >   queda ningún aviso activo sin coordenadas).
-> - **Lo que sí sigue pendiente:** el `GoogleService-Info.plist` y la clave APNs
->   para el push en iOS, restringir la llave de Google Maps, rotar los secretos,
+> - **El push de iOS YA NO está pendiente** (comprobado el 25-ago-2026, ver §3):
+>   los secretos de APNs están cargados, el código manda a Apple directamente y
+>   el build pone el entitlement. El `GoogleService-Info.plist` no hace falta:
+>   Firebase es solo para Android. Falta únicamente probarlo en un iPhone.
+> - **Lo que sí sigue pendiente:** restringir la llave de Google Maps, rotar los secretos,
 >   y el alta del RUC en Factiliza.
 >
 > **Estado al 15 de julio de 2026** · App v2.6 (versionCode 17) · Stack: React 18 + Vite + TypeScript + Supabase + Capacitor.
@@ -28,7 +31,7 @@
 - Lo que falta se divide en tres frentes:
   1. **Un puñado de funcionalidades a medias** (sobre todo una pantalla de búsqueda prototipo y preferencias de notificación).
   2. **Configuración de producción** (llaves/secrets que aún no se cargan: Izipay, hCaptcha real, Resend, FCM…).
-  3. **Preparación para iPhone/iOS** — el frente con más trabajo real: hay pipeline de build iOS, pero faltan safe-areas, URL scheme, push APNs, iconos y persistir la config nativa. Detalle en §5.
+  3. **Preparación para iPhone/iOS** — quedan el icono maestro de 1024×1024 y probarlo en un iPhone físico. Las safe-areas, el URL scheme y el push APNs ya están resueltos (§3). Detalle en §5.
 
 ---
 
@@ -95,7 +98,15 @@
 - [x] 🔴 **Safe areas / notch / Dynamic Island.** ✅ *Hecho (15-jul).* Utilidades `.pt-safe`/`.pb-safe` (`env(safe-area-inset-*)`) en `index.css`, aplicadas a los headers (`Navbar.tsx`, `AdminLayout.tsx`) y a las barras inferiores (`MobileBottomNav.tsx`, `AdminLayout.tsx`). En Android valen 0 (MainActivity ya aplica y **consume** los insets → sin duplicar). **Pendiente:** validar en un iPhone real con Dynamic Island.
 - [x] 🔴 **URL scheme para OAuth en `Info.plist`.** ✅ *Hecho (15-jul).* El paso "Configure iOS" de `codemagic.yaml` inyecta `CFBundleURLTypes` con `com.effe.multiclasificados` vía `PlistBuddy` tras `cap sync` (equivalente al `AndroidManifest.xml`).
 - [x] 🔴 **Variables de entorno del build iOS.** ✅ *Hecho en código (15-jul).* `codemagic.yaml` ahora declara `VITE_PUBLIC_SITE_URL`, `VITE_IZIPAY_PUBLIC_KEY` y `VITE_HCAPTCHA_SITE_KEY`. **Falta 🔑 cargar los VALORES** en Codemagic (ver §4).
-- [ ] 🔴 **Push notifications en iOS (APNs).** ⛔ *Pendiente por dependencia externa.* `push.ts` es cross-platform y el `codemagic.yaml` ya copia `GoogleService-Info.plist` si está en `ios-config/`. Falta: la **clave APNs** subida a Firebase, las capabilities Push/Background Modes + entitlement `aps-environment`, y decidir en `send-push` el envío a tokens iOS (APNs vs FCM). Requiere la clave de Apple (ver §Pendientes externos del PLAN).
+- [x] 🔴 **Push notifications en iOS (APNs).** ✅ *Hecho (verificado 25-ago-2026).* Esta línea decía "pendiente" desde julio y **por eso la auditoría externa de agosto lo clasificó como hallazgo GRAVE (H-04)**. No lo es, y conviene dejar claro qué se comprobó, capa por capa:
+  - `send-push/index.ts` habla **directamente con Apple** (APNs con JWT firmado), sin pasar por Firebase. La rama iOS está escrita y solo se salta si faltan los secretos.
+  - Los cinco secretos (`APNS_KEY_P8`, `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_BUNDLE_ID`, `APNS_ENV`) **están cargados** en Edge Functions.
+  - `codemagic.yaml` tiene `IOS_PUSH: "true"`, escribe el entitlement `aps-environment = production`, lo engancha al proyecto Xcode y **comprueba después del build** que quedó puesto.
+  - `push.ts` registra en cualquier plataforma nativa (`isNativePlatform()`), no solo Android.
+
+  **El `GoogleService-Info.plist` NO hace falta**, y es donde se torció la auditoría: dio por supuesta la arquitectura habitual de FCM para las dos plataformas. Aquí Firebase es solo para Android; en iOS, `@capacitor/push-notifications` entrega un token de APNs y se manda a Apple sin intermediario.
+
+  Lo único que queda es **probarlo en un iPhone de verdad**: que los secretos tengan los valores buenos y que la notificación llegue. Eso no se puede comprobar desde el repositorio.
 - [x] 🔴 **Persistir/automatizar la config nativa iOS.** ✅ *Hecho (15-jul).* En vez de commitear `ios/`, el paso "Configure iOS" de `codemagic.yaml` **reinyecta** URL scheme, usage strings, Firebase e iconos tras `cap add/sync`, así no se pierden entre builds. `@capacitor/ios` quedó en `package.json` (lo instala `npm ci`).
 
 ### 🟠 Importantes
@@ -163,7 +174,7 @@ Casi todo el trabajo **de código** está hecho (Fases 0, 1, 2, 3 y 5 del plan �
 
 1. **QA en un iPhone real** de las safe-areas y el teclado (código listo, falta verlo en pantalla).
 2. **Config de producción (§4):** cargar las llaves (Izipay, hCaptcha, Resend, service_role) y los **valores** de las env vars en Codemagic.
-3. **Push en iOS (§3 🔴):** requiere la **clave APNs** de Apple + `GoogleService-Info.plist` en `ios-config/` + trabajo de backend en `send-push`.
+3. ~~**Push en iOS:** requiere la clave APNs + `GoogleService-Info.plist` + trabajo en `send-push`.~~ **Resuelto** (25-ago-2026, ver §3). El `.plist` nunca hizo falta: iOS va directo a Apple, no por Firebase.
 4. **Assets iOS:** poner el master `assets/icon.png` 1024×1024.
 5. **Rotar los secretos comprometidos** (§5).
 
