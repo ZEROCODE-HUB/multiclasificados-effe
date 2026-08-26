@@ -319,11 +319,28 @@ actualización ofrecerá *bajar* de versión:
 están vacíos, y activarlos apuntando a un bundle viejo degradaría un APK recién
 instalado.
 
-**Un cabo suelto menor:** `release.yml` y `ci.yml` son flujos independientes y
-los dos se disparan con cada push a `main`. Es decir, **el AAB se compila y se
-firma aunque las pruebas estén en rojo** — nada lo impide, solo que `ci.yml`
-saldría en rojo al lado. Se arregla añadiendo `npm test` a `release.yml` antes de
-compilar (≈4 min más por ejecución).
+**Cuándo se compila (cambiado el 26-ago):** ya **no** en cada push a `main`.
+Se dispara solo cuando cambia `android/app/build.gradle` —es decir, cuando se
+sube la versión, que es lo que de verdad significa "voy a publicar"— y a mano
+con *Run workflow*. Antes eran ~2 min 40 s de firma y empaquetado por cada
+corrección de un comentario.
+
+⚠️ **El matiz:** el AAB se compila con el commit que subió la versión, **no con
+el último de la rama**. Si subes la versión y después sigues corrigiendo, el
+artefacto no lleva esas correcciones y nada avisa, porque el flujo salió en
+verde. El último paso imprime el commit empaquetado: míralo antes de subir a
+Play, y si no es el que quieres, lanza el flujo a mano.
+
+**Y ahora corre `npm test` antes de firmar.** Eran flujos independientes, así que
+un AAB podía firmarse y subirse a Play con las pruebas en rojo; lo único que lo
+delataba era `ci.yml` en rojo al lado, que nadie mira cuando va a publicar.
+
+> Al activarlo salieron a la luz **dos promesas que resolvían después del
+> teardown** (`configYapePlin` sin mockear en dos pruebas del modal de compra).
+> Las 1896 pruebas pasaban, pero vitest terminaba con código 1, así que el paso
+> fallaba **sin un solo test en rojo**. Era un rojo intermitente que ya venía de
+> antes en `ci.yml`; desde que esto bloquea la firma, dejó de ser cosmético.
+> Corregido y verificado de extremo a extremo el 26-ago.
 
 ---
 
