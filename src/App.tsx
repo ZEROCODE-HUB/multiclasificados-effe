@@ -29,6 +29,7 @@ import ListingDetail from "./pages/ListingDetail.tsx";
 // build anterior desaparecen, y quien tuviera la app abierta se quedaba con un
 // "Failed to fetch dynamically imported module" al entrar aquí. Ver
 // src/lib/cargaDiferida.ts.
+const LegalPage = cargaDiferida(() => import("./pages/LegalPage.tsx"));
 const AdminPricing = cargaDiferida(() => import("./pages/admin/AdminPricing.tsx"));
 const AdvertiserInvoices = cargaDiferida(() => import("./pages/advertiser/AdvertiserInvoices.tsx"));
 const AdvertiserDashboard = cargaDiferida(() => import("./pages/AdvertiserDashboard.tsx"));
@@ -104,6 +105,13 @@ const App = () => (
           <Route path="/aviso/:id" element={<ListingDetail />} />
           <Route path="/planes" element={<Navigate to="/dashboard/anunciante/publicar" replace />} />
           <Route path="/mapa" element={<Navigate to="/buscar?view=map" replace />} />
+          {/* Términos y Política de Privacidad. Son UN documento con dos
+              direcciones: `/privacidad` baja hasta el tratamiento de datos.
+              Existen porque Google Play exige un ENLACE público a la política
+              y lo revisa en cada actualización — el modal no se puede enlazar.
+              Públicas del todo: sin sesión y sin nada por encima. */}
+          <Route path="/terminos" element={<LegalPage />} />
+          <Route path="/privacidad" element={<LegalPage />} />
 
 
           {/* Paneles de usuario (anunciante/buscador): exigen sesión REAL de

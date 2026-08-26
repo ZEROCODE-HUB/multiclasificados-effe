@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -5,15 +6,36 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { ExternalLink } from "lucide-react";
+import { CORREO_SOPORTE } from "@/lib/soporte";
 
 // Términos y Condiciones del Servicio + Política de Tratamiento de Datos
 // Personales de CORP LOZANOCHEFFER SAC (documento único). Última actualización:
 // 16 de junio de 2026.
+//
+// El texto vive en `LegalTermsContent` y se enseña de DOS formas:
+//
+//   · `TermsDialog` — el modal de siempre, para leerlo sin salir del registro.
+//   · `/terminos` y `/privacidad` (LegalPage) — la misma cosa con dirección
+//     propia. Hace falta porque Google Play exige un ENLACE público a la
+//     política de privacidad y lo revisa en cada actualización: un documento
+//     que solo existe dentro de un modal no se puede enlazar.
+//
+// El correo de contacto sale de `CORREO_SOPORTE` y no está escrito a mano. Aquí
+// decía `privacidad@coleffe.com`, un buzón que nadie confirmó que existiera; el
+// gemelo `soporte@coleffe.com` resultó NO existir en cPanel. Una política que
+// remite a un correo que rebota para ejercer derechos sobre los datos personales
+// es justo lo que mira un revisor, y lo que reclama un usuario.
 const LAST_UPDATED = "16 de junio de 2026";
 
-function Section({ n, title, children }: { n: string; title: string; children: React.ReactNode }) {
+function Section({
+  n, title, id, children,
+}: { n: string; title: string; id?: string; children: React.ReactNode }) {
   return (
-    <section className="space-y-2">
+    // `scroll-mt` para que al saltar aquí el título no quede pegado al borde
+    // de arriba, que es donde el ojo lo pierde.
+    <section id={id} className="space-y-2 scroll-mt-6">
       <h3 className="text-sm font-bold text-foreground">
         {n}. {title}
       </h3>
@@ -133,7 +155,7 @@ export function LegalTermsContent() {
         />
       </Section>
 
-      <Section n="4" title="Datos personales recopilados">
+      <Section n="4" id="datos-personales" title="Datos personales recopilados">
         <p>
           Para la prestación del Servicio, LA EMPRESA podrá recopilar y tratar las siguientes
           categorías de datos personales de EL CLIENTE:
@@ -254,8 +276,8 @@ export function LegalTermsContent() {
         />
         <p>
           Para ejercer estos derechos, EL CLIENTE deberá enviar una solicitud al correo electrónico{" "}
-          <a href="mailto:privacidad@coleffe.com" className="text-secondary hover:underline">
-            privacidad@coleffe.com
+          <a href={`mailto:${CORREO_SOPORTE}`} className="text-secondary hover:underline">
+            {CORREO_SOPORTE}
           </a>
           , adjuntando copia de su documento de identidad y la descripción clara de su solicitud. LA
           EMPRESA atenderá dicha solicitud dentro del plazo establecido por la normativa vigente
@@ -338,8 +360,8 @@ export function LegalTermsContent() {
             <><strong className="text-foreground">Domicilio:</strong> Ramal Sun S/N – Huaca del Sol – Campiña de Moche</>,
             <>
               <strong className="text-foreground">Correo de contacto / privacidad:</strong>{" "}
-              <a href="mailto:privacidad@coleffe.com" className="text-secondary hover:underline">
-                privacidad@coleffe.com
+              <a href={`mailto:${CORREO_SOPORTE}`} className="text-secondary hover:underline">
+                {CORREO_SOPORTE}
               </a>
             </>,
             <><strong className="text-foreground">Teléfono:</strong> +51 957 531 755</>,
@@ -379,6 +401,13 @@ export function TermsDialog({ open, onOpenChange }: TermsDialogProps) {
           </DialogDescription>
         </DialogHeader>
         <LegalTermsContent />
+        {/* Para quien quiera guardarlo, imprimirlo o mandárselo a alguien: el
+            mismo documento tiene su propia dirección. Un modal no se enlaza. */}
+        <Button asChild variant="outline" size="sm" className="gap-1.5 self-start">
+          <Link to="/terminos" target="_blank" rel="noopener noreferrer">
+            <ExternalLink size={13} /> Abrir en una pestaña
+          </Link>
+        </Button>
       </DialogContent>
     </Dialog>
   );

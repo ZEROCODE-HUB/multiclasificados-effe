@@ -8,15 +8,21 @@ import { useSession, isStaffRole } from "@/hooks/useSession";
  * Modo mantenimiento: con el interruptor de "Variables del sistema" encendido,
  * la plataforma queda cerrada y se muestra una pantalla informativa.
  *
- * Dos excepciones, y ninguna es un descuido:
+ * Tres excepciones, y ninguna es un descuido:
  *   - El staff entra igual. Si no, nadie podría apagar el interruptor desde el
  *     panel y habría que volver a abrir la app desde la base de datos.
  *   - `/auth/staff` y `/auth/callback` quedan accesibles: un administrador que
  *     no tenga la sesión iniciada necesita poder llegar al formulario de login.
  *     El login de usuario normal (`/auth`) sí queda bloqueado.
+ *   - `/terminos` y `/privacidad` NUNCA se cierran. Google Play revisa el
+ *     enlace a la política de privacidad en cada actualización, y una tarde de
+ *     mantenimiento no puede convertirse en una ficha rechazada. Además son el
+ *     documento donde se explica cómo ejercer los derechos sobre los datos
+ *     personales: cerrarlo es justo lo que no debe pasar. No exponen nada —es
+ *     texto legal, sin sesión ni consultas.
  */
 
-const RUTAS_PERMITIDAS = ["/auth/staff", "/auth/callback"];
+const RUTAS_PERMITIDAS = ["/auth/staff", "/auth/callback", "/terminos", "/privacidad"];
 
 export function MaintenanceScreen() {
   return (
