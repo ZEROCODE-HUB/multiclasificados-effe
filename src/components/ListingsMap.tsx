@@ -69,11 +69,17 @@ export function FichaDelPin(
   return (
     <CuerpoDeAviso
       l={l}
-      anchoImagen={300}
-      sizes="208px"
+      anchoImagen={200}
+      sizes="96px"
       urgente={l.urgent ? urgentTimeLeft(l.expiresAt ?? null, Date.now()) : null}
       mostrarPrecio={mostrarPrecio}
-      className="w-52"
+      /* APAISADA, y no por gusto: en vertical la ficha medía unos 300 px de
+         alto y el panel del mapa mide 45vh —unos 360 en un teléfono—, de los
+         que Google deja para el contenido apenas 260. No cabía: le ponía barra
+         de scroll y la subía para aprovechar el hueco, así que salía recortada
+         y despegada del pin. Apaisada baja a unos 110 y cabe de sobra. */
+      orientacion="horizontal"
+      className="w-[17rem] max-w-[80vw]"
       cobertura={
         <a
           href={href}

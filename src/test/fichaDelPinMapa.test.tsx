@@ -36,11 +36,12 @@ describe("se pinta SIN Router, que es como se usa", () => {
     expect(screen.getByText("Trujillo")).toBeInTheDocument();
   });
 
-  it("con su precio y su categoría", () => {
+  it("con su precio", () => {
+    // La categoría se dejó fuera de esta ficha: es el dato que menos aporta y
+    // cada línea cuenta para que quepa sin barra de scroll.
     prepararDom();
     render(<FichaDelPin l={AVISO} href="/aviso/a1" ir={vi.fn()} mostrarPrecio />);
     expect(screen.getByText(/500/)).toBeInTheDocument();
-    expect(screen.getByText("inmuebles")).toBeInTheDocument();
   });
 
   it("y con su imagen: la ficha sin foto no dice nada de un aviso", () => {
@@ -129,5 +130,53 @@ describe("los precios no se cuelan por el mapa", () => {
     // Pero el aviso sigue siendo visible: es un escaparate, no una puerta.
     expect(screen.getByText("Locales en ventas")).toBeInTheDocument();
     expect(screen.getByText("Trujillo")).toBeInTheDocument();
+  });
+});
+
+/**
+ * QUE QUEPA SIN BARRA DE SCROLL.
+ *
+ * El panel del mapa mide 45vh —unos 360 px en un telefono— y de ahi Google deja
+ * para el contenido de su ventanita apenas 260. La ficha vertical medía unos
+ * 300 (foto 4:3 de 156 px mas el texto): no cabia, asi que Google le ponia
+ * barra de scroll y la subia para aprovechar el hueco. De ahi los dos sintomas
+ * que reporto el cliente, que eran el mismo: "no se ve bien" y "se abre mas
+ * arriba".
+ *
+ * Estas pruebas fijan lo que hace que quepa. No miden pixeles —jsdom no calcula
+ * medidas— sino las decisiones que los producen.
+ */
+describe("la ficha cabe en el globo del mapa", () => {
+  const pintar = () =>
+    render(<FichaDelPin l={AVISO} href="/a" ir={vi.fn()} mostrarPrecio />);
+
+  it("es apaisada: la foto va al lado del texto, no encima", () => {
+    prepararDom();
+    const { container } = pintar();
+    expect((container.firstChild as HTMLElement).className).toContain("flex-row");
+  });
+
+  it("la foto es una columna estrecha y NO impone un 4:3 alto", () => {
+    // El 4:3 sobre 208 px de ancho daba 156 px solo de foto. En columna son 96
+    // de ancho y el alto lo manda el texto.
+    prepararDom();
+    const { container } = pintar();
+    const foto = container.querySelector("img")!.parentElement!;
+    expect(foto.className).toContain("w-24");
+    expect(foto.style.aspectRatio).toBeFalsy();
+  });
+
+  it("el titulo no reserva dos lineas para todos", () => {
+    // `min-h` en el titulo suma alto aunque el titulo sea corto. En la tarjeta
+    // del buscador sirve para que las vecinas cuadren; aqui no hay vecinas.
+    prepararDom();
+    pintar();
+    expect(screen.getByText("Locales en ventas").className).not.toContain("min-h");
+  });
+
+  it("no lleva la categoria: es el dato que menos aporta y cada linea cuenta", () => {
+    prepararDom();
+    pintar();
+    expect(screen.queryByText("inmuebles")).toBeNull();
   });
 });
