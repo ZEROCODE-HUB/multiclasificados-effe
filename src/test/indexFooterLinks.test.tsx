@@ -10,9 +10,17 @@ import { prepararDom } from "./domPolyfills";
 
 beforeEach(() => {
   prepararDom();
+  // El país se fija: la portada lo deduce de la zona horaria del equipo, y sin
+  // esto el pie se probaría contra una portada distinta según dónde se ejecute.
+  localStorage.setItem("effe:pais", "PE");
 });
 
-vi.mock("@/lib/listings", () => ({ fetchListings: async () => [] }));
+vi.mock("@/lib/listings", () => ({
+  fetchListings: async () => [],
+  // La portada usa una u otra según el país desde el que se mire; aquí se
+  // prueba el pie, así que las dos devuelven lo mismo.
+  searchListings: async () => [],
+}));
 vi.mock("@/lib/stats", () => ({
   fetchPlatformStats: async () => null,
   fetchCategoryCounts: async () => ({}),

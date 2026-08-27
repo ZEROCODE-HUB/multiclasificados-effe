@@ -16,11 +16,16 @@ import { prepararDom } from "./domPolyfills";
 beforeEach(() => {
   prepararDom();
   localStorage.clear();
+  // EL PAÍS SE FIJA A MANO, y no es un detalle de fontanería: la portada lo
+  // deduce de la zona horaria del equipo, y sin esto estas pruebas daban
+  // "Venezuela" según dónde se ejecutaran. Van de departamentos, que solo
+  // existen dentro del Perú.
+  localStorage.setItem("effe:pais", "PE");
   llamadas.length = 0;
 });
 
 /** Registro de qué se le pidió al servidor y con qué filtros. */
-const llamadas: Array<{ fn: "fetchListings" | "searchListings"; department?: string; limit?: number }> = [];
+const llamadas: Array<{ fn: "fetchListings" | "searchListings"; department?: string; country?: string; limit?: number }> = [];
 
 const aviso = (n: number, dep: string) => ({
   id: `${n}`, title: `Aviso ${n}`, price: 100, currency: "PEN", location: "Sitio",

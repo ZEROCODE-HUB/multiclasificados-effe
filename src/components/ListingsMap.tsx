@@ -3,10 +3,13 @@ import { createRoot, type Root } from "react-dom/client";
 import type { MarkerClusterer } from "@googlemaps/markerclusterer";
 import { imgUrl } from "@/lib/imageUrl";
 import { formatCompactPrice } from "@/lib/pricing";
+import { CuerpoDeAviso } from "@/components/CuerpoDeAviso";
+import { urgentTimeLeft } from "@/lib/listings";
 import { pinDePrecio } from "@/components/mapIcons";
 import { crearAgrupador } from "@/components/mapCluster";
 import { useMapaDeGoogle, textoDeEstadoDelMapa } from "@/lib/googleMaps";
 import { useNavigate } from "react-router-dom";
+import { useSession } from "@/hooks/useSession";
 import { MapPin } from "lucide-react";
 import type { Listing } from "@/data/mockData";
 
@@ -45,33 +48,46 @@ interface ListingsMapProps {
  * Por eso es un `<a>` normal con la navegación inyectada desde fuera: el
  * `href` de verdad conserva "abrir en pestaña nueva" y el clic izquierdo se
  * queda en la aplicación, sin recargarla.
+ *
+ * LO VISUAL LO PONE `CuerpoDeAviso`, el mismo que usa la tarjeta del buscador.
+ * Antes esta ficha se pintaba a mano y había ido divergiendo: sin marco, con la
+ * foto redondeada —el resto de la app es recta—, sin destacado, sin urgente,
+ * sin confidencial, sin sello y sin el aviso de video. Y con el precio del PIN,
+ * que va abreviado por falta de sitio: enseñaba "S/ 250K" donde la tarjeta
+ * decía "S/ 250,000.00". Aquí hay 208 px de ancho y cabe entero.
  */
 export function FichaDelPin(
-  { l, href, ir }: { l: GeoListing; href: string; ir: (href: string) => void },
+  { l, href, ir, mostrarPrecio }: {
+    l: GeoListing;
+    href: string;
+    ir: (href: string) => void;
+    /** Sin sesión el buscador oculta los precios; el mapa tiene que hacer lo
+     *  mismo o sería la puerta de atrás para verlos sin cuenta. */
+    mostrarPrecio: boolean;
+  },
 ) {
   return (
-    <a
-      href={href}
-      className="block w-52 no-underline"
-      onClick={(e) => {
-        // Con Ctrl/Cmd o el botón central, que el navegador haga lo suyo.
-        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
-        e.preventDefault();
-        ir(href);
-      }}
-    >
-      <div className="aspect-[4/3] bg-muted overflow-hidden rounded-t">
-        <img src={imgUrl(l.imageUrl, 300)} alt={l.title} loading="lazy" decoding="async" className="w-full h-full object-cover" />
-      </div>
-      <div className="pt-2">
-        <span className="text-[10px] uppercase tracking-wider font-bold text-secondary">{l.category}</span>
-        <h4 className="text-sm font-semibold text-foreground line-clamp-2 mt-0.5">{l.title}</h4>
-        <p className="flex items-center gap-1 text-[11px] text-muted-foreground mt-1">
-          <MapPin size={10} /> {l.location}
-        </p>
-        <p className="text-base font-extrabold text-primary mt-1">{formatPrice(l.price, l.currency)}</p>
-      </div>
-    </a>
+    <CuerpoDeAviso
+      l={l}
+      anchoImagen={300}
+      sizes="208px"
+      urgente={l.urgent ? urgentTimeLeft(l.expiresAt ?? null, Date.now()) : null}
+      mostrarPrecio={mostrarPrecio}
+      className="w-52"
+      cobertura={
+        <a
+          href={href}
+          aria-label={l.title}
+          className="absolute inset-0 z-[1]"
+          onClick={(e) => {
+            // Con Ctrl/Cmd o el botón central, que el navegador haga lo suyo.
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+            e.preventDefault();
+            ir(href);
+          }}
+        />
+      }
+    />
   );
 }
 
@@ -79,6 +95,11 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
   // Este componente SÍ está dentro del Router; la ficha del pin no. Se le pasa
   // la navegación en una prop porque allí no hay contexto que valga.
   const navigate = useNavigate();
+  // La ficha del pin no puede leer la sesión: se monta fuera del árbol. Este
+  // componente sí está dentro, así que se la pasa hecha. Sin esto, los precios
+  // que el buscador oculta a quien no tiene cuenta se verían pulsando pines.
+  const session = useSession();
+  const conSesion = !!session?.supabase;
   const points = useMemo(() => listings.filter(hasCoords), [listings]);
   const missing = listings.length - points.length;
 
@@ -183,7 +204,7 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
       };
     }
     ficha.current.raiz.render(
-      <FichaDelPin l={l} href={hrefFor(l.id)} ir={(h) => navigate(h)} />,
+      <FichaDelPin l={l} href={hrefFor(l.id)} ir={(h) => navigate(h)} mostrarPrecio={conSesion} />,
     );
     ficha.current.ventana.open({ map: mapa, anchor: marcador });
 

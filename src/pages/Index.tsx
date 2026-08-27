@@ -13,6 +13,7 @@ import {
   DEPARTAMENTOS, departamentoPorId, departamentoGuardado, guardarDepartamento,
   type Departamento,
 } from "@/lib/departamentos";
+import { esPeru, paisPreferido, codigoPaisGuardado, paisPorIP, type Pais } from "@/lib/paises";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fetchPlatformStats, type PlatformStats } from "@/lib/stats";
 import { useSession } from "@/hooks/useSession";
@@ -184,6 +185,28 @@ const Index = () => {
   // abajo es enseñarle algo que no puede ir a ver.
   const [departamento, setDepartamento] = useState<Departamento | null>(() => departamentoGuardado());
 
+  // DE QUÉ PAÍS LLEGA LA VISITA.
+  //
+  // La portada solo sabía de los 25 departamentos del Perú, así que a alguien
+  // que entrase desde Rumanía le preguntaba "¿Dónde estás?" y le ofrecía un
+  // desplegable de departamentos peruanos. Y hay una trampa peor escondida en
+  // `searchListings`: si no se le pasa país filtra por "PE" de oficio, de modo
+  // que al elegir departamento los avisos de fuera desaparecían sin que nadie
+  // lo hubiese pedido.
+  //
+  // Se usa la MISMA deducción que el buscador —lo que el usuario eligió o su
+  // zona horaria primero, y la IP después, que acierta bastante más— para que
+  // las dos pantallas no discrepen sobre dónde está la persona.
+  const [pais, setPais] = useState<Pais>(() => paisPreferido());
+  useEffect(() => {
+    // Si ya eligió país a mano (aquí o en el buscador), no se le toca.
+    if (codigoPaisGuardado()) return;
+    let vivo = true;
+    void paisPorIP().then((p) => { if (vivo && p) setPais(p); });
+    return () => { vivo = false; };
+  }, []);
+  const enPeru = esPeru(pais.code);
+
   const elegirDepartamento = (id: string) => {
     const d = departamentoPorId(id);
     setDepartamento(d);
@@ -192,18 +215,27 @@ const Index = () => {
 
   useEffect(() => {
     let vigente = true;
-    // Sin departamento elegido, la portada es la de todo el país.
-    const cargar = departamento
-      ? searchListings({ department: departamento.id, limit: HOME_LISTINGS + CERCANOS })
-      : fetchListings({ limit: HOME_LISTINGS + CERCANOS });
+    const limit = HOME_LISTINGS + CERCANOS;
+    // Fuera del Perú manda el país, y hay que pasarlo EXPLÍCITAMENTE: si no se
+    // le da `country`, searchListings filtra por "PE" de oficio y devolvería
+    // una lista vacía a quien mira desde otro sitio.
+    // Dentro del Perú todo sigue igual: departamento si lo hay, y si no la
+    // portada de siempre.
+    const cargar = !enPeru
+      ? searchListings({ country: pais.code, limit })
+      : departamento
+        ? searchListings({ department: departamento.id, limit })
+        : fetchListings({ limit });
     cargar.then((rows) => { if (vigente) setListings(rows); });
     return () => { vigente = false; };
-  }, [departamento]);
+  }, [departamento, enPeru, pais.code]);
 
   // Las tres rejillas salen de la MISMA lista y no se pisan: antes "Avisos en
   // tu departamento" hacía su propia consulta y, al filtrar también las de
   // abajo, los cuatro primeros avisos habrían salido dos veces seguidos.
-  const cercanos = departamento ? listings.slice(0, CERCANOS) : [];
+  // Fuera del Perú la sección se llena con los del país; dentro, hace falta
+  // haber elegido departamento.
+  const cercanos = (!enPeru || departamento) ? listings.slice(0, CERCANOS) : [];
   const restoDesde = cercanos.length;
   // Y la segunda rejilla arranca donde termina la primera: si arrancara en un
   // índice fijo, en pantallas anchas (donde la primera fila se lleva más
@@ -345,12 +377,19 @@ const Index = () => {
           <div>
             <p className="text-xs uppercase tracking-[0.2em] font-bold text-secondary mb-2">Cerca de ti</p>
             <h2 className="text-2xl md:text-4xl font-bold text-foreground">
-              {departamento ? `Avisos en ${departamento.nombre}` : "¿Dónde estás?"}
+              {/* Fuera del Perú no se pregunta el departamento: manda el país.
+                  Preguntárselo a quien está en Rumanía con la lista del INEI
+                  era ofrecerle 25 sitios donde no está. */}
+              {!enPeru
+                ? `Avisos en ${pais.nombre}`
+                : departamento
+                  ? `Avisos en ${departamento.nombre}`
+                  : "¿Dónde estás?"}
             </h2>
           </div>
-          {departamento && cercanos.length > 0 && (
+          {cercanos.length > 0 && (!enPeru || departamento) && (
             <Link
-              to={`/buscar?dep=${departamento.id}`}
+              to={enPeru ? `/buscar?dep=${departamento!.id}` : `/buscar?pais=${pais.code}`}
               className="text-xs font-bold uppercase tracking-[0.2em] text-primary border-b-2 border-secondary pb-1 hover:text-secondary transition-colors"
             >
               Ver todos →
@@ -358,7 +397,7 @@ const Index = () => {
           )}
         </div>
 
-        {!departamento ? (
+        {enPeru && !departamento ? (
           <div className="border border-dashed border-border p-6 md:p-8 text-center">
             <p className="text-sm text-muted-foreground mb-4">
               Dinos tu departamento y te mostramos lo que hay publicado ahí.
@@ -377,10 +416,16 @@ const Index = () => {
         ) : cercanos.length === 0 ? (
           <div className="border border-dashed border-border py-10 text-center">
             <p className="text-muted-foreground text-sm">
-              Todavía no hay avisos publicados en {departamento.nombre}.
+              Todavía no hay avisos publicados en {enPeru ? departamento!.nombre : pais.nombre}.
             </p>
-            <Link to="/buscar" className="text-sm font-bold text-secondary hover:underline mt-2 inline-block">
-              Ver los de todo el país →
+            {/* "pais=todos" y no un /buscar a secas: el buscador arranca
+                filtrando por el país que deduce, así que sin esto el enlace
+                devolvería la misma lista vacía de la que se viene huyendo. */}
+            <Link
+              to={enPeru ? "/buscar" : "/buscar?pais=todos"}
+              className="text-sm font-bold text-secondary hover:underline mt-2 inline-block"
+            >
+              {enPeru ? "Ver los de todo el país →" : "Ver los de todos los países →"}
             </Link>
           </div>
         ) : (
@@ -390,7 +435,7 @@ const Index = () => {
             ))}
           </div>
         )}
-        {departamento && (
+        {enPeru && departamento && (
           <button
             type="button"
             onClick={() => { setDepartamento(null); guardarDepartamento(null); }}
