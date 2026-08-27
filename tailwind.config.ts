@@ -111,18 +111,19 @@ export default {
         // de al lado y hacía que el chip pareciera ocupar más de lo que ocupa.
         // Ahora el chip no cambia de tamaño, solo de intensidad.
         //
-        // NO BAJA DE 0,6 a propósito. El chip lleva dentro el contador de horas
-        // en texto blanco sobre rojo; cuanto más transparente, más se acerca el
-        // rojo al blanco del fondo y menos se lee el número. A 0,6 el parpadeo
-        // se nota y la cifra sigue legible en todo el ciclo.
+        // SE APLICA A UNA CAPA BLANCA POR ENCIMA del chip, no al chip. Animar
+        // la opacidad del chip entero desvanecía también el icono y el contador
+        // de horas —la cifra dejaba de leerse justo cuando más se mira— y
+        // además dejaba asomar la foto por detrás. Así el rojo sigue sólido y
+        // solo se ilumina.
         //
         // El ritmo importa por accesibilidad: la WCAG 2.3.1 prohíbe destellos
         // por encima de 3 por segundo (riesgo de crisis fotosensibles). A 1,4 s
         // el ciclo va a 0,7/s, muy por debajo. Y se aplica con `motion-safe:`
         // para que desaparezca en quien pidió menos animación en su sistema.
         "latido-urgente": {
-          "0%, 100%": { opacity: "1" },
-          "50%":      { opacity: "0.6" },
+          "0%, 100%": { opacity: "0" },
+          "50%":      { opacity: "0.28" },
         },
       },
       animation: {

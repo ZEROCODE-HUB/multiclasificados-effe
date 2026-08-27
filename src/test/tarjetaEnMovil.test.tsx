@@ -60,8 +60,12 @@ describe("densidad de la tarjeta en movil", () => {
   });
 });
 
-describe("el distintivo Urgente late", () => {
+describe("el distintivo Urgente parpadea", () => {
   const chip = () => screen.queryByRole("img", { name: /urgente/i });
+  // Lo que se anima NO es el chip sino una capa de destello por encima: si se
+  // animara el chip entero, el icono y el contador de horas se desvanecerian
+  // con el y la cifra dejaria de leerse justo cuando mas se mira.
+  const destello = () => chip()?.querySelector("[aria-hidden]");
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -69,30 +73,45 @@ describe("el distintivo Urgente late", () => {
   });
   afterEach(() => vi.useRealTimers());
 
-  it("late mientras el plazo sigue corriendo", () => {
+  it("parpadea mientras el plazo sigue corriendo", () => {
     pintar({ urgent: true, expiresAt: "2026-08-29T10:00:00Z" });
-    expect(chip()?.className).toContain("animate-latido-urgente");
+    expect(destello()?.className).toContain("animate-latido-urgente");
+  });
+
+  it("el icono y el contador NO se desvanecen: solo el fondo", () => {
+    pintar({ urgent: true, expiresAt: "2026-08-29T10:00:00Z" });
+    // El chip en si no lleva la animacion; la lleva la capa de detras.
+    expect(chip()!.className).not.toContain("animate-latido-urgente");
+    expect(destello()).toBeTruthy();
+  });
+
+  it("el fondo rojo sigue solido: no deja asomar la foto", () => {
+    // Con opacidad sobre el chip, en imagenes claras se transparentaba la foto
+    // y el distintivo se veia sucio. El destello va ENCIMA de un rojo opaco.
+    pintar({ urgent: true, expiresAt: "2026-08-29T10:00:00Z" });
+    expect(chip()!.className).toContain("bg-red-600");
   });
 
   it("se queda quieto cuando el plazo ya vencio", () => {
-    // Un "Urgente" caducado latiendo seria una llamada de atencion a algo que
-    // ya no la merece.
+    // Un "Urgente" caducado parpadeando seria una llamada de atencion a algo
+    // que ya no la merece.
     pintar({ urgent: true, expiresAt: "2026-08-20T10:00:00Z" });
-    expect(chip()?.className).not.toContain("animate-latido-urgente");
+    expect(destello()).toBeFalsy();
   });
 
   it("respeta a quien pidio menos animacion en su sistema", () => {
     // `motion-safe:` traduce a @media (prefers-reduced-motion: no-preference).
-    // Sin ese prefijo, el latido se le impondria a quien lo desactivo por
+    // Sin ese prefijo, el parpadeo se le impondria a quien lo desactivo por
     // motivos vestibulares o de migrana.
     pintar({ urgent: true, expiresAt: "2026-08-29T10:00:00Z" });
-    expect(chip()?.className).toContain("motion-safe:animate-latido-urgente");
+    expect(destello()?.className).toContain("motion-safe:animate-latido-urgente");
   });
 
-  it("los otros distintivos no laten: el latido es del que corre plazo", () => {
+  it("los otros distintivos no parpadean: es del que corre plazo", () => {
     pintar({ confidential: true });
     const otro = screen.getByRole("img", { name: /confidencial/i });
     expect(otro.className).not.toContain("animate-latido-urgente");
+    expect(otro.querySelector("[aria-hidden]")).toBeFalsy();
   });
 });
 

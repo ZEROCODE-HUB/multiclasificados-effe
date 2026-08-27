@@ -95,7 +95,7 @@ export function CuerpoDeAviso({
   // Los chips, una sola vez: cambian de SITIO segun la forma, no de contenido.
   const bloqueDeChips = chips.length > 0 && (
     <TooltipProvider delayDuration={100}>
-      {chips.map(({ key, label, icon: Icon, cls }) => {
+      {chips.map(({ key, label, icon: Icon, cls, bg }) => {
         const cuenta = key === "urgent" && urgente && !urgente.expired;
         return (
           <Tooltip key={label}>
@@ -107,11 +107,21 @@ export function CuerpoDeAviso({
                 role="img"
                 aria-label={cuenta ? `${label} · quedan ${urgente!.short}` : label}
                 onClick={(e) => e.stopPropagation()}
-                className={`${apaisada ? "h-5" : "h-7"} shrink-0 flex items-center justify-center gap-1 shadow-md ${cuenta ? "px-1.5 w-auto" : apaisada ? "w-5" : "w-7"} ${cuenta ? "motion-safe:animate-latido-urgente" : ""} ${cls}`}
+                className={`relative overflow-hidden ${apaisada ? "h-5" : "h-7"} shrink-0 flex items-center justify-center gap-1 shadow-md ${cuenta ? "px-1.5 w-auto" : apaisada ? "w-5" : "w-7"} ${cls}`}
               >
-                <Icon size={apaisada ? 11 : 14} />
+                {/* EL QUE PARPADEA ES EL FONDO, NO EL CHIP.
+                    Animando la opacidad del chip entero, el icono y el contador
+                    de horas se desvanecían con él y la cifra dejaba de leerse
+                    justo cuando más se mira.
+                    Y es un DESTELLO por encima de un rojo que sigue sólido, no
+                    el rojo volviéndose transparente: así detrás no se asoma la
+                    foto, que dejaba el chip sucio sobre imágenes claras. */}
                 {cuenta && (
-                  <span className={`${apaisada ? "text-[10px]" : "text-[11px]"} font-bold leading-none tabular-nums`}>
+                  <span aria-hidden className="absolute inset-0 bg-white motion-safe:animate-latido-urgente" />
+                )}
+                <Icon size={apaisada ? 11 : 14} className="relative z-10" />
+                {cuenta && (
+                  <span className={`relative z-10 ${apaisada ? "text-[10px]" : "text-[11px]"} font-bold leading-none tabular-nums`}>
                     {urgente!.short}
                   </span>
                 )}

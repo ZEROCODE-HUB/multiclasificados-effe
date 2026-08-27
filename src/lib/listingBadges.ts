@@ -10,14 +10,23 @@ export interface ListingBadgeDef {
   icon: LucideIcon;
   /** Fondo + color de texto de la insignia. */
   cls: string;
+  /**
+   * Solo el fondo, aparte.
+   *
+   * Lo necesita el parpadeo del "Urgente": si se anima la opacidad del chip
+   * entero, el icono y el contador de horas se desvanecen con él y la cifra
+   * deja de leerse justo cuando más se mira. Animando una capa de fondo
+   * detrás, el contenido se queda quieto y siempre legible.
+   */
+  bg: string;
 }
 
 const ALL: ListingBadgeDef[] = [
   // Colores oscurecidos a -600 para que el texto blanco supere el 3:1 de WCAG
   // 1.4.11 (amber-500/sky-500 daban 2.15:1 y 2.77:1). Urgente ya cumplía.
-  { key: "featured", label: "Destacado", icon: Award, cls: "bg-amber-600 text-white" },
-  { key: "urgent", label: "Urgente", icon: Flame, cls: "bg-red-600 text-white" },
-  { key: "confidential", label: "Confidencial", icon: EyeOff, cls: "bg-sky-600 text-white" },
+  { key: "featured", label: "Destacado", icon: Award, cls: "bg-amber-600 text-white", bg: "bg-amber-600" },
+  { key: "urgent", label: "Urgente", icon: Flame, cls: "bg-red-600 text-white", bg: "bg-red-600" },
+  { key: "confidential", label: "Confidencial", icon: EyeOff, cls: "bg-sky-600 text-white", bg: "bg-sky-600" },
 ];
 
 /** Devuelve solo las insignias que el aviso trae activadas, en orden fijo. */

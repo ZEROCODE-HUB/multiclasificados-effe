@@ -14,22 +14,13 @@ import { Search, UserCheck, Ban, BadgeCheck, KeyRound, Trash2, ChevronLeft, Chev
 import { PrefsNotificacionDialog } from "@/components/PrefsNotificacionDialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { fetchAdminUsers, setUserStatus, verifyUser, deleteUser, setUserRole, ajustarSaldo, saldoDeUsuario, type AdminUser } from "@/lib/admin";
+import { fetchAdminUsers, setUserStatus, verifyUser, deleteUser, reactivarUsuario, setUserRole, ajustarSaldo, saldoDeUsuario, type AdminUser } from "@/lib/admin";
 import { usePermissions } from "@/hooks/usePermissions";
 import { supabase } from "@/lib/supabase";
 import { formatCredits } from "@/lib/pricing";
 import { toast } from "@/hooks/use-toast";
 import { mensajeDeError } from "@/lib/errores";
-
-// Mapa estado real (BD) -> etiqueta y color del diseño existente.
-const statusMeta: Record<string, { label: string; color: string }> = {
-  active:    { label: "Activo",     color: "bg-success/15 text-success border-success/30" },
-  pending:   { label: "Pendiente",  color: "bg-warning/15 text-warning border-warning/30" },
-  suspended: { label: "Suspendido", color: "bg-destructive/15 text-destructive border-destructive/30" },
-  // "banned" heredado se muestra también como Suspendido (unificamos el bloqueo).
-  banned:    { label: "Suspendido", color: "bg-destructive/15 text-destructive border-destructive/30" },
-};
-const metaFor = (s: string) => statusMeta[s] ?? statusMeta.active;
+import { metaFor } from "@/pages/admin/estadoDeUsuario";
 
 const isUuid = (v: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
@@ -210,9 +201,15 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
     const Btn: "outline" | "ghost" = compact ? "outline" : "ghost";
     const size: "icon" | "sm" = compact ? "sm" : "icon";
     const iconSize = compact ? 14 : 16;
-    // Un solo botón que alterna según el estado: si está suspendido permite
-    // reactivarlo; en cualquier otro caso permite suspenderlo.
-    const isSuspended = u.status === "suspended" || u.status === "banned";
+    // Un solo botón que alterna según el estado: si la cuenta está parada
+    // permite devolverla, y en cualquier otro caso permite suspenderla.
+    //
+    // "inactive" ENTRA AQUÍ, y faltaba: un cliente dado de baja veía el botón
+    // de "Suspender" y no tenía por dónde volver. La función del servidor
+    // (admin_reactivar_usuario, migración 0127) estaba escrita desde el
+    // principio, pero no la llamaba nadie: la baja era un camino de ida.
+    const dadoDeBaja = u.status === "inactive";
+    const isSuspended = u.status === "suspended" || u.status === "banned" || dadoDeBaja;
     return (
       <>
         {canEdit && (
@@ -234,15 +231,29 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
                 {isSuspended ? `¿Reactivar a ${u.full_name}?` : `¿Suspender al usuario ${u.full_name}?`}
               </AlertDialogTitle>
               <AlertDialogDescription>
-                {isSuspended
-                  ? "El usuario recibirá acceso completo a la plataforma. Se le notificará por correo."
-                  : "El usuario perderá el acceso a la plataforma hasta que se reactive su cuenta."}
+                {dadoDeBaja
+                  ? "La cuenta vuelve a quedar activa. Sus avisos NO se republican solos: los pausó la baja y los retoma el propio anunciante cuando quiera."
+                  : isSuspended
+                    ? "El usuario recibirá acceso completo a la plataforma. Se le notificará por correo."
+                    : "El usuario perderá el acceso a la plataforma hasta que se reactive su cuenta."}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
               {isSuspended ? (
-                <AlertDialogAction onClick={() => run("Usuario reactivado", u, () => setUserStatus(u.id, "active"))}>Reactivar</AlertDialogAction>
+                // Una baja se deshace con su propia función, no poniendo el
+                // estado a mano: `admin_reactivar_usuario` deja constancia en la
+                // auditoría de que se revirtió una baja, que no es lo mismo que
+                // levantar una suspensión.
+                <AlertDialogAction
+                  onClick={() => run(
+                    dadoDeBaja ? "Cliente reactivado" : "Usuario reactivado",
+                    u,
+                    () => (dadoDeBaja ? reactivarUsuario(u.id) : setUserStatus(u.id, "active")),
+                  )}
+                >
+                  Reactivar
+                </AlertDialogAction>
               ) : (
                 <AlertDialogAction onClick={() => run("Usuario suspendido", u, () => setUserStatus(u.id, "suspended"))}>Suspender</AlertDialogAction>
               )}
