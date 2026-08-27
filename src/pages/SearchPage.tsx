@@ -718,7 +718,11 @@ export default function SearchPage() {
                     ref={rejilla.ref}
                     className={
                       layout === "grid"
-                        ? "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6 gap-3"
+                        // Dos por fila en móvil: a una sola columna la tarjeta
+                        // ocupaba el ancho completo y solo cabía 1,4 avisos por
+                        // pantalla. El `lg:grid-cols-4` cierra el escalón que
+                        // faltaba: antes se saltaba de 3 a 5 columnas de golpe.
+                        ? "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3"
                         : "space-y-3"
                     }
                   >

@@ -76,6 +76,10 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
     <TooltipProvider delayDuration={100}>
       {badgeDefs.map(({ key, label, icon: Icon, cls }) => {
         const showCount = key === "urgent" && urgent && !urgent.expired;
+        // El latido solo mientras el plazo SIGUE corriendo. Un "Urgente" ya
+        // vencido latiendo sería una llamada de atención a algo que no la
+        // merece — y el chip se queda quieto en cuanto expira.
+        const late = key === "urgent" && urgent && !urgent.expired;
         return (
           <Tooltip key={label}>
             <TooltipTrigger asChild>
@@ -86,7 +90,7 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
                 role="img"
                 aria-label={showCount ? `${label} · quedan ${urgent!.short}` : label}
                 onClick={(e) => e.stopPropagation()}
-                className={`h-7 shrink-0 flex items-center justify-center gap-1 shadow-md ${showCount ? "px-1.5 w-auto" : "w-7"} ${cls}`}
+                className={`h-7 shrink-0 flex items-center justify-center gap-1 shadow-md ${showCount ? "px-1.5 w-auto" : "w-7"} ${late ? "motion-safe:animate-latido-urgente" : ""} ${cls}`}
               >
                 <Icon size={14} />
                 {showCount && (
@@ -148,10 +152,15 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
       {/* items-start + w-fit: los chips (de anchos distintos cuando "Urgente"
           muestra el contador) quedan alineados por su borde izquierdo en vez de
           descuadrados (IT2-031). */}
-      {/* max-w: reserva el hueco de "Verificado" + el corazón, que van fijos a
-          la derecha. Sin él, con 3 o más insignias el bloque izquierdo crecía
-          hasta encimarse con ellos. */}
-      <div className="absolute top-3 left-3 z-10 flex flex-col items-start gap-1.5 w-fit max-w-[calc(100%-8.5rem)]">
+      {/* max-w: reserva el hueco del escudo + el corazón, que van fijos a la
+          derecha. Sin él, con 3 o más insignias el bloque izquierdo crecía
+          hasta encimarse con ellos.
+
+          Bajado de 8.5rem a 5.5rem al quitarle el texto al sello: ahora los dos
+          controles de la derecha ocupan 80 px (corazón de 12 a 44, escudo de 48
+          a 80) más un margen. Con el valor viejo, en una tarjeta de 158 px el
+          bloque izquierdo se quedaba en 22 px y los chips no cabían. */}
+      <div className="absolute top-3 left-3 z-10 flex flex-col items-start gap-1.5 w-fit max-w-[calc(100%-5.5rem)]">
         {badgeChips}
       </div>
       {/* "Tiene video": es un dato que cambia si vale la pena entrar, y se ve de
@@ -163,11 +172,33 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
         </span>
       )}
       {/* Solo si el equipo de administración verificó al anunciante. Antes salía
-          en todas las tarjetas sin condición: decoración con pinta de dato. */}
+          en todas las tarjetas sin condición: decoración con pinta de dato.
+
+          SIN LA PALABRA "Verificado": el chip con texto medía unos 95 px y,
+          anclado a 48 px del borde derecho, ocupaba 143 de los ~158 px que mide
+          una tarjeta cuando van dos por fila. Se comía la tarjeta entera y se
+          encimaba con los distintivos de la izquierda.
+
+          Que el escudo solo no se explique a sí mismo se compensa donde sí hay
+          sitio: la ficha del aviso lo dice con todas las letras ("Verificado
+          eFFe", "Anunciante verificado y avalado por eFFe"). Aquí van el
+          aria-label y el tooltip, que es como ya funcionan los otros chips. */}
       {listing.advertiserVerified && (
-        <span className="absolute top-3 right-12 z-10 inline-flex items-center gap-1 px-2.5 py-1 bg-white/95 backdrop-blur-sm text-primary text-[10px] font-bold uppercase tracking-wider shadow-sm">
-          <ShieldCheck size={10} /> Verificado
-        </span>
+        <TooltipProvider delayDuration={100}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                role="img"
+                aria-label="Anunciante verificado por eFFe"
+                onClick={(e) => e.stopPropagation()}
+                className="absolute top-3 right-12 z-10 w-8 h-8 bg-white/95 backdrop-blur-sm flex items-center justify-center text-primary shadow-sm"
+              >
+                <ShieldCheck size={15} />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>Anunciante verificado por eFFe</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       )}
       <button
         onClick={handleFav}
@@ -198,8 +229,10 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
           flex-1 + min-w-0: en WebKit los nodos de texto con line-clamp variaban
           de alto y descuadraban precios e insignias entre tarjetas vecinas; con
           esto el bloque ocupa el alto sobrante y el CTA queda siempre al ras. */}
-      <div className="flex flex-col gap-1.5 p-3 flex-1 min-w-0">
-        <span className="text-[10px] uppercase tracking-[0.18em] font-bold text-secondary">{listing.category}</span>
+      <div className="flex flex-col gap-1 sm:gap-1.5 p-2 sm:p-3 flex-1 min-w-0">
+        {/* truncate: con dos tarjetas por fila caben ~158 px, y categorías como
+            "Vehículos y Repuestos" con este espaciado se salían del recuadro. */}
+        <span className="text-[10px] uppercase tracking-[0.18em] font-bold text-secondary truncate">{listing.category}</span>
         <h3 className="font-semibold text-foreground text-sm leading-snug line-clamp-2 group-hover:text-primary transition-colors min-h-[2.25rem]">
           {listing.title}
         </h3>
@@ -223,12 +256,17 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
           </div>
         )}
 
-        {/* CTA — mismo botón para todos; si no hay sesión, lleva al login */}
+        {/* CTA — mismo botón para todos; si no hay sesión, lleva al login.
+            Oculto en móvil: la tarjeta entera YA es un enlace que la cubre
+            (el <Link absolute inset-0 de arriba), así que ahí el botón repetía
+            el mismo destino a cambio de 32 px de alto por tarjeta — con dos
+            columnas y varias filas en pantalla, eso es mucho sitio por nada.
+            En escritorio se queda: hay espacio y acompaña al hover. */}
         <Button
           variant="outline"
           size="sm"
           onClick={(e) => { e.stopPropagation(); goToDetail(); }}
-          className="relative z-10 w-full mt-auto h-8 text-xs font-semibold border-border hover:border-primary hover:bg-primary hover:text-primary-foreground transition-all rounded-none"
+          className="relative z-10 w-full mt-auto h-8 text-xs font-semibold border-border hover:border-primary hover:bg-primary hover:text-primary-foreground transition-all rounded-none hidden sm:inline-flex"
         >
           Ver detalle
         </Button>

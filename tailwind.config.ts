@@ -104,12 +104,26 @@ export default {
           from: { opacity: "0", transform: "translateX(-20px)" },
           to: { opacity: "1", transform: "translateX(0)" },
         },
+        // Latido del distintivo "Urgente". Es un anillo que se expande y se
+        // apaga, NO un encendido/apagado: el chip lleva dentro el contador de
+        // horas y un parpadeo de opacidad lo volvería ilegible cada segundo.
+        //
+        // El ritmo importa por accesibilidad: la WCAG 2.3.1 prohíbe destellos
+        // por encima de 3 por segundo (riesgo de crisis fotosensibles). A 1,8 s
+        // el ciclo va a 0,55/s, muy por debajo. Y se aplica con `motion-safe:`
+        // para que desaparezca en quien pidió menos animación en su sistema.
+        "latido-urgente": {
+          "0%":   { boxShadow: "0 0 0 0 rgb(220 38 38 / 0.65)" },
+          "70%":  { boxShadow: "0 0 0 7px rgb(220 38 38 / 0)" },
+          "100%": { boxShadow: "0 0 0 0 rgb(220 38 38 / 0)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "fade-in": "fade-in 0.5s ease-out forwards",
         "slide-in-left": "slide-in-left 0.4s ease-out forwards",
+        "latido-urgente": "latido-urgente 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite",
       },
     },
   },

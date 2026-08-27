@@ -91,14 +91,32 @@ describe("SearchPage — paginación en web (20 por página)", () => {
     expect(screen.getByRole("button", { name: /anterior/i })).toBeDisabled();
   });
 
-  // Bug de la app: en teléfono salían 2 avisos por fila. La cuadrícula debe
-  // arrancar en UNA columna (el 2-col recién desde 'sm').
-  it("los avisos van de a uno por fila en la base (móvil)", async () => {
+  // OJO A LA HISTORIA DE ESTE TEST, porque dice lo contrario que antes.
+  //
+  // Hubo una época en que salían 2 por fila y se consideró un bug: la tarjeta
+  // era la de escritorio sin adaptar, y a ese ancho el sello "Verificado" y los
+  // distintivos se pisaban. La solución de entonces fue bajar a UNA columna.
+  //
+  // Eso arreglaba el solape a costa de dejar 1,4 avisos por pantalla: la tarjeta
+  // pasaba a ocupar el ancho completo y la foto crecía a 270 px de alto. Ahora
+  // vuelven las 2 columnas, pero esta vez CON la tarjeta adaptada (sello sin
+  // texto, hueco reservado de 5.5rem, botón oculto en móvil).
+  //
+  // Si alguien ve este test y le tienta devolverlo a una columna: el solape que
+  // lo motivó ya no está, y volver atrás reintroduce el problema de densidad.
+  it("los avisos van de a dos por fila en móvil", async () => {
     renderPage();
     await waitFor(() => expect(cards().length).toBe(20));
     const grid = cards()[0].parentElement!;
-    expect(grid.className).toContain("grid-cols-1");
-    // Sin 2 columnas como base (eso solo aplica desde 'sm:').
-    expect(grid.className).not.toMatch(/(^|\s)grid-cols-2(\s|$)/);
+    expect(grid.className).toMatch(/(^|\s)grid-cols-2(\s|$)/);
+    expect(grid.className).not.toContain("grid-cols-1");
+  });
+
+  // El escalón que faltaba: se saltaba de 3 columnas a 5 sin pasar por 4.
+  it("la escala de columnas no salta de 3 a 5", async () => {
+    renderPage();
+    await waitFor(() => expect(cards().length).toBe(20));
+    const grid = cards()[0].parentElement!;
+    expect(grid.className).toContain("lg:grid-cols-4");
   });
 });

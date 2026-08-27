@@ -30,7 +30,9 @@ const BASE: Listing = {
 const renderCard = (extra: Partial<Listing>) =>
   render(<MemoryRouter><ListingCard listing={{ ...BASE, ...extra }} /></MemoryRouter>);
 
-const sello = () => screen.queryByText("Verificado");
+// El sello ya no lleva la palabra "Verificado" (ver más abajo), así que se
+// busca por lo que lo identifica de verdad: su aria-label.
+const sello = () => screen.queryByRole("img", { name: /anunciante verificado/i });
 
 describe("el sello Verificado en la tarjeta", () => {
   it("un anunciante verificado por el equipo lo lleva", () => {
@@ -52,6 +54,23 @@ describe("el sello Verificado en la tarjeta", () => {
     // Destacado y Urgente se compran; verificar es otra cosa y no se vende.
     renderCard({ featured: true, urgent: true, confidential: true });
     expect(sello()).toBeNull();
+  });
+
+  // Es SOLO el escudo, sin la palabra. Con dos tarjetas por fila el chip con
+  // texto medía 95 px y, anclado a 48 del borde, ocupaba 143 de los ~158 que
+  // mide la tarjeta: se comía el ancho entero y se encimaba con los
+  // distintivos de la izquierda.
+  it("no lleva la palabra escrita: solo el escudo", () => {
+    renderCard({ advertiserVerified: true });
+    expect(screen.queryByText(/verificado/i)).toBeNull();
+    expect(sello()).toBeInTheDocument();
+  });
+
+  // Quitar el texto no puede costar el significado: quien no vea el escudo (o
+  // no lo reconozca) tiene que poder saber qué es.
+  it("sigue diciendo qué significa, aunque no se lea", () => {
+    renderCard({ advertiserVerified: true });
+    expect(sello()).toHaveAttribute("aria-label", expect.stringMatching(/verificado por eFFe/i));
   });
 });
 

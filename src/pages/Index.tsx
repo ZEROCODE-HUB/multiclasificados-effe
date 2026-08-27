@@ -41,13 +41,26 @@ import { Button } from "@/components/ui/button";
 // `auto-fill` y NO `auto-fit`: con pocos avisos, auto-fit los estiraría a lo
 // ancho y volveríamos al problema.
 //
-// Los dos números van en constantes porque `useFittingCount` tiene que hacer la
+// Los números van en constantes porque `useFittingCount` tiene que hacer la
 // MISMA cuenta que el CSS para decidir cuántos avisos se muestran: si se cambia
 // el ancho mínimo aquí y no allí, aparecería una segunda fila a medias.
+//
+// Con 230 px mínimos, un móvil de 360 —menos los 32 de los márgenes— solo daba
+// para UNA columna: la portada caía a tarjetas de ancho completo sin que nadie
+// hubiera escrito un `grid-cols-1`. En móvil baja a 150 para que entren dos.
+//
+// Por encima se queda en 230 a propósito: con 150 en un escritorio de 1200 px
+// saldrían 7 columnas diminutas donde hoy hay 4, que no es lo que se pidió.
+const CARD_MIN_MOVIL = 150;
 const CARD_MIN_WIDTH = 230;
+// 608 = el breakpoint `sm` de Tailwind (640) menos los 32 px de `px-4` del
+// contenedor: el hook mide el CONTENEDOR, mientras que el CSS mira la ventana.
+// A nivel de módulo para que la referencia sea estable entre renders.
+const anchoMinimoDeTarjeta = (anchoContenedor: number) =>
+  anchoContenedor < 608 ? CARD_MIN_MOVIL : CARD_MIN_WIDTH;
 const CARD_GAP = 16; // gap-x-4
 const LISTING_GRID =
-  "grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-x-4";
+  "grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-x-4";
 
 // Cuántos avisos pide la portada. Son dos secciones que se reparten la lista
 // para no enseñar los mismos avisos dos veces, y cada una llena una fila: en un
@@ -133,8 +146,8 @@ const Index = () => {
   const [listings, setListings] = useState<Listing[]>([]);
   // Cada sección enseña UNA fila: los avisos que entren en el ancho disponible.
   // Así no queda nunca una última fila a medias.
-  const semana = useFittingCount(CARD_MIN_WIDTH, CARD_GAP, FALLBACK_COLS);
-  const nuevos = useFittingCount(CARD_MIN_WIDTH, CARD_GAP, FALLBACK_COLS);
+  const semana = useFittingCount(anchoMinimoDeTarjeta, CARD_GAP, FALLBACK_COLS);
+  const nuevos = useFittingCount(anchoMinimoDeTarjeta, CARD_GAP, FALLBACK_COLS);
   const [platform, setPlatform] = useState<PlatformStats | null>(null);
   // Términos/Privacidad del footer: abren el documento legal (antes eran href="#").
   const [termsOpen, setTermsOpen] = useState(false);

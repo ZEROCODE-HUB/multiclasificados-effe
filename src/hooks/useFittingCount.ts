@@ -22,8 +22,17 @@ export function columnsThatFit(containerWidth: number, minWidth: number, gap: nu
  * `fallback` se conserva mientras no haya una medida válida (render inicial sin
  * layout, o entorno de pruebas): calcular sobre un ancho 0 dejaría una sola
  * tarjeta en pantalla.
+ *
+ * `minWidth` admite una FUNCIÓN del ancho medido, para rejillas cuyo mínimo
+ * cambia por tramo (la portada usa 150 px en móvil y 230 en adelante). Tiene que
+ * ser estable entre renders —declararla a nivel de módulo—, porque entra en las
+ * dependencias del efecto: una función creada en el render mediría en bucle.
  */
-export function useFittingCount(minWidth: number, gap: number, fallback: number) {
+export function useFittingCount(
+  minWidth: number | ((containerWidth: number) => number),
+  gap: number,
+  fallback: number,
+) {
   // Referencia por callback y no `useRef`: la rejilla no existe en el primer
   // render (mientras no hay avisos se pinta el bloque de "sin avisos"), así que
   // un efecto atado solo a [minWidth, gap] mediría una referencia vacía y jamás
@@ -40,7 +49,9 @@ export function useFittingCount(minWidth: number, gap: number, fallback: number)
 
     const medir = () => {
       const ancho = nodo.clientWidth;
-      if (ancho > 0) setCount(columnsThatFit(ancho, minWidth, gap));
+      if (ancho <= 0) return;
+      const min = typeof minWidth === "function" ? minWidth(ancho) : minWidth;
+      setCount(columnsThatFit(ancho, min, gap));
     };
     medir();
 
