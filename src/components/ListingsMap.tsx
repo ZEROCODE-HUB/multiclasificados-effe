@@ -126,6 +126,11 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
   // todos, y la selección automática que viene detrás no debe centrar el mapa
   // en uno solo.
   const yaEncuadrado = useRef(false);
+  // ¿La selección viene de pulsar el pin, o de la lista lateral? Solo la
+  // segunda debe centrar el mapa; la primera abre ficha, y esa ya se coloca.
+  const desdeElPin = useRef(false);
+  // El frame pendiente para abrir la ficha, que se cancela si llega otro clic.
+  const frame = useRef<number | null>(null);
 
   // ---- Pines: se reconstruyen cuando cambia la lista de avisos ----
   useEffect(() => {
@@ -140,6 +145,12 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
       // activaba el pin, así que mover el ratón por el mapa iba seleccionando y
       // haciendo pan a cada aviso que rozaba — molesto.
       m.addListener("gmp-click", () => {
+        // Se avisa de que la selección viene del PIN. El efecto de más abajo
+        // hace `panTo` al punto para acercarse al aviso elegido desde la lista
+        // lateral; si también lo hiciera aquí, competiría con el auto-pan que
+        // el propio InfoWindow hace para caber, y la ficha acababa descolgada
+        // del pin.
+        desdeElPin.current = true;
         onActive(l.id);
         abrirFicha(l, m);
       });
@@ -188,6 +199,11 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
     if (!active) return;
     // Se omite la primera selección para no pisar el encuadre panorámico.
     if (!yaEncuadrado.current) { yaEncuadrado.current = true; return; }
+    // Si se pulsó el pin, NO se panea: la ficha que se abre encima hace su
+    // propio ajuste para caber, y dos paneos a la vez dejaban el aviso
+    // separado del pin en lugar de pegado a él. Desde la lista lateral sí se
+    // panea, que es el único modo de saber a qué punto corresponde.
+    if (desdeElPin.current) { desdeElPin.current = false; return; }
     const p = points.find((x) => x.id === active);
     if (p) mapa.panTo({ lat: p.lat, lng: p.lng });
   }, [active, mapa, points]);
@@ -203,24 +219,39 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
         nodo,
       };
     }
-    ficha.current.raiz.render(
+    const f = ficha.current;
+    f.raiz.render(
       <FichaDelPin l={l} href={hrefFor(l.id)} ir={(h) => navigate(h)} mostrarPrecio={conSesion} />,
     );
-    ficha.current.ventana.open({ map: mapa, anchor: marcador });
 
+    // SE ABRE UN FRAME DESPUÉS, Y ESE ORDEN ES EL ARREGLO.
+    //
     // `render()` de React 18 no pinta en el acto, y Google mide el contenido
-    // JUSTO al abrir: sin esto la ventana se dimensiona sobre un nodo todavía
-    // vacío y sale del tamaño de un sello aunque la ficha se pinte después.
-    // Volver a pasarle el nodo la obliga a medir de nuevo, ya con contenido.
-    const f = ficha.current;
-    requestAnimationFrame(() => {
-      if (ficha.current === f) f.ventana.setContent(f.nodo);
+    // JUSTO al abrir. Abriendo primero, medía un nodo VACÍO: calculaba que la
+    // ventana no ocupaba nada, paneaba el mapa para ese tamaño, y cuando la
+    // ficha aparecía —unos 280 px de alto— ya no cabía donde se había hecho
+    // sitio. De ahí que el aviso saliera separado del pin en vez de encima.
+    //
+    // Pintar primero y abrir después le da a Google las medidas de verdad, y
+    // su auto-pan deja la ficha pegada a su pin.
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    frame.current = requestAnimationFrame(() => {
+      frame.current = null;
+      // Con dos clics seguidos el frame anterior se cancela arriba, así que
+      // aquí solo llega el último: la ventana se abre sobre el pin que de
+      // verdad se pulsó, no sobre el primero.
+      if (ficha.current !== f) return;
+      f.ventana.setContent(f.nodo);
+      f.ventana.open({ map: mapa, anchor: marcador });
     });
   }
 
   // Al desmontar, la raíz de React de la ficha se desmonta aparte: vive en un
   // nodo que Google creó y que React no limpia solo.
   useEffect(() => () => {
+    // El frame pendiente se cancela: si llegara a correr tras desmontar,
+    // intentaría abrir una ventana sobre un mapa que ya no está.
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
     const f = ficha.current;
     ficha.current = null;
     if (f) { f.ventana.close(); setTimeout(() => f.raiz.unmount(), 0); }
