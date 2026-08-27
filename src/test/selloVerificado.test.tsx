@@ -30,9 +30,8 @@ const BASE: Listing = {
 const renderCard = (extra: Partial<Listing>) =>
   render(<MemoryRouter><ListingCard listing={{ ...BASE, ...extra }} /></MemoryRouter>);
 
-// El sello ya no lleva la palabra "Verificado" (ver más abajo), así que se
-// busca por lo que lo identifica de verdad: su aria-label.
-const sello = () => screen.queryByRole("img", { name: /anunciante verificado/i });
+// El sello es TEXTO y vive en el bloque de contenido, no sobre la foto.
+const sello = () => screen.queryByText(/anunciante verificado/i);
 
 describe("el sello Verificado en la tarjeta", () => {
   it("un anunciante verificado por el equipo lo lleva", () => {
@@ -56,21 +55,30 @@ describe("el sello Verificado en la tarjeta", () => {
     expect(sello()).toBeNull();
   });
 
-  // Es SOLO el escudo, sin la palabra. Con dos tarjetas por fila el chip con
-  // texto medía 95 px y, anclado a 48 del borde, ocupaba 143 de los ~158 que
-  // mide la tarjeta: se comía el ancho entero y se encimaba con los
-  // distintivos de la izquierda.
-  it("no lleva la palabra escrita: solo el escudo", () => {
-    renderCard({ advertiserVerified: true });
-    expect(screen.queryByText(/verificado/i)).toBeNull();
+  // DÓNDE VIVE, que ha cambiado dos veces y conviene dejarlo escrito.
+  // Empezó como chip con la palabra sobre la foto: medía 95 px y, anclado a 48
+  // del borde, ocupaba 143 de los ~158 de una tarjeta a dos columnas. Pasó a
+  // ser solo el escudo, y seguía siendo un recuadro de 32 px tapando el aviso y
+  // peleándose con el favorito por la esquina. Ahora es texto, abajo, fuera de
+  // la foto: no tapa nada y encima se lee.
+  it("no va encima de la foto, sino en el texto", () => {
+    const { container } = renderCard({ advertiserVerified: true });
+    const foto = container.querySelector("img")!.parentElement!;
+    expect(foto.textContent).not.toMatch(/verificado/i);
     expect(sello()).toBeInTheDocument();
   });
 
-  // Quitar el texto no puede costar el significado: quien no vea el escudo (o
-  // no lo reconozca) tiene que poder saber qué es.
-  it("sigue diciendo qué significa, aunque no se lea", () => {
+  // Va pegado al precio: a secas, "Verificado" se leería como si lo comprobado
+  // fuera el importe. Lo que el equipo revisa es a quien publica.
+  it("dice ANUNCIANTE, para no dar a entender que se comprobó el precio", () => {
     renderCard({ advertiserVerified: true });
-    expect(sello()).toHaveAttribute("aria-label", expect.stringMatching(/verificado por eFFe/i));
+    expect(sello()!.textContent).toMatch(/anunciante/i);
+  });
+
+  it("se lee, sin depender de reconocer un símbolo", () => {
+    // Antes era solo un escudo: quien no lo reconociera se quedaba sin el dato.
+    renderCard({ advertiserVerified: true });
+    expect(sello()!.textContent!.trim().length).toBeGreaterThan(5);
   });
 });
 

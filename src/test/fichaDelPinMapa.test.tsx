@@ -96,10 +96,10 @@ describe("la ficha enseña lo mismo que la tarjeta del buscador", () => {
     expect(screen.getByRole("img", { name: /confidencial/i })).toBeInTheDocument();
   });
 
-  it("el sello del anunciante verificado", () => {
+  it("el sello del anunciante verificado, en texto bajo el precio", () => {
     prepararDom();
     render(<FichaDelPin l={con({ advertiserVerified: true })} href="/a" ir={vi.fn()} mostrarPrecio />);
-    expect(screen.getByRole("img", { name: /anunciante verificado/i })).toBeInTheDocument();
+    expect(screen.getByText(/anunciante verificado/i)).toBeInTheDocument();
   });
 
   it("el aviso de que trae video", () => {

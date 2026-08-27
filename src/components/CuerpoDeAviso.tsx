@@ -88,11 +88,13 @@ export function CuerpoDeAviso({
       {cobertura}
 
       {/* Distintivos, arriba a la izquierda y en columna.
-          El max-w reserva el hueco de los dos controles de la derecha (el sello
-          en right-12 y el favorito en right-3 ocupan 80 px): sin él, con tres
-          distintivos el bloque crecía hasta encimarse con ellos. */}
+          El max-w reserva el hueco de lo que va fijo a la derecha; sin él, con
+          tres distintivos el bloque crecía hasta encimarse.
+          Baja de 5.5rem a 3.5rem porque ahí arriba ya solo queda el favorito
+          (de 12 a 44 px): al bajar el sello al texto se liberaron 36 px, que en
+          una tarjeta de 158 px no son pocos. */}
       {chips.length > 0 && (
-        <div className="absolute top-3 left-3 z-10 flex flex-col items-start gap-1.5 w-fit max-w-[calc(100%-5.5rem)]">
+        <div className="absolute top-3 left-3 z-10 flex flex-col items-start gap-1.5 w-fit max-w-[calc(100%-3.5rem)]">
           <TooltipProvider delayDuration={100}>
             {chips.map(({ key, label, icon: Icon, cls }) => {
               const cuenta = key === "urgent" && urgente && !urgente.expired;
@@ -122,27 +124,9 @@ export function CuerpoDeAviso({
         </div>
       )}
 
-      {/* El sello, solo si administración verificó al anunciante. SIN la palabra
-          "Verificado": con dos tarjetas por fila el chip con texto ocupaba 143
-          de los ~158 px de la tarjeta. La ficha del aviso sí lo escribe entero,
-          que es donde se aprende el símbolo. */}
-      {l.advertiserVerified && (
-        <TooltipProvider delayDuration={100}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span
-                role="img"
-                aria-label="Anunciante verificado por eFFe"
-                onClick={(e) => e.stopPropagation()}
-                className="absolute top-3 right-12 z-10 w-8 h-8 bg-white/95 backdrop-blur-sm flex items-center justify-center text-primary shadow-sm"
-              >
-                <ShieldCheck size={15} />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>Anunciante verificado por eFFe</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
+      {/* El sello YA NO va aquí: bajó al bloque de texto, más abajo. Encima de
+          la foto era un recuadro de 32 px tapando parte del aviso, y competía
+          con el favorito y con los distintivos por las mismas esquinas. */}
 
       {accionEsquina}
 
@@ -187,6 +171,19 @@ export function CuerpoDeAviso({
             {formatPrecioAviso(l.price, l.currency)}
           </p>
         )}
+
+        {/* El sello, ya en texto y fuera de la foto.
+            Dice "ANUNCIANTE verificado" y no solo "Verificado" a propósito: aquí
+            va pegado al precio, y a secas se leería como si lo comprobado fuera
+            el importe o el aviso. Lo que el equipo revisa es a la persona o la
+            empresa que publica, que es otra cosa. */}
+        {l.advertiserVerified && (
+          <p className="flex items-center gap-1 text-[10px] font-semibold text-secondary">
+            <ShieldCheck size={11} className="shrink-0" />
+            <span className="truncate">Anunciante verificado</span>
+          </p>
+        )}
+
         {pie}
       </div>
     </div>

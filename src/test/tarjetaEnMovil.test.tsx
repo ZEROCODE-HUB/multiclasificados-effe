@@ -45,16 +45,17 @@ describe("densidad de la tarjeta en movil", () => {
       .toMatch(/sm:inline-flex/);
   });
 
-  it("el hueco reservado a la derecha baja a 5.5rem", () => {
-    // Con el sello sin texto, los dos controles de la derecha ocupan 80 px.
-    // Con el valor viejo (8.5rem) el bloque izquierdo se quedaba en 22 px y los
-    // distintivos no cabian.
+  it("el hueco reservado a la derecha baja a 3.5rem", () => {
+    // Arriba a la derecha ya solo queda el favorito (de 12 a 44 px): al bajar
+    // el sello al bloque de texto se liberaron 36 px, que en una tarjeta de
+    // 158 px no son pocos. Con el valor original (8.5rem) al bloque izquierdo
+    // le quedaban 22 px y los distintivos no cabian.
     pintar({ confidential: true });
     // Se llega por un chip: un querySelector con los corchetes de Tailwind
     // dentro del valor no es un selector CSS valido. Se usa Confidencial y no
     // Destacado porque ese ya no pinta chip (lo dice el marco dorado).
     const bloque = screen.getByRole("img", { name: /confidencial/i }).parentElement!;
-    expect(bloque.className).toContain("max-w-[calc(100%-5.5rem)]");
+    expect(bloque.className).toContain("max-w-[calc(100%-3.5rem)]");
     expect(bloque.className).not.toContain("8.5rem");
   });
 });
