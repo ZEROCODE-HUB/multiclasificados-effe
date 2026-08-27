@@ -127,5 +127,16 @@ export default {
       },
     },
   },
+  // EL HOVER, SOLO DONDE HAY RATÓN.
+  //
+  // Por omisión Tailwind aplica `hover:` en cualquier pantalla, y en una táctil
+  // el estado se queda PEGADO tras el toque: lo pulsado sigue viéndose como si
+  // el dedo estuviera encima hasta que se toca otra cosa. Eso disfrazó el bug
+  // de los filtros del buscador —un chip apagado que parecía encendido— y el
+  // mismo disfraz estaba disponible en cada botón de la app.
+  //
+  // Con esto, `hover:` pasa a envolverse en @media (hover: hover): en el móvil
+  // simplemente no ocurre, que es lo que la gente espera.
+  future: { hoverOnlyWhenSupported: true },
   plugins: [animate],
 } satisfies Config;

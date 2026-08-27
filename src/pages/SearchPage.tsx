@@ -453,9 +453,19 @@ export default function SearchPage() {
                 <button
                   key={c.id}
                   onClick={() => setCategory((prev) => (prev === c.id ? "" : c.id))}
+                  aria-pressed={category === c.id}
+                  /* SELECCIONADO VA RELLENO, y no es cosmética.
+                     Antes "seleccionado" era `border-secondary text-secondary`
+                     y el hover era `hover:border-secondary hover:text-secondary`
+                     — las MISMAS clases. En un teléfono el hover se queda pegado
+                     tras el toque, así que al pulsar para quitar el filtro el
+                     chip seguía viéndose igual de encendido mientras el mapa ya
+                     mostraba todo: parecía que el filtro no respondía cuando en
+                     realidad sí se había quitado.
+                     Con el relleno, encendido y tocado ya no se parecen. */
                   className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border rounded-full transition-colors shrink-0 ${
                     category === c.id
-                      ? "border-secondary text-secondary"
+                      ? "bg-secondary border-secondary text-secondary-foreground"
                       : "border-border hover:border-secondary hover:text-secondary"
                   }`}
                 >

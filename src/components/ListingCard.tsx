@@ -57,7 +57,12 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
   // decorativas, como el corazón de favoritos. Van como ICONO compacto para no
   // pisarse entre sí ni con "Verificado"; el nombre sale al pasar el mouse.
   // Colores oficiales (dorado / rojo / celeste) en @/lib/listingBadges.
-  const badgeDefs = listingBadges(listing);
+  // "Destacado" NO lleva chip en la tarjeta: el marco dorado ya lo dice, y el
+  // icono era la misma información contada dos veces en el sitio donde menos
+  // sitio hay. En la ficha del aviso sí sigue, que allí no compite con nada.
+  // Se conserva para lectores de pantalla más abajo, que a esos el color no
+  // les dice nada.
+  const badgeDefs = listingBadges(listing).filter((b) => b.key !== "featured");
 
   // Cuenta regresiva del adicional "Urgente": horas que le quedan al aviso.
   // Solo tickeamos (cada minuto) si el aviso es urgente y tiene vencimiento.
@@ -113,7 +118,8 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
     // EFFE-014: enlace real (<a>). Este layout no tiene botones anidados (las
     // insignias son <span>), así que la card entera puede ser el enlace.
     return (
-      <Link to={detailUrl} aria-label={listing.title} className={`no-underline text-inherit flex gap-4 p-3 hover:shadow-lg transition-all cursor-pointer group ${featured ? "bg-amber-50/50 border-2 border-amber-400 hover:border-amber-500" : "bg-card border border-border hover:border-secondary/40"}`}>
+      <Link to={detailUrl} aria-label={listing.title} className={`no-underline text-inherit flex gap-4 p-3 hover:shadow-lg transition-all cursor-pointer group ${featured ? "bg-amber-50 border-2 border-amber-500 hover:border-amber-600" : "bg-card border border-border hover:border-secondary/40"}`}>
+        {featured && <span className="sr-only">Aviso destacado</span>}
         <div className="relative w-40 flex-shrink-0 overflow-hidden bg-muted" style={{ aspectRatio: "4 / 3" }}>
           {/* La miniatura se muestra a 160 px: pedimos ese tamaño, no el original. */}
           <img src={imgUrl(listing.imageUrl, 200)} srcSet={imgSrcSet(listing.imageUrl, 200)} sizes="160px" alt={listing.title} className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.05]" loading="lazy" decoding="async" />
@@ -140,7 +146,17 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
 
 
   return (
-    <div className={`group relative cursor-pointer flex flex-col overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5 ${featured ? "bg-amber-50/50 border-2 border-amber-400 ring-1 ring-amber-300/60 hover:border-amber-500" : "bg-card border border-border/70 hover:border-secondary/40"}`}>
+    /* El dorado del destacado sube de tono porque ahora carga solo: al quitarle
+       el icono, el marco es lo ÚNICO que distingue un aviso pagado. Antes el
+       fondo iba al 50 % de opacidad y el borde en amber-400, que sobre blanco
+       se leía como un matiz, no como una distinción.
+       El halo exterior es lo que más lo separa de sus vecinos sin ensuciar la
+       tarjeta por dentro; cabe porque la rejilla deja 12 px de separación. */
+    <div className={`group relative cursor-pointer flex flex-col overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5 ${featured ? "bg-amber-50 border-2 border-amber-500 ring-2 ring-amber-400/40 shadow-md shadow-amber-500/20 hover:border-amber-600 hover:shadow-amber-500/40" : "bg-card border border-border/70 hover:border-secondary/40"}`}>
+      {/* El color no es información para todo el mundo: quien use lector de
+          pantalla o no distinga el dorado se quedaba sin saberlo al retirar el
+          icono. */}
+      {featured && <span className="sr-only">Aviso destacado</span>}
       {/* EFFE-014: enlace real que cubre toda la card (stretched link). Los
           controles (favorito, insignias con tooltip, CTA) van con z-10 por encima
           y como HERMANOS del enlace, para no anidar botones dentro de un <a>. */}
@@ -163,14 +179,10 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
       <div className="absolute top-3 left-3 z-10 flex flex-col items-start gap-1.5 w-fit max-w-[calc(100%-5.5rem)]">
         {badgeChips}
       </div>
-      {/* "Tiene video": es un dato que cambia si vale la pena entrar, y se ve de
-          un vistazo sin cargar nada. Abajo a la izquierda, donde no compite con
-          las insignias de pago. */}
-      {(listing.videoCount ?? 0) > 0 && (
-        <span className="absolute bottom-3 left-3 z-10 inline-flex items-center gap-1 px-2 py-1 bg-black/70 text-white text-[10px] font-bold uppercase tracking-wider">
-          <Video size={10} /> Video
-        </span>
-      )}
+      {/* El "tiene video" ya no vive aquí: estaba anclado al fondo del WRAPPER
+          —que es imagen + textos— así que su `bottom-3` no caía sobre la foto
+          sino sobre el precio. Ahora va dentro del contenedor de la imagen,
+          más abajo. */}
       {/* Solo si el equipo de administración verificó al anunciante. Antes salía
           en todas las tarjetas sin condición: decoración con pinta de dato.
 
@@ -223,6 +235,23 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
           decoding="async"
           className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.05]"
         />
+        {/* "Tiene video": un dato que cambia si vale la pena entrar, y se ve sin
+            cargar nada. Va DENTRO de la imagen (antes colgaba del wrapper y
+            aterrizaba sobre el precio) y en la esquina de abajo a la derecha,
+            que es donde el ojo ya la busca por YouTube y compañía.
+
+            Solo el icono: la palabra "VIDEO" en mayúsculas sobre negro sólido
+            pesaba más que el propio aviso. El aria-label mantiene el dato para
+            quien no ve el icono. */}
+        {(listing.videoCount ?? 0) > 0 && (
+          <span
+            role="img"
+            aria-label="Este aviso incluye video"
+            className="absolute bottom-1.5 right-1.5 z-10 flex items-center justify-center w-6 h-6 bg-black/55 backdrop-blur-[2px] text-white/95"
+          >
+            <Video size={12} />
+          </span>
+        )}
       </div>
 
       {/* Content — espaciado compacto (gap/padding reducidos) para ganar densidad.

@@ -38,10 +38,21 @@ describe("ListingCard — insignias de adicionales", () => {
     expect(screen.queryByLabelText("Destacado")).not.toBeInTheDocument();
   });
 
-  it("muestra 'Destacado' y 'Confidencial' cuando ambos están activos", () => {
-    renderCard({ featured: true, confidential: true });
-    expect(screen.getByLabelText("Destacado")).toBeInTheDocument();
+  // "Destacado" YA NO lleva chip en la tarjeta: el marco dorado lo dice, y el
+  // icono era la misma información dos veces justo donde menos sitio hay. En la
+  // ficha del aviso sigue estando, que allí no compite con nada.
+  it("'Destacado' no lleva chip: lo dice el marco dorado", () => {
+    const { container } = renderCard({ featured: true, confidential: true });
+    expect(screen.queryByLabelText("Destacado")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Confidencial")).toBeInTheDocument();
+    expect((container.firstChild as HTMLElement).className).toContain("amber");
+  });
+
+  // Quitarle el icono no puede dejar el dato solo en el color: quien use lector
+  // de pantalla, o no distinga el dorado, se quedaría sin saberlo.
+  it("aun sin chip, un lector de pantalla sí sabe que está destacado", () => {
+    renderCard({ featured: true });
+    expect(screen.getByText("Aviso destacado")).toBeInTheDocument();
   });
 
   it("también muestra las insignias en el layout de lista", () => {

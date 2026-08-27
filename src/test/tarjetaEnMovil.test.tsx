@@ -49,10 +49,11 @@ describe("densidad de la tarjeta en movil", () => {
     // Con el sello sin texto, los dos controles de la derecha ocupan 80 px.
     // Con el valor viejo (8.5rem) el bloque izquierdo se quedaba en 22 px y los
     // distintivos no cabian.
-    pintar({ featured: true });
-    // Se llega por el chip: un querySelector con los corchetes de Tailwind
-    // dentro del valor no es un selector CSS valido.
-    const bloque = screen.getByRole("img", { name: /destacado/i }).parentElement!;
+    pintar({ confidential: true });
+    // Se llega por un chip: un querySelector con los corchetes de Tailwind
+    // dentro del valor no es un selector CSS valido. Se usa Confidencial y no
+    // Destacado porque ese ya no pinta chip (lo dice el marco dorado).
+    const bloque = screen.getByRole("img", { name: /confidencial/i }).parentElement!;
     expect(bloque.className).toContain("max-w-[calc(100%-5.5rem)]");
     expect(bloque.className).not.toContain("8.5rem");
   });
@@ -88,9 +89,9 @@ describe("el distintivo Urgente late", () => {
   });
 
   it("los otros distintivos no laten: el latido es del que corre plazo", () => {
-    pintar({ featured: true, confidential: true });
-    const destacado = screen.queryByRole("img", { name: /destacado/i });
-    expect(destacado?.className).not.toContain("animate-latido-urgente");
+    pintar({ confidential: true });
+    const otro = screen.getByRole("img", { name: /confidencial/i });
+    expect(otro.className).not.toContain("animate-latido-urgente");
   });
 });
 
@@ -113,5 +114,31 @@ describe("la portada entra en dos columnas en movil", () => {
     // Es la razon de que el minimo cambie por tramo en vez de bajar a secas.
     expect(columnsThatFit(1200, 230, GAP)).toBe(4);
     expect(columnsThatFit(1200, 150, GAP)).toBe(7);
+  });
+});
+
+describe("el aviso 'tiene video'", () => {
+  const chip = () => screen.queryByRole("img", { name: /incluye video/i });
+
+  it("va DENTRO de la imagen, no colgando del fondo de la tarjeta", () => {
+    // El bug: estaba anclado al wrapper (imagen + textos), asi que su bottom-3
+    // no caia sobre la foto sino sobre el precio.
+    pintar({ videoCount: 2 });
+    const marco = chip()!.parentElement!;
+    // Su padre tiene que ser el contenedor de la FOTO: el que lleva el 4:3 y
+    // el <img> dentro. Si vuelve a colgar del wrapper, aqui no habria imagen.
+    expect(marco.querySelector("img")).toBeTruthy();
+    expect(marco.style.aspectRatio).toBe("4 / 3");
+  });
+
+  it("es solo el icono: la palabra pesaba mas que el propio aviso", () => {
+    pintar({ videoCount: 1 });
+    expect(screen.queryByText(/^video$/i)).toBeNull();
+    expect(chip()).toBeInTheDocument();
+  });
+
+  it("sin videos no aparece", () => {
+    pintar();
+    expect(chip()).toBeNull();
   });
 });
