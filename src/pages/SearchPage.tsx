@@ -71,6 +71,10 @@ export default function SearchPage() {
   const [layout, setLayout] = useState<Layout>("grid");
   const [showFilters, setShowFilters] = useState(false);
   const [active, setActive] = useState<string | null>(null);
+  // La tira de avisos del mapa y cada una de sus tarjetas, para poder llevar a
+  // la vista la del pin que se acaba de pulsar.
+  const tira = useRef<HTMLDivElement | null>(null);
+  const tarjetas = useRef<Record<string, HTMLDivElement | null>>({});
 
   // ---- Datos reales + filtros + búsqueda EN VIVO (REQ-02) ----
   const [listings, setListings] = useState<Listing[]>([]);
@@ -199,6 +203,26 @@ export default function SearchPage() {
     });
     return () => { vivo = false; };
   }, []);
+
+  // AL PULSAR UN PIN, la tarjeta de ese aviso se trae a la vista.
+  //
+  // Es lo que sustituye a la ventanita que se abría sobre el pin. Aquella tenía
+  // un problema sin arreglo posible desde fuera: Google la coloca y la
+  // dimensiona por su cuenta —panea el mapa para que quepa, le mete barra de
+  // scroll si no cabe— y con el panel a 45vh nunca había sitio suficiente. Se
+  // intentó por dos caminos (medir con el contenido ya pintado, quitar el
+  // paneo que competía) y seguía saliendo descolocada.
+  //
+  // Traer la tarjeta a la tira de abajo no depende de nada de eso, y es lo que
+  // hacen las apps de mapas en el móvil.
+  useEffect(() => {
+    if (view !== "map" || !active) return;
+    const el = tarjetas.current[active];
+    if (!el) return;
+    // `nearest` en el eje vertical: con `center` la página entera daba un salto
+    // en móvil, donde la tira vive debajo del mapa.
+    el.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+  }, [active, view]);
 
   // Recuerda el departamento para las próximas visitas.
   useEffect(() => { guardarDepartamento(departamento); }, [departamento]);
@@ -812,61 +836,38 @@ export default function SearchPage() {
             </Suspense>
           </div>
 
-          {/* List - below map on mobile (la página hace scroll), columna izquierda con scroll propio en escritorio */}
-          <div className="lg:flex-1 lg:overflow-y-auto lg:border-r border-border bg-background lg:order-1 lg:min-h-0 pb-[calc(var(--nav-bottom)+2rem)] lg:pb-0">
+          {/* LOS AVISOS DEL MAPA.
+              En móvil, una tira que se desliza de lado con las MISMAS tarjetas
+              del buscador; en escritorio, la columna de siempre con scroll
+              propio. Y aquí es donde aterriza ahora la selección de un pin: al
+              pulsarlo, la tira se desplaza hasta su tarjeta.
+              Eso sustituye a la ventanita que salía sobre el pin, que daba
+              problemas de sitio imposibles de arreglar desde fuera de Google. */}
+          <div className="lg:flex-1 lg:overflow-y-auto lg:border-r border-border bg-background lg:order-1 lg:min-h-0 pb-[calc(var(--nav-bottom)+1rem)] lg:pb-0">
             <div className="px-4 lg:px-5 py-3 lg:py-4 border-b border-border lg:sticky lg:top-0 bg-background/95 backdrop-blur z-10">
               <p className="text-[10px] lg:text-xs uppercase tracking-[0.2em] font-bold text-secondary">Resultados</p>
               <h1 className="text-base lg:text-lg font-bold text-foreground mt-0.5 lg:mt-1">
                 {listings.length} avisos en el mapa
               </h1>
             </div>
-            <div className="divide-y divide-border">
+            <div
+              ref={tira}
+              className="flex gap-3 overflow-x-auto snap-x snap-mandatory no-scrollbar px-4 py-3 lg:grid lg:grid-cols-2 lg:overflow-visible lg:snap-none lg:px-4 xl:grid-cols-3"
+            >
               {listings.map((l) => (
-                <Link
+                <div
                   key={l.id}
-                  to={`/aviso/${l.id}`}
+                  ref={(el) => { tarjetas.current[l.id] = el; }}
                   onMouseEnter={() => setActive(l.id)}
-                  className={`flex gap-3 lg:gap-4 p-3 lg:p-4 transition-colors ${
-                    active === l.id ? "bg-muted/60" : "hover:bg-muted/40"
+                  onClick={() => setActive(l.id)}
+                  /* w-[15rem] y `shrink-0`: en una tira horizontal las tarjetas
+                     no pueden encogerse para caber, o se aplastarían todas. */
+                  className={`w-[15rem] shrink-0 snap-start lg:w-auto lg:shrink transition-shadow ${
+                    active === l.id ? "ring-2 ring-secondary ring-offset-2" : ""
                   }`}
                 >
-                  <div
-                    className="w-24 lg:w-32 shrink-0 bg-muted overflow-hidden"
-                    style={{ aspectRatio: "4 / 3" }}
-                  >
-                    <img src={imgUrl(l.imageUrl, 400)} srcSet={imgSrcSet(l.imageUrl, 400)} sizes="(min-width: 1024px) 25vw, 50vw" alt={l.title} className="w-full h-full object-cover" loading="lazy" decoding="async" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-[10px] uppercase tracking-[0.15em] font-bold text-secondary">
-                        {l.category}
-                      </span>
-                      <button
-                        onClick={(e) => handleFav(e, l.id)}
-                        className="text-muted-foreground hover:text-secondary transition-colors"
-                        aria-label={isFavorite(l.id) ? "Quitar de favoritos" : "Guardar en favoritos"}
-                      >
-                        <Heart
-                          size={14}
-                          className={isFavorite(l.id) ? "text-secondary fill-secondary" : ""}
-                        />
-                      </button>
-                    </div>
-                    <h3 className="font-semibold text-sm text-foreground line-clamp-2 mt-1">{l.title}</h3>
-                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-1.5">
-                      <span className="truncate">
-                        <MapPin size={10} className="inline" /> {l.location}
-                      </span>
-                    </div>
-                    {session?.supabase ? (
-                      <p className="text-base font-extrabold text-primary mt-2">
-                        {formatPrecioAviso(l.price, l.currency)}
-                      </p>
-                    ) : (
-                      <p className="text-[11px] text-secondary font-semibold mt-2">Ver detalle</p>
-                    )}
-                  </div>
-                </Link>
+                  <ListingCard listing={l} />
+                </div>
               ))}
             </div>
           </div>

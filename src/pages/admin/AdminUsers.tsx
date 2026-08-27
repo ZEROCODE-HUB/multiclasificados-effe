@@ -340,18 +340,35 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>¿Dar de baja a {u.full_name}?</AlertDialogTitle>
+              {/* DICE LO QUE VA A PASAR CON ESTA PERSONA, no cómo funciona la
+                  regla en general. El mismo botón da de baja o borra para
+                  siempre según un dato que quien pulsa no veía: antes el cuadro
+                  explicaba las dos ramas y dejaba adivinar cuál tocaba. Para
+                  algo irreversible, eso es poco.
+                  `tiene_rastro` lo calcula la MISMA función del servidor que
+                  toma la decisión, así que el aviso y lo que ocurre no pueden
+                  discrepar. */}
+              <AlertDialogTitle>
+                {u.tiene_rastro === false
+                  ? `¿Eliminar a ${u.full_name} de forma permanente?`
+                  : `¿Dar de baja a ${u.full_name}?`}
+              </AlertDialogTitle>
               <AlertDialogDescription>
-                {/* Ya no promete un borrado que puede no ocurrir: desde el punto
-                    B-01, a quien ya contrató NO se le borra. Decir "permanente e
-                    irreversible" y luego desactivar sería mentir justo en el
-                    cuadro que pide confirmación. */}
-                Si este cliente <b>ya publicó avisos o compró saldo</b>, no se borra: queda
-                como <b>inactivo</b> y conserva su historial, porque SUNAT o el Poder Judicial
-                pueden pedir la relación de quienes contrataron. Sus avisos activos se pausan.
-                <br /><br />
-                Si nunca contrató nada, se elimina de forma permanente. Solo el
-                superadministrador puede hacerlo.
+                {u.tiene_rastro === false ? (
+                  <>
+                    Esta cuenta <b>no tiene ningún aviso, pedido ni boleta</b>, así que se
+                    borrará por completo. <b>No se puede deshacer.</b>
+                  </>
+                ) : (
+                  <>
+                    Este cliente <b>ya tiene historial</b> (avisos, pedidos o boletas), así que
+                    no se borra: queda como <b>inactivo</b>, pierde el acceso y sus avisos
+                    activos se pausan. Su historial se conserva, porque SUNAT o el Poder
+                    Judicial pueden pedir la relación de quienes contrataron.
+                    <br /><br />
+                    Puedes reactivarlo después desde esta misma lista.
+                  </>
+                )}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

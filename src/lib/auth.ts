@@ -18,12 +18,17 @@ export const INVALID_CREDENTIALS_MSG = "Correo o contraseña incorrectos.";
 // Error cuando la cuenta está suspendida o baneada: se cierra la sesión y se
 // muestra el motivo en el login.
 export class AccountBlockedError extends Error {
-  status: "suspended" | "banned";
-  constructor(status: "suspended" | "banned") {
+  status: "suspended" | "banned" | "inactive";
+  constructor(status: "suspended" | "banned" | "inactive") {
     super(
       status === "banned"
         ? "Tu cuenta ha sido baneada permanentemente. Si crees que es un error, contacta al soporte."
-        : "Tu cuenta está suspendida temporalmente. Contacta al soporte para más información.",
+        // Una baja no es una sanción, así que no se le habla como si lo fuera:
+        // quien la lea puede haberla pedido él mismo, y en todo caso tiene
+        // derecho a recuperar su cuenta y sus comprobantes.
+        : status === "inactive"
+          ? "Tu cuenta está dada de baja. Si quieres reactivarla, escríbenos y la recuperamos con tu historial."
+          : "Tu cuenta está suspendida temporalmente. Contacta al soporte para más información.",
     );
     this.name = "AccountBlockedError";
     this.status = status;
@@ -41,8 +46,16 @@ export class RoleSyncError extends Error {
 }
 
 // ¿El estado del perfil impide el acceso? Suspensión con fecha pasada ya no bloquea.
-function isBlocked(status?: string | null, suspendedUntil?: string | null): false | "suspended" | "banned" {
+function isBlocked(status?: string | null, suspendedUntil?: string | null): false | "suspended" | "banned" | "inactive" {
   if (status === "banned") return "banned";
+  // Una cuenta dada de baja tampoco entra, y FALTABA.
+  //
+  // `admin_delete_user` dice en su propio comentario que a quien se da de baja
+  // "se le corta el acceso", y le pausa los avisos. Pero aquí solo se miraban
+  // "suspended" y "banned", así que seguía entrando: podía volver a publicar y
+  // a escribir por el chat como si nada. La baja quedaba en un apunte contable
+  // que no cambiaba nada de lo que la persona podía hacer.
+  if (status === "inactive") return "inactive";
   if (status === "suspended") {
     const until = suspendedUntil ? new Date(suspendedUntil).getTime() : null;
     if (until === null || until > Date.now()) return "suspended";

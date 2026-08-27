@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef } from "react";
-import { createRoot, type Root } from "react-dom/client";
 import type { MarkerClusterer } from "@googlemaps/markerclusterer";
 import { imgUrl } from "@/lib/imageUrl";
 import { formatCompactPrice } from "@/lib/pricing";
@@ -36,66 +35,28 @@ interface ListingsMapProps {
 }
 
 /**
- * La tarjetita que sale al pulsar un pin.
+ * SIN VENTANITA SOBRE EL PIN, y esto merece explicación porque estuvo ahí.
  *
- * OJO CON `<Link>`: esto NO se pinta dentro del árbol de la app. Se monta con
- * `createRoot` sobre un nodo suelto que crea Google para el InfoWindow, y esa
- * raíz no hereda ningún contexto — tampoco el del Router. Un `<Link>` ahí lanza
- * "useHref() may be used only in the context of a <Router>", React aborta el
- * render y el nodo se queda VACÍO: la ventanita salía en blanco, con la X y
- * nada más. Así estaba en producción.
+ * Al pulsar un pin se abría un InfoWindow de Google con la ficha del aviso.
+ * Dio problemas desde el principio y ninguno se podía arreglar del todo desde
+ * fuera, porque quien coloca y dimensiona esa ventana es Google:
  *
- * Por eso es un `<a>` normal con la navegación inyectada desde fuera: el
- * `href` de verdad conserva "abrir en pestaña nueva" y el clic izquierdo se
- * queda en la aplicación, sin recargarla.
+ *   - Se montaba con `createRoot` sobre un nodo suelto, fuera del árbol de
+ *     React: sin Router, sin sesión, sin favoritos. Un `<Link>` allí abortaba
+ *     el render y la ventana salía EN BLANCO en producción.
+ *   - Google mide el contenido al abrir, y `render()` no pinta en el acto: se
+ *     abría midiendo un nodo vacío.
+ *   - Con el panel del mapa a 45vh —unos 360 px en un teléfono— sólo quedaban
+ *     unos 260 para el contenido. Lo que no cabía se llenaba de barras de
+ *     scroll, y la ventana se subía para aprovechar el hueco.
+ *   - Su auto-pan competía con el centrado del pin, y la ficha acababa
+ *     apareciendo donde el pin ESTABA antes de moverse.
  *
- * LO VISUAL LO PONE `CuerpoDeAviso`, el mismo que usa la tarjeta del buscador.
- * Antes esta ficha se pintaba a mano y había ido divergiendo: sin marco, con la
- * foto redondeada —el resto de la app es recta—, sin destacado, sin urgente,
- * sin confidencial, sin sello y sin el aviso de video. Y con el precio del PIN,
- * que va abreviado por falta de sitio: enseñaba "S/ 250K" donde la tarjeta
- * decía "S/ 250,000.00". Aquí hay 208 px de ancho y cabe entero.
+ * Se intentó arreglar tres veces. Ahora el pin solo AVISA de cuál se eligió, y
+ * la tarjeta se enseña en la tira de abajo, que es React normal dentro del
+ * árbol y no depende de nada de lo anterior. Es lo que hacen las apps de mapas
+ * en el móvil.
  */
-export function FichaDelPin(
-  { l, href, ir, mostrarPrecio }: {
-    l: GeoListing;
-    href: string;
-    ir: (href: string) => void;
-    /** Sin sesión el buscador oculta los precios; el mapa tiene que hacer lo
-     *  mismo o sería la puerta de atrás para verlos sin cuenta. */
-    mostrarPrecio: boolean;
-  },
-) {
-  return (
-    <CuerpoDeAviso
-      l={l}
-      anchoImagen={200}
-      sizes="96px"
-      urgente={l.urgent ? urgentTimeLeft(l.expiresAt ?? null, Date.now()) : null}
-      mostrarPrecio={mostrarPrecio}
-      /* APAISADA, y no por gusto: en vertical la ficha medía unos 300 px de
-         alto y el panel del mapa mide 45vh —unos 360 en un teléfono—, de los
-         que Google deja para el contenido apenas 260. No cabía: le ponía barra
-         de scroll y la subía para aprovechar el hueco, así que salía recortada
-         y despegada del pin. Apaisada baja a unos 110 y cabe de sobra. */
-      orientacion="horizontal"
-      className="w-[17rem] max-w-[80vw]"
-      cobertura={
-        <a
-          href={href}
-          aria-label={l.title}
-          className="absolute inset-0 z-[1]"
-          onClick={(e) => {
-            // Con Ctrl/Cmd o el botón central, que el navegador haga lo suyo.
-            if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
-            e.preventDefault();
-            ir(href);
-          }}
-        />
-      }
-    />
-  );
-}
 
 export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMapProps) {
   // Este componente SÍ está dentro del Router; la ficha del pin no. Se le pasa
@@ -124,19 +85,10 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
   // que está activo sin reconstruirlos todos.
   const marcadores = useRef(new Map<string, google.maps.marker.AdvancedMarkerElement>());
   const agrupador = useRef<MarkerClusterer | null>(null);
-  // La ficha del pin se pinta con React dentro de un InfoWindow, que es DOM
-  // suelto de Google: hay que guardar la raíz para desmontarla y no dejar
-  // árboles de React colgando cada vez que se abre un pin.
-  const ficha = useRef<{ ventana: google.maps.InfoWindow; raiz: Root; nodo: HTMLElement } | null>(null);
   // El primer encuadre no debe pisarse: al llegar los avisos se encuadra a
   // todos, y la selección automática que viene detrás no debe centrar el mapa
   // en uno solo.
   const yaEncuadrado = useRef(false);
-  // ¿La selección viene de pulsar el pin, o de la lista lateral? Solo la
-  // segunda debe centrar el mapa; la primera abre ficha, y esa ya se coloca.
-  const desdeElPin = useRef(false);
-  // El frame pendiente para abrir la ficha, que se cancela si llega otro clic.
-  const frame = useRef<number | null>(null);
 
   // ---- Pines: se reconstruyen cuando cambia la lista de avisos ----
   useEffect(() => {
@@ -151,14 +103,9 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
       // activaba el pin, así que mover el ratón por el mapa iba seleccionando y
       // haciendo pan a cada aviso que rozaba — molesto.
       m.addListener("gmp-click", () => {
-        // Se avisa de que la selección viene del PIN. El efecto de más abajo
-        // hace `panTo` al punto para acercarse al aviso elegido desde la lista
-        // lateral; si también lo hiciera aquí, competiría con el auto-pan que
-        // el propio InfoWindow hace para caber, y la ficha acababa descolgada
-        // del pin.
-        desdeElPin.current = true;
+        // El pin solo dice CUÁL se eligió. De enseñar el aviso se encarga la
+        // tira de tarjetas de abajo, que se desplaza hasta él.
         onActive(l.id);
-        abrirFicha(l, m);
       });
       return m;
     });
@@ -205,63 +152,11 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
     if (!active) return;
     // Se omite la primera selección para no pisar el encuadre panorámico.
     if (!yaEncuadrado.current) { yaEncuadrado.current = true; return; }
-    // Si se pulsó el pin, NO se panea: la ficha que se abre encima hace su
-    // propio ajuste para caber, y dos paneos a la vez dejaban el aviso
-    // separado del pin en lugar de pegado a él. Desde la lista lateral sí se
-    // panea, que es el único modo de saber a qué punto corresponde.
-    if (desdeElPin.current) { desdeElPin.current = false; return; }
+    // Ya se panea siempre: sin ventanita encima, no hay nada con lo que
+    // competir. Centrar el pin elegido es justo lo que se espera.
     const p = points.find((x) => x.id === active);
     if (p) mapa.panTo({ lat: p.lat, lng: p.lng });
   }, [active, mapa, points]);
-
-  /** Abre (o reutiliza) la tarjetita del aviso sobre su pin. */
-  function abrirFicha(l: GeoListing, marcador: google.maps.marker.AdvancedMarkerElement) {
-    if (!mapa) return;
-    if (!ficha.current) {
-      const nodo = document.createElement("div");
-      ficha.current = {
-        ventana: new google.maps.InfoWindow({ content: nodo }),
-        raiz: createRoot(nodo),
-        nodo,
-      };
-    }
-    const f = ficha.current;
-    f.raiz.render(
-      <FichaDelPin l={l} href={hrefFor(l.id)} ir={(h) => navigate(h)} mostrarPrecio={conSesion} />,
-    );
-
-    // SE ABRE UN FRAME DESPUÉS, Y ESE ORDEN ES EL ARREGLO.
-    //
-    // `render()` de React 18 no pinta en el acto, y Google mide el contenido
-    // JUSTO al abrir. Abriendo primero, medía un nodo VACÍO: calculaba que la
-    // ventana no ocupaba nada, paneaba el mapa para ese tamaño, y cuando la
-    // ficha aparecía —unos 280 px de alto— ya no cabía donde se había hecho
-    // sitio. De ahí que el aviso saliera separado del pin en vez de encima.
-    //
-    // Pintar primero y abrir después le da a Google las medidas de verdad, y
-    // su auto-pan deja la ficha pegada a su pin.
-    if (frame.current !== null) cancelAnimationFrame(frame.current);
-    frame.current = requestAnimationFrame(() => {
-      frame.current = null;
-      // Con dos clics seguidos el frame anterior se cancela arriba, así que
-      // aquí solo llega el último: la ventana se abre sobre el pin que de
-      // verdad se pulsó, no sobre el primero.
-      if (ficha.current !== f) return;
-      f.ventana.setContent(f.nodo);
-      f.ventana.open({ map: mapa, anchor: marcador });
-    });
-  }
-
-  // Al desmontar, la raíz de React de la ficha se desmonta aparte: vive en un
-  // nodo que Google creó y que React no limpia solo.
-  useEffect(() => () => {
-    // El frame pendiente se cancela: si llegara a correr tras desmontar,
-    // intentaría abrir una ventana sobre un mapa que ya no está.
-    if (frame.current !== null) cancelAnimationFrame(frame.current);
-    const f = ficha.current;
-    ficha.current = null;
-    if (f) { f.ventana.close(); setTimeout(() => f.raiz.unmount(), 0); }
-  }, []);
 
   const aviso = textoDeEstadoDelMapa(estado);
 

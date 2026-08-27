@@ -4,21 +4,21 @@ import { MemoryRouter } from "react-router-dom";
 import { prepararDom } from "./domPolyfills";
 
 /**
- * DÓNDE se abre la ficha al pulsar un pin.
+ * QUÉ HACE EL PIN AL PULSARLO.
  *
- * EL BUG, tal como lo vio el cliente: pulsas el precio, el mapa se centra en
- * él… y la tarjeta no sale encima del pin sino más arriba, descolgada.
+ * Ya no abre nada. Antes salía un InfoWindow de Google con la ficha del aviso, y
+ * dio tres rondas de problemas que no se podían cerrar desde fuera, porque quien
+ * coloca y dimensiona esa ventana es Google:
  *
- * Eran dos cosas a la vez:
+ *   - se montaba fuera del árbol de React y un `<Link>` la dejaba EN BLANCO;
+ *   - Google medía el contenido antes de que React lo pintara;
+ *   - con el panel a 45vh no cabía y se llenaba de barras de scroll;
+ *   - su auto-pan competía con el centrado del pin, y la ficha aparecía donde
+ *     el pin ESTABA antes de moverse.
  *
- *  1. Google mide el contenido de la ventanita JUSTO al abrirla, y `render()`
- *     de React 18 no pinta en el acto. Se abría ANTES de pintar, así que medía
- *     un nodo vacío, hacía sitio para nada, y cuando la ficha aparecía —unos
- *     280 px de alto— ya no cabía donde se había hecho hueco.
- *  2. El clic hacía además `panTo` al punto. Ese paneo competía con el que la
- *     propia ventana hace para caber, y entre los dos la dejaban descolocada.
- *
- * Estas pruebas fijan el ORDEN y QUIÉN panea, que es lo que se rompió.
+ * Ahora el pin solo avisa de cuál se eligió y el mapa se centra en él. De
+ * enseñar el aviso se encarga la tira de tarjetas de abajo, que es React normal
+ * dentro del árbol. Estas pruebas fijan ese reparto.
  */
 
 beforeEach(prepararDom);
@@ -128,55 +128,30 @@ beforeEach(() => {
   };
 });
 
-describe("la ficha se abre con el contenido ya pintado", () => {
-  it("cuando Google mide, el nodo YA tiene la ficha dentro", async () => {
-    // Este es el corazón del arreglo. Si se abriera antes de pintar, Google
-    // mediría vacío y haría sitio para una ventana que no existe.
-    pintar();
-    await waitFor(() => expect(clics.size).toBeGreaterThan(0));
-    clics.get("a1")!();
-    await waitFor(() => expect(traza).toContain("open"));
-    expect(contenidoAlAbrir).toBeGreaterThan(100);
-  });
-
-  it("el contenido se pasa ANTES de abrir, no después", async () => {
-    pintar();
-    await waitFor(() => expect(clics.size).toBeGreaterThan(0));
-    clics.get("a1")!();
-    await waitFor(() => expect(traza).toContain("open"));
-    expect(traza.indexOf("setContent")).toBeLessThan(traza.indexOf("open"));
-  });
-});
-
-describe("quién mueve el mapa", () => {
-  it("al pulsar el pin NO se panea: la ficha ya se coloca sola", async () => {
-    // Dos paneos a la vez —el del clic y el que hace la ventana para caber—
-    // dejaban el aviso separado de su pin.
+describe("el pin solo avisa de cuál se eligió", () => {
+  it("no abre ninguna ventana de Google", async () => {
+    // La regla que evita volver al problema: si alguien reintroduce el
+    // InfoWindow, esto falla.
     const onActive = vi.fn();
-    const { rerender } = pintar(null, onActive);
+    pintar(null, onActive);
     await waitFor(() => expect(clics.size).toBeGreaterThan(0));
-    const conActivo = (id: string | null) => rerender(
-      <MemoryRouter>
-        <ListingsMap listings={AVISOS} active={id} onActive={onActive} hrefFor={(i) => `/aviso/${i}`} />
-      </MemoryRouter>,
-    );
 
-    // PRIMERO se gasta la selección inicial, que el componente omite a
-    // propósito para no pisar el encuadre panorámico. Sin este paso el efecto
-    // salía antes de llegar al paneo y la prueba pasaba con el bug puesto.
-    conActivo("a2");
-    await waitFor(() => expect(panTo).toHaveBeenCalledTimes(0));
-    panTo.mockClear();
-
-    // Y AHORA sí: el clic en el pin, con el encuadre ya consumido.
     clics.get("a1")!();
-    conActivo("a1"); // el padre refleja la selección, igual que SearchPage
-
-    await waitFor(() => expect(traza).toContain("open"));
-    expect(panTo).not.toHaveBeenCalled();
+    await waitFor(() => expect(onActive).toHaveBeenCalledWith("a1"));
+    expect(traza).not.toContain("open");
+    expect(traza).not.toContain("setContent");
   });
 
-  it("pero desde la lista lateral SÍ, que es el único modo de ubicar el aviso", async () => {
+  it("avisa del aviso pulsado para que la tira de abajo lo enseñe", async () => {
+    const onActive = vi.fn();
+    pintar(null, onActive);
+    await waitFor(() => expect(clics.size).toBeGreaterThan(0));
+
+    clics.get("a2")!();
+    expect(onActive).toHaveBeenCalledWith("a2");
+  });
+
+  it("y el mapa se centra en el aviso elegido", async () => {
     const onActive = vi.fn();
     const { rerender } = pintar(null, onActive);
     await waitFor(() => expect(clics.size).toBeGreaterThan(0));

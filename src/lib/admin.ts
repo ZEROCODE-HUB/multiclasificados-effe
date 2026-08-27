@@ -1040,6 +1040,15 @@ export interface AdminUser {
   id: string; full_name: string; email: string; status: string; verified: boolean;
   roles: string; listings_count: number; suspended_until: string | null;
   rating: number; created_at: string;
+  /**
+   * ¿Tiene avisos, pedidos o boletas?
+   *
+   * Es lo que decide si la papelera da de baja o borra de verdad, y viene de la
+   * MISMA función que lo decide en el servidor (`tiene_rastro_comercial`). Si
+   * el panel lo calculara por su cuenta acabaría avisando de una cosa y
+   * ocurriendo otra, que es peor que no avisar.
+   */
+  tiene_rastro?: boolean;
 }
 
 export async function fetchAdminUsers(
@@ -1063,6 +1072,7 @@ export async function fetchAdminUsers(
     status: u.status === "Activo" ? "active" : u.status === "Suspendido" ? "suspended" : "pending",
     verified: u.status === "Activo", roles: u.role.toLowerCase(),
     listings_count: u.listings, suspended_until: null, rating: 0, created_at: u.date,
+    tiene_rastro: u.listings > 0,
   }));
   return { data: mapped, real: false };
 }

@@ -68,25 +68,14 @@ interface Props {
   accionEsquina?: ReactNode;
   /** Va al final del bloque de texto (el CTA "Ver detalle"). */
   pie?: ReactNode;
-  /**
-   * "vertical" es la tarjeta de siempre: foto arriba, texto debajo.
-   *
-   * "horizontal" pone la foto a la izquierda y baja el alto de unos 300 px a
-   * unos 110. Es lo que necesita el globo del mapa: ahí el panel mide 45vh
-   * —unos 360 px en un teléfono— y Google deja para el contenido apenas 260.
-   * La tarjeta vertical no cabía, así que le metía barra de scroll y la subía
-   * para aprovechar el hueco: de ahí que se viera recortada y despegada del pin.
-   */
-  orientacion?: "vertical" | "horizontal";
   /** Clases extra para el marco exterior. */
   className?: string;
 }
 
 export function CuerpoDeAviso({
   l, anchoImagen, sizes, urgente, mostrarPrecio = true, cobertura, accionEsquina, pie,
-  orientacion = "vertical", className = "",
+  className = "",
 }: Props) {
-  const apaisada = orientacion === "horizontal";
   // "Destacado" no lleva chip: el marco dorado ya lo dice, y el icono era la
   // misma información dos veces justo donde menos sitio hay.
   const chips = listingBadges(l).filter((b) => b.key !== "featured");
@@ -107,7 +96,7 @@ export function CuerpoDeAviso({
                 role="img"
                 aria-label={cuenta ? `${label} · quedan ${urgente!.short}` : label}
                 onClick={(e) => e.stopPropagation()}
-                className={`relative overflow-hidden ${apaisada ? "h-5" : "h-7"} shrink-0 flex items-center justify-center gap-1 shadow-md ${cuenta ? "px-1.5 w-auto" : apaisada ? "w-5" : "w-7"} ${cls}`}
+                className={`relative overflow-hidden h-7 shrink-0 flex items-center justify-center gap-1 shadow-md ${cuenta ? "px-1.5 w-auto" : "w-7"} ${cls}`}
               >
                 {/* EL QUE PARPADEA ES EL FONDO, NO EL CHIP.
                     Animando la opacidad del chip entero, el icono y el contador
@@ -119,9 +108,9 @@ export function CuerpoDeAviso({
                 {cuenta && (
                   <span aria-hidden className="absolute inset-0 bg-white motion-safe:animate-latido-urgente" />
                 )}
-                <Icon size={apaisada ? 11 : 14} className="relative z-10" />
+                <Icon size={14} className="relative z-10" />
                 {cuenta && (
-                  <span className={`relative z-10 ${apaisada ? "text-[10px]" : "text-[11px]"} font-bold leading-none tabular-nums`}>
+                  <span className={`relative z-10 text-[11px] font-bold leading-none tabular-nums`}>
                     {urgente!.short}
                   </span>
                 )}
@@ -135,7 +124,7 @@ export function CuerpoDeAviso({
   );
 
   return (
-    <div className={`group relative flex ${apaisada ? "flex-row items-stretch" : "flex-col"} overflow-hidden ${marcoDeAviso(featured)} ${className}`}>
+    <div className={`group relative flex flex-col overflow-hidden ${marcoDeAviso(featured)} ${className}`}>
       {/* El color no es información para todo el mundo. */}
       {featured && <span className="sr-only">Aviso destacado</span>}
 
@@ -145,9 +134,8 @@ export function CuerpoDeAviso({
           es donde hay hueco y donde el ojo los busca. El max-w reserva el sitio
           del favorito (de 12 a 44 px); sin él, con tres distintivos el bloque
           crecía hasta encimarse con él.
-          En apaisada NO caben ahí —la foto mide 96 px y un chip se comería un
-          tercio—, así que bajan junto al título. */}
-      {!apaisada && bloqueDeChips && (
+          */}
+      {bloqueDeChips && (
         <div className="absolute top-3 left-3 z-10 flex flex-col items-start gap-1.5 w-fit max-w-[calc(100%-3.5rem)]">
           {bloqueDeChips}
         </div>
@@ -159,14 +147,7 @@ export function CuerpoDeAviso({
 
       {accionEsquina}
 
-      {/* La foto. En apaisada es una columna fija de 96 px que se estira al
-          alto del texto; en vertical manda el 4:3. */}
-      <div
-        className={apaisada
-          ? "relative w-24 shrink-0 self-stretch overflow-hidden bg-muted"
-          : "relative overflow-hidden bg-muted"}
-        style={apaisada ? undefined : { aspectRatio: "4 / 3" }}
-      >
+      <div className="relative overflow-hidden bg-muted" style={{ aspectRatio: "4 / 3" }}>
         <img
           src={imgUrl(l.imageUrl, anchoImagen)}
           srcSet={imgSrcSet(l.imageUrl, anchoImagen)}
@@ -183,38 +164,27 @@ export function CuerpoDeAviso({
           <span
             role="img"
             aria-label="Este aviso incluye video"
-            className={`absolute bottom-1.5 right-1.5 z-10 flex items-center justify-center bg-black/55 backdrop-blur-[2px] text-white/95 ${apaisada ? "w-5 h-5" : "w-6 h-6"}`}
+            className={`absolute bottom-1.5 right-1.5 z-10 flex items-center justify-center bg-black/55 backdrop-blur-[2px] text-white/95 w-6 h-6`}
           >
-            <Video size={apaisada ? 10 : 12} />
+            <Video size={12} />
           </span>
         )}
       </div>
 
       {/* flex-1 + min-w-0: en WebKit los textos con line-clamp variaban de alto
           y descuadraban precios e insignias entre tarjetas vecinas. */}
-      <div className={`flex flex-col min-w-0 flex-1 ${apaisada ? "gap-0.5 p-2 justify-center" : "gap-1 sm:gap-1.5 p-2 sm:p-3"}`}>
-        {/* La categoría se omite en apaisada: es el dato que menos aporta y ahí
-            cada línea cuenta para que la ficha quepa sin barra de scroll. */}
-        {!apaisada && (
-          /* truncate: con dos por fila caben ~158 px, y categorías como
-             "Vehículos y Repuestos" con este espaciado se salían. */
-          <span className="text-[10px] uppercase tracking-[0.18em] font-bold text-secondary truncate">{l.category}</span>
-        )}
-
-        {apaisada && bloqueDeChips && (
-          <div className="flex flex-row items-center gap-1 mb-0.5">{bloqueDeChips}</div>
-        )}
-
-        {/* En apaisada el título va sin `min-h`: ahí reservar dos líneas para
-            todos suma alto a cambio de nada. */}
-        <h3 className={`font-semibold text-foreground text-sm leading-snug line-clamp-2 group-hover:text-primary transition-colors ${apaisada ? "" : "min-h-[2.25rem]"}`}>
+      <div className="flex flex-col min-w-0 flex-1 gap-1 sm:gap-1.5 p-2 sm:p-3">
+        {/* truncate: con dos por fila caben ~158 px, y categorías como
+            "Vehículos y Repuestos" con este espaciado se salían. */}
+        <span className="text-[10px] uppercase tracking-[0.18em] font-bold text-secondary truncate">{l.category}</span>
+        <h3 className="font-semibold text-foreground text-sm leading-snug line-clamp-2 group-hover:text-primary transition-colors min-h-[2.25rem]">
           {l.title}
         </h3>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="flex items-center gap-1 truncate"><MapPin size={11} />{ubicacionConPais(l.location, l.country)}</span>
         </div>
         {mostrarPrecio && (
-          <p className={`font-extrabold text-primary tracking-tight ${apaisada ? "text-sm" : "text-base"}`}>
+          <p className="text-base font-extrabold text-primary tracking-tight">
             {formatPrecioAviso(l.price, l.currency)}
           </p>
         )}
