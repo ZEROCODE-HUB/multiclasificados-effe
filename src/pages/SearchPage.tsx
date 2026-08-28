@@ -958,7 +958,13 @@ export default function SearchPage() {
                  ella. Bastaba con eso.
                  `items-start` para que las tarjetas conserven su alto propio en
                  vez de estirarse hasta el del contenedor. */
-              className="flex items-start gap-3 h-[17rem] overflow-x-auto snap-x snap-mandatory no-scrollbar px-4 py-3 lg:grid lg:items-stretch lg:h-auto lg:grid-cols-2 lg:overflow-visible lg:snap-none lg:px-4 xl:grid-cols-3"
+              /* En escritorio, el MISMO ancho mínimo por tarjeta que usa la
+                 portada (230 px) en vez de un número fijo de columnas. Con
+                 `lg:grid-cols-2` las tarjetas de aquí salían de ~220 px y las
+                 del listado de ~290: el mismo aviso se veía de dos tamaños
+                 según la pantalla. Con `auto-fill` manda el ancho y las
+                 columnas se ajustan solas. */
+              className="flex items-start gap-3 h-[17rem] overflow-x-auto snap-x snap-mandatory no-scrollbar px-4 py-3 lg:grid lg:items-stretch lg:h-auto lg:grid-cols-[repeat(auto-fill,minmax(230px,1fr))] lg:gap-x-4 lg:gap-y-5 lg:overflow-visible lg:snap-none lg:px-4"
             >
               {enLaTira.map((l) => (
                 <div

@@ -113,3 +113,44 @@ describe("de la fila de la base al aviso", () => {
     expect(mapCard(fila()).advertiserVerified).toBe(false);
   });
 });
+
+/**
+ * TODAS LAS TARJETAS MIDEN LO MISMO.
+ *
+ * La línea del sello se pintaba solo cuando el anunciante estaba verificado,
+ * así que esas tarjetas medían unos píxeles más que las demás y la fila salía
+ * descuadrada. Reservar el hueco siempre cuesta una línea de 10 px y las iguala.
+ */
+describe("el sello no descuadra la fila", () => {
+  const bloqueDelSello = (c: HTMLElement) =>
+    [...c.querySelectorAll("p")].find((p) => p.className.includes("min-h-[0.875rem]"));
+
+  it("la línea se reserva aunque el anunciante NO esté verificado", () => {
+    const { container } = renderCard({ advertiserVerified: false });
+    expect(bloqueDelSello(container)).toBeTruthy();
+  });
+
+  it("y sigue estando cuando sí lo está", () => {
+    const { container } = renderCard({ advertiserVerified: true });
+    expect(bloqueDelSello(container)).toBeTruthy();
+  });
+
+  it("pero vacía cuando no hay sello: se reserva el hueco, no se inventa el dato", () => {
+    const { container } = renderCard({ advertiserVerified: false });
+    expect(bloqueDelSello(container)!.textContent!.trim()).toBe("");
+    expect(sello()).toBeNull();
+  });
+
+  it("las dos tarjetas tienen las MISMAS filas de contenido", () => {
+    // Lo que decide el alto son los bloques del cuerpo, no cuántos elementos
+    // haya dentro de cada uno: el sello mete un icono y un texto DENTRO de un
+    // hueco que ya estaba reservado, así que no añade ninguna fila.
+    const filas = (verificado: boolean) => {
+      const { container } = renderCard({ advertiserVerified: verificado });
+      const cuerpo = [...container.querySelectorAll("div")]
+        .find((d) => d.className.includes("flex-1") && d.className.includes("min-w-0"))!;
+      return cuerpo.children.length;
+    };
+    expect(filas(true)).toBe(filas(false));
+  });
+});

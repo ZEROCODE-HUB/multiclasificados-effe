@@ -197,12 +197,19 @@ export function CuerpoDeAviso({
             va pegado al precio, y a secas se leería como si lo comprobado fuera
             el importe o el aviso. Lo que el equipo revisa es a la persona o la
             empresa que publica, que es otra cosa. */}
-        {l.advertiserVerified && (
-          <p className="flex items-center gap-1 text-[10px] font-semibold text-secondary">
-            <ShieldCheck size={11} className="shrink-0" />
-            <span className="truncate">Anunciante verificado</span>
-          </p>
-        )}
+        {/* LA LÍNEA SE RESERVA SIEMPRE, esté o no verificado el anunciante.
+            Si solo se pintara cuando existe, las tarjetas con sello medirían
+            unos píxeles más que las demás y la fila quedaría descuadrada — que
+            es justo lo que se veía. Reservar el hueco cuesta una línea de 10 px
+            y hace que todas midan igual, con sello o sin él. */}
+        <p className="flex items-center gap-1 text-[10px] font-semibold text-secondary min-h-[0.875rem]">
+          {l.advertiserVerified && (
+            <>
+              <ShieldCheck size={11} className="shrink-0" />
+              <span className="truncate">Anunciante verificado</span>
+            </>
+          )}
+        </p>
 
         {pie}
       </div>
