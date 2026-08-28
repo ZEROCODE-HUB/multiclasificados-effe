@@ -37,18 +37,26 @@ const clics = new Map<string, () => void>();
 let contador = 0;
 /** Los listeners que el componente deja puestos sobre el mapa. */
 const oyentes: Array<{ evento: string; cb: () => void; vivo: boolean }> = [];
+/** Todos los marcadores que se han fabricado. */
+const creados: MarcadorFalso[] = [];
 /** Dispara los listeners vivos de un evento, como haría Google. */
 const disparar = (evento: string) => {
   for (const o of oyentes) if (o.evento === evento && o.vivo) { o.vivo = false; o.cb(); }
 };
 
 class MarcadorFalso {
-  content: unknown = null;
+  /** Cuántas veces le han REEMPLAZADO el nodo del contenido. */
+  reemplazos = 0;
+  #contenido: unknown = null;
+  get content() { return this.#contenido; }
+  set content(v: unknown) { this.reemplazos++; this.#contenido = v; }
   position: unknown = null;
   id = "";
   constructor(o: { position: unknown; content: unknown }) {
     this.position = o.position;
     this.content = o.content;
+    this.reemplazos = 0; // el primero es el montaje, no un repintado
+    creados.push(this);
     // Se numeran en el orden en que los crea el componente, que es el de la
     // lista de avisos.
     this.id = AVISOS_IDS[contador++ % AVISOS_IDS.length];
@@ -130,6 +138,7 @@ beforeEach(() => {
   clics.clear();
   contador = 0;
   oyentes.length = 0;
+  creados.length = 0;
   (globalThis as unknown as { google: unknown }).google = {
     maps: {
       InfoWindow: VentanaFalsa,
@@ -250,5 +259,50 @@ describe("una lista nueva con los mismos avisos no toca el mapa", () => {
     );
 
     expect(llamadas).not.toContain("fitBounds");
+  });
+});
+
+/**
+ * EL SALTO DE LOS PINES, esta vez con la causa de verdad.
+ *
+ * Se persiguió cuatro veces en el sitio equivocado. Lo resolvió una medición en
+ * el navegador real: al mover el mapa, `setCenter` lo llamaba GOOGLE (el stack
+ * apuntaba a su `map.js`, ni una línea nuestra) y los cuatro pines se desplazaban
+ * exactamente el mismo delta — o sea, correctamente, con el mapa.
+ *
+ * Lo que fallaba era el repintado. Para resaltar el aviso elegido se reasignaba
+ * `content` del marcador, y en un `AdvancedMarkerElement` eso DESTRUYE el nodo y
+ * monta otro: el nuevo se pinta un fotograma en su posición base, sin la
+ * transformación que lo coloca, y al siguiente ya aparece en su sitio. Y se
+ * hacía con TODOS los marcadores a la vez.
+ */
+describe("resaltar un pin no lo vuelve a fabricar", () => {
+  const conActivo = (id: string | null, onActive = vi.fn()) => (
+    <MemoryRouter>
+      <ListingsMap listings={AVISOS} active={id} onActive={onActive} hrefFor={(i) => `/a/${i}`} />
+    </MemoryRouter>
+  );
+
+  it("cambiar la selección no reemplaza el contenido de ningún marcador", async () => {
+    const { rerender } = render(conActivo(null));
+    await waitFor(() => expect(creados.length).toBeGreaterThan(0));
+    creados.forEach((m) => { m.reemplazos = 0; });
+
+    rerender(conActivo("a1"));
+    rerender(conActivo("a2"));
+
+    expect(creados.map((m) => m.reemplazos)).toEqual(creados.map(() => 0));
+  });
+
+  it("pero el pin elegido SÍ se resalta", async () => {
+    const { rerender } = render(conActivo(null));
+    await waitFor(() => expect(creados.length).toBeGreaterThan(0));
+
+    rerender(conActivo("a1"));
+
+    const el = creados[0].content as HTMLElement;
+    expect(el.className).toContain("bg-primary");
+    // Y los demás se quedan como estaban.
+    expect((creados[1].content as HTMLElement).className).toContain("bg-secondary");
   });
 });

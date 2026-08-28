@@ -4,7 +4,7 @@ import { imgUrl } from "@/lib/imageUrl";
 import { formatCompactPrice } from "@/lib/pricing";
 import { CuerpoDeAviso } from "@/components/CuerpoDeAviso";
 import { urgentTimeLeft } from "@/lib/listings";
-import { pinDePrecio } from "@/components/mapIcons";
+import { pinDePrecio, marcarPinActivo } from "@/components/mapIcons";
 import { crearAgrupador } from "@/components/mapCluster";
 import { useMapaDeGoogle, textoDeEstadoDelMapa } from "@/lib/googleMaps";
 import { useNavigate } from "react-router-dom";
@@ -192,9 +192,12 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
   // ---- El aviso activo: se repinta y el mapa se acerca a él ----
   useEffect(() => {
     if (!mapa) return;
+    // Se cambian las CLASES del pin, no su contenido: reasignar `content`
+    // destruye el nodo y monta otro, y el nuevo se pinta un fotograma en su
+    // posición base antes de colocarse. Eso era el salto.
     for (const [id, m] of marcadores.current) {
-      const l = points.find((p) => p.id === id);
-      if (l) m.content = pinDePrecio(formatPrice(l.price, l.currency), id === active);
+      const el = m.content;
+      if (el instanceof HTMLElement) marcarPinActivo(el, id === active);
     }
     if (!active) return;
     // Se omite la primera selección para no pisar el encuadre panorámico.

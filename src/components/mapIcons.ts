@@ -24,14 +24,39 @@ function div(clases: string, html: string): HTMLElement {
  * burbuja queda justo encima del punto sin necesidad de desplazarla a mano
  * (Leaflet obligaba a un `translate(-50%,-100%)`).
  */
+const PIN_BASE =
+  "inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold shadow-lg whitespace-nowrap transition-all";
+const PIN_ACTIVO = "bg-primary text-primary-foreground scale-110 ring-4 ring-primary/20";
+const PIN_NORMAL = "bg-secondary text-secondary-foreground ring-2 ring-secondary/20";
+
 export function pinDePrecio(label: string, activo: boolean): HTMLElement {
-  const cls = activo
-    ? "bg-primary text-primary-foreground scale-110 ring-4 ring-primary/20"
-    : "bg-secondary text-secondary-foreground ring-2 ring-secondary/20";
-  return div(
-    `inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold shadow-lg whitespace-nowrap transition-all ${cls}`,
-    label,
-  );
+  return div(`${PIN_BASE} ${activo ? PIN_ACTIVO : PIN_NORMAL}`, label);
+}
+
+/**
+ * Enciende o apaga un pin YA COLOCADO, sin fabricar otro.
+ *
+ * AQUÍ ESTABA EL SALTO DE LOS PINES, y costó cuatro intentos encontrarlo porque
+ * no estaba donde parecía.
+ *
+ * Para resaltar el aviso elegido se reasignaba `content` del marcador, que es
+ * lo natural… salvo que en un `AdvancedMarkerElement` eso hace que Google
+ * DESTRUYA el nodo y monte otro. El nodo nuevo se pinta un fotograma en su
+ * posición base, sin la transformación que lo coloca sobre el mapa, y al
+ * siguiente ya aparece en su sitio. Visto a velocidad normal: el pin da un
+ * salto atrás y vuelve a colocarse.
+ *
+ * Y se hacía con TODOS los marcadores en cada cambio de selección, así que
+ * saltaban todos a la vez.
+ *
+ * Cambiando solo las clases del elemento que ya está no se recrea nada, y el
+ * `transition-all` de arriba hace que el cambio de color se vea suave.
+ */
+export function marcarPinActivo(el: HTMLElement, activo: boolean): void {
+  const quiere = `${PIN_BASE} ${activo ? PIN_ACTIVO : PIN_NORMAL}`;
+  // Solo si de verdad cambia: escribir la misma cadena fuerza un recálculo de
+  // estilos por marcador, y aquí se recorren todos.
+  if (el.className !== quiere) el.className = quiere;
 }
 
 /**
