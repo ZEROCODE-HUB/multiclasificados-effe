@@ -162,3 +162,26 @@ describe("el aviso 'tiene video'", () => {
     expect(chip()).toBeNull();
   });
 });
+
+describe("el precio cabe en una linea", () => {
+  it("sin precio dice 'A convenir', no 'Precio a convenir'", () => {
+    // "Precio a convenir" ocupa unos 165 px en el cuerpo del precio. Una
+    // tarjeta del buscador mide ~184 en un movil de 412 y una de la tira del
+    // mapa 160: cabia por los pelos en la primera y partia en dos lineas en la
+    // segunda, con el MISMO componente. Tres pixeles decidian.
+    pintar({ price: 0 });
+    expect(screen.getByText("A convenir")).toBeInTheDocument();
+    expect(screen.queryByText(/Precio a convenir/)).toBeNull();
+  });
+
+  it("con precio se muestra entero, sin tocar", () => {
+    pintar({ price: 250000, currency: "PEN" });
+    expect(screen.getByText("S/ 250,000.00")).toBeInTheDocument();
+  });
+
+  it("y nunca parte en dos lineas: antes recorta", () => {
+    // Partir el precio descuadra el alto de toda la fila de tarjetas.
+    pintar({ price: 0 });
+    expect(screen.getByText("A convenir").className).toContain("truncate");
+  });
+});

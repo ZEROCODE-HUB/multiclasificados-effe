@@ -244,6 +244,28 @@ export function formatPrecioAviso(price: number, currency: string): string {
   return `${sym} ${n.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/**
+ * El precio TAL COMO SE VE EN UNA TARJETA.
+ *
+ * Igual que `formatPrecioAviso` salvo cuando no hay precio: ahí dice
+ * "A convenir" en vez de "Precio a convenir".
+ *
+ * El motivo es de sitio, y explica una diferencia que parecía inexplicable. En
+ * un teléfono de 412 px, una tarjeta del buscador mide unos 184 px y una de la
+ * tira del mapa 160. "Precio a convenir" en el cuerpo del precio ocupa unos
+ * 165: cabía por los pelos en la primera y partía en dos líneas en la segunda,
+ * aunque el componente fuese exactamente el mismo. Tres píxeles decidían.
+ *
+ * Con la versión corta cabe en las dos con holgura, y en un móvil pequeño —donde
+ * la del buscador también se quedaba sin sitio— deja de partir igualmente.
+ * La ficha del aviso sigue diciéndolo entero: allí sobra el ancho.
+ */
+export function precioDeTarjeta(price: number, currency: string): string {
+  const n = Number.isFinite(price) ? price : 0;
+  if (n <= 0) return "A convenir";
+  return formatPrecioAviso(n, currency);
+}
+
 // Precio COMPACTO para espacios chicos (p. ej. los pines del mapa). Abrevia solo
 // montos grandes (K/M) y muestra completos los chicos. Antes se dividía siempre
 // entre 1000 con "K", así que "US$ 2" se veía como "US$ 0K".

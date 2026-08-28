@@ -23,7 +23,7 @@ import type { ReactNode } from "react";
 import { MapPin, ShieldCheck, Video } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { imgUrl, imgSrcSet } from "@/lib/imageUrl";
-import { formatPrecioAviso } from "@/lib/pricing";
+import { precioDeTarjeta } from "@/lib/pricing";
 import { ubicacionConPais } from "@/lib/paises";
 import { listingBadges } from "@/lib/listingBadges";
 import { marcoDeAviso } from "@/lib/estiloDeAviso";
@@ -184,8 +184,11 @@ export function CuerpoDeAviso({
           <span className="flex items-center gap-1 truncate"><MapPin size={11} />{ubicacionConPais(l.location, l.country)}</span>
         </div>
         {mostrarPrecio && (
-          <p className="text-base font-extrabold text-primary tracking-tight">
-            {formatPrecioAviso(l.price, l.currency)}
+          /* `truncate`: red de seguridad para importes muy largos. Antes que
+             partir el precio en dos líneas —que descuadra el alto de toda la
+             fila de tarjetas— es preferible recortarlo. */
+          <p className="text-base font-extrabold text-primary tracking-tight truncate">
+            {precioDeTarjeta(l.price, l.currency)}
           </p>
         )}
 
