@@ -5,6 +5,7 @@ import { Eye, MapPin, Calendar, MoreVertical, Edit, Pause, Play, Trash2, Rocket,
 import type { Listing } from "@/data/mockData";
 import { expiryInfo } from "@/lib/listings";
 import { formatPrecioAviso } from "@/lib/pricing";
+import { fechaHoraCorta } from "@/lib/fechas";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -59,7 +60,11 @@ const expiryStyles: Record<string, string> = {
 export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEdit, onDelete, onTogglePause, onPublish, onRepublish, onRenew, onDuplicate, rejectionReason, pagoEnEspera }: ListingRowProps) {
   const hasActions = !!(onView || onEdit || onDelete || onTogglePause || onPublish || onRepublish || onRenew || onDuplicate);
   // El contador solo tiene sentido en un aviso activo (los vencidos ya caducaron).
-  const expiry = status === "Activo" ? expiryInfo(expiresAt ?? null) : null;
+  // La duración contratada decide CUÁNDO se advierte: sin ella, un plan de 3
+  // días se pintaba en naranja desde el minuto uno.
+  const expiry = status === "Activo"
+    ? expiryInfo(expiresAt ?? null, (listing as { planDurationDays?: number | null }).planDurationDays)
+    : null;
   return (
     <div className="group flex flex-col sm:flex-row gap-0 sm:gap-4 bg-card border border-border overflow-hidden hover:shadow-md hover:border-secondary/40 transition-all">
       {/* Image - prominent on mobile (full width), compact on desktop */}
@@ -148,7 +153,10 @@ export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEd
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground mb-3">
           <span className="flex items-center gap-1"><MapPin size={11} /> {listing.location}</span>
-          <span className="flex items-center gap-1"><Calendar size={11} /> {listing.date}</span>
+          {/* Con la hora: es donde el anunciante comprueba cuándo entró su
+              aviso, y "2026-08-28" a secas no le dice si fue antes o después
+              de pagar. */}
+          <span className="flex items-center gap-1"><Calendar size={11} /> {fechaHoraCorta(listing.publishedAt ?? listing.date)}</span>
           {expiry && (
             <span className={`flex items-center gap-1 ${expiryStyles[expiry.tone]}`}>
               <Clock size={11} /> {expiry.text}

@@ -26,6 +26,31 @@ const SITE_URL = (Deno.env.get("PUBLIC_SITE_URL") || "https://www.coleffe.com").
  * mandarlo: se marca como spam y arrastra al resto. Cada evento dice qué pasó y
  * lleva su enlace, que es lo que pidió el cliente para los avisos por vencer.
  */
+// Horas en palabras. Es una COPIA de src/lib/duracion.ts y no un import: una
+// Edge Function corre en Deno y no ve el código del front. Si se toca una, hay
+// que tocar la otra — los tests comprueban que dicen lo mismo.
+function enPalabras(horas: number): string {
+  const h = Math.max(0, Math.round(horas));
+  if (h < 1) return "menos de una hora";
+  if (h < 24) return `${h} ${h === 1 ? "hora" : "horas"}`;
+  const dias = Math.floor(h / 24);
+  const resto = h % 24;
+  const parteDias = `${dias} ${dias === 1 ? "día" : "días"}`;
+  return resto === 0 ? parteDias : `${parteDias} y ${resto} ${resto === 1 ? "hora" : "horas"}`;
+}
+
+function tiempoDelAviso(transcurridas: unknown, restantes: unknown): string {
+  // `Number(null)` y `Number("")` valen CERO, no NaN, así que comprobar solo
+  // que sea finito dejaba pasar la ausencia de dato: la alerta acababa
+  // diciendo "le quedan menos de una hora" a un aviso recién publicado.
+  const cifra = (v: unknown) =>
+    v === null || v === undefined || v === "" ? Number.NaN : Number(v);
+  const t = cifra(transcurridas);
+  const r = cifra(restantes);
+  if (!Number.isFinite(t) || !Number.isFinite(r)) return "";
+  return `Lleva ${enPalabras(t)} publicado y le ${r === 1 ? "queda" : "quedan"} ${enPalabras(r)}.`;
+}
+
 function bodyFor(type: string, payload: Record<string, unknown>): string {
   const p = payload || {};
   const titulo = String(p.listing_title ?? "tu aviso");
@@ -53,10 +78,13 @@ function bodyFor(type: string, payload: Record<string, unknown>): string {
       return String(p.body ?? "");
 
     case "listing_expiring": {
+      // Las dos cifras que pidió el cliente. Llegan desde la 0133; los avisos
+      // anteriores solo traen `dias` y se leen como antes.
       const dias = Number(p.dias);
-      const plazo = Number.isFinite(dias) && dias > 0
-        ? `Te quedan ${dias} ${dias === 1 ? "día" : "días"} para renovarlo.`
-        : "Está a punto de caducar.";
+      const plazo = tiempoDelAviso(p.horas_transcurridas, p.horas_restantes)
+        || (Number.isFinite(dias) && dias > 0
+          ? `Te quedan ${dias} ${dias === 1 ? "día" : "días"} para renovarlo.`
+          : "Está a punto de caducar.");
       // UN solo enlace, y al sitio donde se renueva. Antes iban dos —la ficha
       // pública primero— y el primero es el que se pulsa: llevaba a un aviso
       // que, si ya había caducado, ni siquiera se podía ver.

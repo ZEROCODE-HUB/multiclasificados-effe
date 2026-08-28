@@ -3,6 +3,7 @@
 // coincidencias de búsquedas guardadas). Aquí las leemos y escuchamos en vivo.
 import { supabase } from "@/lib/supabase";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import { tiempoDelAviso } from "@/lib/duracion";
 
 export interface AppNotification {
   id: string;
@@ -124,8 +125,13 @@ export function notificationText(n: AppNotification): string {
       return `"${(p.listing_title as string) || "Tu aviso"}" volvió a estar visible`;
     case "listing_expiring": {
       const title = (p.listing_title as string) || "Tu aviso";
-      // Desde la 0113 el aviso llega con tres días de antelación y trae cuántos
-      // quedan: decir "vence pronto" sin la cifra no ayuda a decidir.
+      // Desde la 0133 el aviso llega al 85 % del tiempo contratado y trae las
+      // dos cifras que pidió el cliente: cuánto lleva publicado y cuánto le
+      // queda. Es lo que permite decidir si renovar.
+      const tiempo = tiempoDelAviso(p.horas_transcurridas, p.horas_restantes);
+      if (tiempo) return `"${title}" está por vencer. ${tiempo} Renuévalo para que siga visible.`;
+      // Los avisos guardados antes de la 0133 no traen las horas; siguen
+      // leyéndose con lo que sí tienen.
       const dias = Number(p.dias);
       const cuando = Number.isFinite(dias) && dias > 0
         ? `vence en ${dias} ${dias === 1 ? "día" : "días"}`

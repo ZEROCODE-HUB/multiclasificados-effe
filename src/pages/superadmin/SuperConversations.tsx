@@ -11,6 +11,7 @@ import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
 import { mensajeDeError } from "@/lib/errores";
+import { fechaDelDia } from "@/lib/fechas";
 
 // Mapa estado real (BD) -> etiqueta + color del diseño existente.
 const statusMeta: Record<string, { label: string; color: string }> = {
@@ -130,7 +131,7 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
                     </div>
                     <Badge variant="outline" className={m.color}>{m.label}</Badge>
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">{(r.created_at ?? "").slice(0, 10)}</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">{fechaDelDia(r.created_at)}</p>
                 </button>
               );
             })}
@@ -149,7 +150,7 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
                   <div className="w-10 h-10 rounded-full bg-destructive/15 text-destructive flex items-center justify-center"><AlertOctagon size={18} /></div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sm">{item.reporter ?? "Anónimo"} reportó a {item.reported ?? "—"}</p>
-                    <p className="text-xs text-muted-foreground">{item.reason} · {(item.created_at ?? "").slice(0, 10)}</p>
+                    <p className="text-xs text-muted-foreground">{item.reason} · {fechaDelDia(item.created_at)}</p>
                   </div>
                   <Badge variant="outline" className={metaFor(item.status).color}>{metaFor(item.status).label}</Badge>
                 </div>

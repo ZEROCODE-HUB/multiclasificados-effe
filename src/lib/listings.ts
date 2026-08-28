@@ -11,6 +11,7 @@ import type { Listing } from "@/data/mockData";
 // la busca medio repositorio.
 export { FALLBACK_IMG } from "@/lib/imagenPorDefecto";
 import { imagenPorDefecto } from "@/lib/imagenPorDefecto";
+import { fechaDelDia } from "@/lib/fechas";
 
 const isUuid = (v: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
@@ -61,7 +62,11 @@ export function mapCard(r: CardRow): Listing {
     // `||` y no `??`: una cadena vacía también significa "sin imagen", y con
     // `??` se colaría hasta el <img>, que pintaría el icono de imagen rota.
     imageUrl: r.image_url || imagenPorDefecto(),
-    date: (r.published_at ?? r.created_at ?? new Date().toISOString()).slice(0, 10),
+    // `fechaDelDia` y no `.slice(0, 10)`: recortar el ISO daba el día en UTC y,
+    // peor, lo que quedaba se releía como medianoche UTC y retrocedía un día en
+    // el Perú. El aviso del 28 salía fechado el 27.
+    date: fechaDelDia(r.published_at ?? r.created_at),
+    publishedAt: r.published_at ?? r.created_at ?? null,
     featured: !!r.featured,
     urgent: !!r.urgent,
     confidential: !!r.confidential,
@@ -373,7 +378,29 @@ export type ListingCondition = "nuevo" | "usado" | "na";
 // `tone` gradúa el color: normal (>7 días), atención (≤7 días) y urgente (<1 día
 // o ya vencido). Devuelve null si no hay fecha de vencimiento.
 export interface ExpiryInfo { text: string; tone: "normal" | "warning" | "urgent" }
-export function expiryInfo(expiresAt: string | null, now: number = Date.now()): ExpiryInfo | null {
+/**
+ * A partir de qué parte del tiempo contratado se empieza a advertir.
+ *
+ * LO REPORTÓ EL CLIENTE y el diagnóstico le dio la razón: el umbral era
+ * ABSOLUTO —menos de 7 días, avisa— así que un plan de 3 días NACÍA en
+ * advertencia. Publicaba y a los veinte segundos ya le decía "vence en 2 días",
+ * en naranja y con el botón de renovar al lado.
+ *
+ * Medido sobre el tiempo CONTRATADO no depende del plan: el 85 % es tarde para
+ * uno de 3 días (quedan ~11 h) y también para uno de 30 (quedan ~4 días y
+ * medio). El 95 % es el último tramo, cuando ya urge.
+ */
+export const AVISAR_DESDE = 0.85;
+export const URGE_DESDE = 0.95;
+
+export function expiryInfo(
+  expiresAt: string | null,
+  /** Días que se contrataron (`listings.plan_duration_days`). Sin este dato no
+   *  se puede saber qué parte del plan se ha consumido, así que se cae al
+   *  criterio antiguo por días absolutos. */
+  duracionDias?: number | null,
+  now: number = Date.now(),
+): ExpiryInfo | null {
   if (!expiresAt) return null;
   const ms = new Date(expiresAt).getTime() - now;
   if (Number.isNaN(ms)) return null;
@@ -388,6 +415,19 @@ export function expiryInfo(expiresAt: string | null, now: number = Date.now()): 
   else if (hours >= 1) text = `Vence en ${hours} ${hours === 1 ? "hora" : "horas"}`;
   else text = `Vence en ${mins} ${mins === 1 ? "minuto" : "minutos"}`;
 
+  const total = Number(duracionDias) * 86_400_000;
+  if (Number.isFinite(total) && total > 0) {
+    // Lo consumido, no lo que falta: es lo que hace que la regla valga igual
+    // para un plan de 3 días que para uno de 30.
+    const consumido = (total - ms) / total;
+    const tone: ExpiryInfo["tone"] =
+      consumido >= URGE_DESDE ? "urgent" : consumido >= AVISAR_DESDE ? "warning" : "normal";
+    return { text, tone };
+  }
+
+  // Sin duración contratada (avisos anteriores a la 0041) se mantiene el
+  // criterio de siempre. Equivocarse aquí hacia "normal" sería callar un
+  // vencimiento de verdad.
   const tone: ExpiryInfo["tone"] = days >= 7 ? "normal" : days >= 1 ? "warning" : "urgent";
   return { text, tone };
 }
@@ -479,7 +519,9 @@ export async function fetchMyListings(): Promise<MyListing[]> {
         lat: r.lat != null ? Number(r.lat) : null,
         lng: r.lng != null ? Number(r.lng) : null,
         imageUrl: imgs[0]?.url || imagenPorDefecto(),
-        date: (r.published_at ?? r.created_at ?? new Date().toISOString()).slice(0, 10),
+        // Ver mapCard: `.slice(0, 10)` daba el día en UTC y retrocedía uno.
+        date: fechaDelDia(r.published_at ?? r.created_at),
+        publishedAt: r.published_at ?? r.created_at ?? null,
         featured: !!r.featured,
         urgent: !!r.urgent,
         confidential: !!r.confidential,

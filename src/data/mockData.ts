@@ -18,7 +18,15 @@ export interface Listing {
   /** Cuántos vídeos trae el aviso. Solo para la insignia de la tarjeta. */
   videoCount?: number;
   imageUrl: string;
+  /** El DÍA de publicación en el Perú, `YYYY-MM-DD`. Para agrupar y ordenar. */
   date: string;
+  /**
+   * El INSTANTE de la publicación, tal cual (ISO con zona). `date` pierde la
+   * hora, y el cliente pidió ver también la hora y el minuto — que además es
+   * lo único que permite fechar bien un aviso publicado de noche, cuando el
+   * día en UTC y el día en Lima ya no coinciden.
+   */
+  publishedAt?: string | null;
   featured: boolean;
   // Insignias visuales según los adicionales que pagó el anunciante.
   urgent?: boolean;

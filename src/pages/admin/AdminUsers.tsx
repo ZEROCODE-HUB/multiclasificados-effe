@@ -21,6 +21,7 @@ import { formatCredits } from "@/lib/pricing";
 import { toast } from "@/hooks/use-toast";
 import { mensajeDeError } from "@/lib/errores";
 import { metaFor } from "@/pages/admin/estadoDeUsuario";
+import { fechaDelDia } from "@/lib/fechas";
 
 const isUuid = (v: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
@@ -479,7 +480,7 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
                       <TableCell className="text-muted-foreground">{u.email}</TableCell>
                       <TableCell>{roleControl(u)}</TableCell>
                       <TableCell>{u.listings_count}</TableCell>
-                      <TableCell className="text-muted-foreground">{(u.created_at ?? "").slice(0, 10)}</TableCell>
+                      <TableCell className="text-muted-foreground">{fechaDelDia(u.created_at)}</TableCell>
                       <TableCell><Badge className={m.color} variant="outline">{m.label}</Badge></TableCell>
                       <TableCell>
                         {u.verified ? (

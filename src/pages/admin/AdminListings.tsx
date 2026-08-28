@@ -22,6 +22,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { fetchListingImages } from "@/lib/listings";
 import { ListingPreviewDialog } from "@/components/ListingPreviewDialog";
 import { mensajeDeError } from "@/lib/errores";
+import { fechaDelDia } from "@/lib/fechas";
 
 const statusColor: Record<AdminListingStatus, string> = {
   Pendiente: "bg-warning/15 text-warning border-warning/30",
@@ -62,7 +63,9 @@ const toDisplayStatus = (r: AdminListingRow): AdminListingStatus =>
 const mapRow = (r: AdminListingRow): Listing => ({
   id: r.id, title: r.title, advertiser: r.advertiser ?? "Anunciante",
   category: r.category_id, status: toDisplayStatus(r),
-  date: (r.created_at ?? "").slice(0, 10),
+  // El día EN EL PERÚ. Recortar el ISO daba el día en UTC, así que un aviso
+  // creado de noche aparecía fechado al día siguiente.
+  date: fechaDelDia(r.created_at),
   // Mismo criterio que en la app: sin precio, "Precio a convenir".
   price: formatPrecioAviso(Number(r.price || 0), r.currency || "PEN"),
   publishedAt: r.published_at ?? null,

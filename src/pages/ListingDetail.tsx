@@ -71,6 +71,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/lib/supabase";
 import { getOrCreateConversation, sendMessage, hasConversationWithSeller } from "@/lib/messaging";
+import { fechaHoraLarga } from "@/lib/fechas";
 
 
 // Antigüedad de la cuenta del anunciante en formato corto para la ficha.
@@ -718,7 +719,12 @@ export default function ListingDetail() {
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs md:text-sm text-muted-foreground">
               <span className="flex items-center gap-1.5"><MapPin size={14} className="text-secondary" /> {ubicacionConPais(listing.location, listing.country)}</span>
               <span className="flex items-center gap-1.5"><Eye size={14} /> {listing.views.toLocaleString()} vistas</span>
-              <span className="flex items-center gap-1.5"><Calendar size={14} /> {new Date(listing.date).toLocaleDateString("es-PE", { day: "2-digit", month: "short", year: "numeric" })}</span>
+              {/* CON LA HORA, y desde el instante completo.
+                  Antes se pintaba `new Date(listing.date)`, y `listing.date` es
+                  un texto de solo fecha: JavaScript lo lee como medianoche UTC
+                  y en el Perú retrocede al día anterior. El aviso publicado el
+                  28 de agosto a las 16:33 salía fechado el 27. */}
+              <span className="flex items-center gap-1.5"><Calendar size={14} /> {fechaHoraLarga(listing.publishedAt ?? listing.date)}</span>
               {/* La cuenta atrás ya va en la insignia sobre la foto, que es donde
                   se mira primero: aquí gastaba una línea entera para repetirla. */}
             </div>

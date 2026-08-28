@@ -28,10 +28,11 @@ import { useValidacion, MensajeDeError } from "@/hooks/useValidacion";
 import { expiryInfo } from "@/lib/listings";
 import { enfocarCampo } from "@/lib/validacion";
 
-// ¿Al aviso le queda una semana o menos? Es cuando ofrecer renovar ayuda;
-// antes solo sería ruido.
-const porVencer = (expiresAt?: string | null): boolean => {
-  const info = expiryInfo(expiresAt ?? null);
+// ¿Ya consumió el aviso el 85 % de lo que se contrató? Es cuando ofrecer
+// renovar ayuda; antes solo sería ruido — y con un plan de 3 días el botón
+// "Renovar" aparecía a los veinte segundos de publicar.
+const porVencer = (expiresAt?: string | null, duracionDias?: number | null): boolean => {
+  const info = expiryInfo(expiresAt ?? null, duracionDias);
   return !!info && info.tone !== "normal";
 };
 import type { Listing } from "@/data/mockData";
@@ -371,10 +372,10 @@ const AdvertiserListings = () => {
                   // caen en esta pestaña pero no deben republicarse aquí.
                   ? { onRepublish: () => setToPublish(listing) }
                   : {})}
-                {...(listing.status === "active" && porVencer(listing.expiresAt)
-                  // Renovar aparece cuando ya urge (≤7 días): es el mismo dato
-                  // que la fila ya está pintando en "vence en X días". Sin fecha
-                  // de vencimiento no hay nada que renovar.
+                {...(listing.status === "active" && porVencer(listing.expiresAt, listing.planDurationDays)
+                  // Renovar aparece cuando ya urge (85 % del plan consumido): es
+                  // el mismo dato que la fila ya está pintando en "vence en X
+                  // días". Sin fecha de vencimiento no hay nada que renovar.
                   ? { onRenew: () => setToRenew(listing) }
                   : {})}
                 {...(listing.status !== "draft"

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { fetchAdminListing, type AdminListingDetail } from "@/lib/admin";
 import { formatPrecioAviso } from "@/lib/pricing";
+import { fechaHoraCorta } from "@/lib/fechas";
 
 /**
  * El aviso denunciado, para que el moderador lo inspeccione sin salir de donde
@@ -92,7 +93,7 @@ export function ListingPreviewDialog({ listingId, reason, fallbackTitle, onClose
               {aviso.category_id && <p><span className="text-muted-foreground">Categoría:</span> {aviso.category_id}</p>}
               {aviso.location && <p><span className="text-muted-foreground">Ubicación:</span> {aviso.location}</p>}
               {aviso.condition && <p><span className="text-muted-foreground">Estado:</span> {aviso.condition}</p>}
-              <p><span className="text-muted-foreground">Publicado:</span> {(aviso.published_at ?? aviso.created_at).slice(0, 10)}</p>
+              <p><span className="text-muted-foreground">Publicado:</span> {fechaHoraCorta(aviso.published_at ?? aviso.created_at)}</p>
             </div>
 
             {aviso.description && (
