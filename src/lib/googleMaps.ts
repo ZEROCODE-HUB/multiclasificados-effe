@@ -126,6 +126,20 @@ export function useMapaDeGoogle(
         if (!vivo || !contenedor.current) return;
         const m = new l.maps.Map(contenedor.current, {
           mapId: MAPA_ID,
+          // RASTER Y NO VECTORIAL, y esto arregla un fallo muy concreto.
+          //
+          // Con un `mapId` configurado en modo vectorial, los marcadores dan un
+          // tirón al soltar el mapa: aparecen un instante en su posición
+          // anterior y luego en la correcta. Está documentado —el temblor al
+          // arrastrar es bastante peor en vectorial que en raster— y se
+          // persiguió media docena de veces creyendo que era código nuestro,
+          // porque no lo es: nadie mueve nada, es el propio mapa
+          // re-sincronizando los marcadores con la cámara.
+          //
+          // Los marcadores avanzados siguen funcionando igual en raster; lo
+          // único que se pierde son la inclinación y la rotación del mapa, que
+          // aquí no se usan.
+          renderingType: l.maps.RenderingType.RASTER,
           ...opcionesRef.current,
         });
         setLibs(l);
