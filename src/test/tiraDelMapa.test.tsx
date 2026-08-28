@@ -243,3 +243,19 @@ describe("la tira no cambia de alto y por eso el mapa no se recentra solo", () =
     expect(tira(container).className).toContain("items-start");
   });
 });
+
+describe("el reparto de la pantalla en escritorio", () => {
+  it("usa fracciones, no un minmax con porcentaje", async () => {
+    // `minmax(420px, 45%)` contra un `1fr` al lado NO da el 45 %: el track se
+    // queda pegado a su minimo. La columna medía 445 px, entraba UNA tarjeta
+    // por fila y salia del ancho entero, con una foto de 334 px de alto.
+    const { container } = pintar();
+    await waitFor(() => expect(tarjetas().length).toBe(6));
+    // Hay dos rejillas con `lg:grid-cols-[`: la del reparto y la de las
+    // tarjetas. La del reparto es la que lleva `lg:min-h-0`.
+    const rejilla = [...container.querySelectorAll("div")]
+      .find((d) => d.className.includes("lg:grid-cols-[") && d.className.includes("lg:min-h-0"))!;
+    expect(rejilla.className).toContain("2fr");
+    expect(rejilla.className).not.toContain("45%");
+  });
+});

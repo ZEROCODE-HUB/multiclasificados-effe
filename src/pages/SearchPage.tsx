@@ -873,7 +873,12 @@ export default function SearchPage() {
           </div>
         </div>
       ) : (
-        <div className="flex-1 flex flex-col lg:grid lg:grid-cols-[480px_1fr] lg:min-h-0">
+        // EL REPARTO EN ESCRITORIO: 40 % para los avisos, 60 % para el mapa,
+        // con un mínimo para que la lista no se estruje en portátiles.
+        // Estaba en 480 px fijos y TODO lo demás para el mapa: en un monitor de
+        // 1920 el mapa se llevaba 1440, y en esos 480 solo entraba UNA tarjeta
+        // por fila, del ancho entero de la columna.
+        <div className="flex-1 flex flex-col lg:grid lg:grid-cols-[minmax(400px,2fr)_3fr] lg:min-h-0">
           {/* Map - full width on top in mobile, right column on desktop */}
           {/* `flex-1 min-h-0` en vez de un `45vh` fijo: el mapa se queda con
               todo el alto que sobre después de la búsqueda y la tira, así que
