@@ -75,9 +75,25 @@ export default function SearchPage() {
   // la vista la del pin que se acaba de pulsar.
   const tira = useRef<HTMLDivElement | null>(null);
   const tarjetas = useRef<Record<string, HTMLDivElement | null>>({});
+  /**
+   * Al pulsar un PIN, la tira de abajo se queda solo con ese aviso.
+   *
+   * Va en un estado aparte y no en `active` porque no es lo mismo: `active`
+   * también se enciende al pasar el ratón por una tarjeta, y filtrar la lista
+   * con solo pasar por encima sería insufrible. Solo el pin filtra.
+   */
+  const [soloEste, setSoloEste] = useState<string | null>(null);
 
   // ---- Datos reales + filtros + búsqueda EN VIVO (REQ-02) ----
   const [listings, setListings] = useState<Listing[]>([]);
+  // Lo que se ve en la tira. Con un pin elegido, solo ese aviso; si el aviso ya
+  // no está en los resultados (cambió un filtro con la selección puesta), se
+  // enseñan todos en vez de dejar la tira vacía.
+  const enLaTira = useMemo(() => {
+    if (!soloEste) return listings;
+    const uno = listings.filter((l) => l.id === soloEste);
+    return uno.length > 0 ? uno : listings;
+  }, [listings, soloEste]);
   const [q, setQ] = useState<string>(params.get("q") || "");
   const [category, setCategory] = useState<string>(params.get("cat") || "");
   const [priceMin, setPriceMin] = useState<string>(params.get("min") || "");
@@ -830,7 +846,7 @@ export default function SearchPage() {
               <ListingsMap
                 listings={listings}
                 active={active}
-                onActive={setActive}
+                onActive={(id) => { setActive(id); setSoloEste(id); }}
                 hrefFor={(id) => `/aviso/${id}`}
               />
             </Suspense>
@@ -844,25 +860,47 @@ export default function SearchPage() {
               Eso sustituye a la ventanita que salía sobre el pin, que daba
               problemas de sitio imposibles de arreglar desde fuera de Google. */}
           <div className="lg:flex-1 lg:overflow-y-auto lg:border-r border-border bg-background lg:order-1 lg:min-h-0 pb-[calc(var(--nav-bottom)+1rem)] lg:pb-0">
-            <div className="px-4 lg:px-5 py-3 lg:py-4 border-b border-border lg:sticky lg:top-0 bg-background/95 backdrop-blur z-10">
-              <p className="text-[10px] lg:text-xs uppercase tracking-[0.2em] font-bold text-secondary">Resultados</p>
-              <h1 className="text-base lg:text-lg font-bold text-foreground mt-0.5 lg:mt-1">
-                {listings.length} avisos en el mapa
+            {/* En UNA línea. Ocupaba dos —un rótulo "Resultados" encima del
+                conteo— y en el móvil, con el mapa a 45vh, cada píxel de aquí se
+                le quita a los avisos. */}
+            <div className="flex items-center justify-between gap-2 px-4 lg:px-5 py-2 border-b border-border lg:sticky lg:top-0 bg-background/95 backdrop-blur z-10">
+              <h1 className="text-sm font-bold text-foreground flex items-baseline gap-1.5 min-w-0">
+                <span className="text-[10px] uppercase tracking-[0.18em] font-bold text-secondary shrink-0">Resultados</span>
+                <span className="text-muted-foreground/50">·</span>
+                <span className="truncate">
+                  {/* El conteo sigue siendo el TOTAL aunque se esté mirando uno
+                      solo: si dijera "1 aviso" parecería que el mapa se ha
+                      quedado sin nada. */}
+                  {listings.length} {listings.length === 1 ? "aviso" : "avisos"}
+                </span>
               </h1>
+              {soloEste && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => { setSoloEste(null); setActive(null); }}
+                  className="h-7 gap-1 rounded-none text-xs shrink-0"
+                >
+                  <X size={12} /> Ver todos
+                </Button>
+              )}
             </div>
             <div
               ref={tira}
               className="flex gap-3 overflow-x-auto snap-x snap-mandatory no-scrollbar px-4 py-3 lg:grid lg:grid-cols-2 lg:overflow-visible lg:snap-none lg:px-4 xl:grid-cols-3"
             >
-              {listings.map((l) => (
+              {enLaTira.map((l) => (
                 <div
                   key={l.id}
                   ref={(el) => { tarjetas.current[l.id] = el; }}
                   onMouseEnter={() => setActive(l.id)}
                   onClick={() => setActive(l.id)}
-                  /* w-[15rem] y `shrink-0`: en una tira horizontal las tarjetas
-                     no pueden encogerse para caber, o se aplastarían todas. */
-                  className={`w-[15rem] shrink-0 snap-start lg:w-auto lg:shrink transition-shadow ${
+                  /* 10rem = 160 px, el MISMO ancho que tiene una tarjeta en el
+                     buscador cuando van dos por fila. Estaba en 15rem y se veían
+                     visiblemente más grandes que en el resto de la app.
+                     `shrink-0`: en una tira horizontal las tarjetas no pueden
+                     encogerse para caber, o se aplastarían todas. */
+                  className={`w-[10rem] shrink-0 snap-start lg:w-auto lg:shrink transition-shadow ${
                     active === l.id ? "ring-2 ring-secondary ring-offset-2" : ""
                   }`}
                 >
