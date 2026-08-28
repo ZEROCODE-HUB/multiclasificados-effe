@@ -107,3 +107,83 @@ export function pinDeUbicacion(): HTMLElement {
     `<svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z"/></svg>`,
   );
 }
+
+// =====================================================================
+// PINES COMO IMAGEN, para el mapa del buscador.
+//
+// POR QUE EXISTEN, ademas de los de arriba.
+//
+// Un `AdvancedMarkerElement` lleva dentro un nodo del DOM por marcador, y
+// Google lo recoloca al terminar cada gesto sobre el mapa. Ese reposicionado es
+// lo que se veia saltar: al soltar el mapa, los pines aparecian un instante en
+// su sitio anterior y luego en el correcto. Esta documentado y se descartaron
+// una por una todas las causas de este lado — el agrupador (probado con
+// `?agrupar=no`), el codigo que mueve el mapa (dos trazas en produccion sin una
+// sola orden nuestra), la transicion CSS del pin y el renderizado vectorial
+// (ya estaba en raster).
+//
+// Con `google.maps.Marker` el pin es una IMAGEN que Google dibuja en su propia
+// capa: no hay nodo que recolocar, asi que no hay nada que pueda saltar. La
+// clase esta marcada como obsoleta pero sigue soportada, y aqui compensa: un
+// mapa que no tiembla vale mas que evitar un aviso de deprecacion.
+//
+// Se pierde poder animar el color al resaltar; el cambio es instantaneo.
+
+const FONDO_NORMAL = "#bd4e05";  // --secondary
+const FONDO_ACTIVO = "#162950";  // --primary
+const FONDO_GRUPO = "#bd4e05";
+
+/** Convierte un SVG en algo que Google pueda pintar como icono. */
+function comoIcono(svg: string): string {
+  return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg);
+}
+
+/** Escapa lo que va dentro del SVG. El precio lo fabrica la app, pero el
+ *  formato de moneda trae simbolos y mas vale no confiar. */
+function escapar(t: string): string {
+  return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/**
+ * Burbuja de precio del buscador, como imagen.
+ *
+ * El ancho se calcula a ojo por la longitud del texto: un SVG no sabe medir su
+ * propio contenido, y quedarse corto recortaria el precio.
+ */
+export function iconoDePrecio(label: string, activo: boolean): google.maps.Icon {
+  const ancho = Math.max(40, Math.round(label.length * 6.6) + 18);
+  const alto = 22;
+  const fondo = activo ? FONDO_ACTIVO : FONDO_NORMAL;
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${ancho}" height="${alto}" viewBox="0 0 ${ancho} ${alto}">` +
+    `<rect x="0" y="0" rx="11" ry="11" width="${ancho}" height="${alto}" fill="${fondo}"/>` +
+    `<text x="${ancho / 2}" y="${alto / 2}" dy="0.36em" text-anchor="middle" ` +
+    `font-family="Montserrat, system-ui, sans-serif" font-size="11" font-weight="700" fill="#ffffff">` +
+    `${escapar(label)}</text></svg>`;
+  return {
+    url: comoIcono(svg),
+    scaledSize: new google.maps.Size(ancho, alto),
+    // Anclado por el centro de abajo, igual que el pin de HTML: asi la burbuja
+    // queda justo encima del punto.
+    anchor: new google.maps.Point(ancho / 2, alto),
+  };
+}
+
+/** Grupo de avisos cercanos, como imagen. El tamano crece con la cantidad. */
+export function iconoDeGrupo(cantidad: number): google.maps.Icon {
+  const size = cantidad < 10 ? 40 : cantidad < 50 ? 48 : 56;
+  const fuente = cantidad < 100 ? 14 : 12;
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">` +
+    // El anillo exterior translucido es el `ring-4` del pin de HTML.
+    `<circle cx="${size / 2}" cy="${size / 2}" r="${size / 2}" fill="${FONDO_GRUPO}" opacity="0.25"/>` +
+    `<circle cx="${size / 2}" cy="${size / 2}" r="${size / 2 - 4}" fill="${FONDO_GRUPO}"/>` +
+    `<text x="${size / 2}" y="${size / 2}" dy="0.36em" text-anchor="middle" ` +
+    `font-family="Montserrat, system-ui, sans-serif" font-size="${fuente}" font-weight="800" fill="#ffffff">` +
+    `${cantidad}</text></svg>`;
+  return {
+    url: comoIcono(svg),
+    scaledSize: new google.maps.Size(size, size),
+    anchor: new google.maps.Point(size / 2, size / 2),
+  };
+}

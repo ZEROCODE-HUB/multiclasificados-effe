@@ -4,7 +4,7 @@ import { imgUrl } from "@/lib/imageUrl";
 import { formatCompactPrice } from "@/lib/pricing";
 import { CuerpoDeAviso } from "@/components/CuerpoDeAviso";
 import { urgentTimeLeft } from "@/lib/listings";
-import { pinDePrecio, marcarPinActivo } from "@/components/mapIcons";
+import { iconoDePrecio } from "@/components/mapIcons";
 import { crearAgrupador } from "@/components/mapCluster";
 import { useMapaDeGoogle, textoDeEstadoDelMapa } from "@/lib/googleMaps";
 import { useNavigate } from "react-router-dom";
@@ -95,7 +95,7 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
 
   // Los marcadores vivos, por id de aviso: hacen falta para poder repintar el
   // que está activo sin reconstruirlos todos.
-  const marcadores = useRef(new Map<string, google.maps.marker.AdvancedMarkerElement>());
+  const marcadores = useRef(new Map<string, google.maps.Marker>());
   const agrupador = useRef<MarkerClusterer | null>(null);
   // El primer encuadre no debe pisarse: al llegar los avisos se encuadra a
   // todos, y la selección automática que viene detrás no debe centrar el mapa
@@ -107,14 +107,19 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
     if (!mapa || !libs) return;
 
     const creados = points.map((l) => {
-      const m = new libs.marker.AdvancedMarkerElement({
+      // `Marker` y no `AdvancedMarkerElement`: el avanzado lleva un nodo del
+      // DOM por marcador y Google lo RECOLOCA al terminar cada gesto sobre el
+      // mapa. Ese reposicionado es lo que se veía saltar al soltar. Con un
+      // icono no hay nodo que recolocar. Ver el porqué largo en mapIcons.
+      const m = new google.maps.Marker({
         position: { lat: l.lat, lng: l.lng },
-        content: pinDePrecio(formatPrice(l.price, l.currency), false),
+        icon: iconoDePrecio(formatPrice(l.price, l.currency), false),
       });
       // EFFE-093: seleccionar SOLO al pulsar. Antes el `mouseover` también
       // activaba el pin, así que mover el ratón por el mapa iba seleccionando y
       // haciendo pan a cada aviso que rozaba — molesto.
-      m.addListener("gmp-click", () => {
+      // Los marcadores clásicos emiten "click", no "gmp-click".
+      m.addListener("click", () => {
         // El pin solo dice CUÁL se eligió. De enseñar el aviso se encarga la
         // tira de tarjetas de abajo, que se desplaza hasta él.
         onActive(l.id);
@@ -137,7 +142,7 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
       agrupador.current = crearAgrupador(mapa, libs, creados);
     } else {
       // Sin agrupador nadie les asigna el mapa: hay que hacerlo aquí.
-      creados.forEach((m) => { m.map = mapa; });
+      creados.forEach((m) => { m.setMap(mapa); });
     }
 
     // Encuadre panorámico a todos los avisos con ubicación.
@@ -155,7 +160,7 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
         return () => {
           agrupador.current?.clearMarkers();
           agrupador.current = null;
-          creados.forEach((m) => { m.map = null; });
+          creados.forEach((m) => { m.setMap(null); });
         };
       }
 
@@ -189,14 +194,14 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
         google.maps.event.removeListener(alPulsar);
         agrupador.current?.clearMarkers();
         agrupador.current = null;
-        creados.forEach((m) => { m.map = null; });
+        creados.forEach((m) => { m.setMap(null); });
       };
     }
 
     return () => {
       agrupador.current?.clearMarkers();
       agrupador.current = null;
-      creados.forEach((m) => { m.map = null; });
+      creados.forEach((m) => { m.setMap(null); });
     };
     // `onActive` fuera a propósito, y `points` sustituido por su firma: lo que
     // debe reconstruir los pines es que CAMBIEN los avisos, no que el padre
@@ -207,12 +212,11 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
   // ---- El aviso activo: se repinta y el mapa se acerca a él ----
   useEffect(() => {
     if (!mapa) return;
-    // Se cambian las CLASES del pin, no su contenido: reasignar `content`
-    // destruye el nodo y monta otro, y el nuevo se pinta un fotograma en su
-    // posición base antes de colocarse. Eso era el salto.
+    // Resaltar es cambiarle el icono al marcador. Google lo repinta en su
+    // propia capa, sin tocar el DOM ni recolocar nada.
     for (const [id, m] of marcadores.current) {
-      const el = m.content;
-      if (el instanceof HTMLElement) marcarPinActivo(el, id === active);
+      const l = points.find((p) => p.id === id);
+      if (l) m.setIcon(iconoDePrecio(formatPrice(l.price, l.currency), id === active));
     }
     if (!active) return;
     // Se omite la primera selección para no pisar el encuadre panorámico.

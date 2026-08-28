@@ -3,7 +3,7 @@
 // encima de otros y no se lee nada.
 
 import { MarkerClusterer, SuperClusterAlgorithm, type Renderer } from "@googlemaps/markerclusterer";
-import { pinDeGrupo } from "@/components/mapIcons";
+import { pinDeGrupo, iconoDeGrupo } from "@/components/mapIcons";
 import type { LibreriasDelMapa } from "@/lib/googleMaps";
 
 export interface OpcionesDeAgrupacion {
@@ -31,18 +31,31 @@ export interface OpcionesDeAgrupacion {
 export function crearAgrupador(
   mapa: google.maps.Map,
   libs: LibreriasDelMapa,
-  marcadores: google.maps.marker.AdvancedMarkerElement[],
+  // Admite las dos clases de marcador: el buscador usa `Marker` clásico —su
+  // icono es una imagen y no un nodo del DOM, que era lo que saltaba al soltar
+  // el mapa— y los otros mapas siguen con el avanzado.
+  marcadores: Array<google.maps.Marker | google.maps.marker.AdvancedMarkerElement>,
   { radio = 45, zoomMaximo = 16, interactivo = true }: OpcionesDeAgrupacion = {},
 ): MarkerClusterer {
+  // El pin del grupo se fabrica del mismo tipo que los marcadores que agrupa:
+  // mezclar clásicos y avanzados en un mismo mapa hace que el agrupador trate a
+  // unos por `setMap` y a otros por `.map`, y alguno se queda pegado.
+  const clasicos = marcadores.length > 0 && marcadores[0] instanceof google.maps.Marker;
   const renderer: Renderer = {
     render: ({ count, position }) =>
-      new libs.marker.AdvancedMarkerElement({
-        position,
-        content: pinDeGrupo(count),
-        // Por encima de los pines sueltos: un grupo tapado por un precio
-        // suelto se ve como un pin partido por la mitad.
-        zIndex: 1000 + count,
-      }),
+      clasicos
+        ? new google.maps.Marker({
+            position,
+            icon: iconoDeGrupo(count),
+            // Por encima de los pines sueltos: un grupo tapado por un precio
+            // suelto se ve como un pin partido por la mitad.
+            zIndex: 1000 + count,
+          })
+        : new libs.marker.AdvancedMarkerElement({
+            position,
+            content: pinDeGrupo(count),
+            zIndex: 1000 + count,
+          }),
   };
 
   const agrupador = new MarkerClusterer({

@@ -44,25 +44,28 @@ const disparar = (evento: string) => {
   for (const o of oyentes) if (o.evento === evento && o.vivo) { o.vivo = false; o.cb(); }
 };
 
+/**
+ * Imita a `google.maps.Marker`, que es lo que usa ahora el buscador: su pin es
+ * una IMAGEN que Google dibuja en su capa, no un nodo del DOM que haya que
+ * recolocar en cada gesto — que era lo que saltaba al soltar el mapa.
+ */
 class MarcadorFalso {
-  /** Cuántas veces le han REEMPLAZADO el nodo del contenido. */
-  reemplazos = 0;
-  #contenido: unknown = null;
-  get content() { return this.#contenido; }
-  set content(v: unknown) { this.reemplazos++; this.#contenido = v; }
+  /** Cuántas veces le han cambiado el icono. */
+  iconos: unknown[] = [];
   position: unknown = null;
   id = "";
-  constructor(o: { position: unknown; content: unknown }) {
+  constructor(o: { position: unknown; icon?: unknown }) {
     this.position = o.position;
-    this.content = o.content;
-    this.reemplazos = 0; // el primero es el montaje, no un repintado
+    if (o.icon) this.iconos.push(o.icon);
     creados.push(this);
     // Se numeran en el orden en que los crea el componente, que es el de la
     // lista de avisos.
     this.id = AVISOS_IDS[contador++ % AVISOS_IDS.length];
   }
+  setIcon(i: unknown) { this.iconos.push(i); }
+  setMap() { /* el agrupador se encarga */ }
   addListener(evento: string, cb: () => void) {
-    if (evento === "gmp-click") clics.set(this.id, cb);
+    if (evento === "click") clics.set(this.id, cb);
   }
 }
 
@@ -142,6 +145,9 @@ beforeEach(() => {
   (globalThis as unknown as { google: unknown }).google = {
     maps: {
       InfoWindow: VentanaFalsa,
+      Marker: MarcadorFalso,
+      Size: class { constructor(public w: number, public h: number) {} },
+      Point: class { constructor(public x: number, public y: number) {} },
       LatLngBounds: class { extend() {} isEmpty() { return false; } },
       event: {
         // Se guardan de verdad para poder dispararlos: son la clave del salto
@@ -283,26 +289,34 @@ describe("resaltar un pin no lo vuelve a fabricar", () => {
     </MemoryRouter>
   );
 
-  it("cambiar la selección no reemplaza el contenido de ningún marcador", async () => {
+  it("el pin es una imagen, no un nodo del DOM", async () => {
+    // Es lo que quita el salto de raíz: sin nodo, no hay nada que Google tenga
+    // que recolocar al terminar el gesto.
+    render(conActivo(null));
+    await waitFor(() => expect(creados.length).toBeGreaterThan(0));
+    const icono = creados[0].iconos[0] as { url: string };
+    expect(icono.url.startsWith("data:image/svg+xml")).toBe(true);
+  });
+
+  it("resaltar cambia el icono, no fabrica un marcador nuevo", async () => {
     const { rerender } = render(conActivo(null));
     await waitFor(() => expect(creados.length).toBeGreaterThan(0));
-    creados.forEach((m) => { m.reemplazos = 0; });
+    const cuantos = creados.length;
 
     rerender(conActivo("a1"));
     rerender(conActivo("a2"));
 
-    expect(creados.map((m) => m.reemplazos)).toEqual(creados.map(() => 0));
+    expect(creados.length).toBe(cuantos);
   });
 
-  it("pero el pin elegido SÍ se resalta", async () => {
+  it("y el elegido se pinta con el color de resaltado", async () => {
     const { rerender } = render(conActivo(null));
     await waitFor(() => expect(creados.length).toBeGreaterThan(0));
 
     rerender(conActivo("a1"));
 
-    const el = creados[0].content as HTMLElement;
-    expect(el.className).toContain("bg-primary");
-    // Y los demás se quedan como estaban.
-    expect((creados[1].content as HTMLElement).className).toContain("bg-secondary");
+    const ultimo = (m: MarcadorFalso) => decodeURIComponent((m.iconos.at(-1) as { url: string }).url);
+    expect(ultimo(creados[0])).toContain("#162950"); // --primary
+    expect(ultimo(creados[1])).toContain("#bd4e05"); // --secondary
   });
 });
