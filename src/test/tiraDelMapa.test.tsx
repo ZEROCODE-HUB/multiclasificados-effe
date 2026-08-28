@@ -44,7 +44,11 @@ vi.mock("@/components/ListingsMap", () => ({
 vi.mock("@/hooks/use-mobile", () => ({ useIsMobile: () => true }));
 vi.mock("@/components/Navbar", () => ({ Navbar: () => null }));
 vi.mock("@/components/ListingCard", () => ({
-  ListingCard: ({ listing }: { listing: { title: string } }) => <div data-testid="card">{listing.title}</div>,
+  // El mock ARRASTRA `className`: es lo que le da a la tarjeta el estirón que
+  // la iguala con las del listado, y sin esto el test no podría verlo.
+  ListingCard: ({ listing, className }: { listing: { title: string }; className?: string }) => (
+    <div data-testid="card" className={className}>{listing.title}</div>
+  ),
 }));
 vi.mock("@/hooks/useCategories", () => ({ useCategories: () => [] }));
 vi.mock("@/hooks/useSession", () => ({ useSession: () => null }));
@@ -281,5 +285,35 @@ describe("el reparto de la pantalla en escritorio", () => {
       .find((d) => d.className.includes("lg:grid-cols-[") && d.className.includes("lg:min-h-0"))!;
     expect(rejilla.className).toContain("2fr");
     expect(rejilla.className).not.toContain("45%");
+  });
+});
+
+describe("las tarjetas del mapa miden lo mismo que las del listado", () => {
+  it("la tarjeta se estira con la rejilla, no solo su envoltorio", async () => {
+    // En el listado la tarjeta es hija DIRECTA de la rejilla, así que se estira
+    // sola y toda la fila cuadra por abajo. Aquí va dentro de otro div —el que
+    // capta el ratón y pinta el aro de seleccionado—, de modo que la rejilla
+    // estiraba el envoltorio y la tarjeta se quedaba con su alto propio: el aro
+    // sobresalía por debajo y los bordes de una misma fila no coincidían.
+    const { container } = pintar();
+    await waitFor(() => expect(tarjetas().length).toBe(6));
+    // Por nombre de clase y no con `querySelector`: los dos puntos de
+    // `lg:h-full` hay que escaparlos en CSS y un descuido ahí no falla, pasa.
+    const conEstiron = [...container.querySelectorAll("div")]
+      .filter((d) => d.className.split(" ").includes("lg:h-full"));
+    expect(conEstiron).toHaveLength(6);
+  });
+
+  it("caben varias tarjetas por fila y no una estirada a lo ancho", async () => {
+    // El mínimo estaba en 230 px para una columna que es el 40 % de la
+    // pantalla: por debajo de ~1100 px de ancho dejaban de caber dos y
+    // `auto-fill` estiraba UNA hasta los 378 px, más del doble que las 166 del
+    // listado a esa misma anchura.
+    const { container } = pintar();
+    await waitFor(() => expect(tarjetas().length).toBe(6));
+    const clases = (container.querySelector('[class*="snap-x"]') as HTMLElement).className;
+    const min = /minmax\((\d+)px,1fr\)/.exec(clases);
+    expect(min).toBeTruthy();
+    expect(Number(min![1])).toBeLessThanOrEqual(180);
   });
 });

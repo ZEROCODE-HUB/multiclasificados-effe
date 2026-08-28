@@ -177,7 +177,12 @@ export function CuerpoDeAviso({
         {/* truncate: con dos por fila caben ~158 px, y categorías como
             "Vehículos y Repuestos" con este espaciado se salían. */}
         <span className="text-[10px] uppercase tracking-[0.18em] font-bold text-secondary truncate">{l.category}</span>
-        <h3 className="font-semibold text-foreground text-sm leading-snug line-clamp-2 group-hover:text-primary transition-colors min-h-[2.25rem]">
+        {/* EL HUECO RESERVADO TIENE QUE MEDIR EXACTAMENTE DOS LÍNEAS.
+            Estaba en `leading-snug` (1.375 × 14 px = 19.25) con `min-h-[2.25rem]`
+            = 36 px: un título de una línea se estiraba a 36 y uno de dos medía
+            38.5. Dos píxeles y medio que descuadraban la fila entera.
+            Con `leading-5` la línea mide 20 px clavados y la reserva, 40. */}
+        <h3 className="font-semibold text-foreground text-sm leading-5 line-clamp-2 group-hover:text-primary transition-colors min-h-[2.5rem]">
           {l.title}
         </h3>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -202,7 +207,13 @@ export function CuerpoDeAviso({
             unos píxeles más que las demás y la fila quedaría descuadrada — que
             es justo lo que se veía. Reservar el hueco cuesta una línea de 10 px
             y hace que todas midan igual, con sello o sin él. */}
-        <p className="flex items-center gap-1 text-[10px] font-semibold text-secondary min-h-[0.875rem]">
+        {/* `leading-[0.875rem]` NO es un adorno: sin él la reserva no servía.
+            `text-[10px]` solo fija el tamaño de letra; la altura de línea la
+            heredaba del `line-height: 1.65` del body, así que el texto ocupaba
+            16.5 px dentro de un hueco reservado de 14. La tarjeta con sello
+            seguía midiendo más que la de al lado — el fallo que se creía
+            corregido. Ahora la línea mide 14 px, los mismos que se reservan. */}
+        <p className="flex items-center gap-1 text-[10px] leading-[0.875rem] font-semibold text-secondary min-h-[0.875rem]">
           {l.advertiserVerified && (
             <>
               <ShieldCheck size={11} className="shrink-0" />

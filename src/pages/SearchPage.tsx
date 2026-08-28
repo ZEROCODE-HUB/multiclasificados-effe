@@ -975,13 +975,22 @@ export default function SearchPage() {
                  ella. Bastaba con eso.
                  `items-start` para que las tarjetas conserven su alto propio en
                  vez de estirarse hasta el del contenedor. */
-              /* En escritorio, el MISMO ancho mínimo por tarjeta que usa la
-                 portada (230 px) en vez de un número fijo de columnas. Con
-                 `lg:grid-cols-2` las tarjetas de aquí salían de ~220 px y las
-                 del listado de ~290: el mismo aviso se veía de dos tamaños
-                 según la pantalla. Con `auto-fill` manda el ancho y las
-                 columnas se ajustan solas. */
-              className={`flex items-start gap-3 h-[18rem] overflow-x-auto overflow-y-hidden snap-x snap-mandatory no-scrollbar px-4 py-3 ${enLaTira.length === 1 ? "justify-center" : ""} lg:justify-start lg:grid lg:items-stretch lg:h-auto lg:grid-cols-[repeat(auto-fill,minmax(230px,1fr))] lg:gap-x-4 lg:gap-y-5 lg:overflow-visible lg:snap-none lg:px-4`}
+              /* En escritorio manda el ANCHO MÍNIMO por tarjeta, no un número
+                 fijo de columnas: con `lg:grid-cols-2` las de aquí salían de
+                 ~220 px y las del listado de ~290, el mismo aviso a dos tamaños
+                 según la pantalla.
+                 180 px y no los 230 que había: esta columna es el 40 % de la
+                 pantalla, y con 230 de mínimo dejaban de caber dos en cuanto se
+                 bajaba de 1100 px de ancho — entonces `auto-fill` estiraba UNA
+                 sola tarjeta hasta los 378 px, más del doble que las 166 del
+                 listado. Con 180 caben tres donde antes cabían dos, y el ancho
+                 se acerca al del listado en las pantallas normales:
+                   1024 -> 181 px (listado 166)   1536 -> 183 px (listado 192)
+                   1920 -> 235 px (listado 256)
+                 Entre 1280 y 1440 la columna sigue siendo demasiado estrecha
+                 para una tercera tarjeta, así que ahí se quedan algo más
+                 grandes; es el ancho disponible, no una decisión. */
+              className={`flex items-start gap-3 h-[18rem] overflow-x-auto overflow-y-hidden snap-x snap-mandatory no-scrollbar px-4 py-3 ${enLaTira.length === 1 ? "justify-center" : ""} lg:justify-start lg:grid lg:items-stretch lg:h-auto lg:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] lg:gap-x-4 lg:gap-y-5 lg:overflow-visible lg:snap-none lg:px-4`}
             >
               {enLaTira.map((l) => (
                 <div
@@ -998,7 +1007,15 @@ export default function SearchPage() {
                     active === l.id ? "ring-2 ring-secondary ring-offset-2" : ""
                   }`}
                 >
-                  <ListingCard listing={l} />
+                  {/* `lg:h-full`: en escritorio esta tarjeta va envuelta en el
+                      div de arriba, así que la rejilla estira el ENVOLTORIO y
+                      la tarjeta se quedaba corta — el aro de seleccionado
+                      sobresalía por debajo y los bordes de una fila no
+                      cuadraban. En el listado no pasa porque allí la tarjeta es
+                      hija directa de la rejilla.
+                      Solo en `lg`: en la tira del móvil las tarjetas conservan
+                      su alto propio, que ahora ya es el mismo para todas. */}
+                  <ListingCard listing={l} className="lg:h-full" />
                 </div>
               ))}
             </div>

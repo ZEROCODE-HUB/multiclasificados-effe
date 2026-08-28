@@ -19,9 +19,16 @@ import { marcoDeAviso } from "@/lib/estiloDeAviso";
 interface ListingCardProps {
   listing: Listing;
   layout?: "grid" | "list";
+  /** Clases extra para el marco de la tarjeta.
+   *  Existe por la columna del mapa: allí la tarjeta va DENTRO de otro div (el
+   *  que capta el hover y pinta el aro de seleccionado), así que la rejilla
+   *  estira ese envoltorio y no la tarjeta, que se quedaba con su alto propio.
+   *  En el listado no hace falta porque la tarjeta es hija directa de la
+   *  rejilla y se estira sola. */
+  className?: string;
 }
 
-export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
+export function ListingCard({ listing, layout = "grid", className = "" }: ListingCardProps) {
   const navigate = useNavigate();
   const session = useSession();
   const { isFavorite, toggle } = useFavorites();
@@ -122,7 +129,7 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
     // Sin halo: en la lista las filas van pegadas y el anillo exterior se
     // comería la separación. Es el mismo dorado por lo demás.
     return (
-      <Link to={detailUrl} aria-label={listing.title} className={`no-underline text-inherit flex gap-4 p-3 hover:shadow-lg transition-all cursor-pointer group ${marcoDeAviso(featured, false)}`}>
+      <Link to={detailUrl} aria-label={listing.title} className={`no-underline text-inherit flex gap-4 p-3 hover:shadow-lg transition-all cursor-pointer group ${marcoDeAviso(featured, false)} ${className}`}>
         {featured && <span className="sr-only">Aviso destacado</span>}
         <div className="relative w-40 flex-shrink-0 overflow-hidden bg-muted" style={{ aspectRatio: "4 / 3" }}>
           {/* La miniatura se muestra a 160 px: pedimos ese tamaño, no el original. */}
@@ -158,7 +165,7 @@ export function ListingCard({ listing, layout = "grid" }: ListingCardProps) {
       /* Sin sesion no se ensena el precio. La ficha del pin del mapa hace lo
          mismo: si no, cualquiera sin cuenta veria los precios pulsando pines. */
       mostrarPrecio={isAuthed}
-      className="cursor-pointer transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5"
+      className={`cursor-pointer transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5 ${className}`}
       /* EFFE-014: enlace real que cubre toda la card (stretched link). Los
          controles (favorito, insignias con tooltip, CTA) van con z-10 por
          encima y como HERMANOS del enlace, para no anidar botones en un <a>. */

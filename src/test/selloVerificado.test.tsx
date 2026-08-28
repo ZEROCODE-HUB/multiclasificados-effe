@@ -141,6 +141,52 @@ describe("el sello no descuadra la fila", () => {
     expect(sello()).toBeNull();
   });
 
+  // LO QUE RESERVA UN HUECO TIENE QUE MEDIR LO QUE OCUPA SU CONTENIDO.
+  //
+  // Reservar el sitio del sello no bastaba, y el fallo sobrevivió a la primera
+  // corrección: `text-[10px]` solo fija el TAMAÑO DE LETRA. La altura de línea
+  // la heredaba del `line-height: 1.65` del body, así que el texto ocupaba
+  // 16,5 px dentro de un hueco reservado de 14 — la tarjeta con sello seguía
+  // midiendo dos píxeles y medio más que la de al lado.
+  //
+  // Lo mismo pasaba con el título: dos líneas a `leading-snug` miden 38,5 px y
+  // se reservaban 36, así que una tarjeta de título corto y otra de título
+  // largo tampoco medían igual.
+  //
+  // jsdom no calcula diseño, así que no se puede medir el alto real; lo que sí
+  // se puede es comprobar la ARITMÉTICA de las clases, que es donde estuvo el
+  // error las dos veces. Si alguien cambia una y olvida la otra, esto avisa.
+  describe("la reserva mide exactamente lo que ocupa el contenido", () => {
+    const REM = 16;
+    // `leading-5` → 1.25rem; `leading-[0.875rem]` → 0.875rem.
+    const alturaDeLinea = (clases: string) => {
+      const arbitraria = /leading-\[([\d.]+)rem\]/.exec(clases);
+      if (arbitraria) return Number(arbitraria[1]) * REM;
+      const escala = /(?:^|\s)leading-(\d+)(?:\s|$)/.exec(clases);
+      if (escala) return (Number(escala[1]) / 4) * REM;
+      // Sin altura de línea propia hereda el 1.65 del body: es justo el caso
+      // que rompía la reserva, así que no puede pasar por bueno.
+      return null;
+    };
+    const reserva = (clases: string) => {
+      const m = /min-h-\[([\d.]+)rem\]/.exec(clases);
+      return m ? Number(m[1]) * REM : null;
+    };
+
+    it("el sello: una línea de 10 px cabe en su hueco, ni más ni menos", () => {
+      const { container } = renderCard({ advertiserVerified: true });
+      const cls = bloqueDelSello(container)!.className;
+      expect(alturaDeLinea(cls)).toBe(reserva(cls));
+    });
+
+    it("el título: el hueco son DOS líneas clavadas", () => {
+      const { container } = renderCard({ advertiserVerified: true });
+      const h3 = container.querySelector("h3")!;
+      expect(h3.className).toContain("line-clamp-2");
+      expect(alturaDeLinea(h3.className)! * 2).toBe(reserva(h3.className));
+    });
+  });
+
   it("las dos tarjetas tienen las MISMAS filas de contenido", () => {
     // Lo que decide el alto son los bloques del cuerpo, no cuántos elementos
     // haya dentro de cada uno: el sello mete un icono y un texto DENTRO de un
