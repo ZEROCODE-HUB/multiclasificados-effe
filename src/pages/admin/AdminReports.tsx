@@ -137,8 +137,8 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
   const [filters, setFilters] = useState<Filters>({ from: "", to: "", cat: "all", region: "all" });
 
   // ===== Datos reales (se llenan a medida que haya más actividad) =====
-  const [allCategory, setAllCategory] = useState<{ cat: string; avisos: number; monto: number }[]>([]);
-  const [allRegion, setAllRegion] = useState<{ reg: string; avisos: number; monto: number }[]>([]);
+  const [allCategory, setAllCategory] = useState<{ cat: string; avisos: number; renovaciones: number; monto: number }[]>([]);
+  const [allRegion, setAllRegion] = useState<{ reg: string; avisos: number; renovaciones: number; monto: number }[]>([]);
   const [claims, setClaims] = useState<ClaimsSummary>({ recibidos: 0, pendientes: 0, solucionados: 0, trend: [] });
   const [revenueSeries, setRevenueSeries] = useState<GrowthPoint[]>([]);
   // Período de las series (Pagos/Avisos/Usuarios/Postulaciones). El RPC ya sabía
@@ -226,6 +226,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
   // Arrays filtrados (categoría/región) que alimentan los gráficos, respetando el diseño.
   const visibilityByCategory = allCategory.filter((r) => matchCat(r.cat));
   const freeByCategory = visibilityByCategory.map((r) => ({ cat: r.cat, value: r.avisos }));
+  const renovacionesTotales = visibilityByCategory.reduce((a, b) => a + b.renovaciones, 0);
   const visibilityByRegion = allRegion.filter((r) => matchRegion(r.reg));
   const freeByRegion = visibilityByRegion.map((r) => ({ reg: r.reg, value: r.avisos }));
   const claimsTrend = claims.trend;
@@ -238,7 +239,15 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
     let title = "Reporte";
     if (activeTab === "dashboard") {
       title = "Avisos por categoría";
-      rows = visibilityByCategory.map((r) => ({ Categoría: r.cat, Avisos: r.avisos, "Monto S/": Number(r.monto.toFixed(2)) }));
+      // "Renovaciones" va en su propia columna: el monto siempre las incluyó,
+      // pero "Avisos" cuenta avisos distintos y un aviso renovado cinco veces
+      // sigue siendo uno. Leídas juntas, parecía que faltaba dinero.
+      rows = visibilityByCategory.map((r) => ({
+        Categoría: r.cat,
+        Avisos: r.avisos,
+        Renovaciones: r.renovaciones,
+        "Monto S/": Number(r.monto.toFixed(2)),
+      }));
     } else if (activeTab === "reclamos") {
       title = "Reclamos";
       rows = [
@@ -346,6 +355,14 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
                     <CardTitle className="text-sm">Avisos con visibilidad por categoría</CardTitle>
                     <p className="text-xs text-muted-foreground">
                       Total cobrado: <b className="text-secondary">{soles(visibilityByCategory.reduce((a, b) => a + b.monto, 0))}</b>
+                      {/* Las renovaciones se dicen aparte porque no son avisos
+                          nuevos: el mismo aviso renovado cinco veces sigue
+                          siendo uno. El importe siempre las incluyó, y sin este
+                          dato parecía que el dinero no cuadraba con el conteo. */}
+                      {renovacionesTotales > 0 && (
+                        <> · incluye <b className="text-secondary">{renovacionesTotales}</b>{" "}
+                        {renovacionesTotales === 1 ? "renovación" : "renovaciones"}</>
+                      )}
                     </p>
                   </CardHeader>
                   <CardContent className="h-64">
@@ -356,7 +373,8 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
                         <YAxis fontSize={11} />
                         <Tooltip formatter={(value, name) => (name === "S/ cobrado" ? [soles(value as number), name] : [value, name])} />
                         <Legend />
-                        <Bar dataKey="avisos" fill="hsl(24 95% 53%)" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="avisos" fill="hsl(24 95% 53%)" radius={[4, 4, 0, 0]} name="Avisos" />
+                        <Bar dataKey="renovaciones" fill="hsl(24 95% 72%)" radius={[4, 4, 0, 0]} name="Renovaciones" />
                         <Bar dataKey="monto" fill="hsl(220 56% 30%)" radius={[4, 4, 0, 0]} name="S/ cobrado" />
                       </BarChart>
                     </ResponsiveContainer>

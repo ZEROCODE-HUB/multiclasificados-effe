@@ -1002,7 +1002,16 @@ export async function fetchCategoryRevenue(range?: ReportDateRange) {
   try {
     const { data, error } = await supabase.rpc("admin_category_revenue", rangeArgs(range));
     if (error) throw error;
-    return ((data as Array<{ cat: string; avisos: number; monto: number }>) ?? []).map((r) => ({ cat: r.cat, avisos: Number(r.avisos) || 0, monto: Number(r.monto) || 0 }));
+    return ((data as Array<{ cat: string; avisos: number; renovaciones: number; monto: number }>) ?? [])
+      .map((r) => ({
+        cat: r.cat,
+        avisos: Number(r.avisos) || 0,
+        // Las renovaciones van APARTE de los avisos: el monto ya las incluía
+        // pero el conteo no, y las dos columnas se leían como si contaran lo
+        // mismo. Un aviso renovado cinco veces sigue siendo un aviso.
+        renovaciones: Number(r.renovaciones) || 0,
+        monto: Number(r.monto) || 0,
+      }));
   } catch { return []; }
 }
 
@@ -1011,7 +1020,13 @@ export async function fetchRegionDistribution(range?: ReportDateRange) {
   try {
     const { data, error } = await supabase.rpc("admin_region_distribution", rangeArgs(range));
     if (error) throw error;
-    return ((data as Array<{ reg: string; avisos: number; monto: number }>) ?? []).map((r) => ({ reg: r.reg, avisos: Number(r.avisos) || 0, monto: Number(r.monto) || 0 }));
+    return ((data as Array<{ reg: string; avisos: number; renovaciones: number; monto: number }>) ?? [])
+      .map((r) => ({
+        reg: r.reg,
+        avisos: Number(r.avisos) || 0,
+        renovaciones: Number(r.renovaciones) || 0,
+        monto: Number(r.monto) || 0,
+      }));
   } catch { return []; }
 }
 
