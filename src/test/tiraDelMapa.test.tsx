@@ -196,3 +196,50 @@ describe("llevar la tarjeta a la vista no arrastra al mapa", () => {
     }
   });
 });
+
+/**
+ * LA TIRA NO PUEDE CAMBIAR DE ALTO.
+ *
+ * El mapa es `flex-1`: se queda con lo que le sobre a la tira. Si la tira crece
+ * o mengua, el mapa cambia de TAMAÑO — y Google recentra el mapa por su cuenta
+ * cuando eso ocurre.
+ *
+ * Eso era el salto que se persiguió durante cinco intentos: un tirón seco unos
+ * 300 ms después de centrar el pin, que no salía en ningún registro porque no
+ * lo pedía nuestro código. Lo delató una traza tomada en producción: nueve
+ * `setCenter` seguidos (la animación de centrado) y luego UNO suelto, aislado,
+ * y todos marcados como GOOGLE.
+ *
+ * Y la tira cambiaba de alto sin que nadie lo pidiera: al pulsar un pin se
+ * queda con un solo aviso, y una tarjeta con la línea de "Anunciante
+ * verificado" mide unos píxeles más que una sin ella. Con eso bastaba.
+ */
+describe("la tira no cambia de alto y por eso el mapa no se recentra solo", () => {
+  const tira = (c: HTMLElement) => c.querySelector('[class*="snap-x"]') as HTMLElement;
+
+  it("tiene una altura fija, no la que dicte su contenido", async () => {
+    const { container } = pintar();
+    await waitFor(() => expect(tarjetas().length).toBe(6));
+    expect(tira(container).className).toMatch(/h-\[17rem\]/);
+  });
+
+  it("y la conserva al quedarse con un solo aviso", async () => {
+    // Este es el momento exacto en el que saltaba: seis tarjetas pasan a una.
+    const { container } = pintar();
+    await waitFor(() => expect(tarjetas().length).toBe(6));
+    const antes = tira(container).className;
+
+    fireEvent.click(screen.getByTestId("pin"));
+    await waitFor(() => expect(tarjetas().length).toBe(1));
+
+    expect(tira(container).className).toBe(antes);
+  });
+
+  it("las tarjetas no se estiran hasta el alto del contenedor", async () => {
+    // Con `items-stretch` una sola tarjeta se estiraría a los 17rem y el bloque
+    // de texto quedaría con un hueco enorme debajo del precio.
+    const { container } = pintar();
+    await waitFor(() => expect(tarjetas().length).toBe(6));
+    expect(tira(container).className).toContain("items-start");
+  });
+});

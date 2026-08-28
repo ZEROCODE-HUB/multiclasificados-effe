@@ -945,7 +945,20 @@ export default function SearchPage() {
           <div ref={columna} className="lg:flex-1 lg:overflow-y-auto lg:border-r border-border bg-background lg:order-1 lg:min-h-0 pb-[calc(var(--nav-bottom)+1rem)] lg:pb-0">
             <div
               ref={tira}
-              className="flex gap-3 overflow-x-auto snap-x snap-mandatory no-scrollbar px-4 py-3 lg:grid lg:grid-cols-2 lg:overflow-visible lg:snap-none lg:px-4 xl:grid-cols-3"
+              /* ALTURA FIJA, y aquí está la razón de un fallo que costó cinco
+                 intentos encontrar.
+                 El mapa es `flex-1`: se queda con el alto que le sobre a esta
+                 tira. Si la tira cambia de alto, el mapa cambia de tamaño, y
+                 Google RECENTRA el mapa por su cuenta cuando eso pasa. Se veía
+                 como un tirón seco unos 300 ms después de centrar el pin, y no
+                 aparecía en ningún registro porque no lo pedía nuestro código.
+                 Y la tira cambiaba de alto sin querer: al pulsar un pin se
+                 queda con un solo aviso, y una tarjeta con la línea de
+                 "Anunciante verificado" mide unos píxeles más que otra sin
+                 ella. Bastaba con eso.
+                 `items-start` para que las tarjetas conserven su alto propio en
+                 vez de estirarse hasta el del contenedor. */
+              className="flex items-start gap-3 h-[17rem] overflow-x-auto snap-x snap-mandatory no-scrollbar px-4 py-3 lg:grid lg:items-stretch lg:h-auto lg:grid-cols-2 lg:overflow-visible lg:snap-none lg:px-4 xl:grid-cols-3"
             >
               {enLaTira.map((l) => (
                 <div

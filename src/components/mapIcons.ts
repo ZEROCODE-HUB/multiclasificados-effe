@@ -24,8 +24,21 @@ function div(clases: string, html: string): HTMLElement {
  * burbuja queda justo encima del punto sin necesidad de desplazarla a mano
  * (Leaflet obligaba a un `translate(-50%,-100%)`).
  */
+// `transition-colors` y NO `transition-all`. La diferencia es el fallo que se
+// persiguió durante cinco intentos.
+//
+// Google coloca cada marcador con un `transform`. Mientras se arrastra el mapa
+// mueve el CONTENEDOR de los pines, así que el transform de cada pin no cambia
+// y todos acompañan al mapa sin problema. Pero AL SOLTAR recoloca cada pin con
+// su propio transform… y `transition-all` anima también esa propiedad: el pin
+// se veía viajando desde donde estaba hasta donde debía estar. De ahí el
+// "vuelve a su posición anterior y luego se pone en la correcta", que pasaba
+// con todos los pines a la vez y no aparecía en ningún registro del mapa
+// porque no lo movía nadie: era la transición dibujándolo.
+//
+// `transition-colors` deja el resaltado suave y no toca la posición.
 const PIN_BASE =
-  "inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold shadow-lg whitespace-nowrap transition-all";
+  "inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold shadow-lg whitespace-nowrap transition-colors duration-200";
 const PIN_ACTIVO = "bg-primary text-primary-foreground scale-110 ring-4 ring-primary/20";
 const PIN_NORMAL = "bg-secondary text-secondary-foreground ring-2 ring-secondary/20";
 
@@ -49,8 +62,8 @@ export function pinDePrecio(label: string, activo: boolean): HTMLElement {
  * Y se hacía con TODOS los marcadores en cada cambio de selección, así que
  * saltaban todos a la vez.
  *
- * Cambiando solo las clases del elemento que ya está no se recrea nada, y el
- * `transition-all` de arriba hace que el cambio de color se vea suave.
+ * Cambiando solo las clases del elemento que ya está no se recrea nada, y la
+ * transición de color de arriba hace que el resaltado se vea suave.
  */
 export function marcarPinActivo(el: HTMLElement, activo: boolean): void {
   const quiere = `${PIN_BASE} ${activo ? PIN_ACTIVO : PIN_NORMAL}`;
