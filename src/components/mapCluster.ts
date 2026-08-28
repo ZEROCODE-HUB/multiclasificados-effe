@@ -45,7 +45,7 @@ export function crearAgrupador(
       }),
   };
 
-  return new MarkerClusterer({
+  const agrupador = new MarkerClusterer({
     map: mapa,
     markers: marcadores,
     algorithm: new SuperClusterAlgorithm({ radius: radio, maxZoom: zoomMaximo }),
@@ -54,4 +54,40 @@ export function crearAgrupador(
       ? (_e, cluster, m) => m.fitBounds(cluster.bounds!, 64)
       : () => {},
   });
+
+  // ---------------------------------------------------------------------
+  // EL SALTO DE LOS PINES AL SOLTAR EL MAPA
+  //
+  // El agrupador se re-dibuja en CADA `idle` del mapa, es decir cada vez que
+  // el mapa se queda quieto — también al terminar un simple arrastre. Y
+  // re-dibujar no es repintar: en `renderClusters` la librería vuelve a
+  // asignarle el mapa a TODOS los marcadores (`setMap(marker, map)`), lo que
+  // los reinserta. Un marcador reinsertado se pinta un fotograma en su
+  // posición base, sin la transformación que lo coloca, y al siguiente ya
+  // aparece en su sitio: exactamente el "vuelven a su posición anterior y
+  // luego se ponen en la correcta" que se veía con todos los pines a la vez.
+  //
+  // La propia librería sabe que esto parpadea —tiene un `requestAnimationFrame`
+  // comentado como "to avoid flickering"— y hay una petición abierta para poder
+  // desactivar ese re-dibujo automático:
+  // https://github.com/googlemaps/js-markerclusterer/issues/276
+  //
+  // Mientras tanto se le quita su escucha de `idle` y se pone una que solo
+  // re-dibuja CUANDO CAMBIA EL ZOOM. Es lo único que necesita: el algoritmo
+  // (SuperCluster) agrupa por geografía, no por lo que se ve en pantalla, así
+  // que desplazarse no cambia ningún grupo. Arrastrar deja de repintar nada.
+  const interno = agrupador as unknown as { idleListener: google.maps.MapsEventListener | null };
+  if (interno.idleListener) {
+    google.maps.event.removeListener(interno.idleListener);
+    interno.idleListener = null;
+  }
+  let zoomPrevio = mapa.getZoom();
+  interno.idleListener = mapa.addListener("idle", () => {
+    const z = mapa.getZoom();
+    if (z === zoomPrevio) return;
+    zoomPrevio = z;
+    agrupador.render();
+  });
+
+  return agrupador;
 }
