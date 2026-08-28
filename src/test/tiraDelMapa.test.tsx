@@ -163,3 +163,36 @@ describe("la vista mapa cabe entera", () => {
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
   });
 });
+
+/**
+ * NADA MÁS QUE LA TIRA SE MUEVE.
+ *
+ * El sintoma: pulsas un pin, el mapa lo centra bien… y un instante despues el
+ * pin da un salto corto hacia atras y vuelve a colocarse. Parecia cosa del
+ * mapa y era de aqui: llevar la tarjeta a la vista con `scrollIntoView`
+ * desplaza TODOS los ancestros que puedan desplazarse, no solo el que uno
+ * tiene en mente — y uno de ellos contiene el mapa.
+ *
+ * Se arregla tocando el scroll del propio contenedor, que no puede afectar a
+ * nada de fuera. Esta prueba lo fija: si alguien vuelve a `scrollIntoView`, el
+ * espia salta.
+ */
+describe("llevar la tarjeta a la vista no arrastra al mapa", () => {
+  it("no usa scrollIntoView, que mueve tambien lo de alrededor", async () => {
+    const espia = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = espia;
+    // jsdom no implementa scrollTo; hace falta para que el efecto no reviente.
+    const scrollTo = vi.fn();
+    Element.prototype.scrollTo = scrollTo as unknown as Element["scrollTo"];
+    try {
+      pintar();
+      await waitFor(() => expect(tarjetas().length).toBe(6));
+      fireEvent.click(screen.getByTestId("pin"));
+      await waitFor(() => expect(tarjetas().length).toBe(1));
+      expect(espia).not.toHaveBeenCalled();
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+});

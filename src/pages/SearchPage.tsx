@@ -78,6 +78,11 @@ export default function SearchPage() {
   // La tira de avisos del mapa y cada una de sus tarjetas, para poder llevar a
   // la vista la del pin que se acaba de pulsar.
   const tira = useRef<HTMLDivElement | null>(null);
+  // En escritorio la tira no desborda: quien tiene el scroll es la columna que
+  // la contiene. Se guarda aparte para no acabar buscando "algún ancestro que
+  // se pueda desplazar", que es justo lo que hacía `scrollIntoView` y lo que
+  // movía el mapa sin querer.
+  const columna = useRef<HTMLDivElement | null>(null);
   const tarjetas = useRef<Record<string, HTMLDivElement | null>>({});
   /**
    * Al pulsar un PIN, la tira de abajo se queda solo con ese aviso.
@@ -237,11 +242,35 @@ export default function SearchPage() {
   // hacen las apps de mapas en el móvil.
   useEffect(() => {
     if (view !== "map" || !active) return;
+    const caja = tira.current;
     const el = tarjetas.current[active];
-    if (!el) return;
-    // `nearest` en el eje vertical: con `center` la página entera daba un salto
-    // en móvil, donde la tira vive debajo del mapa.
-    el.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    if (!caja || !el) return;
+
+    // SE MUEVE LA TIRA A MANO, Y NO CON `scrollIntoView`.
+    //
+    // `scrollIntoView` desplaza TODOS los ancestros que puedan desplazarse, no
+    // solo el que uno tiene en mente. Aquí eso movía también el contenedor del
+    // mapa: el pin acababa de centrarse y, un instante después, daba un salto
+    // corto hacia atrás y volvía a colocarse. Parecía cosa del mapa y era este
+    // efecto tirando del contenedor de al lado.
+    //
+    // Tocando `scrollTo` del propio elemento no hay forma de que afecte a nada
+    // más. El eje se elige por el que de verdad desborda: en el móvil la tira
+    // va de lado, y en escritorio la columna va de arriba abajo.
+    if (caja.scrollWidth > caja.clientWidth) {
+      caja.scrollTo({
+        left: el.offsetLeft - (caja.clientWidth - el.clientWidth) / 2,
+        behavior: "smooth",
+      });
+      return;
+    }
+    const col = columna.current;
+    if (col && col.scrollHeight > col.clientHeight) {
+      col.scrollTo({
+        top: el.offsetTop - (col.clientHeight - el.clientHeight) / 2,
+        behavior: "smooth",
+      });
+    }
   }, [active, view]);
 
   // Recuerda el departamento para las próximas visitas.
@@ -913,7 +942,7 @@ export default function SearchPage() {
               pulsarlo, la tira se desplaza hasta su tarjeta.
               Eso sustituye a la ventanita que salía sobre el pin, que daba
               problemas de sitio imposibles de arreglar desde fuera de Google. */}
-          <div className="lg:flex-1 lg:overflow-y-auto lg:border-r border-border bg-background lg:order-1 lg:min-h-0 pb-[calc(var(--nav-bottom)+1rem)] lg:pb-0">
+          <div ref={columna} className="lg:flex-1 lg:overflow-y-auto lg:border-r border-border bg-background lg:order-1 lg:min-h-0 pb-[calc(var(--nav-bottom)+1rem)] lg:pb-0">
             <div
               ref={tira}
               className="flex gap-3 overflow-x-auto snap-x snap-mandatory no-scrollbar px-4 py-3 lg:grid lg:grid-cols-2 lg:overflow-visible lg:snap-none lg:px-4 xl:grid-cols-3"
