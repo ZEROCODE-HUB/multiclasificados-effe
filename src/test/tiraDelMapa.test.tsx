@@ -108,3 +108,58 @@ describe("pasar el ratón por una tarjeta NO filtra", () => {
     expect(screen.queryByRole("button", { name: /ver todos/i })).toBeNull();
   });
 });
+
+/**
+ * LA VISTA MAPA CABE EN PANTALLA Y NO SE DESPLAZA.
+ *
+ * Tener que bajar para ver los avisos en una pantalla que ya es un mapa es lo
+ * peor de los dos mundos: ni se ve bien el mapa ni se llega a la lista. Para
+ * que quepa hay que quitarle alto a todo lo demás, y eso son decisiones
+ * concretas, no un ajuste de CSS suelto. Son las que fijan estas pruebas.
+ */
+describe("la vista mapa cabe entera", () => {
+  it("la página no hace scroll: alto fijo y desbordamiento oculto", async () => {
+    const { container } = pintar();
+    await waitFor(() => expect(tarjetas().length).toBe(6));
+    const raiz = container.firstChild as HTMLElement;
+    expect(raiz.className).toContain("h-[100dvh]");
+    expect(raiz.className).toContain("overflow-hidden");
+    // `dvh` y no `vh`: en el móvil la barra del navegador aparece y desaparece,
+    // y con `vh` la tira quedaba cortada por abajo al mover el mapa.
+    expect(raiz.className).not.toContain("h-[100vh]");
+  });
+
+  it("el mapa se queda con el alto que sobre, sin un 45vh fijo", async () => {
+    const { container } = pintar();
+    await waitFor(() => expect(tarjetas().length).toBe(6));
+    // Cuanto menos ocupen la búsqueda y la tira, más mapa se ve.
+    expect(container.innerHTML).not.toContain("h-[45vh]");
+  });
+
+  it("la fila de categorías se esconde: ya están dentro del botón Filtros", async () => {
+    // En el mapa el espacio vertical es lo único escaso, y esa fila repetía
+    // algo alcanzable de otra forma. Se comprueba por la clase y no por el rol
+    // porque sigue en el DOM: la esconde el CSS según el ancho.
+    const { container } = pintar();
+    await waitFor(() => expect(tarjetas().length).toBe(6));
+    const fila = container.querySelector('[data-fila="categorias"]') as HTMLElement;
+    expect(fila).toBeTruthy();
+    expect(fila.className).toContain("hidden");
+  });
+
+  it("y el botón Filtros sigue ahí, que es donde viven ahora", async () => {
+    // Hay dos en el documento (uno por tamaño de pantalla) desde antes de esto;
+    // lo que importa es que no desaparezcan al ocultar las categorías.
+    pintar();
+    await waitFor(() => expect(tarjetas().length).toBe(6));
+    expect(screen.getAllByRole("button", { name: /filtros/i }).length).toBeGreaterThan(0);
+  });
+
+  it("hay UN solo encabezado de página, no uno por tamaño de pantalla", async () => {
+    // El conteo se pinta flotando sobre el mapa; con un <h1> en cada variante
+    // visual habría dos en el documento, o ninguno alcanzable según el ancho.
+    pintar();
+    await waitFor(() => expect(tarjetas().length).toBe(6));
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+  });
+});

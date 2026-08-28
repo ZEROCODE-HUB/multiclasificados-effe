@@ -68,6 +68,10 @@ export default function SearchPage() {
   const { isFavorite, toggle } = useFavorites();
   const initialView = (params.get("view") as ViewMode) || "list";
   const [view, setView] = useState<ViewMode>(initialView);
+  // La vista Mapa se comporta distinto en varios sitios: es la única que ocupa
+  // la pantalla entera sin dejar hacer scroll, así que ahí el espacio vertical
+  // manda sobre todo lo demás.
+  const esMapa = view === "map";
   const [layout, setLayout] = useState<Layout>("grid");
   const [showFilters, setShowFilters] = useState(false);
   const [active, setActive] = useState<string | null>(null);
@@ -472,7 +476,12 @@ export default function SearchPage() {
               van FUERA del contenedor con scroll horizontal para que no se oculten
               tras el scroll cuando las categorías llenan el ancho en desktop
               (IT2-028). Solo las categorías scrollean (flex-1 min-w-0). */}
-          <div className="flex items-center gap-3">
+          {/* EN LA VISTA MAPA ESTA FILA DESAPARECE EN EL MÓVIL.
+              Las categorías ya están dentro del botón "Filtros", así que ahí
+              solo repetían algo que se puede alcanzar de otra forma — y ahí el
+              espacio vertical es lo único escaso: cada fila que se quita se la
+              queda el mapa. En tablet y escritorio se conserva, que sitio hay. */}
+          <div data-fila="categorias" className={`items-center gap-3 ${esMapa ? "hidden md:flex" : "flex"}`}>
             {/* Solo en tablet (md–lg): en lg+ el panel ya vive en la barra lateral.
                 Sin el `lg:hidden`, en desktop este botón abría el Sheet (cuyo
                 contenido es `lg:hidden`) y solo se veía el overlay → pantalla negra. */}
@@ -487,7 +496,7 @@ export default function SearchPage() {
             {/* El degradado del borde derecho avisa de que la lista sigue: con
                 `no-scrollbar` no hay ninguna otra pista de que se puede deslizar
                 (IT3-014). `pointer-events-none` para no comerse los clics. */}
-            <div className="relative flex-1 min-w-0">
+            <div className={`relative flex-1 min-w-0 ${esMapa ? "hidden lg:block" : ""}`}>
             <div className="flex items-center gap-3 overflow-x-auto no-scrollbar">
               {categories.map((c) => (
                 <button
@@ -520,7 +529,7 @@ export default function SearchPage() {
         </div>
       </div>
     ),
-    [category, categories, ViewToggle]
+    [category, categories, ViewToggle, esMapa]
   );
 
 
@@ -656,7 +665,11 @@ export default function SearchPage() {
   );
 
   return (
-    <div className={`${view === "map" ? "min-h-screen lg:h-screen" : "min-h-screen"} flex flex-col bg-background`}>
+    /* En la vista Mapa la página NO hace scroll: cabe entera y punto. `dvh` y
+       no `vh` porque en el móvil la barra del navegador aparece y desaparece, y
+       con `vh` la tira quedaba cortada por abajo justo al empezar a mover el
+       mapa. */
+    <div className={`${esMapa ? "h-[100dvh] overflow-hidden" : "min-h-screen"} flex flex-col bg-background`}>
       <Navbar />
 
       {/* Búsqueda en vivo (filtra mientras escribes) en todo lo que sea < 2xl
@@ -833,7 +846,20 @@ export default function SearchPage() {
       ) : (
         <div className="flex-1 flex flex-col lg:grid lg:grid-cols-[480px_1fr] lg:min-h-0">
           {/* Map - full width on top in mobile, right column on desktop */}
-          <div className="relative bg-muted overflow-hidden h-[45vh] lg:h-auto lg:order-2 shrink-0">
+          {/* `flex-1 min-h-0` en vez de un `45vh` fijo: el mapa se queda con
+              todo el alto que sobre después de la búsqueda y la tira, así que
+              cuanto menos ocupen ellas, más mapa se ve. */}
+          {/* UN SOLO h1 para la página, y va aquí porque el conteo se pinta en
+              dos sitios —flotando sobre el mapa en el móvil, en la cabecera de
+              la columna en escritorio— y solo uno de los dos está visible cada
+              vez. Con un encabezado en cada uno habría dos h1 en el documento, o
+              ninguno alcanzable según el ancho. Los dos visuales van marcados
+              como decorativos. */}
+          <h1 className="sr-only">
+            {listings.length} {listings.length === 1 ? "aviso" : "avisos"} en el mapa
+          </h1>
+
+          <div className="relative bg-muted overflow-hidden flex-1 min-h-0 lg:h-auto lg:order-2 lg:flex-none">
             {/* El Suspense va pegado al mapa: si envolviera también la lista,
                 la columna de resultados se remontaría al cambiar de vista. */}
             <Suspense
@@ -850,6 +876,34 @@ export default function SearchPage() {
                 hrefFor={(id) => `/aviso/${id}`}
               />
             </Suspense>
+
+            {/* EL CONTEO, FLOTANDO SOBRE EL MAPA.
+                Antes era una barra propia entre el mapa y los avisos: una franja
+                de ancho completo para decir un número. Aquí no le quita alto a
+                nada, y el botón de "ver todos" queda junto al mapa, que es donde
+                se acaba de pulsar el pin.
+                Uno solo para todos los anchos: con una versión por tamaño había
+                dos botones "Ver todos" en el documento a la vez. */}
+            <div className="absolute top-3 left-3 z-[5] flex items-center gap-2">
+              <p aria-hidden className="flex items-baseline gap-1.5 bg-background/95 backdrop-blur px-2.5 py-1 shadow-sm text-xs font-bold text-foreground">
+                <span className="text-[10px] uppercase tracking-[0.18em] font-bold text-secondary">Resultados</span>
+                <span className="text-muted-foreground/50">·</span>
+                {/* El conteo sigue siendo el TOTAL aunque se esté mirando uno
+                    solo: si dijera "1 aviso" parecería que el mapa se ha quedado
+                    sin nada. */}
+                <span>{listings.length}</span>
+              </p>
+              {soloEste && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => { setSoloEste(null); setActive(null); }}
+                  className="h-[26px] gap-1 rounded-none text-xs bg-background/95 backdrop-blur shadow-sm"
+                >
+                  <X size={12} /> Ver todos
+                </Button>
+              )}
+            </div>
           </div>
 
           {/* LOS AVISOS DEL MAPA.
@@ -860,31 +914,6 @@ export default function SearchPage() {
               Eso sustituye a la ventanita que salía sobre el pin, que daba
               problemas de sitio imposibles de arreglar desde fuera de Google. */}
           <div className="lg:flex-1 lg:overflow-y-auto lg:border-r border-border bg-background lg:order-1 lg:min-h-0 pb-[calc(var(--nav-bottom)+1rem)] lg:pb-0">
-            {/* En UNA línea. Ocupaba dos —un rótulo "Resultados" encima del
-                conteo— y en el móvil, con el mapa a 45vh, cada píxel de aquí se
-                le quita a los avisos. */}
-            <div className="flex items-center justify-between gap-2 px-4 lg:px-5 py-2 border-b border-border lg:sticky lg:top-0 bg-background/95 backdrop-blur z-10">
-              <h1 className="text-sm font-bold text-foreground flex items-baseline gap-1.5 min-w-0">
-                <span className="text-[10px] uppercase tracking-[0.18em] font-bold text-secondary shrink-0">Resultados</span>
-                <span className="text-muted-foreground/50">·</span>
-                <span className="truncate">
-                  {/* El conteo sigue siendo el TOTAL aunque se esté mirando uno
-                      solo: si dijera "1 aviso" parecería que el mapa se ha
-                      quedado sin nada. */}
-                  {listings.length} {listings.length === 1 ? "aviso" : "avisos"}
-                </span>
-              </h1>
-              {soloEste && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => { setSoloEste(null); setActive(null); }}
-                  className="h-7 gap-1 rounded-none text-xs shrink-0"
-                >
-                  <X size={12} /> Ver todos
-                </Button>
-              )}
-            </div>
             <div
               ref={tira}
               className="flex gap-3 overflow-x-auto snap-x snap-mandatory no-scrollbar px-4 py-3 lg:grid lg:grid-cols-2 lg:overflow-visible lg:snap-none lg:px-4 xl:grid-cols-3"
