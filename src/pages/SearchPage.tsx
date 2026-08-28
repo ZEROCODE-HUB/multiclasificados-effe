@@ -950,6 +950,18 @@ export default function SearchPage() {
           <div ref={columna} className="lg:flex-1 lg:overflow-y-auto lg:border-r border-border bg-background lg:order-1 lg:min-h-0 pb-[calc(var(--nav-bottom)+1rem)] lg:pb-0">
             <div
               ref={tira}
+              /* 18rem y no 17: la tarjeta mide unos 251 px (foto de 120 más el
+                 texto) y con el relleno vertical se pasaba por tres píxeles del
+                 alto fijo. Tres píxeles bastaban para que apareciera barra.
+
+                 `overflow-y-hidden` explícito por lo mismo, y esto es poco
+                 evidente: al poner `overflow-x: auto`, el eje VERTICAL deja de
+                 ser `visible` y pasa también a `auto` — así que la tira se
+                 podía desplazar hacia abajo sin que nadie lo hubiera pedido.
+
+                 `justify-center` cuando solo queda un aviso: si no, la tarjeta
+                 se queda pegada a la izquierda y el resto del ancho es un vacío
+                 que parece un error de maquetación. */
               /* ALTURA FIJA, y aquí está la razón de un fallo que costó cinco
                  intentos encontrar.
                  El mapa es `flex-1`: se queda con el alto que le sobre a esta
@@ -969,7 +981,7 @@ export default function SearchPage() {
                  del listado de ~290: el mismo aviso se veía de dos tamaños
                  según la pantalla. Con `auto-fill` manda el ancho y las
                  columnas se ajustan solas. */
-              className="flex items-start gap-3 h-[17rem] overflow-x-auto snap-x snap-mandatory no-scrollbar px-4 py-3 lg:grid lg:items-stretch lg:h-auto lg:grid-cols-[repeat(auto-fill,minmax(230px,1fr))] lg:gap-x-4 lg:gap-y-5 lg:overflow-visible lg:snap-none lg:px-4"
+              className={`flex items-start gap-3 h-[18rem] overflow-x-auto overflow-y-hidden snap-x snap-mandatory no-scrollbar px-4 py-3 ${enLaTira.length === 1 ? "justify-center" : ""} lg:justify-start lg:grid lg:items-stretch lg:h-auto lg:grid-cols-[repeat(auto-fill,minmax(230px,1fr))] lg:gap-x-4 lg:gap-y-5 lg:overflow-visible lg:snap-none lg:px-4`}
             >
               {enLaTira.map((l) => (
                 <div

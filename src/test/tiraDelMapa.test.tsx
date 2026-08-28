@@ -220,19 +220,43 @@ describe("la tira no cambia de alto y por eso el mapa no se recentra solo", () =
   it("tiene una altura fija, no la que dicte su contenido", async () => {
     const { container } = pintar();
     await waitFor(() => expect(tarjetas().length).toBe(6));
-    expect(tira(container).className).toMatch(/h-\[17rem\]/);
+    expect(tira(container).className).toMatch(/h-\[\d+rem\]/);
   });
 
   it("y la conserva al quedarse con un solo aviso", async () => {
-    // Este es el momento exacto en el que saltaba: seis tarjetas pasan a una.
+    // Este es el momento exacto en el que el mapa se recentraba solo: seis
+    // tarjetas pasan a una. Se compara SOLO el alto: otras clases sí cambian
+    // (con un aviso la tarjeta se centra), pero el alto no puede.
+    const alto = (c: HTMLElement) => tira(c).className.match(/h-\[\d+rem\]/)?.[0];
     const { container } = pintar();
     await waitFor(() => expect(tarjetas().length).toBe(6));
-    const antes = tira(container).className;
+    const antes = alto(container);
 
     fireEvent.click(screen.getByTestId("pin"));
     await waitFor(() => expect(tarjetas().length).toBe(1));
 
-    expect(tira(container).className).toBe(antes);
+    expect(alto(container)).toBe(antes);
+  });
+
+  it("no se puede desplazar en vertical", async () => {
+    // Poco evidente: al poner `overflow-x: auto`, el eje VERTICAL deja de ser
+    // `visible` y pasa también a `auto`. La tira se podía arrastrar hacia abajo
+    // sin que nadie lo hubiera pedido, y bastaban tres píxeles de mas para que
+    // apareciera la barra.
+    const { container } = pintar();
+    await waitFor(() => expect(tarjetas().length).toBe(6));
+    expect(tira(container).className).toContain("overflow-y-hidden");
+  });
+
+  it("con un solo aviso la tarjeta se centra, en vez de dejar un vacio al lado", async () => {
+    const { container } = pintar();
+    await waitFor(() => expect(tarjetas().length).toBe(6));
+    expect(tira(container).className).not.toContain("justify-center");
+
+    fireEvent.click(screen.getByTestId("pin"));
+    await waitFor(() => expect(tarjetas().length).toBe(1));
+
+    expect(tira(container).className).toContain("justify-center");
   });
 
   it("las tarjetas no se estiran hasta el alto del contenedor", async () => {
