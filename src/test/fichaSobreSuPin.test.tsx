@@ -27,10 +27,20 @@ beforeEach(prepararDom);
 const traza: string[] = [];
 /** Cuánto contenido tenía el nodo en el momento exacto de abrir. */
 let contenidoAlAbrir = -1;
+/** Lo que se le pidió al mapa, en orden. */
+const llamadas: string[] = [];
 const panTo = vi.fn();
+/** Cada vez que alguien le cambia el zoom al mapa. */
+const llamadasDeZoom: number[] = [];
 const clics = new Map<string, () => void>();
 
 let contador = 0;
+/** Los listeners que el componente deja puestos sobre el mapa. */
+const oyentes: Array<{ evento: string; cb: () => void; vivo: boolean }> = [];
+/** Dispara los listeners vivos de un evento, como haría Google. */
+const disparar = (evento: string) => {
+  for (const o of oyentes) if (o.evento === evento && o.vivo) { o.vivo = false; o.cb(); }
+};
 
 class MarcadorFalso {
   content: unknown = null;
@@ -61,9 +71,11 @@ class VentanaFalsa {
 
 const mapaFalso = {
   panTo,
-  fitBounds: vi.fn(),
-  getZoom: () => 12,
-  setZoom: vi.fn(),
+  fitBounds: () => llamadas.push("fitBounds"),
+  // 18: el zoom exagerado al que llega `fitBounds` con los avisos muy juntos,
+  // que es justo el caso que la corrección existe para arreglar.
+  getZoom: () => 18,
+  setZoom: (z: number) => llamadasDeZoom.push(z),
   setCenter: vi.fn(),
 };
 
@@ -113,15 +125,24 @@ beforeEach(() => {
   traza.length = 0;
   contenidoAlAbrir = -1;
   panTo.mockClear();
+  llamadasDeZoom.length = 0;
+  llamadas.length = 0;
   clics.clear();
   contador = 0;
+  oyentes.length = 0;
   (globalThis as unknown as { google: unknown }).google = {
     maps: {
       InfoWindow: VentanaFalsa,
       LatLngBounds: class { extend() {} isEmpty() { return false; } },
       event: {
-        addListenerOnce: vi.fn(),
-        removeListener: vi.fn(),
+        // Se guardan de verdad para poder dispararlos: son la clave del salto
+        // de los pines.
+        addListenerOnce: (_o: unknown, evento: string, cb: () => void) => {
+          const h = { evento, cb, vivo: true };
+          oyentes.push(h);
+          return h;
+        },
+        removeListener: (h: { vivo: boolean }) => { if (h) h.vivo = false; },
         clearInstanceListeners: vi.fn(),
       },
     },
@@ -168,5 +189,66 @@ describe("el pin solo avisa de cuál se eligió", () => {
 
     await waitFor(() => expect(panTo).toHaveBeenCalled());
     expect(panTo).toHaveBeenCalledWith({ lat: -12.0, lng: -77.0 });
+  });
+});
+
+/**
+ * EL SALTO DE TODOS LOS PINES.
+ *
+ * Lo reportó el cliente así: "sucede incluso si solo muevo el mapa, y se mueven
+ * todos los pines".
+ *
+ * `fitBounds` se pasa de zoom cuando los avisos están muy juntos, y eso se
+ * corregía al primer `idle`. Pero `idle` se emite CADA VEZ que el mapa se queda
+ * quieto, no solo tras el encuadre: si ese primer `idle` tardaba —el mapa aún
+ * sin medir, o el usuario tocándolo antes—, el listener seguía armado y saltaba
+ * con el primer movimiento de la persona, cambiando el zoom de golpe.
+ */
+describe("nadie le cambia el encuadre al usuario por detrás", () => {
+  it("si el usuario arrastra, la corrección de zoom se desarma", async () => {
+    pintar();
+    await waitFor(() => expect(clics.size).toBeGreaterThan(0));
+    llamadasDeZoom.length = 0;
+
+    // El usuario arrastra ANTES de que llegue el primer `idle`…
+    disparar("dragstart");
+    // …y cuando el mapa se queda quieto, ya no se le toca el zoom.
+    disparar("idle");
+
+    expect(llamadasDeZoom).toHaveLength(0);
+  });
+
+  it("pero si nadie ha tocado nada, el encuadre inicial sí se corrige", async () => {
+    // Con avisos muy juntos `fitBounds` se acerca demasiado y hay que bajarlo.
+    pintar();
+    await waitFor(() => expect(clics.size).toBeGreaterThan(0));
+    llamadasDeZoom.length = 0;
+
+    disparar("idle");
+
+    expect(llamadasDeZoom).toHaveLength(1);
+  });
+});
+
+describe("una lista nueva con los mismos avisos no toca el mapa", () => {
+  it("no se reencuadra ni se recolocan los pines", async () => {
+    // La otra mitad del "se mueven todos los pines solos". Si la dependencia
+    // fuera el array y no su contenido, bastaba con que el padre lo volviera a
+    // crear —cosa que hace en cada búsqueda— para destruir los marcadores,
+    // rehacer el agrupador y devolver el mapa al encuadre general.
+    const onActive = vi.fn();
+    const { rerender } = pintar(null, onActive);
+    await waitFor(() => expect(clics.size).toBeGreaterThan(0));
+    llamadas.length = 0;
+
+    // MISMOS avisos, array nuevo: es lo que devuelve una búsqueda repetida.
+    const copia = AVISOS.map((a) => ({ ...(a as object) })) as never[];
+    rerender(
+      <MemoryRouter>
+        <ListingsMap listings={copia} active={null} onActive={onActive} hrefFor={(i) => `/a/${i}`} />
+      </MemoryRouter>,
+    );
+
+    expect(llamadas).not.toContain("fitBounds");
   });
 });

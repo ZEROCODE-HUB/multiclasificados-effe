@@ -68,6 +68,18 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
   const session = useSession();
   const conSesion = !!session?.supabase;
   const points = useMemo(() => listings.filter(hasCoords), [listings]);
+  /**
+   * Qué avisos hay, como texto.
+   *
+   * Los pines se reconstruyen —y el mapa se REENCUADRA— cuando cambia esta
+   * lista. Si la dependencia fuera el array, bastaría con que el padre lo
+   * recreara con los mismos avisos dentro para que todo saltara: se destruyen
+   * los marcadores, se rehace el agrupador y `fitBounds` devuelve el mapa al
+   * encuadre general. Visto desde fuera, "todos los pines se mueven solos".
+   *
+   * Comparando los ids, un array nuevo con el mismo contenido no toca nada.
+   */
+  const firmaDePuntos = useMemo(() => points.map((p) => p.id).join(","), [points]);
   const missing = listings.length - points.length;
 
   const { contenedor, mapa, libs, estado } = useMapaDeGoogle({
@@ -115,17 +127,51 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
 
     // Encuadre panorámico a todos los avisos con ubicación.
     if (points.length > 0) {
+      yaEncuadrado.current = false;
+
+      if (points.length === 1) {
+        // UN SOLO AVISO: se coloca a mano y se acabó.
+        //
+        // Con `fitBounds` sobre un único punto el mapa se acerca hasta el
+        // máximo —se ve el tejado— y había que corregirlo después esperando un
+        // evento. Ese "después" era justo el problema: ver más abajo.
+        mapa.setCenter({ lat: points[0].lat, lng: points[0].lng });
+        mapa.setZoom(15);
+        return () => {
+          agrupador.current?.clearMarkers();
+          agrupador.current = null;
+          creados.forEach((m) => { m.map = null; });
+        };
+      }
+
       const caja = new google.maps.LatLngBounds();
       points.forEach((p) => caja.extend({ lat: p.lat, lng: p.lng }));
       mapa.fitBounds(caja, 48);
-      // Con un solo aviso `fitBounds` se acerca hasta el máximo y se ve el
-      // tejado: se limita para que quede a escala de barrio.
+
+      // AQUÍ ESTABA EL SALTO DE LOS PINES, y costó encontrarlo porque parecía
+      // cosa de la selección.
+      //
+      // Con varios avisos muy juntos `fitBounds` también se pasa de zoom, y se
+      // corregía al primer `idle`. Pero `idle` se emite CADA VEZ que el mapa se
+      // queda quieto, no solo tras el encuadre: si ese primer `idle` no llegaba
+      // enseguida —el mapa aún sin medir, o el usuario tocándolo antes—, el
+      // listener seguía armado y se disparaba con el PRIMER MOVIMIENTO de la
+      // persona. Entonces cambiaba el zoom de golpe y saltaban todos los pines.
+      // Lo mismo al pulsar un pin: el `panTo` produce un `idle` y ahí saltaba.
+      //
+      // Ahora la corrección se DESARMA en cuanto el usuario toca el mapa: a
+      // partir de ese momento el encuadre es cosa suya y nadie se lo cambia.
       const corregir = google.maps.event.addListenerOnce(mapa, "idle", () => {
         if ((mapa.getZoom() ?? 0) > 15) mapa.setZoom(15);
       });
-      yaEncuadrado.current = false;
+      const desarmar = () => google.maps.event.removeListener(corregir);
+      const alArrastrar = google.maps.event.addListenerOnce(mapa, "dragstart", desarmar);
+      const alPulsar = google.maps.event.addListenerOnce(mapa, "click", desarmar);
+
       return () => {
         google.maps.event.removeListener(corregir);
+        google.maps.event.removeListener(alArrastrar);
+        google.maps.event.removeListener(alPulsar);
         agrupador.current?.clearMarkers();
         agrupador.current = null;
         creados.forEach((m) => { m.map = null; });
@@ -137,10 +183,11 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
       agrupador.current = null;
       creados.forEach((m) => { m.map = null; });
     };
-    // `onActive` fuera a propósito: cambia de identidad en cada render del padre
-    // y reconstruiría todos los pines sin motivo.
+    // `onActive` fuera a propósito, y `points` sustituido por su firma: lo que
+    // debe reconstruir los pines es que CAMBIEN los avisos, no que el padre
+    // vuelva a crear el array.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapa, libs, points]);
+  }, [mapa, libs, firmaDePuntos]);
 
   // ---- El aviso activo: se repinta y el mapa se acerca a él ----
   useEffect(() => {
@@ -156,7 +203,11 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
     // competir. Centrar el pin elegido es justo lo que se espera.
     const p = points.find((x) => x.id === active);
     if (p) mapa.panTo({ lat: p.lat, lng: p.lng });
-  }, [active, mapa, points]);
+    // Por la firma y no por el array, igual que arriba: con `points` en las
+    // dependencias, un render del padre que devolviera la misma lista volvía a
+    // centrar el mapa por su cuenta, sin que nadie hubiera elegido nada.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, mapa, firmaDePuntos]);
 
   const aviso = textoDeEstadoDelMapa(estado);
 
