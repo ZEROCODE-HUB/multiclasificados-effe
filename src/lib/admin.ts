@@ -1240,6 +1240,15 @@ export interface AdminReport {
   reporter_id: string | null; reported_id: string | null;
   listing_id: string | null; listing_title: string | null;
   assigned_to: string | null; assignee: string | null; created_at: string;
+  // B-10. Opcionales porque los reportes anteriores a la 0136 no los traen: en
+  // pantalla salen como "—", no como campos rotos.
+  reporter_name?: string | null;
+  reporter_doc_type?: string | null;
+  reporter_doc_number?: string | null;
+  /** true = comprobado y existe · false = comprobado y NO existe · null = no se pudo comprobar. */
+  reporter_doc_verified?: boolean | null;
+  /** Cuántos reportes acumula ese aviso, contando este. */
+  reportes_del_aviso?: number | null;
 }
 
 // Un mensaje de la conversación entre dos usuarios (vista de moderación).
@@ -1271,6 +1280,8 @@ export async function fetchReports(): Promise<{ data: AdminReport[]; real: boole
     status: r.status === "Abierto" ? "open" : r.status === "En revisión" ? "reviewing" : "resolved",
     action_taken: null, reporter: r.reporter, reported: r.reported, reporter_id: null, reported_id: null,
     listing_id: null, listing_title: null, assigned_to: null, assignee: null, created_at: r.date,
+    reporter_name: null, reporter_doc_type: null, reporter_doc_number: null,
+    reporter_doc_verified: null, reportes_del_aviso: null,
   }));
   return { data: mapped, real: false };
 }

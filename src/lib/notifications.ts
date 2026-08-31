@@ -148,6 +148,16 @@ export function notificationText(n: AppNotification): string {
       const clase = p.kind === "queja" ? "queja" : "reclamo";
       return `Entró un ${clase} nuevo en el Libro de Reclamaciones.`;
     }
+    case "career_new": {
+      // B-18. Lleva el puesto y el nombre porque es lo que decide si esto se
+      // mira ahora o el lunes: no es lo mismo un electricista que un contador
+      // cuando justo se está buscando uno.
+      const nombre = (p.nombre as string) || "";
+      const puesto = (p.puesto as string) || "";
+      if (nombre && puesto) return `${nombre} postuló al puesto de ${puesto}.`;
+      if (nombre) return `${nombre} envió una postulación de trabajo.`;
+      return "Llegó una postulación nueva desde «Trabaje con nosotros».";
+    }
     case "moderation_warning": {
       const reason = (p.reason as string) || "";
       const note = (p.note as string) || "";
@@ -202,6 +212,9 @@ export function notificationText(n: AppNotification): string {
 }
 
 // Destino al hacer clic, según el tipo.
+/** Las dos ramas del panel. Fuera de ellas, un aviso de personal no tiene destino. */
+const esStaff = (role: string) => role === "admin" || role === "superadmin";
+
 export function notificationLink(n: AppNotification, role: string): string {
   const p = n.payload || {};
   const base = role === "anunciante" ? "anunciante" : "buscador";
@@ -216,11 +229,14 @@ export function notificationLink(n: AppNotification, role: string): string {
     case "new_application":
       // El dueño revisa las postulaciones recibidas en su panel de anunciante.
       return "/dashboard/anunciante/postulaciones";
+    // Los dos avisos que van al personal. `role` decide la rama del panel: un
+    // admin no puede entrar por /dashboard/superadmin y al revés tampoco.
+    // Cuando se escribió esto la pantalla del Libro no existía y el enlace era
+    // "#"; existe desde la v9.6, así que ahora lleva a ella.
     case "complaint_new":
-      // Sin destino: la pantalla del Libro de Reclamaciones no existe (B-09).
-      // Mandar al panel de inicio sería peor que no mover: quien pulsa espera
-      // ver el reclamo, no el escritorio. El aviso ya trae lo que hace falta.
-      return "#";
+      return esStaff(role) ? `/dashboard/${role}/reclamaciones` : "#";
+    case "career_new":
+      return esStaff(role) ? `/dashboard/${role}/postulaciones` : "#";
     case "listing_disabled":
     case "listing_enabled":
     case "listing_expiring":

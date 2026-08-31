@@ -11,16 +11,17 @@ import {
 
 const EXPECTED_IDS = [
   "Gestión de avisos", "Gestión de usuarios", "Configuración comercial", "Pagos y planes",
-  "Pagos Yape/Plin", "Libro de Reclamaciones", "Conversaciones reportadas", "Reportes", "Comunicaciones", "Auditoría y logs",
+  "Pagos Yape/Plin", "Libro de Reclamaciones", "Trabaje con nosotros",
+  "Conversaciones reportadas", "Reportes", "Comunicaciones", "Auditoría y logs",
 ];
 
 describe("catálogo de permisos", () => {
-  it("declara los 10 módulos con sus ids EXACTOS de la BD", () => {
+  it("declara los 11 módulos con sus ids EXACTOS de la BD", () => {
     expect(PERM_MODULES.map((m) => m.id)).toEqual(EXPECTED_IDS);
   });
 
   it("MATRIX_MODULES excluye los superadmin-only (Auditoría)", () => {
-    expect(MATRIX_MODULES).toHaveLength(9);
+    expect(MATRIX_MODULES).toHaveLength(10);
     expect(MATRIX_MODULES.map((m) => m.id)).not.toContain("Auditoría y logs");
   });
 

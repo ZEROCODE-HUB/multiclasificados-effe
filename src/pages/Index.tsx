@@ -3,6 +3,7 @@ import { imgUrl } from "@/lib/imageUrl";
 import { BrandMark } from "@/components/BrandMark";
 import { HeroSearch } from "@/components/HeroSearch";
 import { CategoryGrid } from "@/components/CategoryGrid";
+import { RedesSocialesPie } from "@/components/RedesSocialesPie";
 import { ListingCard } from "@/components/ListingCard";
 import { CountUp } from "@/components/CountUp";
 import { LibroReclamaciones } from "@/components/LibroReclamaciones";
@@ -776,6 +777,9 @@ const Index = () => {
                   "Planes Pro" (llevaba al login) se quitaron en IT3-010. Los dos
                   enlaces legales abrían el MISMO diálogo, así que queda uno. */}
               <ul className="space-y-3 text-sm text-primary-foreground/70">
+                {/* B-18. Va con dirección propia y no en un modal: una oferta de
+                    empleo se comparte, y un diálogo no se puede enlazar. */}
+                <li><Link to="/trabaje-con-nosotros" className="hover:text-secondary transition-colors">Trabaje con nosotros</Link></li>
                 <li><button type="button" onClick={() => setTermsOpen(true)} className="hover:text-secondary transition-colors text-left">Términos y condiciones</button></li>
               </ul>
             </div>
@@ -795,6 +799,10 @@ const Index = () => {
                 </li>
                 <li className="flex items-center gap-2"><CheckCircle2 size={14} className="text-secondary" /> Lima, Perú</li>
               </ul>
+              {/* B-16: los iconos de redes. Salen solo los que estén
+                  configurados en Comercial > Variables del sistema; si no hay
+                  ninguno, el componente no pinta nada y el pie queda como estaba. */}
+              <RedesSocialesPie className="mt-5" />
             </div>
           </div>
           <div className="border-t border-white/15 pt-8 flex flex-col sm:flex-row gap-3 justify-between items-center text-sm text-primary-foreground/50">

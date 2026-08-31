@@ -11,7 +11,8 @@
 // de "acceso" con un único toggle (view) porque acceder = usar la sección.
 import type { LucideIcon } from "lucide-react";
 import {
-  ClipboardList, Users, Tags, DollarSign, Flag, FileBarChart, Send, ScrollText, Smartphone, BookOpen } from "lucide-react";
+  ClipboardList, Users, Tags, DollarSign, Flag, FileBarChart, Send, ScrollText, Smartphone, BookOpen,
+  Briefcase } from "lucide-react";
 
 export type PermAction = "view" | "edit" | "approve" | "delete";
 
@@ -93,6 +94,19 @@ export const PERM_MODULES: PermModuleDef[] = [
     actions: [
       A.access("Consultar los reclamos registrados y su hoja."),
       { key: "edit", label: "Responder", description: "Responder al consumidor y cerrar el reclamo. Compromete a la empresa en un plazo legal." },
+    ],
+  },
+  {
+    // Postulaciones espontáneas de trabajo EN eFFe (B-18). Nada que ver con las
+    // postulaciones a los avisos de empleo de los anunciantes: aquellas van
+    // dirigidas a un cliente y este módulo no las toca. Trae documento, correo
+    // y teléfono de terceros, así que va por permiso y no por "es del staff".
+    id: "Trabaje con nosotros", label: "Trabaje con nosotros", icon: Briefcase,
+    group: "Operación", sub: "postulaciones",
+    description: "Postulaciones de trabajo recibidas desde la web.",
+    actions: [
+      A.access("Consultar las postulaciones recibidas y sus datos."),
+      { key: "edit", label: "Gestionar", description: "Marcar el estado de una postulación y dejar una nota interna." },
     ],
   },
   {

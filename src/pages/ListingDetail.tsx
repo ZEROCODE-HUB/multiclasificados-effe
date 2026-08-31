@@ -58,7 +58,12 @@ import { applyToListing, fetchMyApplication, STATUS_LABEL, type ApplicationStatu
 import { Checkbox } from "@/components/ui/checkbox";
 import { loadSold, markSold, unmarkSold, formatPrecioAviso } from "@/lib/pricing";
 import { ubicacionConPais } from "@/lib/paises";
-import { reportListing, reportUser, LISTING_REPORT_REASONS, USER_REPORT_REASONS } from "@/lib/reports";
+import {
+  reportListing, reportUser, comprobarDocumento,
+  LISTING_REPORT_REASONS, USER_REPORT_REASONS,
+} from "@/lib/reports";
+import { fetchMyIdentity } from "@/lib/identity";
+import { normalizeDocNumber } from "@/lib/verifyDoc";
 import { ShareMenuItems, ShareFab } from "@/components/ShareListing";
 import { codigoDeAviso } from "@/lib/listingCode";
 import { FALLBACK_IMG, imagenPorDefecto } from "@/lib/imagenPorDefecto";
@@ -324,6 +329,16 @@ export default function ListingDetail() {
   const [reportCategory, setReportCategory] = useState("");
   const [reportDetail, setReportDetail] = useState("");
   const [reportSubmitting, setReportSubmitting] = useState(false);
+  // B-10: quién reporta. El documento se pide y se comprueba ANTES de enviar,
+  // como pidió el cliente.
+  const [reportName, setReportName] = useState("");
+  const [reportDocType, setReportDocType] = useState<"DNI" | "RUC">("DNI");
+  const [reportDoc, setReportDoc] = useState("");
+  const [reportDocError, setReportDocError] = useState("");
+  // Se rellena solo con el documento que el usuario YA verificó al publicar o
+  // al comprar saldo. Cada verificación es una consulta que se paga: volver a
+  // pedírsela sería cobrarnos dos veces por saber lo mismo.
+  const [docYaVerificado, setDocYaVerificado] = useState(false);
   // Reporte de usuario (anunciante)
   const [userReportOpen, setUserReportOpen] = useState(false);
   const [userReportCategory, setUserReportCategory] = useState("");
@@ -344,11 +359,58 @@ export default function ListingDetail() {
     if (!messageEdited) setMessageText(defaultMessage);
   }, [defaultMessage, messageEdited]);
 
+  // Al abrir el reporte se trae el documento que el usuario ya tenga verificado
+  // en su perfil. Si está, no se vuelve a consultar a Factiliza.
+  useEffect(() => {
+    if (!reportOpen) return;
+    let vigente = true;
+    fetchMyIdentity().then((yo) => {
+      if (!vigente || !yo?.docNumber) return;
+      setReportDocType(yo.docType === "ruc" ? "RUC" : "DNI");
+      setReportDoc(yo.docNumber);
+      setReportName((n) => n || yo.name || "");
+      setDocYaVerificado(true);
+    });
+    return () => { vigente = false; };
+  }, [reportOpen]);
+
   const handleReport = async () => {
     if (!reportCategory || !listing.id) return;
+    const doc = reportDoc.replace(/\D/g, "");
+    const largo = reportDocType === "RUC" ? 11 : 8;
+    if (doc.length !== largo) {
+      setReportDocError(`El ${reportDocType} debe tener ${largo} dígitos.`);
+      return;
+    }
+    setReportDocError("");
     setReportSubmitting(true);
     try {
-      await reportListing(listing.id, reportCategory, reportDetail);
+      // `null` = no se pudo comprobar, que NO es lo mismo que un documento
+      // falso. Ver `comprobarDocumento`: falla abierto a propósito.
+      let verificado: boolean | null = docYaVerificado ? true : null;
+      let nombre = reportName.trim();
+
+      if (!docYaVerificado) {
+        const r = await comprobarDocumento(reportDocType, doc);
+        if (r.estado === "no-existe") {
+          setReportDocError(r.mensaje);
+          setReportSubmitting(false);
+          return;
+        }
+        if (r.estado === "existe") {
+          verificado = true;
+          // El nombre del registro manda sobre lo tecleado: es el que respalda
+          // el documento, y es lo que va a leer quien modere.
+          if (r.nombre) nombre = r.nombre;
+        }
+      }
+
+      await reportListing(listing.id, reportCategory, reportDetail, {
+        name: nombre,
+        docType: reportDocType,
+        docNumber: doc,
+        docVerified: verificado,
+      });
       setReportOpen(false);
       setReportCategory("");
       setReportDetail("");
@@ -1304,10 +1366,71 @@ export default function ListingDetail() {
               onChange={(e) => setReportDetail(e.target.value)}
               placeholder="Cuéntanos más sobre el problema…"
             />
+
+            {/* B-10: el documento de quien reporta, comprobado antes de enviar.
+                Un reporte anónimo cuesta cero y puede tumbar un aviso legítimo;
+                con documento, quien denuncia responde de lo que denuncia. */}
+            <div className="border-t pt-3 space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="reporter-name">Tus nombres y apellidos</Label>
+                <Input
+                  id="reporter-name"
+                  value={reportName}
+                  onChange={(e) => setReportName(e.target.value)}
+                  placeholder="Como figura en tu documento"
+                />
+              </div>
+              <div className="grid grid-cols-[7rem_1fr] gap-2">
+                <div className="space-y-2">
+                  <Label htmlFor="reporter-doc-type">Documento</Label>
+                  <Select
+                    value={reportDocType}
+                    onValueChange={(v) => {
+                      setReportDocType(v as "DNI" | "RUC");
+                      setReportDocError("");
+                      // Cambiar de tipo invalida lo verificado: el número que
+                      // había era de otro documento.
+                      setDocYaVerificado(false);
+                    }}
+                  >
+                    <SelectTrigger id="reporter-doc-type"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="DNI">DNI</SelectItem>
+                      <SelectItem value="RUC">RUC</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="reporter-doc">Número</Label>
+                  <Input
+                    id="reporter-doc"
+                    inputMode="numeric"
+                    value={reportDoc}
+                    onChange={(e) => {
+                      // Sin `maxLength` en el input: el helper filtra primero y
+                      // recorta después, para que pegar "4444 5555" funcione.
+                      setReportDoc(normalizeDocNumber(e.target.value, reportDocType === "RUC" ? 11 : 8));
+                      setReportDocError("");
+                      setDocYaVerificado(false);
+                    }}
+                    className={reportDocError ? "border-destructive" : ""}
+                    aria-invalid={!!reportDocError}
+                    aria-describedby={reportDocError ? "reporter-doc-error" : undefined}
+                  />
+                </div>
+              </div>
+              {reportDocError && (
+                <p id="reporter-doc-error" className="text-xs text-destructive">{reportDocError}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Lo comprobamos con el registro y solo lo ve el equipo de moderación.
+                No se le muestra al anunciante.
+              </p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setReportOpen(false)}>Cancelar</Button>
-            <Button onClick={handleReport} disabled={!reportCategory || reportSubmitting} className="gap-2">
+            <Button onClick={handleReport} disabled={!reportCategory || !reportDoc || reportSubmitting} className="gap-2">
               <Flag size={14} /> {reportSubmitting ? "Enviando…" : "Enviar reporte"}
             </Button>
           </DialogFooter>

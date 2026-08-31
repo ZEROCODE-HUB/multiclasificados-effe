@@ -137,6 +137,23 @@ function bodyFor(type: string, payload: Record<string, unknown>): string {
         aviso ? `Verlo: ${aviso}` : `Tus avisos: ${misAvisos}`,
       );
 
+    case "career_new": {
+      // B-18: "que llegue un correo a los usuarios Admin y SuperAdmin". Sale por
+      // esta vía y no por un envío aparte porque los tres canales nacen
+      // activados desde la 0121: la notificación YA es el correo.
+      const nombre = String(p.nombre ?? "").trim();
+      const puesto = String(p.puesto ?? "").trim();
+      const quien = nombre || "Alguien";
+      return parrafos(
+        puesto
+          ? `${quien} postuló al puesto de ${puesto}.`
+          : `${quien} envió una postulación de trabajo.`,
+        // Al panel de admin: es el que existe para los dos roles, y quien entre
+        // con superadmin será redirigido a su propia rama.
+        `Verla: ${SITE_URL}/dashboard/admin/postulaciones`,
+      );
+    }
+
     default:
       return String(p.body ?? p.preview ?? `Tienes una notificación nueva en eFFe Clasificados: ${SITE_URL}`);
   }

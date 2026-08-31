@@ -10,7 +10,17 @@
 //
 // Response (200 JSON):
 //   { "success": true,  "tipo": "dni", "numero": "...", "nombre": "JUAN PEREZ", "data": {...} }
-//   { "success": false, "error": "No se encontró el documento." }
+//   { "success": false, "error": "No se encontró el documento.", "causa": "no_existe" }
+//
+// `causa` (añadido para B-10) separa cosas que antes se confundían:
+//   · "no_existe" → Factiliza contestó y el documento NO está en el registro.
+//   · "servicio"  → Factiliza no contestó, o contestó mal, o nuestro token
+//                   caducó. NO dice nada sobre el documento.
+//   · "entrada"   → el número no tiene la forma de un DNI o un RUC.
+//   · "cuota"     → se agotó el cupo de consultas.
+// La diferencia importa desde que reportar un aviso exige documento: negar
+// un reporte porque Factiliza está caída sería silenciar una denuncia real
+// por una avería nuestra.
 // Response 401: { "success": false, "error": "Inicia sesión para verificar tu documento." }
 //
 // IMPORTANTE (seguridad): esta función consulta datos personales (RENIEC:
@@ -130,26 +140,26 @@ Deno.serve(async (req) => {
 
   try {
     if (!FACTILIZA_TOKEN) {
-      return json({ success: false, error: "Verificación no configurada (falta FACTILIZA_TOKEN)." });
+      return json({ success: false, error: "Verificación no configurada (falta FACTILIZA_TOKEN).", causa: "servicio" });
     }
 
     // Solo usuarios autenticados: se comprueba ANTES de gastar una consulta.
     const userId = await authenticatedUserId(req);
     if (!userId) {
-      return json({ success: false, error: "Inicia sesión para verificar tu documento." }, 401);
+      return json({ success: false, error: "Inicia sesión para verificar tu documento.", causa: "servicio" }, 401);
     }
 
     const { tipo, numero } = await req.json().catch(() => ({}));
     const doc = String(numero ?? "").replace(/\D/g, "");
 
     if (tipo !== "dni" && tipo !== "ruc") {
-      return json({ success: false, error: "Tipo de documento inválido." });
+      return json({ success: false, error: "Tipo de documento inválido.", causa: "entrada" });
     }
     if (tipo === "dni" && doc.length !== 8) {
-      return json({ success: false, error: "El DNI debe tener 8 dígitos." });
+      return json({ success: false, error: "El DNI debe tener 8 dígitos.", causa: "entrada" });
     }
     if (tipo === "ruc" && doc.length !== 11) {
-      return json({ success: false, error: "El RUC debe tener 11 dígitos." });
+      return json({ success: false, error: "El RUC debe tener 11 dígitos.", causa: "entrada" });
     }
 
     // Antes de gastar nada: ¿ya está contestada esta pregunta, y le queda cupo?
@@ -172,7 +182,7 @@ Deno.serve(async (req) => {
     const veredicto = evaluarLimite(historial, ahora);
     if (!veredicto.permitido) {
       // 429: el cliente lo distingue de un documento que no existe.
-      return json({ success: false, error: veredicto.motivo, rate_limited: true }, 429);
+      return json({ success: false, error: veredicto.motivo, rate_limited: true, causa: "cuota" }, 429);
     }
 
     const url = `${FACTILIZA_BASE}/${tipo}/info/${doc}`;
@@ -200,7 +210,14 @@ Deno.serve(async (req) => {
       // Un 401 es culpa nuestra (token caducado), no de quien consulta: no se
       // le carga en su cupo. Un documento que no existe, sí.
       if (res.status !== 401) await anotarConsulta(userId, tipo, doc, false, null, null);
-      return json({ success: false, error: msg });
+      // Un 401 es token nuestro caducado y un 5xx es su servidor: en los dos
+      // casos no sabemos nada del documento. Solo el "contestó y no está" es
+      // `no_existe`, y es el único que autoriza a bloquear a alguien.
+      return json({
+        success: false,
+        error: msg,
+        causa: res.status === 401 || res.status >= 500 ? "servicio" : "no_existe",
+      });
     }
 
     const data = payload.data as Record<string, unknown>;
@@ -225,6 +242,6 @@ Deno.serve(async (req) => {
     // EFFE-053: no exponer el error técnico crudo (timeout, red, etc.) al usuario;
     // se registra para depurar y se muestra un mensaje amigable.
     console.error("[verify-doc] error:", e);
-    return json({ success: false, error: "No se pudo verificar el documento en este momento. Inténtalo de nuevo en unos minutos." });
+    return json({ success: false, error: "No se pudo verificar el documento en este momento. Inténtalo de nuevo en unos minutos.", causa: "servicio" });
   }
 });

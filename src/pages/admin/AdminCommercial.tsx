@@ -521,6 +521,14 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
     free_listings_limit: "Límite de publicaciones gratis",
     maintenance_mode: "Modo mantenimiento",
     default_listing_image: "Imagen de los avisos sin foto",
+    // B-16: los enlaces del pie de la portada. Van aquí y no en el código
+    // porque una cuenta de red social cambia y eso no debe costar un despliegue.
+    social_facebook: "Facebook",
+    social_instagram: "Instagram",
+    social_tiktok: "TikTok",
+    social_youtube: "YouTube",
+    social_linkedin: "LinkedIn",
+    social_whatsapp: "WhatsApp",
   } as const;
   type SettingKey = keyof typeof SETTING_KEYS;
   // Cada ajuste tiene SU tipo: los dos primeros van a un <Input type="number">
@@ -530,10 +538,15 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
     commission_pct: number; free_listings_limit: number; maintenance_mode: boolean;
     // URL de la imagen para avisos sin foto. null = usar la del bundle.
     default_listing_image: string | null;
+    // Los seis del pie. Cadena vacía = esa red no sale.
+    social_facebook: string; social_instagram: string; social_tiktok: string;
+    social_youtube: string; social_linkedin: string; social_whatsapp: string;
   }
   const [settings, setSettings] = useState<Ajustes>({
     commission_pct: 0, free_listings_limit: 0, maintenance_mode: false,
     default_listing_image: null,
+    social_facebook: "", social_instagram: "", social_tiktok: "",
+    social_youtube: "", social_linkedin: "", social_whatsapp: "",
   });
 
   // Imagen por defecto: archivo elegido pendiente de subir + su vista previa.
@@ -675,6 +688,13 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
           else if (s.key === "free_listings_limit") next.free_listings_limit = Number(s.value) || 0;
           else if (s.key === "maintenance_mode") next.maintenance_mode = s.value === true || s.value === "true";
           else if (s.key === "default_listing_image") next.default_listing_image = typeof s.value === "string" && s.value ? s.value : null;
+          else if (s.key.startsWith("social_") && s.key in next) {
+            // Todas las `social_*` son texto y se tratan igual, así que no hace
+            // falta una rama por red: seis `else if` idénticos se desincronizan
+            // en cuanto se añade una séptima.
+            (next as unknown as Record<string, string>)[s.key] =
+              typeof s.value === "string" ? s.value : "";
+          }
         });
         return next;
       });
@@ -927,6 +947,37 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
                   </div>
                   <Switch checked={!!settings.maintenance_mode}
                     onCheckedChange={(v) => setSettings((s) => ({ ...s, maintenance_mode: v }))} />
+                </div>
+              </div>
+
+              {/* B-16 · Redes sociales del pie. Se guardan tal cual se escriben;
+                  el saneado (que sea http/https, y el número de WhatsApp a
+                  enlace de wa.me) lo hace `enlaceDeRed` antes de pintarlas. Una
+                  red vacía sencillamente no sale en el pie. */}
+              <div className="space-y-3 border-t pt-5">
+                <div>
+                  <p className="font-medium text-sm">Redes sociales del pie</p>
+                  <p className="text-xs text-muted-foreground">
+                    El enlace completo del perfil. Las que dejes en blanco no aparecen en la
+                    portada. En WhatsApp va el número con el código de país, sin signos —por
+                    ejemplo 51903375308.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {([
+                    "social_facebook", "social_instagram", "social_tiktok",
+                    "social_youtube", "social_linkedin", "social_whatsapp",
+                  ] as const).map((k) => (
+                    <div key={k} className="space-y-2">
+                      <Label htmlFor={k}>{SETTING_KEYS[k]}</Label>
+                      <Input
+                        id={k}
+                        value={settings[k]}
+                        placeholder={k === "social_whatsapp" ? "51903375308" : "https://…"}
+                        onChange={(e) => setSettings((s) => ({ ...s, [k]: e.target.value }))}
+                      />
+                    </div>
+                  ))}
                 </div>
               </div>
 

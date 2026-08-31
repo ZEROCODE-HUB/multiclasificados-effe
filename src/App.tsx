@@ -30,6 +30,7 @@ import ListingDetail from "./pages/ListingDetail.tsx";
 // "Failed to fetch dynamically imported module" al entrar aquí. Ver
 // src/lib/cargaDiferida.ts.
 const LegalPage = cargaDiferida(() => import("./pages/LegalPage.tsx"));
+const TrabajeConNosotros = cargaDiferida(() => import("./pages/TrabajeConNosotros.tsx"));
 const AdminPricing = cargaDiferida(() => import("./pages/admin/AdminPricing.tsx"));
 const AdvertiserInvoices = cargaDiferida(() => import("./pages/advertiser/AdvertiserInvoices.tsx"));
 const AdvertiserDashboard = cargaDiferida(() => import("./pages/AdvertiserDashboard.tsx"));
@@ -51,6 +52,7 @@ const AdminCommercial = cargaDiferida(() => import("./pages/admin/AdminCommercia
 const AdminReports = cargaDiferida(() => import("./pages/admin/AdminReports.tsx"));
 const AdminPagosManuales = cargaDiferida(() => import("./pages/admin/AdminPagosManuales.tsx"));
 const AdminReclamaciones = cargaDiferida(() => import("./pages/admin/AdminReclamaciones.tsx"));
+const AdminCareers = cargaDiferida(() => import("./pages/admin/AdminCareers.tsx"));
 const SuperRoles = cargaDiferida(() => import("./pages/superadmin/SuperRoles.tsx"));
 const SuperAudit = cargaDiferida(() => import("./pages/superadmin/SuperAudit.tsx"));
 const SuperConversations = cargaDiferida(() => import("./pages/superadmin/SuperConversations.tsx"));
@@ -113,6 +115,10 @@ const App = () => (
               Públicas del todo: sin sesión y sin nada por encima. */}
           <Route path="/terminos" element={<LegalPage />} />
           <Route path="/privacidad" element={<LegalPage />} />
+          {/* B-18. Pública del todo: postular no exige cuenta. Con dirección
+              propia porque una oferta de empleo se comparte por WhatsApp, y
+              un modal no se puede enlazar. */}
+          <Route path="/trabaje-con-nosotros" element={<TrabajeConNosotros />} />
 
 
           {/* Paneles de usuario (anunciante/buscador): exigen sesión REAL de
@@ -160,6 +166,7 @@ const App = () => (
                 "Conversaciones reportadas": aquél son denuncias entre usuarios;
                 éste trae documento y domicilio del consumidor y plazos legales. */}
             <Route path="/dashboard/admin/reclamaciones" element={<AdminReclamaciones role="admin" />} />
+            <Route path="/dashboard/admin/postulaciones" element={<AdminCareers role="admin" />} />
           </Route>
 
           {/* Super Admin — shell persistente, solo rol superadmin */}
@@ -177,6 +184,7 @@ const App = () => (
                 "Conversaciones reportadas": aquél son denuncias entre usuarios;
                 éste trae documento y domicilio del consumidor y plazos legales. */}
             <Route path="/dashboard/superadmin/reclamaciones" element={<AdminReclamaciones role="superadmin" />} />
+            <Route path="/dashboard/superadmin/postulaciones" element={<AdminCareers role="superadmin" />} />
             <Route path="/dashboard/superadmin/roles" element={<SuperRoles />} />
             <Route path="/dashboard/superadmin/auditoria" element={<SuperAudit />} />
           </Route>

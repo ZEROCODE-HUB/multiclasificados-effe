@@ -13,13 +13,16 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, Eye, ChevronLeft, ChevronRight, MapPin, Calendar, Tag, User, Ban, RotateCcw, Flag, CalendarClock, ExternalLink } from "lucide-react";
+import { Search, Eye, ChevronLeft, ChevronRight, MapPin, Calendar, Tag, User, Ban, RotateCcw, Flag,
+  CalendarClock, ExternalLink, ShieldCheck, AlertTriangle, FileSpreadsheet } from "lucide-react";
 import { AdminListingStatus } from "@/data/adminMockData";
 import { toast } from "@/hooks/use-toast";
 import { disableListing, loadDisabled, formatPrecioAviso } from "@/lib/pricing";
 import { fetchAdminListings, setListingStatus, setListingPublishedAt, fetchReports, resolveReport, type AdminListingRow, type AdminReport } from "@/lib/admin";
 import { usePermissions } from "@/hooks/usePermissions";
 import { fetchListingImages } from "@/lib/listings";
+import { fechaHoraCorta } from "@/lib/fechas";
+import { exportExcel } from "@/lib/exportReport";
 import { ListingPreviewDialog } from "@/components/ListingPreviewDialog";
 import { mensajeDeError } from "@/lib/errores";
 import { fechaDelDia } from "@/lib/fechas";
@@ -39,6 +42,41 @@ const REPORT_STATUS: Record<string, { label: string; cls: string }> = {
   reviewing: { label: "En revisión", cls: "bg-secondary/15 text-secondary border-secondary/30" },
   resolved: { label: "Resuelto", cls: "bg-success/15 text-success border-success/30" },
 };
+
+/**
+ * El reporte de quienes reportan (B-10).
+ *
+ * `reason` se guarda como "categoría — comentario" en un solo campo, así que
+ * aquí se vuelve a partir: el cliente pidió motivo y comentarios en COLUMNAS
+ * distintas, y una celda con las dos cosas pegadas no se puede filtrar.
+ */
+function filasDeReportes(lista: AdminReport[]): Record<string, string | number>[] {
+  return lista.map((r) => {
+    const corte = r.reason?.indexOf(" — ") ?? -1;
+    const motivo = r.category ?? (corte >= 0 ? r.reason.slice(0, corte) : r.reason ?? "");
+    const comentario = corte >= 0 ? r.reason.slice(corte + 3) : "";
+    return {
+      "Fecha y hora": fechaHoraCorta(r.created_at),
+      Documento: r.reporter_doc_number ? `${r.reporter_doc_type ?? "DNI"} ${r.reporter_doc_number}` : "",
+      // Los tres estados, escritos para que se entiendan sin leyenda: "sin
+      // verificar" no acusa a nadie, "no encontrado" sí.
+      "Documento verificado":
+        !r.reporter_doc_number ? "No se pidió"
+          : r.reporter_doc_verified === true ? "Sí"
+          : r.reporter_doc_verified === false ? "No encontrado"
+          : "No se pudo comprobar",
+      "Apellidos y nombres": r.reporter_name || r.reporter || "",
+      Aviso: r.listing_title ?? "",
+      "Reportes de ese aviso": r.reportes_del_aviso ?? "",
+      Motivo: motivo,
+      Comentarios: comentario,
+      Estado: REPORT_STATUS[r.status]?.label ?? r.status,
+      // "Qué acciones realizó EFFE ante ese reporte", que es lo que pidió.
+      "Acción de eFFe": r.action_taken ?? "",
+      Asignado: r.assignee ?? "",
+    };
+  });
+}
 
 // Forma que consume el diseño (igual que el mock original), derivada del dato real.
 interface Listing {
@@ -460,6 +498,21 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
                 <CardTitle className="text-base md:text-lg flex items-center gap-2">
                   <Flag size={16} className="text-destructive" /> Avisos reportados
                 </CardTitle>
+                <div className="flex items-center gap-2">
+                {reports.length > 0 && (
+                  <Button
+                    variant="outline" size="sm" className="gap-2"
+                    onClick={() => exportExcel(
+                      `reportes-de-avisos-${new Date().toISOString().slice(0, 10)}`,
+                      // Lo FILTRADO, no la pantalla: es el fallo B-19, y aquí
+                      // habría vuelto a aparecer.
+                      filasDeReportes(visibleReports),
+                      "Reportes de avisos",
+                    )}
+                  >
+                    <FileSpreadsheet size={14} /> Excel
+                  </Button>
+                )}
                 {reports.length > 0 && (
                   <Select value={reportStatus} onValueChange={setReportStatus}>
                     <SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger>
@@ -471,6 +524,7 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
                     </SelectContent>
                   </Select>
                 )}
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -492,11 +546,43 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
                             <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                               {r.category && <Badge variant="outline">{r.category}</Badge>}
                               <Badge variant="outline" className={st.cls}>{st.label}</Badge>
+                              {/* "Controlar la cantidad de Reportes que tiene un
+                                  aviso": en una lista ordenada por fecha, un aviso
+                                  con nueve denuncias se lee igual que uno con una.
+                                  Aquí no. */}
+                              {(r.reportes_del_aviso ?? 0) > 1 && (
+                                <Badge variant="outline" className="bg-destructive/15 text-destructive border-destructive/30">
+                                  {r.reportes_del_aviso} reportes de este aviso
+                                </Badge>
+                              )}
                             </div>
                             <p className="text-sm text-foreground mt-2"><span className="text-muted-foreground">Motivo:</span> {r.reason}</p>
                             <p className="text-xs text-muted-foreground mt-1">
-                              Reportado por <b>{r.reporter ?? "Usuario"}</b> · {new Date(r.created_at).toLocaleString("es-PE")}
+                              Reportado por <b>{r.reporter_name || r.reporter || "Usuario"}</b>
+                              {r.reporter_doc_number && (
+                                <> · {r.reporter_doc_type ?? "DNI"} {r.reporter_doc_number}</>
+                              )}
+                              {" · "}{fechaHoraCorta(r.created_at)}
                             </p>
+                            {/* B-10. Los tres estados se dicen distinto a propósito:
+                                "sin verificar" es que el registro no respondió, y no
+                                acusa a nadie; "no encontrado" sí. Antes de la 0136 no
+                                se pedía documento, y esos reportes no muestran nada. */}
+                            {r.reporter_doc_number && (
+                              r.reporter_doc_verified === true ? (
+                                <p className="text-xs text-success mt-0.5 flex items-center gap-1">
+                                  <ShieldCheck size={12} /> Documento verificado
+                                </p>
+                              ) : r.reporter_doc_verified === false ? (
+                                <p className="text-xs text-destructive mt-0.5 flex items-center gap-1">
+                                  <AlertTriangle size={12} /> El documento no se encontró en el registro
+                                </p>
+                              ) : (
+                                <p className="text-xs text-warning mt-0.5 flex items-center gap-1">
+                                  <AlertTriangle size={12} /> No se pudo verificar el documento
+                                </p>
+                              )
+                            )}
                           </div>
                           <div className="flex flex-col gap-2">
                             {/* Sin esto hay que decidir si deshabilitar un aviso sin haberlo visto. */}
