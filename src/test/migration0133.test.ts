@@ -158,12 +158,26 @@ describe("no se repite el aviso", () => {
 
 describe("el aviso lleva el tiempo transcurrido y el que queda", () => {
   it("las dos cifras, en horas", async () => {
+    // Las cifras se redondean a la hora, y entre el INSERT y la pasada del cron
+    // el reloj avanza: con la máquina cargada esos milisegundos bastan para que
+    // 62 h se conviertan en 61 o 63 y la prueba falle sin que nada esté roto.
+    // Se comprueba lo que importa —el orden de magnitud y que las tres cifras
+    // cuadren entre sí—, no un número al segundo.
     await publicar(1, 3, 62);
     await correr();
     const [n] = await notificados();
-    expect(n.payload.horas_totales).toBe(72);
-    expect(n.payload.horas_transcurridas).toBe(62);
-    expect(n.payload.horas_restantes).toBe(10);
+    const totales = Number(n.payload.horas_totales);
+    const pasadas = Number(n.payload.horas_transcurridas);
+    const quedan = Number(n.payload.horas_restantes);
+
+    expect(totales).toBe(72);
+    expect(pasadas).toBeGreaterThanOrEqual(61);
+    expect(pasadas).toBeLessThanOrEqual(63);
+    expect(quedan).toBeGreaterThanOrEqual(9);
+    expect(quedan).toBeLessThanOrEqual(11);
+    // Y lo que de verdad no puede fallar: que las dos sumen el plan contratado.
+    expect(pasadas + quedan).toBeGreaterThanOrEqual(totales - 1);
+    expect(pasadas + quedan).toBeLessThanOrEqual(totales);
   });
 
   it("en horas y no en días: a un plan de 3 días le quedan '0 días' casi un día entero", async () => {

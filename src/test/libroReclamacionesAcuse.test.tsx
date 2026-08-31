@@ -44,7 +44,11 @@ describe("confirmación del Libro de Reclamaciones", () => {
     render(<LibroReclamaciones />);
     await llenarYEnviar();
 
-    await waitFor(() => expect(screen.getByText(/reclamo registrado/i)).toBeTruthy());
+    // `findByText` y no `waitFor(getByText)`: el envío pasa por varios estados
+    // asíncronos y, con la suite entera corriendo, el segundo por defecto de
+    // `waitFor` se agota antes de que React pinte la confirmación. Fallaba de
+    // forma intermitente solo en la pasada completa, que es la que firma el APK.
+    await screen.findByText(/reclamo registrado/i, undefined, { timeout: 5000 });
     expect(screen.getByText(/N\.º 13/)).toBeTruthy();
     // La hora es la del servidor traída a hora de Perú, no la del teléfono.
     expect(screen.getByText("17/08/2026 10:37")).toBeTruthy();
@@ -63,7 +67,11 @@ describe("confirmación del Libro de Reclamaciones", () => {
     render(<LibroReclamaciones />);
     await llenarYEnviar();
 
-    await waitFor(() => expect(screen.getByText(/reclamo registrado/i)).toBeTruthy());
+    // `findByText` y no `waitFor(getByText)`: el envío pasa por varios estados
+    // asíncronos y, con la suite entera corriendo, el segundo por defecto de
+    // `waitFor` se agota antes de que React pinte la confirmación. Fallaba de
+    // forma intermitente solo en la pasada completa, que es la que firma el APK.
+    await screen.findByText(/reclamo registrado/i, undefined, { timeout: 5000 });
     expect(screen.getByText(/No pudimos enviarte la copia/i)).toBeTruthy();
     // El reclamo sigue registrado: el número es la prueba y tiene que verse.
     expect(screen.getByText(/N\.º 14/)).toBeTruthy();
@@ -75,7 +83,11 @@ describe("confirmación del Libro de Reclamaciones", () => {
     render(<LibroReclamaciones />);
     await llenarYEnviar();
 
-    await waitFor(() => expect(screen.getByText(/reclamo registrado/i)).toBeTruthy());
+    // `findByText` y no `waitFor(getByText)`: el envío pasa por varios estados
+    // asíncronos y, con la suite entera corriendo, el segundo por defecto de
+    // `waitFor` se agota antes de que React pinte la confirmación. Fallaba de
+    // forma intermitente solo en la pasada completa, que es la que firma el APK.
+    await screen.findByText(/reclamo registrado/i, undefined, { timeout: 5000 });
     expect(screen.queryByText(/registrada el/i)).toBeNull();
   });
 });

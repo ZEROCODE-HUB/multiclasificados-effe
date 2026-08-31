@@ -21,6 +21,12 @@ const MIG = fs.readFileSync(
   path.resolve(__dirname, "../../supabase/migrations", "0135_trabaje_con_nosotros.sql"),
   "utf8",
 );
+// La 0137 cierra lo que Supabase abre solo. Va junta con la 0135 en estas
+// pruebas porque sin ella los permisos de la tabla NO son los que la 0135 dice.
+const MIG_137 = fs.readFileSync(
+  path.resolve(__dirname, "../../supabase/migrations", "0137_careers_solo_lo_necesario.sql"),
+  "utf8",
+);
 
 const ADMIN = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const SUPER = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -75,6 +81,7 @@ beforeAll(async () => {
       ('${ADMIN}', 'admin'), ('${SUPER}', 'superadmin'), ('${MODER}', 'moderador');
   `);
   await db.exec(MIG);
+  await db.exec(MIG_137);
 });
 
 beforeEach(async () => {
@@ -205,11 +212,30 @@ describe("quién puede hacer qué", () => {
     expect(p[0].auth).toBe(true);
   });
 
-  it("pero anon NO puede leerlas: son datos personales de terceros", async () => {
+  /**
+   * ⚠️ AQUÍ HAY UNA TRAMPA QUE YA MORDIÓ UNA VEZ.
+   *
+   * Estas comprobaciones pasaban ANTES de existir la 0137, y eran mentira en
+   * producción: el proyecto de Supabase tiene `alter default privileges` que
+   * conceden ALL sobre cada tabla nueva de `public` a `anon` y `authenticated`.
+   * Un `grant` explícito no quita nada, se suma. PGlite no reproduce eso, así
+   * que el verde de aquí no demostraba nada.
+   *
+   * Comprobado contra el proyecto real el 31-ago-2026, recién aplicada la 0135:
+   * anon tenía select, update Y delete. Los datos no llegaron a estar expuestos
+   * —la RLS hizo su trabajo—, pero la RLS era la ÚNICA barrera sobre una tabla
+   * con documento, correo y teléfono de terceros.
+   *
+   * Por eso ahora se aplican las dos migraciones juntas y además se comprueba
+   * que la 0137 contenga los revoke: si alguien la borra creyéndola redundante,
+   * esto se pone en rojo.
+   */
+  it("anon NO puede leerlas: son datos personales de terceros", async () => {
     const p = await q<{ ok: boolean }>(
       "select has_table_privilege('anon', 'public.careers', 'select') as ok",
     );
     expect(p[0].ok).toBe(false);
+    expect(MIG_137).toMatch(/revoke select[^;]*from anon/s);
   });
 
   it("nadie borra desde la aplicación", async () => {
@@ -221,6 +247,14 @@ describe("quién puede hacer qué", () => {
     `);
     expect(p[0].anon).toBe(false);
     expect(p[0].auth).toBe(false);
+    expect(MIG_137).toMatch(/revoke delete[^;]*from authenticated/s);
+  });
+
+  it("y anon tampoco puede modificarlas", async () => {
+    const p = await q<{ ok: boolean }>(
+      "select has_table_privilege('anon', 'public.careers', 'update') as ok",
+    );
+    expect(p[0].ok).toBe(false);
   });
 
   it("la RLS está encendida y con sus tres policies", async () => {
