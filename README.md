@@ -74,9 +74,12 @@ codemagic.yaml  # CI de build iOS → TestFlight
 
 - **Android:** `npm run build && npx cap sync android`, luego abrir `android/` en Android Studio.
 - **iOS:** lo compila `codemagic.yaml` (regenera `ios/` con `npx cap add ios` en cada build).
-  Estado y pendientes de iOS en [`CHECKLIST.md`](./CHECKLIST.md) y [`PLAN-IMPLEMENTACION.md`](./PLAN-IMPLEMENTACION.md).
+  Los pendientes de iOS están en el checklist de estado (ver abajo) y en [`PLAN-IMPLEMENTACION.md`](./PLAN-IMPLEMENTACION.md).
 
 ## Documentación de estado
 
-- [`CHECKLIST.md`](./CHECKLIST.md) — inventario «hecho / falta» de todo el proyecto.
+- **`CHECKLIST.md`** — inventario «hecho / falta» de todo el proyecto. **No está en el
+  repositorio**: describe qué credenciales existen y qué sigue sin cerrar, así que
+  desde el 31-ago-2026 vive fuera, en
+  `~/.claude/projects/C--Claude-MulticlasificadosEffe/CHECKLIST.md`.
 - [`PLAN-IMPLEMENTACION.md`](./PLAN-IMPLEMENTACION.md) — plan por fases y pendientes externos (llaves, APNs…).

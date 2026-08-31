@@ -1,6 +1,7 @@
 # 🛠️ Plan de implementación — eFFe Clasificados
 
-> **15 de julio de 2026.** Plan paso a paso para cerrar todo lo que falta según [`CHECKLIST.md`](./CHECKLIST.md).
+> **15 de julio de 2026.** Plan paso a paso para cerrar todo lo que falta según el `CHECKLIST.md`, que desde el
+> 31-ago-2026 **no se versiona**: vive en `~/.claude/projects/C--Claude-MulticlasificadosEffe/`.
 > Ordenado por fases (de menor a mayor riesgo/dependencia). Cada ítem indica los **archivos a tocar** y un **esfuerzo** aproximado (S = pequeño, M = medio, L = grande).
 >
 > **Todo lo que depende de terceros o de cargar llaves/certificados** (APNs de Apple, secrets, cuentas externas) está separado al final en **§ Pendientes externos** — no se puede resolver solo con código.
