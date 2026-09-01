@@ -30,7 +30,7 @@ vi.mock("@/lib/supabase", () => ({
   },
 }));
 
-import { comprobarDocumento, reportListing } from "@/lib/reports";
+import { comprobarDocumento, reportListing, faltaEnLaDenuncia } from "@/lib/reports";
 
 beforeEach(() => {
   verifyDocument.mockReset();
@@ -132,5 +132,45 @@ describe("lo que se guarda con el reporte", () => {
     const fila = insert.mock.calls[0][0] as Record<string, unknown>;
     expect(fila).not.toHaveProperty("reporter_doc_number");
     expect(fila).not.toHaveProperty("reporter_doc_verified");
+  });
+});
+
+describe("qué le falta al formulario antes de enviarlo", () => {
+  const ok = { name: "ANA RAMIREZ SOTO", docType: "DNI" as const, docNumber: "45678912" };
+
+  it("los nombres y apellidos son obligatorios", () => {
+    // El cliente pidió "DNI, Apellidos y nombres". Y hace falta de verdad: si
+    // Factiliza no responde tampoco llega el nombre del registro, así que sin
+    // esto la denuncia se guardaría sin rastro de quién la puso.
+    expect(faltaEnLaDenuncia({ ...ok, name: "" })).toEqual({
+      campo: "name", mensaje: "Escribe tus nombres y apellidos.",
+    });
+    expect(faltaEnLaDenuncia({ ...ok, name: "   " })?.campo).toBe("name");
+  });
+
+  it("el nombre se pregunta antes que el documento", () => {
+    // Importa el orden: la pantalla marca el PRIMERO que falta y le lleva el
+    // cursor. Devolver el documento con el nombre vacío mandaría al usuario al
+    // campo equivocado.
+    expect(faltaEnLaDenuncia({ name: "", docType: "DNI", docNumber: "" })?.campo).toBe("name");
+  });
+
+  it("el DNI son ocho dígitos y el RUC once", () => {
+    expect(faltaEnLaDenuncia({ ...ok, docNumber: "456" })).toEqual({
+      campo: "docNumber", mensaje: "El DNI debe tener 8 dígitos.",
+    });
+    expect(faltaEnLaDenuncia({ ...ok, docType: "RUC", docNumber: "45678912" })).toEqual({
+      campo: "docNumber", mensaje: "El RUC debe tener 11 dígitos.",
+    });
+    expect(faltaEnLaDenuncia({ ...ok, docType: "RUC", docNumber: "20123456789" })).toBeNull();
+  });
+
+  it("los puntos y espacios de un documento pegado no cuentan como dígitos", () => {
+    expect(faltaEnLaDenuncia({ ...ok, docNumber: "45.678.912" })).toBeNull();
+    expect(faltaEnLaDenuncia({ ...ok, docNumber: "4567 8912" })).toBeNull();
+  });
+
+  it("completo, no falta nada", () => {
+    expect(faltaEnLaDenuncia(ok)).toBeNull();
   });
 });

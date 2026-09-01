@@ -14,7 +14,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Search, Eye, ChevronLeft, ChevronRight, MapPin, Calendar, Tag, User, Ban, RotateCcw, Flag,
-  CalendarClock, ExternalLink, ShieldCheck, AlertTriangle, FileSpreadsheet } from "lucide-react";
+  CalendarClock, ExternalLink, ShieldCheck, AlertTriangle, FileSpreadsheet, CheckCircle2 } from "lucide-react";
 import { AdminListingStatus } from "@/data/adminMockData";
 import { toast } from "@/hooks/use-toast";
 import { disableListing, loadDisabled, formatPrecioAviso } from "@/lib/pricing";
@@ -44,17 +44,36 @@ const REPORT_STATUS: Record<string, { label: string; cls: string }> = {
 };
 
 /**
- * El reporte de quienes reportan (B-10).
- *
- * `reason` se guarda como "categoría — comentario" en un solo campo, así que
- * aquí se vuelve a partir: el cliente pidió motivo y comentarios en COLUMNAS
- * distintas, y una celda con las dos cosas pegadas no se puede filtrar.
+ * `reason` se guarda como "categoría — comentario" en un solo campo. Se parte
+ * en dos sitios —el Excel y la tarjeta del panel— y por eso vive aquí: el
+ * cliente pidió motivo y comentarios en COLUMNAS distintas, y en pantalla
+ * repetir la categoría debajo de su propia etiqueta sobra.
  */
+function partirMotivo(r: AdminReport): { motivo: string; comentario: string } {
+  const corte = r.reason?.indexOf(" — ") ?? -1;
+  return {
+    motivo: r.category ?? (corte >= 0 ? r.reason.slice(0, corte) : r.reason ?? ""),
+    comentario: corte >= 0 ? r.reason.slice(corte + 3) : "",
+  };
+}
+
+/**
+ * Qué hizo eFFe con la denuncia. `action_taken` guarda el código que entiende
+ * la base ('remove', 'dismiss'…); al cliente hay que darle la palabra, no el
+ * código: es la columna que pidió literalmente ("qué acciones realizó EFFE ante
+ * ese reporte").
+ */
+const ACCION_DE_EFFE: Record<string, string> = {
+  dismiss: "Desestimado (sin falta)",
+  warn: "Anunciante advertido",
+  remove: "Aviso deshabilitado",
+  ban: "Cuenta suspendida",
+};
+
+/** El reporte de quienes reportan (B-10). */
 function filasDeReportes(lista: AdminReport[]): Record<string, string | number>[] {
   return lista.map((r) => {
-    const corte = r.reason?.indexOf(" — ") ?? -1;
-    const motivo = r.category ?? (corte >= 0 ? r.reason.slice(0, corte) : r.reason ?? "");
-    const comentario = corte >= 0 ? r.reason.slice(corte + 3) : "";
+    const { motivo, comentario } = partirMotivo(r);
     return {
       "Fecha y hora": fechaHoraCorta(r.created_at),
       Documento: r.reporter_doc_number ? `${r.reporter_doc_type ?? "DNI"} ${r.reporter_doc_number}` : "",
@@ -71,8 +90,7 @@ function filasDeReportes(lista: AdminReport[]): Record<string, string | number>[
       Motivo: motivo,
       Comentarios: comentario,
       Estado: REPORT_STATUS[r.status]?.label ?? r.status,
-      // "Qué acciones realizó EFFE ante ese reporte", que es lo que pidió.
-      "Acción de eFFe": r.action_taken ?? "",
+      "Acción de eFFe": r.action_taken ? (ACCION_DE_EFFE[r.action_taken] ?? r.action_taken) : "",
       Asignado: r.assignee ?? "",
     };
   });
@@ -150,6 +168,15 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
   // (el admin decide qué ver); por defecto se muestran todos.
   const [reportStatus, setReportStatus] = useState<string>("all");
   const visibleReports = reportStatus === "all" ? reports : reports.filter((r) => r.status === reportStatus);
+  // La chapa de la pestaña cuenta lo que queda POR MIRAR. Contando también los
+  // resueltos nunca bajaba: hoy hay 21 denuncias de avisos y 8 ya cerradas, así
+  // que decía 21 para siempre y dejaba de significar nada.
+  const reportsPendientes = reports.filter((r) => r.status !== "resolved").length;
+  // Cerrar una denuncia infundada. Sin esto, la única salida era deshabilitar el
+  // aviso: un aviso legítimo denunciado por despecho se quedaba "Pendiente" para
+  // siempre, y "anulado" —uno de los estados que pidió el cliente— no existía.
+  const [dismissTarget, setDismissTarget] = useState<{ id: string; title: string } | null>(null);
+  const [dismissNote, setDismissNote] = useState("");
   // Aviso denunciado que se está inspeccionando desde la pestaña "Reportados".
   const [reportado, setReportado] = useState<AdminReport | null>(null);
   const [disabled, setDisabled] = useState<Record<string, string>>(() => loadDisabled());
@@ -231,6 +258,22 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
     setDisableReason("");
   };
 
+  // Cierra la denuncia sin tocar el aviso: se revisó y no había falta.
+  const confirmDismiss = async () => {
+    if (!dismissTarget) return;
+    const nota = dismissNote.trim() || "Revisado: no se encontró incumplimiento.";
+    try {
+      if (!isUuid(dismissTarget.id)) throw new Error("Denuncia de ejemplo: no hay nada que cerrar.");
+      await resolveReport(dismissTarget.id, "dismiss", nota);
+      await loadReportedListings();
+      toast({ title: "Denuncia desestimada", description: `"${dismissTarget.title}" queda como está.` });
+    } catch (e) {
+      toast({ title: "No se pudo desestimar", description: mensajeDeError(e, "Error"), variant: "destructive" });
+    }
+    setDismissTarget(null);
+    setDismissNote("");
+  };
+
   // Vuelve a publicar un aviso deshabilitado (status -> active).
   const enableListing = async (l: Listing) => {
     if (!isUuid(l.id)) {
@@ -306,7 +349,7 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
         <TabsList>
           <TabsTrigger value="todos">Todos los avisos</TabsTrigger>
           <TabsTrigger value="reportados" className="gap-1.5">
-            Reportados {reports.length > 0 && <Badge variant="outline" className="text-destructive border-destructive/30 bg-destructive/10 ml-1">{reports.length}</Badge>}
+            Reportados {reportsPendientes > 0 && <Badge variant="outline" className="text-destructive border-destructive/30 bg-destructive/10 ml-1">{reportsPendientes}</Badge>}
           </TabsTrigger>
         </TabsList>
 
@@ -538,6 +581,7 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
                     const rowMatch = rows.find((x) => x.id === r.listing_id);
                     const isDisabled = rowMatch?.status === "Rechazado" || !!disabled[r.listing_id ?? ""];
                     const st = REPORT_STATUS[r.status] ?? { label: r.status, cls: "" };
+                    const { comentario } = partirMotivo(r);
                     return (
                       <div key={r.id} className="border p-4 bg-card">
                         <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -556,7 +600,24 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
                                 </Badge>
                               )}
                             </div>
-                            <p className="text-sm text-foreground mt-2"><span className="text-muted-foreground">Motivo:</span> {r.reason}</p>
+                            {/* La categoría ya está en la etiqueta de arriba;
+                                repetirla aquí dejaba "Motivo: Publicación
+                                duplicada o spam — Publicación duplicada o spam".
+                                Lo que aporta es el comentario. */}
+                            {comentario ? (
+                              <p className="text-sm text-foreground mt-2">
+                                <span className="text-muted-foreground">Comentario:</span> {comentario}
+                              </p>
+                            ) : (
+                              <p className="text-sm text-muted-foreground mt-2 italic">Sin comentario.</p>
+                            )}
+                            {/* Lo que ya se hizo con la denuncia. Sin esto, un
+                                reporte cerrado se lee igual que uno sin tocar. */}
+                            {r.action_taken && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Acción de eFFe: <b>{ACCION_DE_EFFE[r.action_taken] ?? r.action_taken}</b>
+                              </p>
+                            )}
                             <p className="text-xs text-muted-foreground mt-1">
                               Reportado por <b>{r.reporter_name || r.reporter || "Usuario"}</b>
                               {r.reporter_doc_number && (
@@ -597,6 +658,14 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
                               <Button size="sm" variant="outline" className="text-destructive gap-1"
                                 onClick={() => setDisableTarget({ id: r.listing_id ?? "", title: r.listing_title ?? "Aviso", advertiser: r.reported ?? "Anunciante", reportId: r.id })}>
                                 <Ban size={14} /> Deshabilitar
+                              </Button>
+                            )}
+                            {/* La otra mitad de moderar: decir que no había nada.
+                                No toca el aviso ni avisa al anunciante. */}
+                            {canModerate && r.status !== "resolved" && (
+                              <Button size="sm" variant="ghost" className="gap-1"
+                                onClick={() => setDismissTarget({ id: r.id, title: r.listing_title ?? "Aviso" })}>
+                                <CheckCircle2 size={14} /> Desestimar
                               </Button>
                             )}
                           </div>
@@ -679,6 +748,34 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
             <Button variant="ghost" onClick={() => { setDisableTarget(null); setDisableReason(""); }}>Cancelar</Button>
             <Button onClick={confirmDisable} disabled={!disableReason.trim()} className="gap-2">
               <Ban size={14} /> Deshabilitar y notificar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Desestimar la denuncia: se revisó y el aviso se queda. */}
+      <Dialog open={!!dismissTarget} onOpenChange={(o) => { if (!o) { setDismissTarget(null); setDismissNote(""); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Desestimar denuncia</DialogTitle>
+            <DialogDescription>
+              "{dismissTarget?.title}" <b>no</b> se toca y el anunciante no recibe ninguna notificación.
+              La denuncia queda cerrada.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Label>Motivo (queda en el reporte de denuncias)</Label>
+            <Textarea
+              rows={3}
+              value={dismissNote}
+              onChange={(e) => setDismissNote(e.target.value)}
+              placeholder="Ej: el precio del aviso es correcto; la denuncia no describe ningún incumplimiento…"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => { setDismissTarget(null); setDismissNote(""); }}>Cancelar</Button>
+            <Button onClick={confirmDismiss} className="gap-2">
+              <CheckCircle2 size={14} /> Desestimar
             </Button>
           </DialogFooter>
         </DialogContent>

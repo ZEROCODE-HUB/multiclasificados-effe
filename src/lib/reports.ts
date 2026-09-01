@@ -46,6 +46,34 @@ export interface QuienReporta {
   docVerified: boolean | null;
 }
 
+/**
+ * Qué le falta al formulario de denuncia antes de enviarlo.
+ *
+ * Vive aquí y no en la pantalla por lo mismo que `camposIncompletos` en
+ * `careers.ts`: es una regla del producto —el cliente pidió "DNI, Apellidos y
+ * nombres"— y conviene poder comprobarla sin montar la ficha del aviso.
+ *
+ * El orden importa: la pantalla marca en rojo el primero y le lleva el cursor
+ * (B-09). Y se comprueba ANTES de consultar a Factiliza, porque esa consulta se
+ * paga y un formulario a medias no vale una factura.
+ */
+export function faltaEnLaDenuncia(
+  d: { name?: string; docType: "DNI" | "RUC"; docNumber?: string },
+): { campo: "name" | "docNumber"; mensaje: string } | null {
+  // El nombre es obligatorio: cuando Factiliza no responde tampoco llega el
+  // nombre del registro, y ese es justo el caso que B-10 decide NO bloquear.
+  // Sin lo tecleado, esa denuncia no dejaría rastro de quién la puso.
+  if (!d.name?.trim()) {
+    return { campo: "name", mensaje: "Escribe tus nombres y apellidos." };
+  }
+  const largo = d.docType === "RUC" ? 11 : 8;
+  const digitos = (d.docNumber ?? "").replace(/\D/g, "");
+  if (digitos.length !== largo) {
+    return { campo: "docNumber", mensaje: `El ${d.docType} debe tener ${largo} dígitos.` };
+  }
+  return null;
+}
+
 export type ResultadoDocumento =
   | { estado: "existe"; nombre: string }
   | { estado: "no-existe"; mensaje: string }

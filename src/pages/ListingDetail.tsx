@@ -59,11 +59,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { loadSold, markSold, unmarkSold, formatPrecioAviso } from "@/lib/pricing";
 import { ubicacionConPais } from "@/lib/paises";
 import {
-  reportListing, reportUser, comprobarDocumento,
+  reportListing, reportUser, comprobarDocumento, faltaEnLaDenuncia,
   LISTING_REPORT_REASONS, USER_REPORT_REASONS,
 } from "@/lib/reports";
 import { fetchMyIdentity } from "@/lib/identity";
 import { normalizeDocNumber } from "@/lib/verifyDoc";
+import { mensajeDeError } from "@/lib/errores";
 import { ShareMenuItems, ShareFab } from "@/components/ShareListing";
 import { codigoDeAviso } from "@/lib/listingCode";
 import { FALLBACK_IMG, imagenPorDefecto } from "@/lib/imagenPorDefecto";
@@ -335,6 +336,7 @@ export default function ListingDetail() {
   const [reportDocType, setReportDocType] = useState<"DNI" | "RUC">("DNI");
   const [reportDoc, setReportDoc] = useState("");
   const [reportDocError, setReportDocError] = useState("");
+  const [reportNameError, setReportNameError] = useState("");
   // Se rellena solo con el documento que el usuario YA verificó al publicar o
   // al comprar saldo. Cada verificación es una consulta que se paga: volver a
   // pedírsela sería cobrarnos dos veces por saber lo mismo.
@@ -376,13 +378,19 @@ export default function ListingDetail() {
 
   const handleReport = async () => {
     if (!reportCategory || !listing.id) return;
-    const doc = reportDoc.replace(/\D/g, "");
-    const largo = reportDocType === "RUC" ? 11 : 8;
-    if (doc.length !== largo) {
-      setReportDocError(`El ${reportDocType} debe tener ${largo} dígitos.`);
+    // La regla vive en `faltaEnLaDenuncia`. Aquí solo se marca en rojo el primer
+    // campo que falta y se le lleva el cursor, como en el resto de formularios
+    // (B-09).
+    const falta = faltaEnLaDenuncia({
+      name: reportName, docType: reportDocType, docNumber: reportDoc,
+    });
+    setReportNameError(falta?.campo === "name" ? falta.mensaje : "");
+    setReportDocError(falta?.campo === "docNumber" ? falta.mensaje : "");
+    if (falta) {
+      document.getElementById(falta.campo === "name" ? "reporter-name" : "reporter-doc")?.focus();
       return;
     }
-    setReportDocError("");
+    const doc = reportDoc.replace(/\D/g, "");
     setReportSubmitting(true);
     try {
       // `null` = no se pudo comprobar, que NO es lo mismo que un documento
@@ -416,7 +424,11 @@ export default function ListingDetail() {
       setReportDetail("");
       toast({ title: "Reporte enviado", description: "Nuestro equipo de moderación revisará el aviso." });
     } catch (e) {
-      toast({ title: "No se pudo reportar", description: e instanceof Error ? e.message : "Intenta de nuevo.", variant: "destructive" });
+      // `instanceof Error` era falso para los errores de Supabase, que son
+      // objetos planos: el mensaje del freno de la 0136 ("Has enviado varios
+      // reportes en poco tiempo") no llegaba nunca y el usuario solo veía
+      // "Intenta de nuevo", así que volvía a intentarlo.
+      toast({ title: "No se pudo reportar", description: mensajeDeError(e, "Intenta de nuevo."), variant: "destructive" });
     } finally {
       setReportSubmitting(false);
     }
@@ -432,7 +444,9 @@ export default function ListingDetail() {
       setUserReportDetail("");
       toast({ title: "Usuario reportado", description: "Nuestro equipo de moderación revisará al anunciante." });
     } catch (e) {
-      toast({ title: "No se pudo reportar", description: e instanceof Error ? e.message : "Intenta de nuevo.", variant: "destructive" });
+      // Mismo motivo que arriba: el trigger de la 0136 vigila la tabla `reports`
+      // entera, así que también frena los reportes de usuario.
+      toast({ title: "No se pudo reportar", description: mensajeDeError(e, "Intenta de nuevo."), variant: "destructive" });
     } finally {
       setUserReportSubmitting(false);
     }
@@ -1376,9 +1390,15 @@ export default function ListingDetail() {
                 <Input
                   id="reporter-name"
                   value={reportName}
-                  onChange={(e) => setReportName(e.target.value)}
+                  onChange={(e) => { setReportName(e.target.value); setReportNameError(""); }}
                   placeholder="Como figura en tu documento"
+                  className={reportNameError ? "border-destructive" : ""}
+                  aria-invalid={!!reportNameError}
+                  aria-describedby={reportNameError ? "reporter-name-error" : undefined}
                 />
+                {reportNameError && (
+                  <p id="reporter-name-error" className="text-xs text-destructive">{reportNameError}</p>
+                )}
               </div>
               <div className="grid grid-cols-[7rem_1fr] gap-2">
                 <div className="space-y-2">
