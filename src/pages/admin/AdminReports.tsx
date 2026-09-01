@@ -19,7 +19,7 @@ import {
   fetchClaimsSummary, fetchGrowthSeries, fetchAdminCreditTransactions, nombreDeTipo,
   fetchSaldosUsuarios, SALDOS_PAGE_SIZE, type SaldoUsuario,
   CREDIT_TX_PAGE_SIZE, GROWTH_RANGES,
-  type ClaimsSummary, type GrowthPoint, type AdminCreditTx, type GrowthRange,
+  type ClaimsSummary, type CifrasDeDenuncias, type GrowthPoint, type AdminCreditTx, type GrowthRange,
 } from "@/lib/admin";
 import { exportRows } from "@/lib/exportReport";
 import { formatCredits, formatSoles } from "@/lib/pricing";
@@ -45,6 +45,50 @@ interface Filters { from: string; to: string; cat: string; region: string }
 
 // Rangos rápidos del historial de transacciones: rellenan el "Desde" del filtro
 // de fechas, que antes había que teclear a mano cada vez.
+/**
+ * Una fila del Excel de denuncias. Sin desglose escribe "—" y no 0: cero es una
+ * cifra y diría que no hay denuncias de ese tipo, que no es lo mismo que no
+ * saberlo porque la migración 0139 aún no esté aplicada.
+ */
+const cifrasFila = (c?: CifrasDeDenuncias) =>
+  c
+    ? { Recibidas: c.recibidos, Pendientes: c.pendientes, Resueltas: c.solucionados }
+    : { Recibidas: "—", Pendientes: "—", Resueltas: "—" };
+
+/** Las tres cifras de un tipo de denuncia, con dónde se moderan. */
+function TarjetaDeDenuncias({ titulo, nota, cifras }: {
+  titulo: string; nota: string; cifras?: CifrasDeDenuncias;
+}) {
+  return (
+    <Card>
+      <CardContent className="p-4 space-y-3">
+        <div>
+          <p className="text-sm font-semibold text-foreground">{titulo}</p>
+          <p className="text-xs text-muted-foreground">{nota}</p>
+        </div>
+        {cifras ? (
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div>
+              <p className="text-2xl font-extrabold">{cifras.recibidos}</p>
+              <p className="text-[11px] text-muted-foreground">Recibidas</p>
+            </div>
+            <div>
+              <p className="text-2xl font-extrabold text-warning">{cifras.pendientes}</p>
+              <p className="text-[11px] text-muted-foreground">Pendientes</p>
+            </div>
+            <div>
+              <p className="text-2xl font-extrabold text-success">{cifras.solucionados}</p>
+              <p className="text-[11px] text-muted-foreground">Resueltas</p>
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">Sin desglose disponible.</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 const TX_RANGES: { value: string; label: string; days: number | null }[] = [
   { value: "all", label: "Todo el tiempo", days: null },
   { value: "7d", label: "Últimos 7 días", days: 7 },
@@ -250,11 +294,15 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
       }));
     } else if (activeTab === "reclamos") {
       title = "Denuncias";
+      // Una fila por grupo y no una lista de indicadores sueltos: así se puede
+      // comparar de un vistazo si el problema está en los avisos o en la gente.
       rows = [
-        { Indicador: "Recibidos", Valor: claims.recibidos },
-        { Indicador: "Pendientes", Valor: claims.pendientes },
-        { Indicador: "Solucionados", Valor: claims.solucionados },
-        ...claimsTrend.map((t) => ({ Indicador: `Mes ${t.mes}`, Valor: `${t.recibidos} recibidos / ${t.solucionados} resueltos` })),
+        { Tipo: "Avisos", ...cifrasFila(claims.avisos) },
+        { Tipo: "Usuarios", ...cifrasFila(claims.usuarios) },
+        { Tipo: "Total", ...cifrasFila(claims) },
+        ...claimsTrend.map((t) => ({
+          Tipo: `Mes ${t.mes}`, Recibidos: t.recibidos, Pendientes: "", Solucionados: t.solucionados,
+        })),
       ];
     } else if (activeTab === "transacciones") {
       title = "Transacciones de crédito";
@@ -425,16 +473,33 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
               </div>
             </TabsContent>
 
-            {/* RECLAMOS */}
+            {/* DENUNCIAS (tabla `reports`, NO el Libro de Reclamaciones) */}
             <TabsContent value="reclamos" className="pt-4 space-y-5">
               <ReportFilters filters={filters} setFilters={setFilters} regions={regionNames} onExport={exp} show={{ dates: true, catRegion: false }} />
+              {/* El total primero, y debajo de qué es cada cosa: un "Recibidos: 42"
+                  no dice si el problema es lo que se publica o cómo se comporta la
+                  gente, y cada mitad la modera una pantalla distinta. */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Recibidos</p><p className="text-3xl font-extrabold">{claims.recibidos}</p></CardContent></Card>
-                <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Pendientes de solución</p><p className="text-3xl font-extrabold text-warning">{claims.pendientes}</p></CardContent></Card>
-                <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Solucionados con conformidad</p><p className="text-3xl font-extrabold text-success">{claims.solucionados}</p></CardContent></Card>
+                <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Recibidas</p><p className="text-3xl font-extrabold">{claims.recibidos}</p></CardContent></Card>
+                <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Pendientes</p><p className="text-3xl font-extrabold text-warning">{claims.pendientes}</p></CardContent></Card>
+                <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Resueltas</p><p className="text-3xl font-extrabold text-success">{claims.solucionados}</p></CardContent></Card>
               </div>
+              {(claims.avisos || claims.usuarios) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <TarjetaDeDenuncias
+                    titulo="Sobre avisos"
+                    nota="Se moderan en Gestión de avisos → Reportados"
+                    cifras={claims.avisos}
+                  />
+                  <TarjetaDeDenuncias
+                    titulo="Sobre usuarios"
+                    nota="Se moderan en Usuarios reportados"
+                    cifras={claims.usuarios}
+                  />
+                </div>
+              )}
               <Card>
-                <CardHeader><CardTitle className="text-sm">Tendencia de reclamos</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-sm">Tendencia de denuncias (avisos y usuarios)</CardTitle></CardHeader>
                 <CardContent className="h-72">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={claimsTrend}>

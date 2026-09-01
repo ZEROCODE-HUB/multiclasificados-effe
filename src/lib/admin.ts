@@ -1030,19 +1030,47 @@ export async function fetchRegionDistribution(range?: ReportDateRange) {
   } catch { return []; }
 }
 
-export interface ClaimsSummary {
+/** Las tres cifras de un grupo de denuncias. */
+export interface CifrasDeDenuncias {
   recibidos: number; pendientes: number; solucionados: number;
+}
+
+export interface ClaimsSummary extends CifrasDeDenuncias {
+  /**
+   * El desglose que añade la 0139. `reports` guarda dos cosas que no se moderan
+   * igual: un "Recibidos: 42" no dice si el problema es lo que se publica o
+   * cómo se comporta la gente.
+   *
+   * Opcionales porque la migración puede no estar aplicada todavía: en ese caso
+   * la pantalla enseña solo el total en vez de romperse.
+   */
+  avisos?: CifrasDeDenuncias;
+  usuarios?: CifrasDeDenuncias;
   trend: { mes: string; recibidos: number; solucionados: number }[];
 }
 export async function fetchClaimsSummary(range?: ReportDateRange): Promise<ClaimsSummary> {
   try {
     const { data, error } = await supabase.rpc("admin_claims_summary", rangeArgs(range));
     if (error) throw error;
-    const d = data as { recibidos?: number; pendientes?: number; solucionados?: number; trend?: Array<{ mes: string; recibidos: number; solucionados: number }> } | null;
+    const d = data as {
+      recibidos?: number; pendientes?: number; solucionados?: number;
+      avisos?: Partial<CifrasDeDenuncias>; usuarios?: Partial<CifrasDeDenuncias>;
+      trend?: Array<{ mes: string; recibidos: number; solucionados: number }>;
+    } | null;
+    // `undefined` y no ceros cuando el desglose no viene: cero es una cifra y
+    // diría que no hay denuncias de ese tipo, que es distinto de no saberlo.
+    const grupo = (g?: Partial<CifrasDeDenuncias>): CifrasDeDenuncias | undefined =>
+      g ? {
+        recibidos: Number(g.recibidos) || 0,
+        pendientes: Number(g.pendientes) || 0,
+        solucionados: Number(g.solucionados) || 0,
+      } : undefined;
     return {
       recibidos: Number(d?.recibidos) || 0,
       pendientes: Number(d?.pendientes) || 0,
       solucionados: Number(d?.solucionados) || 0,
+      avisos: grupo(d?.avisos),
+      usuarios: grupo(d?.usuarios),
       trend: (d?.trend ?? []).map((t) => ({ mes: t.mes, recibidos: Number(t.recibidos) || 0, solucionados: Number(t.solucionados) || 0 })),
     };
   } catch {
