@@ -237,7 +237,7 @@ const ADMIN_META: Record<string, { title: string; breadcrumb: string[] }> = {
   "yape-plin": { title: "Pagos con Yape y Plin", breadcrumb: ["Operación", "Yape/Plin"] },
   reclamaciones: { title: "Libro de Reclamaciones", breadcrumb: ["Operación", "Libro de Reclamaciones"] },
   postulaciones: { title: "Trabaje con nosotros", breadcrumb: ["Operación", "Trabaje con nosotros"] },
-  conversaciones: { title: "Reclamos / Moderación", breadcrumb: ["Operación", "Reclamos / chats"] },
+  conversaciones: { title: "Usuarios reportados", breadcrumb: ["Operación", "Usuarios reportados"] },
   reportes: { title: "Reportes", breadcrumb: ["Operación", "Reportes"] },
   comunicaciones: { title: "Comunicaciones", breadcrumb: ["Comunicaciones", "Centro"] },
   roles: { title: "Roles y permisos", breadcrumb: ["Plataforma", "Roles"] },

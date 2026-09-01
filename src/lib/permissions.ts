@@ -110,7 +110,10 @@ export const PERM_MODULES: PermModuleDef[] = [
     ],
   },
   {
-    id: "Conversaciones reportadas", label: "Reclamos / chats", icon: Flag, group: "Operación", sub: "conversaciones",
+    // El `id` es la clave en la BD y NO se toca. La etiqueta sí: "Reclamos"
+    // chocaba con "Libro de Reclamaciones", que es la pantalla legal de
+    // Indecopi y no tiene nada que ver con moderar a un usuario.
+    id: "Conversaciones reportadas", label: "Usuarios reportados", icon: Flag, group: "Operación", sub: "conversaciones",
     description: "Denuncias entre usuarios y su moderación.",
     actions: [
       A.access("Ver los reclamos y la conversación reportada."),

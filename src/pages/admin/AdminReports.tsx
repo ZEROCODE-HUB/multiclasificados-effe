@@ -249,7 +249,7 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
         "Monto S/": Number(r.monto.toFixed(2)),
       }));
     } else if (activeTab === "reclamos") {
-      title = "Reclamos";
+      title = "Denuncias";
       rows = [
         { Indicador: "Recibidos", Valor: claims.recibidos },
         { Indicador: "Pendientes", Valor: claims.pendientes },
@@ -315,7 +315,11 @@ const AdminReports = ({ role }: { role: AdminRole }) => {
           <Tabs defaultValue="dashboard" onValueChange={setActiveTab}>
             <TabsList className="w-full overflow-x-auto justify-start no-scrollbar">
               <TabsTrigger value="dashboard">Dashboard en tiempo real</TabsTrigger>
-              <TabsTrigger value="reclamos">Reclamos</TabsTrigger>
+              {/* Cuenta la tabla `reports` (denuncias de avisos Y de usuarios), no el
+                  Libro de Reclamaciones, que es `complaints`. Se llamaba "Reclamos"
+                  y era el cuarto sitio del panel usando esa palabra para algo
+                  distinto. */}
+              <TabsTrigger value="reclamos">Denuncias</TabsTrigger>
               <TabsTrigger value="pagos">Pagos</TabsTrigger>
               <TabsTrigger value="avisos">Avisos</TabsTrigger>
               <TabsTrigger value="usuarios">Usuarios</TabsTrigger>

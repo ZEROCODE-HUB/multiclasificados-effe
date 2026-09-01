@@ -196,7 +196,7 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
 
   const load = () => fetchAdminListings().then(({ data }) => setRows(data.map(mapRow)));
   // Avisos reportados REALES desde la BD (tabla `reports`), solo target_type "listing".
-  // Los reportes de usuarios se gestionan en "Reclamos / Moderación".
+  // Las denuncias contra personas se moderan en "Usuarios reportados".
   const loadReportedListings = () =>
     fetchReports().then(({ data }) => setReports(data.filter((r) => r.target_type === "listing")));
   useEffect(() => {

@@ -4,8 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ListingPreviewDialog } from "@/components/ListingPreviewDialog";
-import { Search, AlertOctagon, ArrowLeft, Eye } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Search, AlertOctagon, ArrowLeft } from "lucide-react";
 import { fetchReports, assignReport, resolveReport, fetchConversationBetween, type AdminReport, type ModMessage } from "@/lib/admin";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
@@ -13,7 +13,27 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { mensajeDeError } from "@/lib/errores";
 import { fechaDelDia } from "@/lib/fechas";
 
+/**
+ * Denuncias contra PERSONAS, con la conversación entre ambas como prueba.
+ *
+ * QUÉ NO ESTÁ AQUÍ, Y POR QUÉ. La tabla `reports` guarda dos cosas distintas, y
+ * hasta el 1-sep-2026 esta pantalla las enseñaba las dos: las 21 denuncias de
+ * avisos salían también en Gestión de avisos → Reportados, cada sitio con
+ * acciones diferentes (allí se deshabilita o se desestima el aviso; aquí se
+ * advierte o se suspende al anunciante) y nada decía cuál era la buena.
+ *
+ * El síntoma que lo delataba: en una denuncia de aviso, el panel del chat
+ * —que es toda la razón de ser de esta pantalla— salía vacío casi siempre,
+ * porque denunciante y anunciante no se habían escrito.
+ *
+ * Ahora cada pantalla es dueña de una cosa: los avisos se moderan donde están
+ * los avisos, y aquí se modera a la persona. Se llega a esto desde «Reportar a
+ * este usuario» en la ficha del aviso y desde el chat de Mensajes.
+ */
+
 // Mapa estado real (BD) -> etiqueta + color del diseño existente.
+const ESTADOS = ["open", "reviewing", "resolved"] as const;
+
 const statusMeta: Record<string, { label: string; color: string }> = {
   open:      { label: "Abierto",     color: "bg-destructive/15 text-destructive border-destructive/30" },
   reviewing: { label: "En revisión", color: "bg-warning/15 text-warning border-warning/30" },
@@ -28,20 +48,23 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
   const [reports, setReports] = useState<AdminReport[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [q, setQ] = useState("");
+  // Sin esto no había forma de ver solo lo pendiente: la lista mezclaba las
+  // resueltas con las abiertas y solo se podía buscar por texto.
+  const [estado, setEstado] = useState<string>("all");
   const [me, setMe] = useState<string | null>(null);
   const [convo, setConvo] = useState<ModMessage[]>([]);
   const [convoLoading, setConvoLoading] = useState(false);
   // Hay una acción de moderación en vuelo: bloquea los botones hasta que vuelva.
   const [busy, setBusy] = useState(false);
-  // Aviso denunciado, que se muestra en un diálogo sin salir de la denuncia.
-  const [avisoId, setAvisoId] = useState<string | null>(null);
   const convoRef = useRef<HTMLDivElement>(null);
   // Solo restringe al rol admin (superadmin = acceso total). "Resolver" reclamos
   // exige Conversaciones reportadas · edit (mismo permiso que exige el servidor).
   const { can } = usePermissions(role === "admin");
   const canResolve = can("Conversaciones reportadas", "edit");
 
-  const load = () => fetchReports().then(({ data }) => setReports(data));
+  const load = () =>
+    // Solo `user`: las de avisos viven en Gestión de avisos → Reportados.
+    fetchReports().then(({ data }) => setReports(data.filter((r) => r.target_type === "user")));
   useEffect(() => {
     load();
     supabase.auth.getUser().then(({ data }) => setMe(data.user?.id ?? null));
@@ -50,11 +73,15 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
   const filtered = useMemo(
     () =>
       reports.filter((r) =>
-        q === "" ||
-        [r.reporter, r.reported, r.reason, r.listing_title].some((f) => (f ?? "").toLowerCase().includes(q.toLowerCase())),
+        (estado === "all" || r.status === estado) &&
+        (q === "" ||
+          [r.reporter, r.reported, r.reason].some((f) => (f ?? "").toLowerCase().includes(q.toLowerCase()))),
       ),
-    [reports, q],
+    [reports, q, estado],
   );
+  // Lo que queda por mirar. Con 18 denuncias abiertas y 2 cerradas, un contador
+  // del total no dice nada útil.
+  const pendientes = reports.filter((r) => r.status !== "resolved").length;
   const item = reports.find((r) => r.id === selected);
 
   // Carga la conversación entre reportante y reportado al abrir una denuncia.
@@ -107,12 +134,28 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
           contenido fluye y hace scroll con la página (incluidos los botones). */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:h-[calc(100vh-220px)] lg:min-h-[500px]">
         <Card className={`lg:col-span-1 flex flex-col ${selected ? "hidden lg:flex" : "flex"}`}>
-          <CardHeader className="space-y-2">
-            <CardTitle className="text-base md:text-lg">Reclamos</CardTitle>
+          <CardHeader className="space-y-2 shrink-0">
+            <CardTitle className="text-base md:text-lg flex items-center gap-2">
+              Usuarios reportados
+              {pendientes > 0 && (
+                <Badge variant="outline" className="bg-destructive/15 text-destructive border-destructive/30">
+                  {pendientes} sin cerrar
+                </Badge>
+              )}
+            </CardTitle>
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar..." className="pl-9 h-9" />
             </div>
+            <Select value={estado} onValueChange={setEstado}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los estados</SelectItem>
+                {ESTADOS.map((e) => (
+                  <SelectItem key={e} value={e}>{statusMeta[e].label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </CardHeader>
           <CardContent className="flex-1 overflow-y-auto space-y-2">
             {filtered.map((r) => {
@@ -136,7 +179,9 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
               );
             })}
             {filtered.length === 0 && (
-              <p className="text-xs text-muted-foreground text-center py-8">No hay reclamos.</p>
+              <p className="text-xs text-muted-foreground text-center py-8">
+                {reports.length === 0 ? "No hay usuarios reportados." : "Ninguno con ese estado."}
+              </p>
             )}
           </CardContent>
         </Card>
@@ -144,7 +189,7 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
         <Card className={`lg:col-span-2 flex flex-col ${selected ? "flex" : "hidden lg:flex"}`}>
           {item ? (
             <>
-              <CardHeader className="border-b">
+              <CardHeader className="border-b shrink-0">
                 <div className="flex items-center gap-3">
                   <Button size="icon" variant="ghost" className="lg:hidden" onClick={() => setSelected(null)}><ArrowLeft size={18} /></Button>
                   <div className="w-10 h-10 rounded-full bg-destructive/15 text-destructive flex items-center justify-center"><AlertOctagon size={18} /></div>
@@ -155,29 +200,24 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
                   <Badge variant="outline" className={metaFor(item.status).color}>{metaFor(item.status).label}</Badge>
                 </div>
               </CardHeader>
-              <CardContent className="flex-1 overflow-y-auto py-4 space-y-3 bg-muted/30">
-                <div className="rounded-xl border bg-card p-4 space-y-2">
-                  <p className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Detalle del reclamo</p>
-                  <p className="text-sm"><span className="text-muted-foreground">Tipo:</span> {item.target_type === "user" ? "Usuario" : "Aviso"}</p>
-                  {item.listing_title && <p className="text-sm"><span className="text-muted-foreground">Aviso:</span> {item.listing_title}</p>}
+              {/* UN solo scroll, el de la conversación. Antes el panel entero
+                  scrolleaba Y dentro la conversación scrolleaba otra vez con
+                  `max-h-[45vh]`: dos barras compitiendo, y en móvil los botones
+                  de moderar quedaban detrás de todos los mensajes. */}
+              <CardContent className="flex-1 min-h-0 flex flex-col gap-3 py-4 bg-muted/30">
+                <div className="rounded-xl border bg-card p-4 space-y-2 shrink-0">
+                  <p className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Detalle del reporte</p>
                   <p className="text-sm"><span className="text-muted-foreground">Motivo:</span> {item.reason}</p>
                   {item.category && <p className="text-sm"><span className="text-muted-foreground">Categoría:</span> {item.category}</p>}
                   {item.assignee && <p className="text-sm"><span className="text-muted-foreground">Asignado a:</span> {item.assignee}</p>}
                   {item.action_taken && <p className="text-sm"><span className="text-muted-foreground">Acción tomada:</span> {item.action_taken}</p>}
-                  {/* Denuncia sobre un aviso: sin esto el moderador no puede ver
-                      qué se publicó. Se abre aquí mismo, sin salir de la denuncia. */}
-                  {item.target_type === "listing" && item.listing_id && (
-                    <Button variant="outline" size="sm" className="mt-1 gap-1.5" onClick={() => setAvisoId(item.listing_id)}>
-                      <Eye size={14} /> Ver aviso
-                    </Button>
-                  )}
                 </div>
-                <div className="rounded-xl border bg-card p-3">
-                  <p className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground mb-2">
+                <div className="rounded-xl border bg-card p-3 flex-1 min-h-0 flex flex-col">
+                  <p className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground mb-2 shrink-0">
                     Conversación entre ambos usuarios
                   </p>
                   {/* Leyenda: quién es quién */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3 pb-2 border-b">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3 pb-2 border-b shrink-0">
                     <span className="flex items-center gap-1.5 text-[11px] font-semibold text-foreground">
                       <span className="w-2.5 h-2.5 rounded-full bg-muted-foreground/50" />
                       Denunciante: {item.reporter ?? "—"}
@@ -194,7 +234,10 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
                       No hay mensajes registrados entre estos usuarios.
                     </p>
                   ) : (
-                    <div ref={convoRef} className="space-y-2 max-h-[45vh] overflow-y-auto pr-1">
+                    // En escritorio el alto lo pone el flex de la tarjeta; en móvil
+                    // no hay altura fija, así que se acota para que la página no se
+                    // vuelva interminable.
+                    <div ref={convoRef} className="space-y-2 flex-1 min-h-0 overflow-y-auto pr-1 max-h-[50vh] lg:max-h-none">
                       {convo.map((m) => {
                         // Denunciado a la DERECHA; denunciante (y cualquier otro) a la izquierda.
                         const isDenunciado = item.reported_id != null && m.sender_id === item.reported_id;
@@ -224,7 +267,10 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
                 </div>
               </CardContent>
               {canResolve ? (
-              <div className="border-t p-4 flex flex-col sm:flex-row gap-2">
+              // `sticky` en móvil: la página scrollea con toda la conversación y
+              // antes los tres botones quedaban al final del todo. En escritorio
+              // la tarjeta tiene alto fijo y ya estaban abajo, así que `static`.
+              <div className="border-t p-4 flex flex-col sm:flex-row gap-2 bg-card shrink-0 sticky bottom-[var(--nav-bottom)] lg:static z-10">
                 {/* Solo se marca en revisión una denuncia abierta: una vez asignada
                     (o resuelta) volver a pulsar no hace nada útil. */}
                 <Button variant="outline" className="flex-1" disabled={busy || item.status !== "open"} onClick={markReviewing}>
@@ -236,7 +282,7 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
               ) : (
               <div className="border-t p-4">
                 <p className="text-xs text-muted-foreground text-center">
-                  Puedes revisar este reclamo, pero no tienes permiso para resolverlo.
+                  Puedes revisar este reporte, pero no tienes permiso para resolverlo.
                 </p>
               </div>
               )}
@@ -245,20 +291,13 @@ const SuperConversations = ({ role = "superadmin" as AdminRole }: { role?: Admin
             <div className="flex-1 flex items-center justify-center text-center p-8">
               <div>
                 <AlertOctagon size={40} className="mx-auto text-muted-foreground/40 mb-3" />
-                <p className="text-sm font-medium text-foreground">Selecciona un reclamo</p>
-                <p className="text-xs text-muted-foreground">Podrás ver la conversación completa entre los usuarios.</p>
+                <p className="text-sm font-medium text-foreground">Selecciona un usuario reportado</p>
+                <p className="text-xs text-muted-foreground">Podrás ver la conversación completa entre ambos.</p>
               </div>
             </div>
           )}
         </Card>
       </div>
-
-      <ListingPreviewDialog
-        listingId={avisoId}
-        reason={item?.reason}
-        fallbackTitle={item?.listing_title}
-        onClose={() => setAvisoId(null)}
-      />
     </>
   );
 };

@@ -1,18 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+/**
+ * "Usuarios reportados" — denuncias contra PERSONAS.
+ *
+ * Hasta el 1-sep-2026 esta pantalla enseñaba también las denuncias de avisos,
+ * que salían igualmente en Gestión de avisos → Reportados con acciones
+ * distintas. Se repartieron: los avisos allí, las personas aquí. Lo que cubría
+ * el bloque "el moderador ve el aviso denunciado" vive ahora en
+ * `adminListingsReported.test.tsx`.
+ */
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { AdminReport } from "@/lib/admin";
+import { prepararDom } from "./domPolyfills";
 
 // --- Mocks de la capa de datos ---
 const fetchReports = vi.fn();
 const assignReport = vi.fn();
 const resolveReport = vi.fn();
-const fetchAdminListing = vi.fn();
 
 vi.mock("@/lib/admin", () => ({
   fetchReports: (...a: unknown[]) => fetchReports(...a),
   assignReport: (...a: unknown[]) => assignReport(...a),
   resolveReport: (...a: unknown[]) => resolveReport(...a),
-  fetchAdminListing: (...a: unknown[]) => fetchAdminListing(...a),
   fetchConversationBetween: async () => [],
 }));
 
@@ -29,102 +37,120 @@ const LISTING = "22222222-2222-4222-8222-222222222222";
 
 const base: AdminReport = {
   id: "33333333-3333-4333-8333-333333333333",
-  target_type: "listing", reason: "Posible estafa", category: null, status: "open",
+  target_type: "user", reason: "Posible estafador", category: "Posible estafador", status: "open",
   action_taken: null, reporter: "Ana", reported: "Luis",
   reporter_id: "44444444-4444-4444-8444-444444444444",
   reported_id: "55555555-5555-4555-8555-555555555555",
-  listing_id: LISTING, listing_title: "Camioneta 4x4", assigned_to: null, assignee: null,
+  listing_id: null, listing_title: null, assigned_to: null, assignee: null,
   created_at: "2026-07-01T00:00:00Z",
 };
 
-const conReporte = (r: Partial<AdminReport>) => {
-  fetchReports.mockResolvedValue({ data: [{ ...base, ...r }], real: true });
+// Una denuncia de AVISO, para comprobar que aquí no entra.
+const DE_AVISO: AdminReport = {
+  ...base,
+  id: "77777777-7777-4777-8777-777777777777",
+  target_type: "listing", reason: "Precio incorrecto", category: "Precio incorrecto",
+  reporter: "Carmen", reported: "Marta",
+  listing_id: LISTING, listing_title: "Camioneta 4x4",
 };
+
+const conReportes = (...rs: AdminReport[]) => {
+  fetchReports.mockResolvedValue({ data: rs, real: true });
+};
+
+const conReporte = (r: Partial<AdminReport>) => conReportes({ ...base, ...r });
 
 /** Renderiza y abre la denuncia de la lista. */
 const abrirDenuncia = async () => {
   render(<SuperConversations role="superadmin" />);
   const fila = await screen.findByRole("button", { name: /Ana → Luis/ });
   fireEvent.click(fila);
-  await screen.findByText("Detalle del reclamo");
-};
-
-const AVISO = {
-  id: LISTING, title: "Casa", description: "Bonita casa en la sierra", price: 120000, currency: "PEN",
-  condition: "Usado", category_id: "inmuebles", subcategory_id: null, location: "Áncash",
-  status: "rejected", featured: false, urgent: false, views: 42,
-  rejection_reason: "Removido por moderación", published_at: "2026-07-01T00:00:00Z",
-  created_at: "2026-07-01T00:00:00Z", advertiser: "Oscar Mijael Pérez García",
-  advertiser_id: "66666666-6666-4666-8666-666666666666", images: ["https://cdn/1.jpg"],
+  await screen.findByText("Detalle del reporte");
 };
 
 beforeEach(() => {
+  prepararDom();
   vi.clearAllMocks();
   getUser.mockResolvedValue({ data: { user: { id: MOD } } });
   assignReport.mockResolvedValue(undefined);
   resolveReport.mockResolvedValue(undefined);
-  fetchAdminListing.mockResolvedValue(AVISO);
   conReporte({});
 });
 
-const verAviso = () => fireEvent.click(screen.getByRole("button", { name: /Ver aviso/ }));
+describe("aquí solo se moderan personas", () => {
+  it("una denuncia de aviso no aparece en esta pantalla", async () => {
+    // Salía en las dos, con acciones distintas y nada que dijera cuál era la
+    // buena. Los avisos se moderan en Gestión de avisos → Reportados.
+    conReportes(base, DE_AVISO);
+    render(<SuperConversations role="superadmin" />);
 
-describe("denuncia sobre un aviso: el moderador ve el contenido reportado", () => {
-  it("muestra la información del aviso sin sacar al moderador de la denuncia", async () => {
-    await abrirDenuncia();
-    verAviso();
-
-    // Se pide el aviso denunciado, no otro.
-    await waitFor(() => expect(fetchAdminListing).toHaveBeenCalledWith(LISTING));
-
-    const dialogo = await screen.findByRole("dialog");
-    expect(dialogo).toHaveTextContent("Bonita casa en la sierra");
-    expect(dialogo).toHaveTextContent("Oscar Mijael Pérez García");
-    expect(dialogo).toHaveTextContent("S/ 120,000.00");
-    expect(dialogo).toHaveTextContent("42"); // vistas
-
-    // La denuncia sigue detrás: no se navegó a ningún sitio.
-    expect(screen.getByText("Detalle del reclamo")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /Ver aviso/ })).toBeNull();
+    expect(await screen.findByRole("button", { name: /Ana → Luis/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Carmen → Marta/ })).toBeNull();
   });
 
-  it("un aviso deshabilitado se ve igual, con su motivo de rechazo", async () => {
+  it("y ya no ofrece ver el aviso, que aquí no venía a cuento", async () => {
     await abrirDenuncia();
-    verAviso();
-
-    const dialogo = await screen.findByRole("dialog");
-    expect(dialogo).toHaveTextContent("Rechazado");
-    expect(dialogo).toHaveTextContent("Removido por moderación");
-  });
-
-  it("si el aviso ya no existe, lo dice en vez de quedarse cargando", async () => {
-    fetchAdminListing.mockResolvedValue(null);
-    await abrirDenuncia();
-    verAviso();
-
-    expect(await screen.findByText(/No se pudo cargar el aviso/)).toBeInTheDocument();
-  });
-
-  it("si el backend falla, tampoco se queda colgado", async () => {
-    fetchAdminListing.mockRejectedValue(new Error("no autorizado"));
-    await abrirDenuncia();
-    verAviso();
-
-    expect(await screen.findByText(/No se pudo cargar el aviso/)).toBeInTheDocument();
-  });
-
-  it("si la denuncia es sobre un usuario no hay aviso que ver", async () => {
-    conReporte({ target_type: "user", listing_id: null, listing_title: null });
-    await abrirDenuncia();
-
     expect(screen.queryByRole("button", { name: /Ver aviso/ })).toBeNull();
   });
 
-  it("no ofrece el botón si el aviso no viene identificado", async () => {
-    conReporte({ target_type: "listing", listing_id: null });
-    await abrirDenuncia();
+  it("el contador dice lo que queda por mirar, no el histórico", async () => {
+    conReportes(
+      base,
+      { ...base, id: "aaaaaaa1-aaaa-4aaa-8aaa-aaaaaaaaaaa1", status: "reviewing" },
+      { ...base, id: "aaaaaaa2-aaaa-4aaa-8aaa-aaaaaaaaaaa2", status: "resolved" },
+    );
+    render(<SuperConversations role="superadmin" />);
+    expect(await screen.findByText("2 sin cerrar")).toBeInTheDocument();
+  });
+});
 
-    expect(screen.queryByRole("button", { name: /Ver aviso/ })).toBeNull();
+describe("filtrar por estado", () => {
+  const TRES = [
+    { ...base, reporter: "Ana" },
+    { ...base, id: "bbbbbbb1-bbbb-4bbb-8bbb-bbbbbbbbbbb1", reporter: "Berta", status: "reviewing" },
+    { ...base, id: "bbbbbbb2-bbbb-4bbb-8bbb-bbbbbbbbbbb2", reporter: "Carla", status: "resolved" },
+  ];
+
+  const elegir = async (opcion: string) => {
+    // El Select de Radix se abre con click en el trigger, no con keyDown.
+    fireEvent.click(screen.getByRole("combobox"));
+    fireEvent.click(await screen.findByRole("option", { name: opcion }));
+  };
+
+  it("se puede quedar solo con las abiertas", async () => {
+    // Antes no había filtro: la lista mezclaba resueltas y abiertas y solo se
+    // podía buscar por texto.
+    conReportes(...TRES);
+    render(<SuperConversations role="superadmin" />);
+    await screen.findByRole("button", { name: /Ana →/ });
+
+    await elegir("Abierto");
+
+    expect(screen.getByRole("button", { name: /Ana →/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Berta →/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Carla →/ })).toBeNull();
+  });
+
+  it("y con las resueltas, para consultar lo ya hecho", async () => {
+    conReportes(...TRES);
+    render(<SuperConversations role="superadmin" />);
+    await screen.findByRole("button", { name: /Ana →/ });
+
+    await elegir("Resuelto");
+
+    expect(screen.getByRole("button", { name: /Carla →/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Ana →/ })).toBeNull();
+  });
+
+  it("si el filtro deja la lista vacía, lo dice sin fingir que no hay nada", async () => {
+    conReportes(base);
+    render(<SuperConversations role="superadmin" />);
+    await screen.findByRole("button", { name: /Ana →/ });
+
+    await elegir("Resuelto");
+
+    expect(screen.getByText("Ninguno con ese estado.")).toBeInTheDocument();
+    expect(screen.queryByText("No hay usuarios reportados.")).toBeNull();
   });
 });
 
