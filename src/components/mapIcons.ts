@@ -117,9 +117,10 @@ export function pinDeUbicacion(): HTMLElement {
 // Google lo recoloca al terminar cada gesto sobre el mapa. Ese reposicionado es
 // lo que se veia saltar: al soltar el mapa, los pines aparecian un instante en
 // su sitio anterior y luego en el correcto. Esta documentado y se descartaron
-// una por una todas las causas de este lado — el agrupador (probado con
-// `?agrupar=no`), el codigo que mueve el mapa (dos trazas en produccion sin una
-// sola orden nuestra), la transicion CSS del pin y el renderizado vectorial
+// una por una todas las causas de este lado — el agrupador (se monto un
+// interruptor temporal en la URL para comparar con y sin agrupar en produccion,
+// y quedo descartado), el codigo que mueve el mapa (dos trazas en produccion sin
+// una sola orden nuestra), la transicion CSS del pin y el renderizado vectorial
 // (ya estaba en raster).
 //
 // Con `google.maps.Marker` el pin es una IMAGEN que Google dibuja en su propia

@@ -129,21 +129,7 @@ export function ListingsMap({ listings, active, onActive, hrefFor }: ListingsMap
 
     marcadores.current = new Map(points.map((l, i) => [l.id, creados[i]]));
 
-    // INTERRUPTOR DE DIAGNÓSTICO: `?agrupar=no` en la URL monta el mapa sin
-    // agrupador, con cada aviso en su pin.
-    //
-    // Existe porque hay un salto de los pines al soltar el mapa que se ha
-    // perseguido varias veces sin poder confirmar de quién es. Con esto se
-    // comparan las dos versiones EN PRODUCCIÓN y en un minuto: si con
-    // `?agrupar=no` el salto desaparece, es del agrupador; si sigue, no lo es y
-    // deja de ser sospechoso para siempre.
-    const agrupar = new URLSearchParams(window.location.search).get("agrupar") !== "no";
-    if (agrupar) {
-      agrupador.current = crearAgrupador(mapa, libs, creados);
-    } else {
-      // Sin agrupador nadie les asigna el mapa: hay que hacerlo aquí.
-      creados.forEach((m) => { m.setMap(mapa); });
-    }
+    agrupador.current = crearAgrupador(mapa, libs, creados);
 
     // Encuadre panorámico a todos los avisos con ubicación.
     if (points.length > 0) {
