@@ -19,6 +19,7 @@ import { AdminListingStatus } from "@/data/adminMockData";
 import { toast } from "@/hooks/use-toast";
 import { disableListing, loadDisabled, formatPrecioAviso } from "@/lib/pricing";
 import { fetchAdminListings, setListingStatus, setListingPublishedAt, fetchReports, resolveReport, type AdminListingRow, type AdminReport } from "@/lib/admin";
+import { agruparPorAviso } from "@/lib/denuncias";
 import { usePermissions } from "@/hooks/usePermissions";
 import { fetchListingImages } from "@/lib/listings";
 import { fechaHoraCorta } from "@/lib/fechas";
@@ -159,9 +160,11 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
   const [filter, setFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
   const [detail, setDetail] = useState<Listing | null>(null);
-  // `reportId` solo viene cuando se deshabilita desde la pestaña "Reportados":
-  // en ese caso, además de bajar el aviso, se cierra la denuncia (IT3-020).
-  const [disableTarget, setDisableTarget] = useState<{ id: string; title: string; advertiser: string; reportId?: string } | null>(null);
+  // `reportIds` solo viene cuando se deshabilita desde la pestaña "Reportados":
+  // en ese caso, además de bajar el aviso, se cierran TODAS sus denuncias
+  // abiertas (IT3-020). Antes se cerraba solo aquella en la que se pulsó, y las
+  // demás del mismo aviso quedaban "Pendiente" con el aviso ya deshabilitado.
+  const [disableTarget, setDisableTarget] = useState<{ id: string; title: string; advertiser: string; reportIds?: string[] } | null>(null);
   const [disableReason, setDisableReason] = useState("");
   const [reports, setReports] = useState<AdminReport[]>([]);
   // Filtro por estado de la pestaña "Reportados". Los resueltos NO se ocultan
@@ -172,11 +175,15 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
   // resueltos nunca bajaba: hoy hay 21 denuncias de avisos y 8 ya cerradas, así
   // que decía 21 para siempre y dejaba de significar nada.
   const reportsPendientes = reports.filter((r) => r.status !== "resolved").length;
+  const gruposDenunciados = agruparPorAviso(visibleReports);
   // Cerrar una denuncia infundada. Sin esto, la única salida era deshabilitar el
   // aviso: un aviso legítimo denunciado por despecho se quedaba "Pendiente" para
   // siempre, y "anulado" —uno de los estados que pidió el cliente— no existía.
-  const [dismissTarget, setDismissTarget] = useState<{ id: string; title: string } | null>(null);
+  const [dismissTarget, setDismissTarget] = useState<{ ids: string[]; title: string } | null>(null);
   const [dismissNote, setDismissNote] = useState("");
+  // Grupos con la lista larga desplegada. Se pliega a partir de la tercera:
+  // nueve denuncias seguidas entierran el resto de avisos denunciados.
+  const [gruposAbiertos, setGruposAbiertos] = useState<Record<string, boolean>>({});
   // Aviso denunciado que se está inspeccionando desde la pestaña "Reportados".
   const [reportado, setReportado] = useState<AdminReport | null>(null);
   const [disabled, setDisabled] = useState<Record<string, string>>(() => loadDisabled());
@@ -230,13 +237,18 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
         // "resuelto" era solo visual (se deducía del estado del aviso), así que
         // volvía a "pendiente" al rehabilitarlo (IT3-020). El id se comprueba
         // porque `fetchReports` cae a datos de ejemplo si el RPC falla.
-        if (disableTarget.reportId && isUuid(disableTarget.reportId)) {
-          try {
-            await resolveReport(disableTarget.reportId, "remove", reason);
-          } catch (e) {
+        // Son N llamadas, una por denuncia. Si alguna falla, el aviso YA está
+        // bajado: callarlo dejaría denuncias abiertas sobre un aviso caído y
+        // nadie sabría cuáles. Así que se cuentan y se dicen.
+        const ids = (disableTarget.reportIds ?? []).filter(isUuid);
+        if (ids.length) {
+          const fallos = await cerrarDenuncias(ids, "remove", reason);
+          if (fallos.length) {
             toast({
-              title: "Aviso deshabilitado, pero la denuncia sigue abierta",
-              description: mensajeDeError(e, "Vuelve a intentarlo desde la pestaña Reportados."),
+              title: fallos.length === ids.length
+                ? "Aviso deshabilitado, pero las denuncias siguen abiertas"
+                : `Aviso deshabilitado; ${fallos.length} de ${ids.length} denuncias siguen abiertas`,
+              description: mensajeDeError(fallos[0], "Vuelve a intentarlo desde la pestaña Reportados."),
               variant: "destructive",
             });
           }
@@ -258,17 +270,47 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
     setDisableReason("");
   };
 
-  // Cierra la denuncia sin tocar el aviso: se revisó y no había falta.
+  /**
+   * Cierra varias denuncias y devuelve los errores de las que no pudieron.
+   *
+   * Se cierran una a una y NO se corta al primer fallo: si la tercera falla, las
+   * otras cuatro ya están resueltas y volver a intentarlas todas no estropea
+   * nada (`admin_resolve_report` vuelve a poner el mismo estado). Cortar dejaría
+   * un lote a medias sin decir por dónde se quedó.
+   */
+  const cerrarDenuncias = async (
+    ids: string[], accion: "remove" | "dismiss", nota: string,
+  ): Promise<unknown[]> => {
+    const fallos: unknown[] = [];
+    for (const id of ids) {
+      try { await resolveReport(id, accion, nota); } catch (e) { fallos.push(e); }
+    }
+    return fallos;
+  };
+
+  // Cierra las denuncias sin tocar el aviso: se revisaron y no había falta.
   const confirmDismiss = async () => {
     if (!dismissTarget) return;
     const nota = dismissNote.trim() || "Revisado: no se encontró incumplimiento.";
-    try {
-      if (!isUuid(dismissTarget.id)) throw new Error("Denuncia de ejemplo: no hay nada que cerrar.");
-      await resolveReport(dismissTarget.id, "dismiss", nota);
-      await loadReportedListings();
-      toast({ title: "Denuncia desestimada", description: `"${dismissTarget.title}" queda como está.` });
-    } catch (e) {
-      toast({ title: "No se pudo desestimar", description: mensajeDeError(e, "Error"), variant: "destructive" });
+    const ids = dismissTarget.ids.filter(isUuid);
+    if (!ids.length) {
+      toast({ title: "Denuncia de ejemplo: no hay nada que cerrar." });
+      setDismissTarget(null); setDismissNote("");
+      return;
+    }
+    const fallos = await cerrarDenuncias(ids, "dismiss", nota);
+    await loadReportedListings();
+    if (fallos.length) {
+      toast({
+        title: `No se pudieron cerrar ${fallos.length} de ${ids.length}`,
+        description: mensajeDeError(fallos[0], "Error"),
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: ids.length === 1 ? "Denuncia desestimada" : `${ids.length} denuncias desestimadas`,
+        description: `"${dismissTarget.title}" queda como está.`,
+      });
     }
     setDismissTarget(null);
     setDismissNote("");
@@ -577,99 +619,155 @@ const AdminListings = ({ role }: { role: AdminRole }) => {
                 <p className="text-sm text-muted-foreground text-center py-8">No hay reportes con ese estado.</p>
               ) : (
                 <div className="space-y-3">
-                  {visibleReports.map((r) => {
-                    const rowMatch = rows.find((x) => x.id === r.listing_id);
-                    const isDisabled = rowMatch?.status === "Rechazado" || !!disabled[r.listing_id ?? ""];
-                    const st = REPORT_STATUS[r.status] ?? { label: r.status, cls: "" };
-                    const { comentario } = partirMotivo(r);
+                  {gruposDenunciados.map((g) => {
+                    const rowMatch = rows.find((x) => x.id === g.listingId);
+                    const isDisabled = rowMatch?.status === "Rechazado" || !!disabled[g.listingId ?? ""];
+                    // A partir de la tercera se pliega: nueve denuncias seguidas
+                    // entierran el resto de avisos denunciados.
+                    const desplegado = !!gruposAbiertos[g.clave];
+                    const aLaVista = desplegado ? g.denuncias : g.denuncias.slice(0, 3);
+                    const ocultas = g.denuncias.length - aLaVista.length;
+                    const puedeCerrar = canModerate && g.abiertas.length > 0;
                     return (
-                      <div key={r.id} className="border p-4 bg-card">
-                        <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div key={g.clave} className="border bg-card">
+                        {/* ---- El aviso: aquí se decide ---- */}
+                        <div className="p-4 flex items-start justify-between gap-3 flex-wrap border-b bg-muted/30">
                           <div className="min-w-0 flex-1">
-                            <p className="font-semibold text-foreground text-sm">{r.listing_title ?? "Aviso"}</p>
+                            <p className="font-semibold text-foreground text-sm">{g.titulo}</p>
                             <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                              {r.category && <Badge variant="outline">{r.category}</Badge>}
-                              <Badge variant="outline" className={st.cls}>{st.label}</Badge>
-                              {/* "Controlar la cantidad de Reportes que tiene un
-                                  aviso": en una lista ordenada por fecha, un aviso
-                                  con nueve denuncias se lee igual que uno con una.
-                                  Aquí no. */}
-                              {(r.reportes_del_aviso ?? 0) > 1 && (
+                              {/* Lo primero que hay que saber es cuántas quedan
+                                  por mirar, no cuántas hubo. */}
+                              {g.abiertas.length > 0 ? (
                                 <Badge variant="outline" className="bg-destructive/15 text-destructive border-destructive/30">
-                                  {r.reportes_del_aviso} reportes de este aviso
+                                  {g.abiertas.length} sin cerrar
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="bg-success/15 text-success border-success/30">
+                                  Todas resueltas
+                                </Badge>
+                              )}
+                              {g.total > g.abiertas.length && (
+                                <Badge variant="outline">{g.total} en total</Badge>
+                              )}
+                              {isDisabled && (
+                                <Badge variant="outline" className="bg-destructive/15 text-destructive border-destructive/30">
+                                  Aviso deshabilitado
                                 </Badge>
                               )}
                             </div>
-                            {/* La categoría ya está en la etiqueta de arriba;
-                                repetirla aquí dejaba "Motivo: Publicación
-                                duplicada o spam — Publicación duplicada o spam".
-                                Lo que aporta es el comentario. */}
-                            {comentario ? (
-                              <p className="text-sm text-foreground mt-2">
-                                <span className="text-muted-foreground">Comentario:</span> {comentario}
-                              </p>
-                            ) : (
-                              <p className="text-sm text-muted-foreground mt-2 italic">Sin comentario.</p>
-                            )}
-                            {/* Lo que ya se hizo con la denuncia. Sin esto, un
-                                reporte cerrado se lee igual que uno sin tocar. */}
-                            {r.action_taken && (
-                              <p className="text-xs text-muted-foreground mt-1">
-                                Acción de eFFe: <b>{ACCION_DE_EFFE[r.action_taken] ?? r.action_taken}</b>
-                              </p>
-                            )}
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Reportado por <b>{r.reporter_name || r.reporter || "Usuario"}</b>
-                              {r.reporter_doc_number && (
-                                <> · {r.reporter_doc_type ?? "DNI"} {r.reporter_doc_number}</>
-                              )}
-                              {" · "}{fechaHoraCorta(r.created_at)}
-                            </p>
-                            {/* B-10. Los tres estados se dicen distinto a propósito:
-                                "sin verificar" es que el registro no respondió, y no
-                                acusa a nadie; "no encontrado" sí. Antes de la 0136 no
-                                se pedía documento, y esos reportes no muestran nada. */}
-                            {r.reporter_doc_number && (
-                              r.reporter_doc_verified === true ? (
-                                <p className="text-xs text-success mt-0.5 flex items-center gap-1">
-                                  <ShieldCheck size={12} /> Documento verificado
-                                </p>
-                              ) : r.reporter_doc_verified === false ? (
-                                <p className="text-xs text-destructive mt-0.5 flex items-center gap-1">
-                                  <AlertTriangle size={12} /> El documento no se encontró en el registro
-                                </p>
-                              ) : (
-                                <p className="text-xs text-warning mt-0.5 flex items-center gap-1">
-                                  <AlertTriangle size={12} /> No se pudo verificar el documento
-                                </p>
-                              )
-                            )}
                           </div>
                           <div className="flex flex-col gap-2">
                             {/* Sin esto hay que decidir si deshabilitar un aviso sin haberlo visto. */}
-                            {r.listing_id && (
-                              <Button size="sm" variant="outline" className="gap-1" onClick={() => setReportado(r)}>
+                            {g.listingId && (
+                              <Button size="sm" variant="outline" className="gap-1" onClick={() => setReportado(g.denuncias[0])}>
                                 <Eye size={14} /> Ver aviso
                               </Button>
                             )}
-                            {isDisabled ? (
-                              <Badge variant="outline" className="bg-destructive/15 text-destructive border-destructive/30">Deshabilitado</Badge>
-                            ) : canModerate && r.status !== "resolved" && (
+                            {!isDisabled && puedeCerrar && (
                               <Button size="sm" variant="outline" className="text-destructive gap-1"
-                                onClick={() => setDisableTarget({ id: r.listing_id ?? "", title: r.listing_title ?? "Aviso", advertiser: r.reported ?? "Anunciante", reportId: r.id })}>
+                                onClick={() => setDisableTarget({
+                                  id: g.listingId ?? "", title: g.titulo,
+                                  advertiser: g.denuncias[0].reported ?? "Anunciante",
+                                  // TODAS las abiertas: bajar el aviso y dejar
+                                  // denuncias suyas en "Pendiente" no tiene sentido.
+                                  reportIds: g.abiertas.map((r) => r.id),
+                                })}>
                                 <Ban size={14} /> Deshabilitar
                               </Button>
                             )}
                             {/* La otra mitad de moderar: decir que no había nada.
                                 No toca el aviso ni avisa al anunciante. */}
-                            {canModerate && r.status !== "resolved" && (
+                            {puedeCerrar && (
                               <Button size="sm" variant="ghost" className="gap-1"
-                                onClick={() => setDismissTarget({ id: r.id, title: r.listing_title ?? "Aviso" })}>
-                                <CheckCircle2 size={14} /> Desestimar
+                                onClick={() => setDismissTarget({ ids: g.abiertas.map((r) => r.id), title: g.titulo })}>
+                                <CheckCircle2 size={14} />
+                                {g.abiertas.length === 1 ? "Desestimar" : "Desestimar todas"}
                               </Button>
                             )}
                           </div>
                         </div>
+
+                        {/* ---- Las denuncias: cada una es un registro aparte ---- */}
+                        <ul className="divide-y">
+                          {aLaVista.map((r) => {
+                            const st = REPORT_STATUS[r.status] ?? { label: r.status, cls: "" };
+                            const { comentario } = partirMotivo(r);
+                            return (
+                              <li key={r.id} className="p-4 flex items-start justify-between gap-3 flex-wrap">
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    {r.category && <Badge variant="outline">{r.category}</Badge>}
+                                    <Badge variant="outline" className={st.cls}>{st.label}</Badge>
+                                  </div>
+                                  {/* La categoría ya está en la etiqueta de arriba;
+                                      repetirla dejaba "Motivo: Publicación duplicada
+                                      o spam — Publicación duplicada o spam". Lo que
+                                      aporta es el comentario. */}
+                                  {comentario ? (
+                                    <p className="text-sm text-foreground mt-2">
+                                      <span className="text-muted-foreground">Comentario:</span> {comentario}
+                                    </p>
+                                  ) : (
+                                    <p className="text-sm text-muted-foreground mt-2 italic">Sin comentario.</p>
+                                  )}
+                                  {/* Lo que ya se hizo con la denuncia. Sin esto, una
+                                      cerrada se lee igual que una sin tocar. */}
+                                  {r.action_taken && (
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      Acción de eFFe: <b>{ACCION_DE_EFFE[r.action_taken] ?? r.action_taken}</b>
+                                    </p>
+                                  )}
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Reportado por <b>{r.reporter_name || r.reporter || "Usuario"}</b>
+                                    {r.reporter_doc_number && (
+                                      <> · {r.reporter_doc_type ?? "DNI"} {r.reporter_doc_number}</>
+                                    )}
+                                    {" · "}{fechaHoraCorta(r.created_at)}
+                                  </p>
+                                  {/* B-10. Los tres estados se dicen distinto a propósito:
+                                      "sin verificar" es que el registro no respondió, y no
+                                      acusa a nadie; "no encontrado" sí. Antes de la 0136 no
+                                      se pedía documento, y esas denuncias no muestran nada. */}
+                                  {r.reporter_doc_number && (
+                                    r.reporter_doc_verified === true ? (
+                                      <p className="text-xs text-success mt-0.5 flex items-center gap-1">
+                                        <ShieldCheck size={12} /> Documento verificado
+                                      </p>
+                                    ) : r.reporter_doc_verified === false ? (
+                                      <p className="text-xs text-destructive mt-0.5 flex items-center gap-1">
+                                        <AlertTriangle size={12} /> El documento no se encontró en el registro
+                                      </p>
+                                    ) : (
+                                      <p className="text-xs text-warning mt-0.5 flex items-center gap-1">
+                                        <AlertTriangle size={12} /> No se pudo verificar el documento
+                                      </p>
+                                    )
+                                  )}
+                                </div>
+                                {/* Suelto, y solo cuando hay más de una abierta: de tres
+                                    denuncias a un aviso, dos pueden ser ciertas y una
+                                    despecho. Con una sola, el botón de la cabecera ya
+                                    hace esto mismo y repetirlo confunde. */}
+                                {canModerate && r.status !== "resolved" && g.abiertas.length > 1 && (
+                                  <Button size="sm" variant="ghost" className="gap-1 shrink-0"
+                                    onClick={() => setDismissTarget({ ids: [r.id], title: g.titulo })}>
+                                    <CheckCircle2 size={14} /> Desestimar esta
+                                  </Button>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
+
+                        {(ocultas > 0 || desplegado) && (
+                          <button
+                            type="button"
+                            className="w-full text-xs text-muted-foreground hover:text-foreground py-2 border-t"
+                            onClick={() => setGruposAbiertos((a) => ({ ...a, [g.clave]: !desplegado }))}
+                          >
+                            {ocultas > 0 ? `Ver las otras ${ocultas} denuncias` : "Ver menos"}
+                          </button>
+                        )}
                       </div>
                     );
                   })}

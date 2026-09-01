@@ -65,6 +65,22 @@ const RESUELTA = {
   reportes_del_aviso: 1,
 };
 
+// Un aviso con cuatro denuncias: tres sin cerrar y una ya resuelta. Es la
+// forma que tenía el caso de producción que motivó agrupar.
+const VARIAS = [1, 2, 3, 4].map((i) => ({
+  ...base,
+  id: `8888888${i}-8888-4888-8888-88888888888${i}`,
+  reason: `Posible estafa o fraude — mensaje ${i}`,
+  category: "Posible estafa o fraude",
+  status: i === 4 ? "resolved" : "open",
+  action_taken: i === 4 ? "dismiss" : null,
+  listing_id: "99999999-9999-4999-8999-999999999999",
+  listing_title: "Rodillo Cat",
+  reporter_name: `DENUNCIANTE ${i}`, reporter_doc_type: "DNI",
+  reporter_doc_number: `4567891${i}`, reporter_doc_verified: true,
+  reportes_del_aviso: 4,
+}));
+
 const resolveReport = vi.fn();
 let REPORTES: unknown[] = [];
 
@@ -82,12 +98,17 @@ vi.mock("@/lib/pricing", () => ({
 }));
 vi.mock("@/lib/listings", () => ({ fetchListingImages: async () => [] }));
 vi.mock("@/hooks/usePermissions", () => ({ usePermissions: () => ({ can: () => true }) }));
-vi.mock("@/hooks/use-toast", () => ({ toast: () => {}, useToast: () => ({ toast: () => {} }) }));
+const toast = vi.fn();
+vi.mock("@/hooks/use-toast", () => ({
+  toast: (...a: unknown[]) => toast(...a),
+  useToast: () => ({ toast: (...a: unknown[]) => toast(...a) }),
+}));
 
 const exportExcel = vi.fn();
 vi.mock("@/lib/exportReport", () => ({ exportExcel: (...a: unknown[]) => exportExcel(...a) }));
 
 import AdminListings from "@/pages/admin/AdminListings";
+import { agruparPorAviso } from "@/lib/denuncias";
 
 const abrirReportados = async () => {
   render(<AdminListings role="superadmin" />);
@@ -142,7 +163,10 @@ describe("la tarjeta de la denuncia", () => {
     expect(tarjeta).toHaveTextContent("ANA RAMIREZ SOTO");
     expect(tarjeta).toHaveTextContent("DNI 45678912");
     expect(tarjeta).toHaveTextContent("Documento verificado");
-    expect(tarjeta).toHaveTextContent("3 reportes de este aviso");
+    // El aviso tiene 3 denuncias en la base aunque aquí solo se vea una: el
+    // total sale de `reportes_del_aviso`, no de contar la lista cargada.
+    expect(tarjeta).toHaveTextContent("1 sin cerrar");
+    expect(tarjeta).toHaveTextContent("3 en total");
   });
 
   it("los reportes anteriores a la 0136 no enseñan campos vacíos", async () => {
@@ -229,5 +253,92 @@ describe("el reporte de los reportes (Excel)", () => {
     // poder distinguir "no se pidió" de "no se pudo comprobar".
     const auto = filas.find((f) => f.Aviso === "Auto")!;
     expect(auto["Documento verificado"]).toBe("No se pidió");
+  });
+});
+
+describe("un aviso con varias denuncias", () => {
+  beforeEach(() => { REPORTES = VARIAS; });
+
+  it("es UNA tarjeta, no cuatro", () => {
+    // Era el problema: cuatro tarjetas y cuatro botones para una sola decisión.
+    expect(agruparPorAviso(VARIAS as never)).toHaveLength(1);
+  });
+
+  it("la cabecera dice cuántas quedan por mirar y cuántas hubo", async () => {
+    await abrirReportados();
+    const tarjeta = tarjetaDe("Rodillo Cat");
+    expect(tarjeta).toHaveTextContent("3 sin cerrar");
+    expect(tarjeta).toHaveTextContent("4 en total");
+  });
+
+  it("deshabilitar el aviso cierra TODAS sus denuncias abiertas", async () => {
+    // Lo que estaba mal: se cerraba solo aquella en la que se pulsó, y las
+    // otras dos quedaban "Pendiente" sobre un aviso ya deshabilitado.
+    await abrirReportados();
+    fireEvent.click(within(tarjetaDe("Rodillo Cat")).getByRole("button", { name: /Deshabilitar/ }));
+    const dialogo = await screen.findByRole("dialog");
+    fireEvent.change(within(dialogo).getByRole("textbox"), { target: { value: "Estafa confirmada" } });
+    fireEvent.click(within(dialogo).getByRole("button", { name: /Deshabilitar y notificar/ }));
+
+    await waitFor(() => expect(resolveReport).toHaveBeenCalledTimes(3));
+    expect(resolveReport.mock.calls.map((c) => c[0]).sort())
+      .toEqual(VARIAS.slice(0, 3).map((r) => r.id).sort());
+    expect(resolveReport.mock.calls.every((c) => c[1] === "remove")).toBe(true);
+    // La ya resuelta no se vuelve a tocar.
+    expect(resolveReport.mock.calls.map((c) => c[0])).not.toContain(VARIAS[3].id);
+  });
+
+  it("«Desestimar todas» cierra las tres de una vez", async () => {
+    await abrirReportados();
+    fireEvent.click(within(tarjetaDe("Rodillo Cat")).getByRole("button", { name: /Desestimar todas/ }));
+    const dialogo = await screen.findByRole("dialog");
+    fireEvent.click(within(dialogo).getByRole("button", { name: /^Desestimar$/ }));
+
+    await waitFor(() => expect(resolveReport).toHaveBeenCalledTimes(3));
+    expect(resolveReport.mock.calls.every((c) => c[1] === "dismiss")).toBe(true);
+  });
+
+  it("y cada denuncia se puede desestimar suelta", async () => {
+    // De tres denuncias a un aviso, dos pueden ser ciertas y una despecho.
+    // Meterlas todas en el mismo saco borraría esa diferencia.
+    await abrirReportados();
+    const sueltos = within(tarjetaDe("Rodillo Cat")).getAllByRole("button", { name: /Desestimar esta/ });
+    expect(sueltos).toHaveLength(3);
+
+    fireEvent.click(sueltos[0]);
+    const dialogo = await screen.findByRole("dialog");
+    fireEvent.click(within(dialogo).getByRole("button", { name: /^Desestimar$/ }));
+
+    await waitFor(() => expect(resolveReport).toHaveBeenCalledTimes(1));
+    expect(resolveReport).toHaveBeenCalledWith(VARIAS[0].id, "dismiss", expect.any(String));
+  });
+
+  it("si una no se puede cerrar, se dice cuántas quedaron abiertas", async () => {
+    // Son N llamadas: callar el fallo dejaría denuncias abiertas sobre un aviso
+    // ya bajado, y nadie sabría cuáles.
+    resolveReport.mockRejectedValueOnce({ message: "no autorizado" });
+    await abrirReportados();
+    fireEvent.click(within(tarjetaDe("Rodillo Cat")).getByRole("button", { name: /Deshabilitar/ }));
+    const dialogo = await screen.findByRole("dialog");
+    fireEvent.change(within(dialogo).getByRole("textbox"), { target: { value: "Estafa" } });
+    fireEvent.click(within(dialogo).getByRole("button", { name: /Deshabilitar y notificar/ }));
+
+    await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Aviso deshabilitado; 1 de 3 denuncias siguen abiertas",
+      description: "no autorizado",
+    })));
+    // Y las otras dos SÍ se cerraron: no se corta al primer fallo.
+    expect(resolveReport).toHaveBeenCalledTimes(3);
+  });
+
+  it("solo se enseñan tres, y el resto se despliega", async () => {
+    REPORTES = [...VARIAS, { ...VARIAS[0], id: "aaaaaaa1-aaaa-4aaa-8aaa-aaaaaaaaaaa1", reporter_name: "QUINTO" }];
+    await abrirReportados();
+    expect(screen.queryByText(/QUINTO/)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /Ver las otras 2 denuncias/ }));
+
+    expect(await screen.findByText(/QUINTO/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Ver menos/ })).toBeInTheDocument();
   });
 });
