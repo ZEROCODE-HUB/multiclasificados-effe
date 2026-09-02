@@ -95,8 +95,18 @@ describe("el texto del aviso por vencer", () => {
     // El orden importa: en la notificación de un móvil se leen las primeras
     // palabras y poco más.
     expect(cuerpoDeNotificacion("listing_expiring", p())).toBe(
-      "«Depa en Miraflores» vence en 20 horas. Lleva 5 días publicado. Renuévalo para que siga visible.",
+      "«Depa en Miraflores» vence en 20 horas. Lleva 5 días publicado. Cuando venza, vuelve a publicarlo desde Mis avisos.",
     );
+  });
+
+  it("NO invita a actuar antes de que venza, y eso es deliberado", () => {
+    // Desde que "Renovar" está oculto (2026-09-02), la única forma de volver a
+    // anunciar es "Republicar", que crea un aviso NUEVO. Un texto que dijera
+    // "renuévalo ahora" llevaría al anunciante a publicar el mismo aviso dos
+    // veces a la vez y pagar dos planes.
+    const t = cuerpoDeNotificacion("listing_expiring", p());
+    expect(t).toContain("Cuando venza");
+    expect(t).not.toMatch(/Renuévalo|Renuévalo ahora/i);
   });
 
   it("las horas se dicen en palabras, no en cifras sueltas", () => {
@@ -109,7 +119,7 @@ describe("el texto del aviso por vencer", () => {
   it("un aviso anterior a la 0133 se lee con los días que sí trae", () => {
     const viejo = { listing_title: "Auto", dias: 3 };
     expect(cuerpoDeNotificacion("listing_expiring", viejo))
-      .toBe("«Auto» vence en 3 días. Renuévalo para que siga visible.");
+      .toBe("«Auto» vence en 3 días. Cuando venza, vuelve a publicarlo desde Mis avisos.");
   });
 
   it("cero horas restantes NO se confunde con «no hay dato»", () => {

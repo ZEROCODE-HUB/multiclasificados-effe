@@ -25,11 +25,38 @@ interface ListingRowProps {
   onTogglePause?: (listing: Listing) => void;
   /** Solo en borradores: cobra y activa el aviso ya guardado. */
   onPublish?: (listing: Listing) => void;
-  /** Solo en avisos vencidos: vuelve a cobrar y publicar (EFFE-036). */
+  /**
+   * ═══════════════════════════════════════════════════════════════════════
+   * OCULTOS POR DECISIÓN DEL CLIENTE (2026-09-02). NO SE USAN.
+   * ═══════════════════════════════════════════════════════════════════════
+   *
+   * `onRepublish` revivía un aviso vencido (EFFE-036) y `onRenew` le sumaba
+   * días a uno vivo sin dejarlo caer (migración 0113). Las dos funcionan y su
+   * código sigue entero —el diálogo, las RPC `publish_listing` y
+   * `renovar_aviso`, sus migraciones y sus pruebas—, pero **la pantalla ya no
+   * las ofrece**: el cliente quiso una sola acción para volver a anunciar, y
+   * es `onDuplicate`, que ahora se llama "Republicar".
+   *
+   * Se dejan las props en vez de borrarlas para no arrancar de raíz un flujo
+   * que se puede querer de vuelta. Mientras nadie las pase, no se pinta nada.
+   *
+   * OJO SI SE REACTIVAN: hoy "Republicar" en pantalla ES `onDuplicate`, que
+   * hace otra cosa (crea un aviso nuevo). Habría que decidir los tres nombres
+   * a la vez, no reactivar una y ya.
+   */
   onRepublish?: (listing: Listing) => void;
-  /** Aviso vivo por vencer: le suma días sin dejarlo caer (0113). */
   onRenew?: (listing: Listing) => void;
-  /** Crea un aviso NUEVO con los mismos datos, para volver a anunciar lo mismo. */
+  /**
+   * REPUBLICAR: crea un aviso NUEVO con los mismos datos.
+   *
+   * Lleva al formulario de publicar con todo copiado —textos, precio, fotos,
+   * PDF y adicionales— y el usuario cambia lo que quiera antes de pagar. El
+   * aviso original no se toca: este nace con su propio id, sus visitas a cero
+   * y fecha de hoy, así que entra por arriba en "recientes".
+   *
+   * Se llamaba "Publicar uno igual" y estaba enterrada en el menú ⋮. Ahora es
+   * LA acción de volver a anunciar, así que sale como botón.
+   */
   onDuplicate?: (listing: Listing) => void;
   /** Motivo de rechazo de moderación; si viene, se muestra un aviso. */
   rejectionReason?: string | null;
@@ -61,7 +88,7 @@ export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEd
   const hasActions = !!(onView || onEdit || onDelete || onTogglePause || onPublish || onRepublish || onRenew || onDuplicate);
   // El menu ⋮ ya solo lleva las acciones secundarias. Sin ninguna de las tres
   // quedaba un boton que abria un desplegable vacio.
-  const hasMenu = !!(onDuplicate || onTogglePause || onDelete);
+  const hasMenu = !!(onTogglePause || onDelete);
   // El contador solo tiene sentido en un aviso activo (los vencidos ya caducaron).
   // La duración contratada decide CUÁNDO se advierte: sin ella, un plan de 3
   // días se pintaba en naranja desde el minuto uno.
@@ -131,11 +158,6 @@ export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEd
                 secundarias —las que no son "lo siguiente que hay que hacer" con
                 este aviso— y el pie se queda con las principales. */}
             <DropdownMenuContent align="end">
-              {onDuplicate && (
-                <DropdownMenuItem onSelect={() => onDuplicate(listing)}>
-                  <Copy size={14} className="mr-2" /> Publicar uno igual
-                </DropdownMenuItem>
-              )}
               {onTogglePause && (
                 <DropdownMenuItem onSelect={() => onTogglePause(listing)}>
                   {status === "Pausado" ? (
@@ -212,10 +234,6 @@ export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEd
           <div className="flex flex-wrap items-center gap-1.5">
             {hasActions ? (
               <>
-                {/* LAS TRES SON DISTINTAS Y SE PARECÍAN DEMASIADO: mismo icono,
-                    misma forma y ninguna explicación. El `title` dice qué hace
-                    cada una, que es lo que preguntaba el cliente. Solo puede
-                    salir UNA: dependen del estado del aviso, que es excluyente. */}
                 {/* Solo borradores: retoma el aviso guardado y lo publica. */}
                 {onPublish && (
                   <Button
@@ -226,26 +244,37 @@ export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEd
                     <Rocket size={13} /> Publicar
                   </Button>
                 )}
-                {/* Solo vencidos: vuelve a cobrar y publicar (EFFE-036). */}
-                {onRepublish && (
+                {/* REPUBLICAR — la única forma de volver a anunciar.
+                    Es `onDuplicate`: lleva al formulario con todo copiado y sale
+                    un aviso NUEVO, con fecha de hoy, así que entra por arriba.
+
+                    Las dos que había antes con estos nombres (revivir un aviso
+                    vencido y sumarle días a uno vivo) están ocultas por decisión
+                    del cliente; ver el comentario de `onRepublish` arriba. */}
+                {onDuplicate && (
                   <Button
                     size="sm" className="h-8 px-3 text-xs gap-1"
-                    title="Tu aviso ya venció. Vuelve a ponerlo en circulación con el mismo enlace y sus visitas."
-                    onClick={() => onRepublish(listing)}
+                    title="Vuelve a publicar este aviso. Se copia entero —textos, fotos y adicionales— y podrás cambiar lo que quieras antes de pagar. Sale como aviso nuevo, así que aparece arriba en los resultados."
+                    onClick={() => onDuplicate(listing)}
                   >
                     <RotateCw size={13} /> Republicar
                   </Button>
                 )}
-                {/* Por vencer: se le suman días y conserva visitas y enlace. */}
+                {/* Ocultos y sin usar (ver `onRepublish` / `onRenew` arriba).
+                    Mientras nadie pase esas props, esto no pinta nada; se deja
+                    para que reactivarlas sea volver a pasarlas y no reescribir
+                    la fila entera.
+                {onRepublish && (
+                  <Button size="sm" className="h-8 px-3 text-xs gap-1" onClick={() => onRepublish(listing)}>
+                    <RotateCw size={13} /> Republicar (el de verdad)
+                  </Button>
+                )}
                 {onRenew && (
-                  <Button
-                    size="sm" className="h-8 px-3 text-xs gap-1"
-                    title="Le suma días antes de que venza, sin que deje de verse. Conserva sus visitas, sus favoritos y su enlace."
-                    onClick={() => onRenew(listing)}
-                  >
+                  <Button size="sm" className="h-8 px-3 text-xs gap-1" onClick={() => onRenew(listing)}>
                     <RotateCw size={13} /> Renovar
                   </Button>
                 )}
+                */}
                 <Button variant="outline" size="sm" className="h-8 px-3 text-xs gap-1" onClick={() => onEdit?.(listing)}>
                   <Edit size={13} /> Editar
                 </Button>

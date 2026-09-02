@@ -41,7 +41,7 @@ function bodyFor(type: string, payload: Record<string, unknown>, titulo?: string
 
   // Cómo se invita a pulsar, según lo que hay al otro lado.
   const LLAMADA: Record<string, string> = {
-    listing_expiring: "Renuévalo aquí",
+    listing_expiring: "Ver tus avisos",
     new_message: "Responder",
     new_application: "Ver las postulaciones",
     application_status: "Ver tu postulación",
@@ -69,7 +69,7 @@ function bodyFor(type: string, payload: Record<string, unknown>, titulo?: string
     cuerpo,
     rutaFinal ? `${LLAMADA[type] ?? "Verlo"}: ${SITE_URL}${rutaFinal}` : null,
     // Lo que pasa si no se hace nada. Solo donde hay algo que perder.
-    type === "listing_expiring" && "Cuando vence deja de aparecer en las búsquedas.",
+    type === "listing_expiring" && "Cuando vence deja de aparecer en las búsquedas. Podrás volver a publicarlo con el botón «Republicar», que copia el aviso entero para que solo cambies lo que quieras.",
     type === "complaint_new" && "El plazo legal para responder es de 30 días.",
   );
 }

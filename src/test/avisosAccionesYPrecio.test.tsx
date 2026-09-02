@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { ListingRow } from "@/components/ListingRow";
 import { duracionDelPlan, expiryInfo, AVISAR_DESDE } from "@/lib/listings";
@@ -89,24 +89,48 @@ describe("las acciones de la fila (punto 05)", () => {
   it("cada acción sale UNA vez, no en el menú y además como botón", () => {
     // Publicar, Republicar, Renovar, Editar y Eliminar estaban en los dos
     // sitios. Cinco acciones por duplicado en una fila de cuatro líneas.
-    pintar({ onRenew: vi.fn(), onEdit: vi.fn(), onDelete: vi.fn(), onView: vi.fn(), onDuplicate: vi.fn() });
-    expect(screen.getAllByRole("button", { name: /^Renovar$/ })).toHaveLength(1);
+    pintar({ onDuplicate: vi.fn(), onEdit: vi.fn(), onDelete: vi.fn(), onView: vi.fn() });
+    expect(screen.getAllByRole("button", { name: /^Republicar$/ })).toHaveLength(1);
     expect(screen.getAllByRole("button", { name: /^Editar$/ })).toHaveLength(1);
   });
 
-  it("la acción principal explica qué hace y en qué se diferencia", () => {
-    // Las tres llevaban el mismo icono y ninguna explicación: el cliente
-    // preguntó directamente en qué se diferenciaban.
-    pintar({ onRenew: vi.fn(), onView: vi.fn() });
-    const renovar = screen.getByRole("button", { name: /^Renovar$/ });
-    expect(renovar.getAttribute("title")).toMatch(/antes de que venza/i);
-    expect(renovar.getAttribute("title")).toMatch(/visitas/i);
+  it("«Republicar» es la de crear un aviso nuevo, y lo explica", () => {
+    // OJO AL NOMBRE, que aquí está el lío: "Republicar" en pantalla NO es la
+    // acción que se llamaba así en el código (revivir un aviso vencido). Es
+    // `onDuplicate`, la que se llamaba "Publicar uno igual". El cliente decidió
+    // (2026-09-02) dejar UNA sola forma de volver a anunciar, y es esta.
+    pintar({ onDuplicate: vi.fn(), onView: vi.fn() });
+    const boton = screen.getByRole("button", { name: /^Republicar$/ });
+    expect(boton.getAttribute("title")).toMatch(/copia/i);
+    expect(boton.getAttribute("title")).toMatch(/cambiar lo que quieras/i);
+    expect(boton.getAttribute("title")).toMatch(/aviso nuevo/i);
   });
 
-  it("republicar dice que el aviso YA venció", () => {
-    pintar({ onRepublish: vi.fn(), onView: vi.fn(), status: "Vencido" });
-    expect(screen.getByRole("button", { name: /^Republicar$/ }).getAttribute("title"))
-      .toMatch(/venció/i);
+  it("llama a `onDuplicate` y no a las que están ocultas", () => {
+    const duplicar = vi.fn();
+    const republicar = vi.fn();
+    const renovar = vi.fn();
+    pintar({ onDuplicate: duplicar, onRepublish: republicar, onRenew: renovar, onView: vi.fn() });
+    fireEvent.click(screen.getByRole("button", { name: /^Republicar$/ }));
+    expect(duplicar).toHaveBeenCalledTimes(1);
+    expect(republicar).not.toHaveBeenCalled();
+    expect(renovar).not.toHaveBeenCalled();
+  });
+
+  it("Renovar y el Republicar viejo NO se pintan, aunque se pasen sus props", () => {
+    // Están ocultos por decisión del cliente y su código sigue entero. Esta es
+    // la prueba de que "oculto" significa oculto: si alguien descomenta los
+    // botones sin querer, esto lo dice.
+    pintar({ onRepublish: vi.fn(), onRenew: vi.fn(), onDuplicate: vi.fn(), onView: vi.fn() });
+    expect(screen.queryByRole("button", { name: /^Renovar$/ })).toBeNull();
+    // Solo uno con ese nombre: el de duplicar. Si el viejo se pintara, serían dos.
+    expect(screen.getAllByRole("button", { name: /^Republicar$/ })).toHaveLength(1);
+  });
+
+  it("un borrador no ofrece Republicar: nunca llegó a publicarse", () => {
+    pintar({ onPublish: vi.fn(), onView: vi.fn(), status: "Borrador" });
+    expect(screen.getByRole("button", { name: /^Publicar$/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Republicar$/ })).toBeNull();
   });
 
   it("eliminar ya no está entre los botones principales", () => {
@@ -117,8 +141,8 @@ describe("las acciones de la fila (punto 05)", () => {
   });
 
   it("sin acciones secundarias no se pinta un menú ⋮ vacío", () => {
-    pintar({ onView: vi.fn(), onEdit: vi.fn() });
-    expect(screen.queryByRole("button", { name: "" })).toBeNull();
+    pintar({ onView: vi.fn(), onEdit: vi.fn(), onDuplicate: vi.fn() });
+    expect(screen.queryByRole("button", { name: /más opciones/i })).toBeNull();
   });
 });
 

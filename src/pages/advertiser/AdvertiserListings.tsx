@@ -31,6 +31,13 @@ import { enfocarCampo } from "@/lib/validacion";
 // ¿Ya consumió el aviso el 85 % de lo que se contrató? Es cuando ofrecer
 // renovar ayuda; antes solo sería ruido — y con un plan de 3 días el botón
 // "Renovar" aparecía a los veinte segundos de publicar.
+// OCULTO (2026-09-02): decidía cuándo ofrecer "Renovar", que ya no se ofrece.
+// Se conserva junto al diálogo de renovar —ver más abajo— porque encierra la
+// regla que costó acertar: el umbral del 85 % se mide con la MISMA cuenta que
+// hace la base de datos al mandar la campanita (`duracionDelPlan`), y con la
+// cuenta anterior un aviso de 60 o 90 días recibía el correo y aquí seguía
+// saliendo "normal". Si algún día vuelve "Renovar", esto es lo que hay que
+// volver a pasarle a la fila.
 const porVencer = (aviso: MyListing): boolean => {
   const info = expiryInfo(
     aviso.expiresAt ?? null,
@@ -375,18 +382,33 @@ const AdvertiserListings = () => {
                   // publicarlo lo saltaría la moderación.
                   ? { onPublish: () => setToPublish(listing) }
                   : {})}
-                {...(tab === "vencidos" && listing.status === "expired"
-                  // Solo los VENCIDOS se republican (EFFE-036). 'rejected'/'sold'
-                  // caen en esta pestaña pero no deben republicarse aquí.
-                  ? { onRepublish: () => setToPublish(listing) }
-                  : {})}
-                {...(listing.status === "active" && porVencer(listing)
-                  // Renovar aparece cuando ya urge (85 % del plan consumido): es
-                  // el mismo dato que la fila ya está pintando en "vence en X
-                  // días". Sin fecha de vencimiento no hay nada que renovar.
-                  ? { onRenew: () => setToRenew(listing) }
-                  : {})}
                 {...(listing.status !== "draft"
+                  // ───────────────────────────────────────────────────────────
+                  // REPUBLICAR. Lleva al formulario con el aviso copiado entero
+                  // —textos, precio, fotos, PDF y adicionales— para cambiar lo
+                  // que haga falta y pagar. Sale un aviso NUEVO: id propio,
+                  // visitas a cero y fecha de hoy, así que entra por arriba en
+                  // los resultados.
+                  //
+                  // En todo lo que no sea un borrador: publicados, pausados,
+                  // vencidos, rechazados y vendidos. Un borrador no se
+                  // republica —nunca llegó a publicarse—, se publica.
+                  //
+                  // OCULTOS POR DECISIÓN DEL CLIENTE (2026-09-02), aquí mismo:
+                  //
+                  //   onRepublish  revivía un aviso vencido (EFFE-036)
+                  //   onRenew      le sumaba días a uno vivo (migración 0113)
+                  //
+                  // Las dos siguen funcionando: el diálogo, las RPC
+                  // `publish_listing` y `renovar_aviso` y sus migraciones están
+                  // intactos, y sus pruebas también. Lo que se retiró es la
+                  // forma de llegar a ellas. Se quiso UNA sola manera de volver
+                  // a anunciar, y es esta.
+                  //
+                  // Para devolverlas: volver a pasar las props (la fila las
+                  // sigue aceptando) y decidir los TRES nombres a la vez —hoy
+                  // "Republicar" en pantalla es esta, que hace otra cosa.
+                  // ───────────────────────────────────────────────────────────
                   ? { onDuplicate: () => navigate(`/dashboard/anunciante/publicar?copiar=${listing.id}`) }
                   : {})}
               />
@@ -644,8 +666,18 @@ const AdvertiserListings = () => {
         }}
       />
 
-      {/* Renovar: le suma días al aviso SIN dejarlo caer, así conserva sus
-          visitas, sus favoritos y su enlace. */}
+      {/* ═══════════════════════════════════════════════════════════════════
+          RENOVAR — OCULTO POR DECISIÓN DEL CLIENTE (2026-09-02). NO SE ABRE.
+
+          Le sumaba días al aviso SIN dejarlo caer, conservando sus visitas, sus
+          favoritos y su enlace. Sigue entero y funcionando: el diálogo, la RPC
+          `renovar_aviso` y la migración 0113.
+
+          Lo que se retiró es la ÚNICA forma de llegar aquí: nadie llama ya a
+          `setToRenew`, así que `toRenew` es siempre null y este diálogo nunca
+          se monta. Se deja en vez de borrarlo para que devolverlo sea volver a
+          pasar `onRenew` en la fila, y no reescribir esto desde cero.
+          ═══════════════════════════════════════════════════════════════════ */}
       <PublishDraftDialog
         draft={toRenew}
         modo="renovar"

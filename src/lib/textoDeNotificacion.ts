@@ -75,7 +75,12 @@ export function textoDeVencimiento(p: Record<string, unknown>): string {
     ? ` Lleva ${enPalabras(transcurridas)} publicado.`
     : "";
 
-  return `«${titulo}» ${cuando}.${lleva} Renuévalo para que siga visible.`;
+  // "Cuando venza" y NO "renuévalo ahora": desde el 2026-09-02 la única forma
+  // de volver a anunciar es "Republicar", que crea un aviso NUEVO. Si esto
+  // invitara a actuar antes de que venza, el anunciante acabaría con el mismo
+  // aviso publicado dos veces a la vez, pagando dos planes. Renovar —que sí
+  // servía para actuar antes— está oculto por decisión del cliente.
+  return `«${titulo}» ${cuando}.${lleva} Cuando venza, vuelve a publicarlo desde Mis avisos.`;
 }
 
 /**
