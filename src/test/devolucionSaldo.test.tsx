@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { prepararDom } from "./domPolyfills";
 import { DevolucionSaldoDialog } from "@/components/DevolucionSaldoDialog";
-import { CORREO_SOPORTE, enlaceDevolucionSaldo } from "@/lib/soporte";
+import fs from "node:fs";
+import path from "node:path";
+import { CORREO_SOPORTE, cuerpoDevolucionSaldo, enlaceDevolucionSaldo } from "@/lib/soporte";
 
 /**
  * "Solicitar devolución de saldo" desde "Mi saldo".
@@ -126,5 +128,87 @@ describe("el cuadro de diálogo", () => {
     // ganarse un reclamo que no hacía falta.
     abrir();
     expect(await screen.findByText(/no es automática/i)).toBeInTheDocument();
+  });
+});
+
+describe("el `mailto:` no puede fallar en silencio", () => {
+  /**
+   * LO QUE REPORTÓ EL CLIENTE: "ese botón no está llevando correctamente a
+   * enviar el correo".
+   *
+   * Un `mailto:` sin cliente de correo configurado no falla: no hace NADA. No
+   * hay evento, no hay error y no hay forma de detectarlo desde la página. La
+   * persona pulsa, no pasa nada, y se queda creyendo que escribió. Tratándose
+   * de una devolución de dinero, es lo peor que puede pasar.
+   *
+   * Por eso al pulsar se copia además el correo entero y se avisa.
+   */
+  const escribirDatos = { nombre: "Ana Quispe", correo: "ana@ejemplo.pe", saldo: 42.5 };
+
+  it("al pulsar «Escribir a soporte» copia el mensaje completo", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    abrir();
+    fireEvent.click(screen.getByRole("link", { name: /escribir a soporte/i }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    const copiado = writeText.mock.calls[0][0] as string;
+    // Lo mismo que va dentro del mailto, no un resumen: quien lo pegue tiene
+    // que poder mandarlo tal cual.
+    expect(copiado).toBe(cuerpoDevolucionSaldo(escribirDatos));
+    expect(copiado).toContain("Ana Quispe");
+    expect(copiado).toContain("S/ 42.50");
+    expect(copiado).toContain("Banco y número de cuenta (CCI)");
+  });
+
+  it("y lo dice, con la dirección a la que pegarlo", async () => {
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
+    abrir();
+    fireEvent.click(screen.getByRole("link", { name: /escribir a soporte/i }));
+
+    await waitFor(() => expect(toast).toHaveBeenCalled());
+    const aviso = toast.mock.calls.at(-1)![0] as { description: string };
+    expect(aviso.description).toContain(CORREO_SOPORTE);
+  });
+
+  it("sin portapapeles el aviso sale igual: no se traga el clic", async () => {
+    // WebView antiguo o contexto no seguro. La dirección sigue a la vista en el
+    // diálogo para teclearla.
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockRejectedValue(new Error("nope")) } });
+    abrir();
+    fireEvent.click(screen.getByRole("link", { name: /escribir a soporte/i }));
+    await waitFor(() => expect(toast).toHaveBeenCalled());
+  });
+
+  it("el enlace sigue siendo un `mailto:` de verdad", () => {
+    // La copia es la RED, no el sustituto: quien tenga el correo configurado se
+    // ahorra pegar nada.
+    abrir();
+    const enlace = screen.getByRole("link", { name: /escribir a soporte/i });
+    expect(enlace.getAttribute("href")).toBe(enlaceDevolucionSaldo(escribirDatos));
+  });
+});
+
+describe("ya no está en «Comprar saldo»", () => {
+  it("el cuadro de comprar no lleva el enlace suelto", () => {
+    // Estaba ahí como un `mailto:` pelado, SIN este diálogo detrás: o sea sin
+    // la dirección copiable ni la red del portapapeles. Y había que abrir el
+    // flujo de COMPRAR para encontrar cómo pedir que te DEVUELVAN.
+    const modal = fs.readFileSync(
+      path.resolve(__dirname, "../components/BuyCreditsModal.tsx"), "utf8",
+    );
+    expect(modal).not.toContain("enlaceDevolucionSaldo");
+  });
+
+  it("y sí está en el menú «Mi cuenta», en escritorio y en móvil", () => {
+    const navbar = fs.readFileSync(
+      path.resolve(__dirname, "../components/Navbar.tsx"), "utf8",
+    );
+    expect(navbar).toContain("DevolucionSaldoDialog");
+    // Dos veces: el desplegable de escritorio y el menú de móvil. Dejarlo solo
+    // arriba lo escondería de la mitad de la gente.
+    // Tres apariciones: la definición y los dos sitios que la usan.
+    expect(navbar.match(/abrirDevolucion/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
   });
 });

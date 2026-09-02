@@ -14,7 +14,6 @@ import {
   type DurationDays, type ExtrasSelection, type PricingSettings, type ExtraPrices,
 } from "@/lib/pricing";
 import { fetchPricingSettings } from "@/lib/pricingRemote";
-import { enlaceDevolucionSaldo } from "@/lib/soporte";
 import { paisPreferido } from "@/lib/paises";
 import { SelectorDePais } from "@/components/SelectorDePais";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -904,14 +903,24 @@ export function BuyCreditsModal({
               </button>
             )}
 
-            {/* La devolución no se puede automatizar (hay que verificar la cuenta
-                bancaria), así que se abre un correo con los datos ya escritos. */}
-            <a
-              href={enlaceDevolucionSaldo({ nombre: verifiedName, correo: email, saldo: currentBalance })}
-              className="text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground self-start"
-            >
-              Solicitar devolución de saldo
-            </a>
+            {/* "Solicitar devolución de saldo" ESTABA AQUÍ y se retiró
+                (2026-09-02, a pedido del cliente). Dos motivos:
+
+                1. NO FUNCIONABA BIEN. Era un `mailto:` pelado. Si el equipo no
+                   tiene un cliente de correo configurado —lo normal en un
+                   Windows de oficina, y en un móvil sin la app de correo
+                   enlazada—, pulsar no hace NADA visible y la persona se queda
+                   creyendo que escribió. Tratándose de dinero, eso es lo peor
+                   que puede pasar. `DevolucionSaldoDialog` se creó justo para
+                   arreglarlo (ofrece el correo Y la dirección copiable), pero
+                   este enlace viejo se quedó aquí sin quitar.
+
+                2. NO ERA SU SITIO. Estaba enterrado dentro del flujo de COMPRAR:
+                   había que abrir el cuadro de comprar saldo para encontrar cómo
+                   pedir que te lo devuelvan.
+
+                Ahora vive en el menú "Mi cuenta" (Navbar) y en "Mi saldo"
+                (AdvertiserDashboard), los dos abriendo el diálogo. */}
 
             <DialogFooter className="gap-2 pt-2">
               <Button variant="ghost" onClick={onClose} disabled={buying}>Cancelar</Button>

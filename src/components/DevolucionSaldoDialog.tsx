@@ -2,11 +2,17 @@
 // dinero que tiene cargado y no va a gastar.
 //
 // Es el lado del usuario de una función que el equipo ya tenía: el
-// administrador devuelve saldo desde Gestión de Usuarios, y hasta ahora el
-// usuario no tenía forma de pedirlo desde donde ve su saldo. El enlace existía,
-// pero enterrado dentro del cuadro de "Comprar saldo" —había que abrir el flujo
-// de compra para encontrarlo—, y el cliente lo pidió en "Mi saldo", que es
-// donde uno mira cuando piensa en su dinero.
+// administrador devuelve saldo desde Gestión de Usuarios, y el usuario no tenía
+// forma de pedirlo desde donde ve su saldo.
+//
+// DÓNDE VIVE (actualizado el 2026-09-02):
+//   · menú "Mi cuenta" de la barra superior — escritorio y móvil
+//   · "Mi saldo", en el panel del anunciante
+//
+// Y dónde YA NO: dentro del cuadro de "Comprar saldo". Estaba ahí como un
+// `mailto:` pelado, sin este diálogo detrás. O sea que había que abrir el flujo
+// de COMPRAR para encontrar cómo pedir que te DEVUELVAN, y encima el enlace
+// fallaba en silencio. Lo reportó el cliente y se retiró.
 //
 // Por qué hay un diálogo y no solo un enlace: un `mailto:` falla EN SILENCIO.
 // En un equipo sin cliente de correo configurado —lo normal en un Windows de
@@ -25,7 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Copy, Check, Mail, Undo2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { formatCredits } from "@/lib/pricing";
-import { CORREO_SOPORTE, enlaceDevolucionSaldo } from "@/lib/soporte";
+import { CORREO_SOPORTE, cuerpoDevolucionSaldo, enlaceDevolucionSaldo } from "@/lib/soporte";
 
 export interface DevolucionSaldoDialogProps {
   open: boolean;
@@ -41,6 +47,17 @@ export function DevolucionSaldoDialog({
 }: DevolucionSaldoDialogProps) {
   const [copiado, setCopiado] = useState(false);
   const disponible = typeof saldo === "number" && Number.isFinite(saldo) ? saldo : 0;
+
+  const alEscribir = () => {
+    // Sin `await`: la navegación al `mailto:` va en el mismo gesto y no se
+    // puede esperar. Si el portapapeles no está disponible, el aviso lo dice
+    // igual y la dirección sigue a la vista arriba.
+    void navigator.clipboard?.writeText(cuerpoDevolucionSaldo({ nombre, correo, saldo })).catch(() => undefined);
+    toast({
+      title: "Te copiamos el mensaje",
+      description: `Si no se abrió tu correo, pégalo en uno nuevo a ${CORREO_SOPORTE}.`,
+    });
+  };
 
   const copiar = async () => {
     try {
@@ -102,9 +119,21 @@ export function DevolucionSaldoDialog({
         <DialogFooter className="gap-2">
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Cerrar</Button>
           {/* Un enlace y no un botón: así el navegador decide cómo abrirlo, y
-              quien tenga el correo configurado se ahorra copiar y pegar. */}
+              quien tenga el correo configurado se ahorra copiar y pegar.
+
+              Y CON RED DEBAJO. Un `mailto:` que no encuentra cliente de correo
+              no falla: no hace NADA. No hay evento, no hay error, no hay forma
+              de detectarlo — la persona pulsa, no pasa nada y se queda creyendo
+              que escribió. Tratándose de dinero eso es lo peor que puede pasar,
+              y es justo lo que reportó el cliente.
+              
+              Así que al pulsar se copia además el correo entero al portapapeles
+              y se dice. Si el cliente de correo abre, el mensaje ya está escrito
+              y la copia sobra sin molestar; si no abre, la persona tiene el
+              texto listo para pegarlo donde sea. Se copia DENTRO del gesto del
+              clic porque el portapapeles solo lo permite ahí. */}
           <Button asChild className="gap-2">
-            <a href={enlaceDevolucionSaldo({ nombre, correo, saldo })}>
+            <a href={enlaceDevolucionSaldo({ nombre, correo, saldo })} onClick={alEscribir}>
               <Mail size={14} /> Escribir a soporte
             </a>
           </Button>

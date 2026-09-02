@@ -23,9 +23,16 @@ export const ASUNTO_DEVOLUCION = "Solicitud de devolución de saldo";
  * cuenta donde recibir el dinero. Sin eso, cada solicitud son tres correos de
  * ida y vuelta antes de poder hacer nada.
  */
-export function enlaceDevolucionSaldo(d: DatosDevolucion = {}): string {
+/**
+ * El texto del correo, aparte del enlace.
+ *
+ * Separado porque hace falta DOS veces: dentro del `mailto:` y, para quien no
+ * tenga un cliente de correo, copiado al portapapeles. Generándolo en dos
+ * sitios, el que se copia y el que se abre acabarían diciendo cosas distintas.
+ */
+export function cuerpoDevolucionSaldo(d: DatosDevolucion = {}): string {
   const saldo = typeof d.saldo === "number" && Number.isFinite(d.saldo) ? d.saldo : 0;
-  const cuerpo = [
+  return [
     "Hola, quiero solicitar la devolución de mi saldo.",
     "",
     `Nombre: ${d.nombre?.trim() || "(completar)"}`,
@@ -38,5 +45,9 @@ export function enlaceDevolucionSaldo(d: DatosDevolucion = {}): string {
     "",
     "Gracias.",
   ].join("\n");
-  return `mailto:${CORREO_SOPORTE}?subject=${encodeURIComponent(ASUNTO_DEVOLUCION)}&body=${encodeURIComponent(cuerpo)}`;
+}
+
+export function enlaceDevolucionSaldo(d: DatosDevolucion = {}): string {
+  return `mailto:${CORREO_SOPORTE}?subject=${encodeURIComponent(ASUNTO_DEVOLUCION)}`
+    + `&body=${encodeURIComponent(cuerpoDevolucionSaldo(d))}`;
 }

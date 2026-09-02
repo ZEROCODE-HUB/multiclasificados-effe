@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import {
   Search, Menu, X, Heart, MessageSquare, PlusCircle, ChevronDown,
   User, LogIn, UserPlus, Settings, LogOut, ClipboardList,
-  BarChart3, Users, Star, CreditCard, Shield,
+  BarChart3, Users, Star, CreditCard, Shield, Undo2,
 } from "lucide-react";
 import { useState } from "react";
 import { useCategories } from "@/hooks/useCategories";
@@ -22,6 +22,8 @@ import { NotificationsBell } from "@/components/NotificationsBell";
 import { signOut, logoutPath } from "@/lib/auth";
 import { BrandMark } from "@/components/BrandMark";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
+import { DevolucionSaldoDialog } from "@/components/DevolucionSaldoDialog";
+import { getCreditBalance } from "@/lib/credits";
 import { CreditsBalance } from "@/components/CreditsBalance";
 
 export function Navbar() {
@@ -58,6 +60,28 @@ export function Navbar() {
   // créditos y todo enlace a los paneles de usuario (RequireRole ya los bloquea,
   // pero mostrarlos solo lleva a "Acceso denegado").
   const isAdmin = !!session && isStaffRole(session.role);
+
+  /**
+   * "Solicitar devolución de saldo".
+   *
+   * Vive aquí porque es donde el cliente lo pidió y donde tiene sentido: uno
+   * piensa en su propio dinero desde "Mi cuenta", no desde el cuadro de COMPRAR
+   * —que es donde estaba, y había que abrir el flujo de compra para encontrarlo.
+   *
+   * Abre un diálogo y no un `mailto:` directo, que es como estaba y por lo que
+   * no funcionaba: sin un cliente de correo configurado, un `mailto:` no hace
+   * nada visible y la persona cree que escribió. El diálogo ofrece las dos vías,
+   * el correo prellenado y la dirección copiable.
+   *
+   * El saldo se pide AL ABRIRLO y no al montar la barra: es un dato que solo
+   * hace falta ahí dentro, y la barra se pinta en todas las pantallas.
+   */
+  const [devolucionAbierta, setDevolucionAbierta] = useState(false);
+  const [saldoDevolucion, setSaldoDevolucion] = useState<number | null>(null);
+  const abrirDevolucion = () => {
+    setDevolucionAbierta(true);
+    getCreditBalance().then(setSaldoDevolucion).catch(() => setSaldoDevolucion(null));
+  };
 
   // Items unificados del menú Mi Cuenta
   const accountItems = isUser
@@ -218,6 +242,10 @@ export function Navbar() {
                     </DropdownMenuItem>
                   ))}
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={abrirDevolucion} className="gap-2 cursor-pointer rounded-none">
+                    <Undo2 size={14} className="text-muted-foreground" /> Solicitar devolución de saldo
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={logout} className="gap-2 cursor-pointer text-destructive rounded-none">
                     <LogOut size={14} /> Cerrar sesión
                   </DropdownMenuItem>
@@ -321,6 +349,15 @@ export function Navbar() {
                   </Link>
                 ))}
                 <div className="border-t my-2" />
+                {/* También en móvil: ahí no existe el menú de escritorio, y
+                    dejarlo solo arriba lo escondería de la mitad de la gente. */}
+                <button
+                  onClick={() => { abrirDevolucion(); setMobileOpen(false); }}
+                  className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium hover:bg-muted/50"
+                >
+                  <Undo2 size={16} className="text-muted-foreground" /> Solicitar devolución de saldo
+                </button>
+                <div className="border-t my-2" />
                 <button
                   onClick={() => { logout(); setMobileOpen(false); }}
                   className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/10"
@@ -378,6 +415,17 @@ export function Navbar() {
       )}
     </header>
     <MobileBottomNav />
+
+    {/* Fuera del <header>: el header es `sticky` y crea contexto de apilamiento,
+        así que un diálogo dentro competiría con su z-index en vez de cubrir la
+        pantalla. */}
+    <DevolucionSaldoDialog
+      open={devolucionAbierta}
+      onOpenChange={setDevolucionAbierta}
+      nombre={session?.name}
+      correo={session?.email}
+      saldo={saldoDevolucion}
+    />
     </>
   );
 }
