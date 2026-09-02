@@ -122,6 +122,13 @@ const AdvertiserListings = () => {
   // campana de "tu aviso vence en X dias" dejaba en la lista general —con veinte
   // avisos, a buscar cual era—, y al renovar tampoco se veia el aviso renovado.
   // Con esto los dos terminan senalando el aviso concreto.
+  //
+  // OJO: esta mecanica esta ademas en `useFilaSenalada`, que la usan las otras
+  // tres listas a las que llevan notificaciones (busquedas guardadas y las dos
+  // de postulaciones). Aqui NO se usa el hook por dos motivos propios de esta
+  // pantalla: hay que cambiar de pestana antes de saltar, y el resaltado se
+  // dispara tambien desde el dialogo de renovar. Si se toca el comportamiento,
+  // tocar los dos.
   const avisoDestacado = searchParams.get("aviso") ?? "";
   const [resaltado, setResaltado] = useState("");
   const filaRef = useRef<HTMLDivElement | null>(null);

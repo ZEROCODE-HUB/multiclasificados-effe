@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Check, X, Eye, Users, FileText } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { useFilaSenalada } from "@/hooks/useFilaSenalada";
 import {
   fetchApplicationsForOwner,
   updateApplicationStatus,
@@ -36,6 +37,10 @@ const fmtDate = (iso: string) =>
 const AdvertiserApplications = () => {
   const [apps, setApps] = useState<OwnerApplication[]>([]);
   const [loading, setLoading] = useState(true);
+  // Llegar desde la campana señalando LA postulación recién recibida. El
+  // `application_id` ya venía en la notificación desde siempre; lo que faltaba
+  // era usarlo. La pestaña por defecto es "Todas", así que la tarjeta existe.
+  const { senalado, filaRef, clasesDeResaltado } = useFilaSenalada("postulacion", !loading);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -69,7 +74,11 @@ const AdvertiserApplications = () => {
     s === "all" ? apps.length : apps.filter((a) => a.status === s).length;
 
   const renderCard = (app: OwnerApplication) => (
-    <Card key={app.id} className="border-l-4 border-l-secondary/50 hover:shadow-md transition-shadow">
+    <Card
+      key={app.id}
+      ref={app.id === senalado ? filaRef : undefined}
+      className={`border-l-4 border-l-secondary/50 hover:shadow-md transition-shadow duration-500 ${clasesDeResaltado(app.id)}`}
+    >
       <CardContent className="p-4">
         <div className="flex items-start gap-3">
           <div className="w-11 h-11 rounded-full gradient-secondary flex items-center justify-center text-secondary-foreground font-bold flex-shrink-0 shadow-sm">

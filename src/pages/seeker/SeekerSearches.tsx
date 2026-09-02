@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Bell, BellOff, Clock, Search, Trash2, Play } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useCategories } from "@/hooks/useCategories";
+import { useFilaSenalada } from "@/hooks/useFilaSenalada";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -26,6 +27,8 @@ const SeekerSearches = () => {
   const catName = (id?: string) => (id ? categories.find((c) => c.id === id)?.name ?? id : "Todas");
   const [items, setItems] = useState<SavedSearch[]>([]);
   const [loading, setLoading] = useState(true);
+  // Llegar desde la campana señalando LA búsqueda que encontró avisos nuevos.
+  const { senalado, filaRef, clasesDeResaltado } = useFilaSenalada("busqueda", !loading);
   const [counts, setCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
@@ -90,7 +93,15 @@ const SeekerSearches = () => {
             </div>
           ) : (
             items.map((s) => (
-              <Card key={s.id} className="hover:shadow-md transition-shadow">
+              <Card
+                key={s.id}
+                /* La campana manda `?busqueda=<id>` con el `saved_search_id` que
+                   ya trae la notificación de "N nuevos avisos para tu búsqueda".
+                   Sin esto dejaba en la lista, y con varias búsquedas guardadas
+                   no se sabe cuál de ellas encontró algo. */
+                ref={s.id === senalado ? filaRef : undefined}
+                className={`hover:shadow-md transition-shadow duration-500 ${clasesDeResaltado(s.id)}`}
+              >
                 <CardContent className="p-4">
                   <div className="flex items-start gap-4">
                     <div className="p-2 rounded-lg bg-primary/10 text-primary flex-shrink-0">

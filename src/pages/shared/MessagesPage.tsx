@@ -49,7 +49,22 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
   const [params, setParams] = useSearchParams();
   const [userId, setUserId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(params.get("c"));
+  /**
+   * LA CONVERSACIÓN ABIERTA SALE DE LA URL, no de un estado propio.
+   *
+   * Antes era `useState(params.get("c"))`, o sea que el parámetro solo se leía
+   * AL MONTAR. Y la URL ya era la fuente de verdad de todas formas: abrir y
+   * cerrar un chat escriben `?c=`.
+   *
+   * El fallo que causaba: si el usuario ya estaba en Mensajes y pulsaba en la
+   * campana un aviso de "nuevo mensaje" de OTRA conversación, React Router
+   * cambiaba la URL pero no remontaba la pantalla — así que el estado seguía en
+   * el chat anterior y no pasaba absolutamente nada. Justo el caso más probable:
+   * la notificación de un mensaje llega mientras estás leyendo mensajes.
+   *
+   * Derivándolo, no hay dos verdades que sincronizar.
+   */
+  const selectedId = params.get("c");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -150,12 +165,10 @@ const MessagesPage = ({ role }: { role: "anunciante" | "buscador" }) => {
   const selfMarked = selected ? !!(role_side === "buyer" ? selectedSold?.buyer : selectedSold?.seller) : false;
 
   const openConversation = (id: string) => {
-    setSelectedId(id);
     setParams({ c: id }, { replace: true });
   };
 
   const closeConversation = () => {
-    setSelectedId(null);
     params.delete("c");
     setParams(params, { replace: true });
   };

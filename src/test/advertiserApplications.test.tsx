@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { ReactNode } from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { prepararDom } from "./domPolyfills";
 
 beforeEach(prepararDom);
@@ -35,6 +36,13 @@ vi.mock("@/hooks/use-toast", () => ({ toast: (...a: unknown[]) => toast(...a) })
 
 import AdvertiserApplications from "@/pages/advertiser/AdvertiserApplications";
 
+/**
+ * Con Router porque la pantalla usa `useFilaSenalada`, que lee `?postulacion=`
+ * para señalar la postulación que trae la notificación de la campana. Sin
+ * Router, `useSearchParams` revienta al montar.
+ */
+const pintar = () => render(<MemoryRouter><AdvertiserApplications /></MemoryRouter>);
+
 beforeEach(() => {
   vi.clearAllMocks();
   fetchApplicationsForOwner.mockResolvedValue([{ ...APP }]);
@@ -45,7 +53,7 @@ beforeEach(() => {
 
 describe("AdvertiserApplications — panel del anunciante (receptor)", () => {
   it("muestra la postulación recibida con nombre, aviso y estado 'Recibido'", async () => {
-    render(<AdvertiserApplications />);
+    pintar();
     expect(await screen.findByText("Ana Pérez")).toBeTruthy();
     expect(screen.getByText("Para: Vacante QA")).toBeTruthy();
     expect(screen.getByText("Me interesa el puesto")).toBeTruthy();
@@ -53,7 +61,7 @@ describe("AdvertiserApplications — panel del anunciante (receptor)", () => {
   });
 
   it("permite abrir el CV con un enlace firmado", async () => {
-    render(<AdvertiserApplications />);
+    pintar();
     await screen.findByText("Ana Pérez");
     fireEvent.click(screen.getByRole("button", { name: /Ver CV/i }));
     await waitFor(() => expect(getCvSignedUrl).toHaveBeenCalledWith("p1/L1-1.pdf"));
@@ -61,7 +69,7 @@ describe("AdvertiserApplications — panel del anunciante (receptor)", () => {
   });
 
   it("cambia el estado a 'En entrevista' (requisito clave del empleador)", async () => {
-    render(<AdvertiserApplications />);
+    pintar();
     await screen.findByText("Ana Pérez");
     fireEvent.click(screen.getByRole("button", { name: /En entrevista/i }));
     await waitFor(() => expect(updateApplicationStatus).toHaveBeenCalledWith("a1", "interview"));
@@ -70,7 +78,7 @@ describe("AdvertiserApplications — panel del anunciante (receptor)", () => {
   });
 
   it("ofrece los estados de seguimiento pedidos y rechazar", async () => {
-    render(<AdvertiserApplications />);
+    pintar();
     await screen.findByText("Ana Pérez");
     // Para un 'pending' se ofrecen: En revisión, En entrevista, Aceptar, Rechazar.
     expect(screen.getByRole("button", { name: /En revisión/i })).toBeTruthy();
@@ -81,7 +89,7 @@ describe("AdvertiserApplications — panel del anunciante (receptor)", () => {
 
   it("muestra error si falla la actualización de estado", async () => {
     updateApplicationStatus.mockRejectedValue(new Error("denied"));
-    render(<AdvertiserApplications />);
+    pintar();
     await screen.findByText("Ana Pérez");
     fireEvent.click(screen.getByRole("button", { name: /En revisión/i }));
     await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive" })));

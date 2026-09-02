@@ -26,8 +26,25 @@ export function enPalabras(horas: number | null | undefined): string {
 
 export type Rol = string;
 
-/** Las dos ramas del panel. Fuera de ellas, un aviso de personal no tiene destino. */
-const esStaff = (role: Rol) => role === "admin" || role === "superadmin";
+/**
+ * Las dos ramas del panel de administración. Un aviso dirigido al personal solo
+ * tiene destino si quien lo mira entra por una de ellas.
+ */
+const esRamaDePanel = (role: Rol) => role === "admin" || role === "superadmin";
+
+/**
+ * Los cuatro roles de personal, TAL COMO LOS DEFINE `useSession`.
+ *
+ * Incluye moderador y soporte, que no tienen rama propia del panel pero SÍ
+ * cuentan como personal para `RequireRole`: a los cuatro se les niegan los
+ * paneles de usuario.
+ */
+const esPersonal = (role: Rol) =>
+  role === "admin" || role === "superadmin" || role === "moderador" || role === "soporte";
+
+/** Los dos paneles de usuario, que son justo los que el personal no puede abrir. */
+const esPanelDeUsuario = (ruta: string) =>
+  ruta.startsWith("/dashboard/anunciante") || ruta.startsWith("/dashboard/buscador");
 
 /**
  * El texto del aviso por vencer, que es el que pidió estandarizar el cliente.
@@ -215,6 +232,34 @@ export function rutaDeNotificacion(
   payload: Record<string, unknown> | null | undefined,
   role: Rol = "",
 ): string {
+  const destino = destinoDeNotificacion(type, payload, role);
+
+  /**
+   * AL PERSONAL NO SE LE OFRECE UN PANEL DE USUARIO. Nunca.
+   *
+   * `RequireRole` se los niega a propósito —"las cuentas de administración no
+   * pueden usar los paneles de usuario"— y la jerarquía no se hereda hacia
+   * abajo. Así que un enlace ahí no lleva al sitio: lleva a "Acceso denegado".
+   *
+   * NO ES HIPOTÉTICO. Comprobado en producción el 2026-09-02: hay cuentas de
+   * personal con notificaciones de `new_application` (7), `application_status`
+   * (6) y `new_message` (4). Cada una de esas, al pulsarla, dejaba al
+   * administrador en la pantalla de acceso denegado.
+   *
+   * Sin destino, la campana hace lo que ya hace con los avisos informativos:
+   * abre el texto completo en un modal. Que es mucho mejor que un callejón, y
+   * no se pierde nada — a ese panel no iban a poder entrar de todas formas.
+   */
+  if (destino && esPersonal(role) && esPanelDeUsuario(destino)) return "";
+  return destino;
+}
+
+/** El destino "en bruto", antes de comprobar quién lo va a abrir. */
+function destinoDeNotificacion(
+  type: string,
+  payload: Record<string, unknown> | null | undefined,
+  role: Rol,
+): string {
   const p = payload || {};
   const base = role === "anunciante" ? "anunciante" : "buscador";
   /**
@@ -231,7 +276,11 @@ export function rutaDeNotificacion(
 
   switch (type) {
     case "saved_search_match":
-      return "/dashboard/buscador/busquedas";
+      // `?busqueda=` señala LA búsqueda que encontró avisos: con tres o cuatro
+      // guardadas, la lista sola no dice cuál fue.
+      return p.saved_search_id
+        ? `/dashboard/buscador/busquedas?busqueda=${String(p.saved_search_id)}`
+        : "/dashboard/buscador/busquedas";
 
     case "new_message":
       return `/dashboard/${base}/mensajes${p.conversation_id ? `?c=${p.conversation_id}` : ""}`;
@@ -239,14 +288,24 @@ export function rutaDeNotificacion(
     case "application_status":
       // Quien postuló mira SUS postulaciones. Antes iba a la ficha del aviso,
       // que no dice en qué quedó la suya.
-      return "/dashboard/buscador/postulaciones";
+      //
+      // Se señala por `listing_id` porque es lo único que trae esta
+      // notificación (comprobado en producción). Basta: no se puede postular
+      // dos veces al mismo aviso.
+      return p.listing_id
+        ? `/dashboard/buscador/postulaciones?aviso=${String(p.listing_id)}`
+        : "/dashboard/buscador/postulaciones";
 
     case "new_review":
       // Aquí sí la ficha pública: la reseña se lee ahí y el aviso está activo.
       return fichaPublica || misAvisos;
 
     case "new_application":
-      return "/dashboard/anunciante/postulaciones";
+      // `?postulacion=` señala la que acaba de llegar. El `application_id` venía
+      // en la notificación desde el principio; lo que faltaba era usarlo.
+      return p.application_id
+        ? `/dashboard/anunciante/postulaciones?postulacion=${String(p.application_id)}`
+        : "/dashboard/anunciante/postulaciones";
 
     case "listing_disabled":
     case "listing_enabled":
@@ -254,10 +313,10 @@ export function rutaDeNotificacion(
       return misAvisos;
 
     case "complaint_new":
-      return esStaff(role) ? `/dashboard/${role}/reclamaciones` : "";
+      return esRamaDePanel(role) ? `/dashboard/${role}/reclamaciones` : "";
 
     case "career_new":
-      return esStaff(role) ? `/dashboard/${role}/postulaciones` : "";
+      return esRamaDePanel(role) ? `/dashboard/${role}/postulaciones` : "";
 
     case "invoice_voided":
       // Allí ve el comprobante marcado como anulado y su motivo.

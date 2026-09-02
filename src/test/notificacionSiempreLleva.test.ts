@@ -112,7 +112,102 @@ describe("una postulación lleva a donde se ve su estado", () => {
   it("a MIS postulaciones, no a la ficha del aviso", () => {
     // La ficha del aviso no dice en qué quedó la postulación de uno, que es lo
     // único que le importa a quien recibe ese aviso.
-    expect(rutaDeNotificacion("application_status", { listing_id: AVISO, status: "accepted" }, "buscador"))
-      .toBe("/dashboard/buscador/postulaciones");
+    const ruta = rutaDeNotificacion("application_status", { listing_id: AVISO, status: "accepted" }, "buscador");
+    expect(ruta).toContain("/dashboard/buscador/postulaciones");
+    expect(ruta).not.toContain("/aviso/");
+  });
+});
+
+describe("y además SEÑALA la fila, no solo abre la lista", () => {
+  /**
+   * Una notificación que deja en una lista general no ha terminado su trabajo:
+   * ha dicho que algo pasó y ha pedido que se busque. Con veinte avisos, o con
+   * las postulaciones de una semana, eso es lo que hace que no se mire.
+   *
+   * Los identificadores que se usan aquí NO son inventados: son los que traen
+   * las notificaciones reales de producción (comprobado el 2026-09-02).
+   */
+  it("la búsqueda guardada que encontró avisos", () => {
+    expect(rutaDeNotificacion("saved_search_match", { saved_search_id: "s-1", count: 3 }, "buscador"))
+      .toBe("/dashboard/buscador/busquedas?busqueda=s-1");
+  });
+
+  it("la postulación que acaba de llegar", () => {
+    expect(rutaDeNotificacion("new_application", { application_id: "p-1" }, "anunciante"))
+      .toBe("/dashboard/anunciante/postulaciones?postulacion=p-1");
+  });
+
+  it("y la postulación propia que cambió de estado, por su aviso", () => {
+    // `application_status` solo trae `listing_id`. Basta: no se puede postular
+    // dos veces al mismo aviso.
+    expect(rutaDeNotificacion("application_status", { listing_id: AVISO }, "buscador"))
+      .toBe(`/dashboard/buscador/postulaciones?aviso=${AVISO}`);
+  });
+
+  it("si falta el identificador, se abre la lista y ya: nunca un enlace roto", () => {
+    // Las notificaciones viejas pueden no traerlo. Mejor la lista que un
+    // parámetro vacío que no señala nada y ensucia la URL.
+    expect(rutaDeNotificacion("saved_search_match", { count: 3 }, "buscador"))
+      .toBe("/dashboard/buscador/busquedas");
+    expect(rutaDeNotificacion("new_application", {}, "anunciante"))
+      .toBe("/dashboard/anunciante/postulaciones");
+  });
+});
+
+describe("al personal no se le ofrece un panel de usuario", () => {
+  /**
+   * `RequireRole` niega los paneles de usuario a las cuentas de administración,
+   * a propósito y por diseño. Así que un enlace ahí no lleva a la sección: lleva
+   * a "Acceso denegado".
+   *
+   * NO ES HIPOTÉTICO. Comprobado contra producción el 2026-09-02: hay cuentas de
+   * personal con notificaciones de `new_application` (7), `application_status`
+   * (6) y `new_message` (4). Las tres acababan en la pantalla de acceso
+   * denegado al pulsarlas desde la campana.
+   *
+   * Sin destino, la campana abre el texto completo en un modal, que es lo que ya
+   * hace con los avisos informativos. No se pierde nada: a ese panel no iban a
+   * poder entrar igualmente.
+   */
+  const DE_USUARIO: Array<[string, Record<string, unknown>]> = [
+    ["new_application", { application_id: "p-1" }],
+    ["application_status", { listing_id: AVISO, status: "accepted" }],
+    ["new_message", { conversation_id: CHAT }],
+    ["listing_expiring", { listing_id: AVISO }],
+    ["invoice_voided", { number: "B001-45" }],
+    ["manual_payment_approved", { purpose: "publish", listing_id: AVISO }],
+  ];
+
+  it.each(["admin", "superadmin", "moderador", "soporte"])(
+    "un %s no recibe enlace a un panel de usuario",
+    (rol) => {
+      for (const [tipo, payload] of DE_USUARIO) {
+        expect(rutaDeNotificacion(tipo, payload, rol)).toBe("");
+      }
+    },
+  );
+
+  it("los cuatro roles de personal, no solo los dos con panel propio", () => {
+    // Moderador y soporte no tienen rama propia (/dashboard/moderador no
+    // existe), pero `isStaffRole` los cuenta como personal y `RequireRole` les
+    // niega los paneles de usuario igual que a un admin. Olvidarlos aquí los
+    // dejaba a ellos con el callejón sin salida.
+    expect(rutaDeNotificacion("new_message", { conversation_id: CHAT }, "moderador")).toBe("");
+    expect(rutaDeNotificacion("new_message", { conversation_id: CHAT }, "soporte")).toBe("");
+  });
+
+  it("pero el personal SÍ conserva los destinos que son suyos", () => {
+    expect(rutaDeNotificacion("complaint_new", {}, "admin")).toBe("/dashboard/admin/reclamaciones");
+    expect(rutaDeNotificacion("career_new", {}, "superadmin")).toBe("/dashboard/superadmin/postulaciones");
+  });
+
+  it("y la ficha pública de un aviso, que no es un panel", () => {
+    // Una reseña nueva lleva al aviso, y eso lo puede abrir cualquiera.
+    expect(rutaDeNotificacion("new_review", { listing_id: AVISO }, "admin")).toBe(`/aviso/${AVISO}`);
+  });
+
+  it("a un usuario normal no le cambia nada", () => {
+    expect(rutaDeNotificacion("new_application", { application_id: "p-1" }, "anunciante"))
+      .toBe("/dashboard/anunciante/postulaciones?postulacion=p-1");
   });
 });

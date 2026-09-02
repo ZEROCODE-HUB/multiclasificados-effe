@@ -12,6 +12,7 @@ import {
   type MyApplication,
   type ApplicationStatus,
 } from "@/lib/applications";
+import { useFilaSenalada } from "@/hooks/useFilaSenalada";
 
 // Mismos colores de estado que ve el anunciante, para que el candidato reconozca
 // la etapa de un vistazo.
@@ -29,6 +30,14 @@ const fmtDate = (iso: string) =>
 const SeekerApplications = () => {
   const [apps, setApps] = useState<MyApplication[]>([]);
   const [loading, setLoading] = useState(true);
+  // Llegar desde la campana señalando la postulación que cambió de estado.
+  //
+  // Se señala por `listing_id` y no por el id de la postulación porque es lo
+  // ÚNICO que trae esa notificación (comprobado en producción: el payload de
+  // `application_status` lleva `listing_id` y `status`, nada más). Basta: no se
+  // puede postular dos veces al mismo aviso, así que el aviso identifica la
+  // postulación sin ambigüedad.
+  const { senalado, filaRef, clasesDeResaltado } = useFilaSenalada("aviso", !loading);
 
   useEffect(() => {
     setLoading(true);
@@ -42,7 +51,11 @@ const SeekerApplications = () => {
     s === "all" ? apps.length : apps.filter((a) => a.status === s).length;
 
   const renderCard = (app: MyApplication) => (
-    <Card key={app.id} className="border-l-4 border-l-secondary/50 hover:shadow-md transition-shadow">
+    <Card
+      key={app.id}
+      ref={app.listing_id === senalado ? filaRef : undefined}
+      className={`border-l-4 border-l-secondary/50 hover:shadow-md transition-shadow duration-500 ${clasesDeResaltado(app.listing_id)}`}
+    >
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
