@@ -177,7 +177,12 @@ const AdvertiserPublish = () => {
   const [pdfFile, setPdfFile] = useState<{ file: File; name: string; estado?: EstadoSubida } | null>(null);
   // Vídeos elegidos, en el orden en que se verán. Se guardan ya validados
   // (tipo, tamaño y duración): lo que llega aquí es subible.
-  const [videos, setVideos] = useState<Array<{ file: File; name: string; duracion: number; estado?: EstadoSubida }>>([]);
+  const [videos, setVideos] = useState<Array<{
+    file: File; name: string; duracion: number; estado?: EstadoSubida;
+    /** Republicar: ruta del vídeo del aviso original, para copiarlo en Storage. */
+    copiarDe?: string;
+    urlOrigen?: string;
+  }>>([]);
   const [validandoVideo, setValidandoVideo] = useState(false);
   const pdfFileRef = useRef<HTMLInputElement>(null);
   const videoFileRef = useRef<HTMLInputElement>(null);
@@ -354,6 +359,14 @@ const AdvertiserPublish = () => {
         }
         setExtraPhotos(copia.extraPhotos.map((f, i) => ({
           id: `copia-extra-${i}`, url: URL.createObjectURL(f.file), name: f.name, file: f.file,
+        })));
+        // LOS VÍDEOS. Faltaban, y por eso republicar un aviso con vídeos pedía
+        // volver a subirlos: llegaba el paquete contratado ("3 videos") sin
+        // ningún vídeo detrás. No se bajan —serían 45 MB— sino que se marcan
+        // para que Storage los copie en el servidor al publicar.
+        setVideos((copia.videos ?? []).map((v) => ({
+          file: v.file, name: v.name, duracion: 0,
+          copiarDe: v.copiarDe, urlOrigen: v.urlOrigen,
         })));
         if (copia.pdf) setPdfFile({ file: copia.pdf.file, name: copia.pdf.name });
         // Es un aviso NUEVO: sin esto se editaría el original.
@@ -846,7 +859,12 @@ const AdvertiserPublish = () => {
     pdf: hasPdfInPackage && pdfFile
       ? { file: pdfFile.file, name: pdfFile.name, subido: subidoDe(pdfFile.estado) }
       : null,
-    videos: videos.map((v) => ({ file: v.file, name: v.name, subido: subidoDe(v.estado) })),
+    videos: videos.map((v) => ({
+      file: v.file, name: v.name, subido: subidoDe(v.estado),
+      // Solo en una republicación: le dice a Storage que duplique el vídeo del
+      // aviso original en vez de subir el archivo (que aquí va vacío).
+      copiarDe: v.copiarDe, urlOrigen: v.urlOrigen,
+    })),
   });
 
   /** Todos los adjuntos con su estado, para contar el progreso por peso. */

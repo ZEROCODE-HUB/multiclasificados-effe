@@ -23,6 +23,22 @@ export interface PublishPhoto {
    * en vez de esperar a que suban 46 MB de vídeo.
    */
   subido?: AdjuntoSubido;
+  /**
+   * COPIAR el archivo de otro aviso en vez de subirlo. Trae la ruta de origen
+   * en Storage; el destino se calcula igual que en una subida normal.
+   *
+   * Es lo que hace posible "Republicar" con vídeos. No vale `subido`, que
+   * apunta la fila nueva al MISMO archivo del aviso original: el día que se
+   * borre el original, `limpiar-adjuntos` se lleva el fichero y la copia se
+   * queda sin vídeo. Cada aviso necesita el suyo.
+   *
+   * Y no se baja al navegador para volver a subirlo porque tres vídeos son
+   * 45 MB de bajada más otros 45 de subida, y eso en datos móviles se paga. La
+   * copia la hace Storage en el servidor, sin que el archivo pase por aquí.
+   */
+  copiarDe?: string;
+  /** URL pública del original: respaldo si la copia en servidor falla. */
+  urlOrigen?: string;
 }
 
 export interface ListingForm {
@@ -204,6 +220,25 @@ async function uploadListingVideos(
         return { listing_id: listingId, storage_path: v.subido.path, url: v.subido.url, sort_order: sort };
       }
       const path = `${userId}/${listingId}/${sort}-${sanitize(v.name)}`;
+
+      // Republicar: el vídeo se copia DENTRO de Storage. Ni baja ni sube por la
+      // conexión del usuario. Se le da su propia ruta a propósito —no se
+      // comparte el archivo con el aviso original— porque borrar el original se
+      // llevaría el fichero y dejaría la copia sin vídeo.
+      if (v.copiarDe) {
+        const { error } = await supabase.storage.from("listing-videos").copy(v.copiarDe, path);
+        if (!error) {
+          const { data: pub } = supabase.storage.from("listing-videos").getPublicUrl(path);
+          return { listing_id: listingId, storage_path: path, url: pub.publicUrl, sort_order: sort };
+        }
+        console.error("[publish] No se pudo copiar el video, se intenta bajándolo:", error.message);
+        // Respaldo: bajarlo y subirlo. Cuesta ancho de banda, pero perder el
+        // vídeo en silencio deja al usuario con "contrataste 3 y subiste 0" al
+        // publicar, que es justo el fallo que esto viene a arreglar.
+        const copia = v.urlOrigen ? await comoArchivo(v.urlOrigen, v.name, "video/mp4") : null;
+        if (!copia) return null;
+        v = { ...v, file: copia.file };
+      }
       const { error } = await supabase.storage
         .from("listing-videos")
         .upload(path, v.file, { upsert: true, cacheControl: "2592000", contentType: v.file.type || undefined });
@@ -394,6 +429,12 @@ export interface AvisoCopiado {
   extras: Record<string, number | undefined>;
   mainPhoto: PublishPhoto | null;
   extraPhotos: PublishPhoto[];
+  /**
+   * Los vídeos del original, como órdenes de COPIA y no como archivos: llevan
+   * `copiarDe` y el archivo va vacío. Storage los duplica en el servidor al
+   * publicar (ver `uploadListingVideos`).
+   */
+  videos: PublishPhoto[];
   pdf: PublishPhoto | null;
   /** true si alguna foto o el PDF no se pudieron traer. */
   faltanAdjuntos: boolean;
@@ -424,7 +465,12 @@ export async function cargarAvisoParaCopiar(listingId: string): Promise<AvisoCop
   const { data, error } = await supabase
     .from("listings")
     .select("title, description, price, currency, condition, category_id, department, location, lat, lng, " +
-            "country, plan_duration_days, plan_quantity, plan_extras, document_url, listing_images(url, sort_order)")
+            "country, plan_duration_days, plan_quantity, plan_extras, document_url, " +
+            // `listing_videos` FALTABA, y por eso republicar un aviso con vídeos
+            // pedía subirlos otra vez: llegaba el paquete contratado ("3 videos")
+            // sin ningún vídeo detrás, y al publicar saltaba "contrataste 3 y
+            // subiste 0". Lo reportó el cliente.
+            "listing_images(url, sort_order), listing_videos(url, storage_path, sort_order)")
     .eq("id", listingId)
     .maybeSingle();
   if (error || !data) throw new Error("No se pudo cargar el aviso que quieres copiar.");
@@ -441,6 +487,22 @@ export async function cargarAvisoParaCopiar(listingId: string): Promise<AvisoCop
   const pdf = pdfUrl ? await comoArchivo(pdfUrl, "documento.pdf", "application/pdf") : null;
 
   const fotos = descargas.filter((f): f is PublishPhoto => !!f);
+
+  // Los vídeos NO se bajan: se copian dentro de Storage al publicar (ver
+  // `copiarDe`). Tres vídeos son 45 MB, y bajarlos para volver a subirlos
+  // idénticos es ancho de banda del usuario tirado dos veces.
+  const videos = ((r.listing_videos ?? []) as Array<{ url?: string; storage_path?: string; sort_order?: number }>)
+    .filter((v) => !!v.storage_path)
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+    .map((v, i) => ({
+      // El archivo va vacío a propósito: no hay ninguno en memoria y la
+      // pantalla solo enseña el nombre. Lo que cuenta es `copiarDe`.
+      file: new File([], `video-${i + 1}.mp4`),
+      name: `video-${i + 1}.mp4`,
+      copiarDe: String(v.storage_path),
+      urlOrigen: String(v.url ?? ""),
+    }));
+
   const faltanAdjuntos = fotos.length !== imagenes.length || (!!r.document_url && !pdf);
 
   return {
@@ -464,6 +526,7 @@ export async function cargarAvisoParaCopiar(listingId: string): Promise<AvisoCop
     extras: (r.plan_extras ?? {}) as Record<string, number | undefined>,
     mainPhoto: fotos[0] ?? null,
     extraPhotos: fotos.slice(1),
+    videos,
     pdf,
     faltanAdjuntos,
   };

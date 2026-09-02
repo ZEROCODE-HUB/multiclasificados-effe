@@ -68,9 +68,17 @@ const copia = (extra: Record<string, unknown> = {}) => ({
   },
   lat: -12.1, lng: -77.03,
   duration: 30, quantity: 1, extras: { urgente: 1 },
-  mainPhoto: null, extraPhotos: [], pdf: null,
+  mainPhoto: null, extraPhotos: [], videos: [], pdf: null,
   faltanAdjuntos: false,
   ...extra,
+});
+
+/** Un vídeo del aviso original, como orden de copia (no como archivo). */
+const videoCopiado = (i: number) => ({
+  file: new File([], `video-${i}.mp4`),
+  name: `video-${i}.mp4`,
+  copiarDe: `u1/original/${i - 1}-video.mp4`,
+  urlOrigen: `https://cdn/videos/${i}.mp4`,
 });
 
 const conUrl = (busqueda: string) => {
@@ -111,6 +119,42 @@ describe("AdvertiserPublish — publicar uno igual", () => {
     await screen.findByDisplayValue("Casa en Miraflores");
     expect(toast).toHaveBeenCalledWith(expect.objectContaining({
       description: expect.stringContaining("No pudimos traer alguna imagen"),
+    }));
+  });
+
+  it("TRAE LOS VÍDEOS del aviso original", async () => {
+    /**
+     * LO QUE REPORTÓ EL CLIENTE: al republicar, "me pidió poner una imagen
+     * adicional o video, y creo que no lo trajo".
+     *
+     * Y no lo traía: `cargarAvisoParaCopiar` leía `listing_images` y el PDF,
+     * pero NO `listing_videos`. Así que la copia llegaba con el paquete
+     * contratado —"3 videos", que es lo que se paga— y ningún vídeo detrás, y
+     * al publicar saltaba "Contrataste 3 videos y subiste 0".
+     */
+    cargarAvisoParaCopiar.mockResolvedValue(copia({
+      extras: { video20: 2 },
+      videos: [videoCopiado(1), videoCopiado(2)],
+    }));
+    conUrl("?copiar=abc-123");
+    render(<AdvertiserPublish />);
+
+    await screen.findByDisplayValue("Casa en Miraflores");
+    // Los dos huecos contratados salen ocupados, no vacíos pidiendo archivo.
+    expect(await screen.findByText("video-1.mp4")).toBeInTheDocument();
+    expect(screen.getByText("video-2.mp4")).toBeInTheDocument();
+    // Y el botón de agregar ya no aparece: los dos contratados están puestos.
+    expect(screen.queryByText(/Agregar video \(/)).toBeNull();
+  });
+
+  it("un aviso sin vídeos sigue funcionando igual", async () => {
+    // La lista vacía es el caso normal: casi ningún aviso lleva vídeo.
+    cargarAvisoParaCopiar.mockResolvedValue(copia({ videos: [] }));
+    conUrl("?copiar=abc-123");
+    render(<AdvertiserPublish />);
+    await screen.findByDisplayValue("Casa en Miraflores");
+    expect(toast).not.toHaveBeenCalledWith(expect.objectContaining({
+      title: "No se pudo copiar el aviso",
     }));
   });
 
