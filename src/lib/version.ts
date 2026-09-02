@@ -5,7 +5,7 @@
 // El número identifica la build en producción; la fecha ayuda a saber de cuándo
 // es sin tener que mirar el commit. El APK/IPA tiene su propia versión aparte en
 // android/app/build.gradle (versionName/versionCode) y su chequeo OTA.
-export const APP_VERSION = "16.4";
+export const APP_VERSION = "16.5";
 export const APP_VERSION_DATE = "2026-09-02"; // ISO (YYYY-MM-DD); se muestra formateada
 
 // Fecha del release en formato corto es-PE ("25 jul 2026"). Se construye con
