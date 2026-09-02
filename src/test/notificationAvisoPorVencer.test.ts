@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { notificationText, notificationLink, type AppNotification } from "@/lib/notifications";
+import { rutaDeNotificacion } from "@/lib/textoDeNotificacion";
 
 /**
  * La campana de "tu aviso está por vencer" tiene que llevar AL AVISO.
@@ -66,32 +67,35 @@ describe("el CORREO va al mismo sitio que la campana", () => {
   // el enlace no lleve a ninguna parte: se veía una ficha vacía.
   //
   // "Mis avisos" tiene el aviso SIEMPRE, vencido o no, y es donde se renueva.
-  const CORREO = fs.readFileSync(
-    path.resolve(__dirname, "../../supabase/functions/send-email/index.ts"), "utf8",
-  );
-  const bloqueExpiring = CORREO.slice(
-    CORREO.indexOf('case "listing_expiring"'),
-    CORREO.indexOf('case "new_message"'),
-  );
+  //
+  // Esto se comprobaba leyendo el `switch` del correo con expresiones regulares.
+  // Ya no hay tal `switch`: los tres canales preguntan a `rutaDeNotificacion`,
+  // así que ahora se comprueba la respuesta en vez del texto del archivo.
 
   it("enlaza a Mis avisos con el aviso señalado", () => {
-    expect(bloqueExpiring).toContain("avisoEnMisAvisos");
-    expect(CORREO).toMatch(/misAvisos \+ "\?aviso=" \+ encodeURIComponent/);
+    expect(rutaDeNotificacion("listing_expiring", { listing_id: AVISO }, "anunciante"))
+      .toBe(`/dashboard/anunciante/avisos?aviso=${AVISO}`);
   });
 
   it("y ya NO enlaza a la ficha pública, que puede haber caducado", () => {
-    expect(bloqueExpiring).not.toMatch(/Verlo: \$\{aviso\}/);
-  });
-
-  it("un solo enlace: el primero es el que se pulsa", () => {
-    // Antes iban dos, y el primero era el roto.
-    const enlaces = bloqueExpiring.match(/\$\{(aviso|misAvisos|avisoEnMisAvisos)\}/g) ?? [];
-    expect(enlaces).toHaveLength(1);
+    expect(rutaDeNotificacion("listing_expiring", { listing_id: AVISO }, "anunciante"))
+      .not.toContain("/aviso/");
   });
 
   it("la ficha pública sigue usándose donde el aviso SÍ está activo", () => {
-    // Una reseña nueva o un aviso rehabilitado: ahí el enlace directo es lo
-    // correcto y no hay que tocarlo.
-    expect(CORREO).toMatch(/case "new_review"[\s\S]*?\$\{aviso\}/);
+    // Una reseña nueva: ahí el enlace directo es lo correcto. El aviso está
+    // publicado, que es la condición para que alguien lo haya podido reseñar.
+    expect(rutaDeNotificacion("new_review", { listing_id: AVISO }, "anunciante"))
+      .toBe(`/aviso/${AVISO}`);
+  });
+
+  it("el correo pide la ruta al módulo compartido y no se la inventa", () => {
+    const CORREO = fs.readFileSync(
+      path.resolve(__dirname, "../../supabase/functions/send-email/index.ts"), "utf8",
+    );
+    expect(CORREO).toContain("rutaDeNotificacion");
+    // Ni una sola ruta escrita a mano en la función: era así como se separó del
+    // resto en primer lugar.
+    expect(CORREO).not.toMatch(/\/dashboard\/anunciante\/avisos/);
   });
 });

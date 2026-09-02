@@ -3,8 +3,8 @@ import { imgUrl } from "@/lib/imageUrl";
 import { Button } from "@/components/ui/button";
 import { Eye, MapPin, Calendar, MoreVertical, Edit, Pause, Play, Trash2, Rocket, RotateCw, Copy, Clock, Flame, EyeOff, Ban } from "lucide-react";
 import type { Listing } from "@/data/mockData";
-import { expiryInfo } from "@/lib/listings";
-import { formatPrecioAviso } from "@/lib/pricing";
+import { duracionDelPlan, expiryInfo } from "@/lib/listings";
+import { esAConvenir, formatPrecioAviso } from "@/lib/pricing";
 import { fechaHoraCorta } from "@/lib/fechas";
 import {
   DropdownMenu,
@@ -59,11 +59,21 @@ const expiryStyles: Record<string, string> = {
 
 export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEdit, onDelete, onTogglePause, onPublish, onRepublish, onRenew, onDuplicate, rejectionReason, pagoEnEspera }: ListingRowProps) {
   const hasActions = !!(onView || onEdit || onDelete || onTogglePause || onPublish || onRepublish || onRenew || onDuplicate);
+  // El menu ⋮ ya solo lleva las acciones secundarias. Sin ninguna de las tres
+  // quedaba un boton que abria un desplegable vacio.
+  const hasMenu = !!(onDuplicate || onTogglePause || onDelete);
   // El contador solo tiene sentido en un aviso activo (los vencidos ya caducaron).
   // La duración contratada decide CUÁNDO se advierte: sin ella, un plan de 3
   // días se pintaba en naranja desde el minuto uno.
   const expiry = status === "Activo"
-    ? expiryInfo(expiresAt ?? null, (listing as { planDurationDays?: number | null }).planDurationDays)
+    ? expiryInfo(
+        expiresAt ?? null,
+        duracionDelPlan(
+          (listing as { planDurationDays?: number | null }).planDurationDays,
+          listing.publishedAt ?? listing.date,
+          expiresAt ?? null,
+        ),
+      )
     : null;
   return (
     <div className="group flex flex-col sm:flex-row gap-0 sm:gap-4 bg-card border border-border overflow-hidden hover:shadow-md hover:border-secondary/40 transition-all">
@@ -97,36 +107,35 @@ export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEd
       <div className="flex-1 flex flex-col p-3 sm:p-4 min-w-0">
         <div className="flex items-start justify-between gap-2 mb-1.5">
           <h3 className="font-semibold text-foreground line-clamp-2 leading-snug">{listing.title}</h3>
+          {hasMenu && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="p-1 -mr-1 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors flex-shrink-0">
+              {/* `aria-label`: es un icono suelto, así que sin esto un lector
+                  de pantalla lo anuncia como "botón" a secas — y ahora que
+                  guarda acciones que no están en ningún otro sitio (pausar,
+                  eliminar, publicar uno igual), quedarse sin poder abrirlo es
+                  quedarse sin ellas. */}
+              <button
+                type="button"
+                aria-label="Más opciones del aviso"
+                title="Más opciones"
+                className="p-1 -mr-1 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors flex-shrink-0"
+              >
                 <MoreVertical size={16} />
               </button>
             </DropdownMenuTrigger>
+            {/* EL MENÚ SOLO LLEVA LO QUE NO ESTÁ ABAJO.
+                Publicar, Republicar, Renovar, Editar y Eliminar estaban aquí Y
+                como botón en el pie de la fila: cinco acciones por duplicado, y
+                las tres primeras además con el mismo icono. Aquí se quedan las
+                secundarias —las que no son "lo siguiente que hay que hacer" con
+                este aviso— y el pie se queda con las principales. */}
             <DropdownMenuContent align="end">
-              {onPublish && (
-                <DropdownMenuItem onSelect={() => onPublish(listing)}>
-                  <Rocket size={14} className="mr-2" /> Publicar
-                </DropdownMenuItem>
-              )}
-              {onRepublish && (
-                <DropdownMenuItem onSelect={() => onRepublish(listing)}>
-                  <RotateCw size={14} className="mr-2" /> Republicar
-                </DropdownMenuItem>
-              )}
-              {onRenew && (
-                <DropdownMenuItem onSelect={() => onRenew(listing)}>
-                  <RotateCw size={14} className="mr-2" /> Renovar
-                </DropdownMenuItem>
-              )}
               {onDuplicate && (
                 <DropdownMenuItem onSelect={() => onDuplicate(listing)}>
                   <Copy size={14} className="mr-2" /> Publicar uno igual
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem onSelect={() => onEdit?.(listing)}>
-                <Edit size={14} className="mr-2" /> Editar
-              </DropdownMenuItem>
               {onTogglePause && (
                 <DropdownMenuItem onSelect={() => onTogglePause(listing)}>
                   {status === "Pausado" ? (
@@ -149,6 +158,7 @@ export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEd
               )}
             </DropdownMenuContent>
           </DropdownMenu>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground mb-3">
@@ -188,40 +198,56 @@ export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEd
         {/* Envuelve en móvil: con 3 acciones (4 en un borrador, por "Publicar") no
             caben junto al precio y el último botón se salía de la tarjeta. */}
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mt-auto pt-2 border-t border-dashed">
-          <p className="text-lg font-extrabold text-primary">
+          {/* Mismo criterio que en las tarjetas del buscador: "Precio a
+              convenir" no es un importe y no se pinta como uno. */}
+          <p
+            className={
+              esAConvenir(listing.price)
+                ? "text-sm font-semibold text-muted-foreground"
+                : "text-lg font-extrabold text-primary"
+            }
+          >
             {formatPrecioAviso(listing.price, listing.currency)}
           </p>
           <div className="flex flex-wrap items-center gap-1.5">
             {hasActions ? (
               <>
+                {/* LAS TRES SON DISTINTAS Y SE PARECÍAN DEMASIADO: mismo icono,
+                    misma forma y ninguna explicación. El `title` dice qué hace
+                    cada una, que es lo que preguntaba el cliente. Solo puede
+                    salir UNA: dependen del estado del aviso, que es excluyente. */}
                 {/* Solo borradores: retoma el aviso guardado y lo publica. */}
                 {onPublish && (
-                  <Button size="sm" className="h-8 px-3 text-xs gap-1" onClick={() => onPublish(listing)}>
+                  <Button
+                    size="sm" className="h-8 px-3 text-xs gap-1"
+                    title="Cobra el plan y saca el aviso a la calle."
+                    onClick={() => onPublish(listing)}
+                  >
                     <Rocket size={13} /> Publicar
                   </Button>
                 )}
                 {/* Solo vencidos: vuelve a cobrar y publicar (EFFE-036). */}
                 {onRepublish && (
-                  <Button size="sm" className="h-8 px-3 text-xs gap-1" onClick={() => onRepublish(listing)}>
+                  <Button
+                    size="sm" className="h-8 px-3 text-xs gap-1"
+                    title="Tu aviso ya venció. Vuelve a ponerlo en circulación con el mismo enlace y sus visitas."
+                    onClick={() => onRepublish(listing)}
+                  >
                     <RotateCw size={13} /> Republicar
                   </Button>
                 )}
                 {/* Por vencer: se le suman días y conserva visitas y enlace. */}
                 {onRenew && (
-                  <Button size="sm" className="h-8 px-3 text-xs gap-1" onClick={() => onRenew(listing)}>
+                  <Button
+                    size="sm" className="h-8 px-3 text-xs gap-1"
+                    title="Le suma días antes de que venza, sin que deje de verse. Conserva sus visitas, sus favoritos y su enlace."
+                    onClick={() => onRenew(listing)}
+                  >
                     <RotateCw size={13} /> Renovar
                   </Button>
                 )}
                 <Button variant="outline" size="sm" className="h-8 px-3 text-xs gap-1" onClick={() => onEdit?.(listing)}>
                   <Edit size={13} /> Editar
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 px-3 text-xs gap-1 text-destructive border-destructive/40 hover:bg-destructive/10"
-                  onClick={() => onDelete?.(listing)}
-                >
-                  <Trash2 size={13} /> Eliminar
                 </Button>
                 <Button
                   variant="default"

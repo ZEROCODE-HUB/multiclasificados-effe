@@ -16,11 +16,11 @@ const mk = (payload: Record<string, unknown>): AppNotification => ({
 describe("notificación new_application", () => {
   it("el texto incluye el título del aviso", () => {
     expect(notificationText(mk({ listing_title: "Vacante de cocinero" })))
-      .toBe('Nueva postulación en "Vacante de cocinero"');
+      .toBe('Nueva postulación en «Vacante de cocinero»');
   });
 
   it("sin título usa un texto genérico legible", () => {
-    expect(notificationText(mk({}))).toBe('Nueva postulación en "tu aviso"');
+    expect(notificationText(mk({}))).toBe('Nueva postulación en «Tu aviso»');
   });
 
   it("enlaza al panel de postulaciones del anunciante", () => {

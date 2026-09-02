@@ -393,6 +393,36 @@ export interface ExpiryInfo { text: string; tone: "normal" | "warning" | "urgent
 export const AVISAR_DESDE = 0.85;
 export const URGE_DESDE = 0.95;
 
+/**
+ * Los días que dura la vigencia que se está consumiendo.
+ *
+ * POR QUÉ EXISTE. El umbral del 85 % se mide sobre el tiempo CONTRATADO, y ese
+ * dato vive en `listings.plan_duration_days`. El problema es que hasta la 0140
+ * esa columna solo se llenaba en los borradores: un aviso publicado, renovado o
+ * republicado se quedaba sin ella o con la del plan anterior.
+ *
+ * Y la base de datos NO tiene ese problema: `notify_expiring_listings` (0133)
+ * cae en `expires_at - published_at` cuando falta el plan. Así que la campanita
+ * avisaba al 85 % de verdad y la app, con otra cuenta, decidía que todavía no
+ * era momento de enseñar "Renovar".
+ *
+ * Eso es exactamente lo que reportó el cliente: llega el aviso, pulsa, la fila
+ * se resalta... y solo hay "Ver". Aquí se usa la MISMA regla que la base.
+ */
+export function duracionDelPlan(
+  planDurationDays: number | null | undefined,
+  publishedAt: string | null | undefined,
+  expiresAt: string | null | undefined,
+): number | null {
+  const plan = Number(planDurationDays);
+  if (Number.isFinite(plan) && plan > 0) return plan;
+  if (!publishedAt || !expiresAt) return null;
+  const desde = new Date(publishedAt).getTime();
+  const hasta = new Date(expiresAt).getTime();
+  if (Number.isNaN(desde) || Number.isNaN(hasta) || hasta <= desde) return null;
+  return (hasta - desde) / 86_400_000;
+}
+
 export function expiryInfo(
   expiresAt: string | null,
   /** Días que se contrataron (`listings.plan_duration_days`). Sin este dato no

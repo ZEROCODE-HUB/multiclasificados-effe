@@ -1,8 +1,9 @@
-import { Plus, Minus, LocateFixed } from "lucide-react";
+import { Plus, Minus, LocateFixed, ExternalLink, Navigation } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { pinAnclado } from "@/components/mapIcons";
 import { useMapaDeGoogle, textoDeEstadoDelMapa } from "@/lib/googleMaps";
 import { formatPrecioAviso } from "@/lib/pricing";
+import { abrirMapaExterno, esMovil } from "@/lib/mapaExterno";
 
 interface ListingLocationMapProps {
   lat: number;
@@ -105,6 +106,28 @@ export function ListingLocationMap({ lat, lng, price, currency }: ListingLocatio
           <LocateFixed size={16} />
         </button>
       </div>
+
+      {/* ABRIR EL MAPA FUERA.
+          El de aquí sirve para situarse y nada más: no da indicaciones, no
+          calcula la ruta y no sigue al usuario por la calle. Quien va a ver un
+          departamento quiere eso, y hasta ahora tenía que copiar el nombre del
+          sitio a mano en otra aplicación.
+
+          Abajo a la izquierda y CON TEXTO, no como un cuarto icono arriba: los
+          tres de arriba mueven este mapa y este saca al usuario de la app, que
+          no es lo mismo y conviene que se lea antes de pulsarlo. En el teléfono
+          dice "Cómo llegar" porque es lo que va a pasar —se abre la app de
+          mapas con la ruta— y en el escritorio "Abrir en Google Maps", donde
+          una ruta desde el ordenador no sirve de mucho. */}
+      <button
+        type="button"
+        onClick={() => { void abrirMapaExterno(lat, lng, esMovil()); }}
+        className="absolute bottom-2 left-2 z-10 flex items-center gap-1.5 rounded-md border border-border bg-card/95 px-2.5 py-1.5 text-xs font-semibold text-foreground shadow-md backdrop-blur-sm hover:bg-card"
+      >
+        {esMovil()
+          ? <><Navigation size={13} className="text-secondary" /> Cómo llegar</>
+          : <><ExternalLink size={13} className="text-secondary" /> Abrir en Google Maps</>}
+      </button>
     </div>
   );
 }

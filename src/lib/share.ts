@@ -25,7 +25,7 @@ function shareMessage(title: string, url: string): string {
 // nueva, el intent lanza la app de WhatsApp y la pestaña recién abierta queda
 // huérfana en `about:blank` (IT2-030). Navegando en la actual, el usuario
 // vuelve con "atrás" y no queda ninguna pestaña en blanco.
-async function openExternal(url: string): Promise<void> {
+export async function abrirEnlaceExterno(url: string): Promise<void> {
   if (Capacitor.isNativePlatform()) {
     const { Browser } = await import("@capacitor/browser");
     await Browser.open({ url });
@@ -65,7 +65,7 @@ export function enlaceWhatsApp(mensaje: string, telefono?: string): string {
  * Abre WhatsApp SIN abandonar la página actual, y devuelve si lo consiguió.
  *
  * `abrirWhatsApp` navega en la misma pestaña cuando el dispositivo es táctil
- * (ver el comentario de `openExternal`): al compartir un aviso da igual, porque
+ * (ver el comentario de `abrirEnlaceExterno`): al compartir un aviso da igual, porque
  * no queda nada que ver detrás. Al confirmar un pago sí importa — la página
  * tiene que quedarse para llevar al usuario a sus avisos y enseñarle el suyo
  * esperando confirmación. Comprobado en producción: se abría WhatsApp encima y
@@ -113,7 +113,7 @@ export async function abrirWhatsApp(mensaje: string, telefono?: string): Promise
   const webUrl = enlaceWhatsApp(mensaje, telefono);
 
   if (!Capacitor.isNativePlatform()) {
-    await openExternal(webUrl);
+    await abrirEnlaceExterno(webUrl);
     return;
   }
 
@@ -129,7 +129,7 @@ export async function abrirWhatsApp(mensaje: string, telefono?: string): Promise
   window.setTimeout(() => {
     document.removeEventListener("visibilitychange", marcarSalto);
     if (saltoAWhatsApp || document.visibilityState === "hidden") return;
-    void openExternal(webUrl);
+    void abrirEnlaceExterno(webUrl);
   }, 1200);
 }
 

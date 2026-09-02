@@ -36,6 +36,28 @@ vi.mock("@/components/DashboardLayout", () => ({
   DashboardLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
+// El menú ⋮ de Radix, aplanado. En jsdom no se despliega —ni con `click` ni con
+// `pointerDown`: mide posiciones y captura el puntero, y nada de eso existe
+// aquí—, así que sus opciones se pintan en línea. Es el mismo recurso que usa
+// `notificationsBellModal.test.tsx`.
+//
+// Lo que este archivo prueba es que "Eliminar" pida confirmación y borre, no la
+// mecánica del desplegable. Que "Eliminar" esté en el menú y NO entre los
+// botones de la fila se comprueba en `avisosAccionesYPrecio.test.tsx`, sobre el
+// componente y sin Radix de por medio.
+vi.mock("@/components/ui/dropdown-menu", () => {
+  const Div = ({ children }: { children?: React.ReactNode }) => <div>{children}</div>;
+  return {
+    DropdownMenu: Div,
+    DropdownMenuTrigger: Div,
+    DropdownMenuContent: Div,
+    DropdownMenuSeparator: () => null,
+    DropdownMenuItem: ({ children, onSelect }: { children?: React.ReactNode; onSelect?: () => void }) => (
+      <button type="button" role="menuitem" onClick={() => onSelect?.()}>{children}</button>
+    ),
+  };
+});
+
 const navigate = vi.fn();
 vi.mock("react-router-dom", async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>);
@@ -149,9 +171,15 @@ describe("AdvertiserListings — editar / eliminar / ver", () => {
   });
 
   it("ELIMINAR: pide confirmación y borra el aviso", async () => {
+    // "Eliminar" vive ahora en el menú ⋮ y no entre los botones de la fila
+    // (punto 05). Es destructiva y estaba pegada a "Editar", a un dedo de
+    // distancia en el móvil; y además salía por duplicado, porque también
+    // estaba en el menú.
     render(<AdvertiserListings />);
     await abrirVencidos();
-    fireEvent.click(screen.getAllByRole("button", { name: /eliminar/i })[0]);
+
+    fireEvent.click(await screen.findByRole("menuitem", { name: /eliminar/i }));
+
     // Confirmación
     const confirmBtn = await screen.findByRole("button", { name: /^eliminar$/i });
     fireEvent.click(confirmBtn);

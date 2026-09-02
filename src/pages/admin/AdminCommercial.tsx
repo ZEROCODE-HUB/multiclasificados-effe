@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
@@ -529,6 +530,13 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
     social_youtube: "YouTube",
     social_linkedin: "LinkedIn",
     social_whatsapp: "WhatsApp",
+    // Punto 03: la sección "Acerca de Nosotros" de la portada y de /acerca-de.
+    // Aquí y no en el código por lo mismo que las redes: un texto de empresa se
+    // retoca y eso no puede costar un despliegue cada vez.
+    about_titulo: "Acerca de Nosotros · Título",
+    about_texto: "Acerca de Nosotros · Texto",
+    about_mision: "Acerca de Nosotros · Misión",
+    about_vision: "Acerca de Nosotros · Visión",
   } as const;
   type SettingKey = keyof typeof SETTING_KEYS;
   // Cada ajuste tiene SU tipo: los dos primeros van a un <Input type="number">
@@ -541,12 +549,16 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
     // Los seis del pie. Cadena vacía = esa red no sale.
     social_facebook: string; social_instagram: string; social_tiktok: string;
     social_youtube: string; social_linkedin: string; social_whatsapp: string;
+    // Los cuatro de "Acerca de Nosotros". Vacío = se enseña el texto por
+    // defecto de `ACERCA_DE_POR_DEFECTO`, no un hueco en la portada.
+    about_titulo: string; about_texto: string; about_mision: string; about_vision: string;
   }
   const [settings, setSettings] = useState<Ajustes>({
     commission_pct: 0, free_listings_limit: 0, maintenance_mode: false,
     default_listing_image: null,
     social_facebook: "", social_instagram: "", social_tiktok: "",
     social_youtube: "", social_linkedin: "", social_whatsapp: "",
+    about_titulo: "", about_texto: "", about_mision: "", about_vision: "",
   });
 
   // Imagen por defecto: archivo elegido pendiente de subir + su vista previa.
@@ -688,10 +700,10 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
           else if (s.key === "free_listings_limit") next.free_listings_limit = Number(s.value) || 0;
           else if (s.key === "maintenance_mode") next.maintenance_mode = s.value === true || s.value === "true";
           else if (s.key === "default_listing_image") next.default_listing_image = typeof s.value === "string" && s.value ? s.value : null;
-          else if (s.key.startsWith("social_") && s.key in next) {
-            // Todas las `social_*` son texto y se tratan igual, así que no hace
-            // falta una rama por red: seis `else if` idénticos se desincronizan
-            // en cuanto se añade una séptima.
+          else if ((s.key.startsWith("social_") || s.key.startsWith("about_")) && s.key in next) {
+            // Todas las `social_*` y las `about_*` son texto y se tratan igual,
+            // así que no hace falta una rama por cada una: diez `else if`
+            // idénticos se desincronizan en cuanto se añade el undécimo.
             (next as unknown as Record<string, string>)[s.key] =
               typeof s.value === "string" ? s.value : "";
           }
@@ -978,6 +990,61 @@ const AdminCommercial = ({ role }: { role: AdminRole }) => {
                       />
                     </div>
                   ))}
+                </div>
+              </div>
+
+              {/* Punto 03 · "Acerca de Nosotros". Se pinta en la portada y en
+                  /acerca-de. El texto sale TAL CUAL, como texto plano: los
+                  saltos de línea se respetan y nada más. No se admite HTML a
+                  propósito — esto lo lee todo el visitante, y pegar aquí algo
+                  que alguien pasó por WhatsApp no puede acabar siendo un
+                  <script> en la portada. */}
+              <div className="space-y-3 border-t pt-5">
+                <div>
+                  <p className="font-medium text-sm">Acerca de Nosotros</p>
+                  <p className="text-xs text-muted-foreground">
+                    Sale al final de la portada y en la página{" "}
+                    <span className="font-mono">/acerca-de</span>. Los saltos de línea se
+                    respetan; deja un renglón en blanco para separar párrafos. Lo que
+                    dejes vacío vuelve al texto de fábrica.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="about_titulo">{SETTING_KEYS.about_titulo}</Label>
+                  <Input
+                    id="about_titulo"
+                    value={settings.about_titulo}
+                    placeholder="Acerca de Nosotros"
+                    onChange={(e) => setSettings((s) => ({ ...s, about_titulo: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="about_texto">{SETTING_KEYS.about_texto}</Label>
+                  <Textarea
+                    id="about_texto"
+                    rows={7}
+                    value={settings.about_texto}
+                    placeholder="Quiénes somos, qué hacemos y por qué."
+                    onChange={(e) => setSettings((s) => ({ ...s, about_texto: e.target.value }))}
+                  />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="about_mision">{SETTING_KEYS.about_mision}</Label>
+                    <Textarea
+                      id="about_mision" rows={4}
+                      value={settings.about_mision}
+                      onChange={(e) => setSettings((s) => ({ ...s, about_mision: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="about_vision">{SETTING_KEYS.about_vision}</Label>
+                    <Textarea
+                      id="about_vision" rows={4}
+                      value={settings.about_vision}
+                      onChange={(e) => setSettings((s) => ({ ...s, about_vision: e.target.value }))}
+                    />
+                  </div>
                 </div>
               </div>
 

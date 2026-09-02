@@ -11,7 +11,7 @@ import { useFavorites } from "@/hooks/useFavorites";
 import { listingBadges } from "@/lib/listingBadges";
 import { urgentTimeLeft } from "@/lib/listings";
 import { imgUrl, imgSrcSet } from "@/lib/imageUrl";
-import { formatPrecioAviso } from "@/lib/pricing";
+import { esAConvenir, formatPrecioAviso } from "@/lib/pricing";
 import { ubicacionConPais } from "@/lib/paises";
 import { CuerpoDeAviso } from "@/components/CuerpoDeAviso";
 import { marcoDeAviso } from "@/lib/estiloDeAviso";
@@ -146,7 +146,18 @@ export function ListingCard({ listing, layout = "grid", className = "" }: Listin
             <span className="flex items-center gap-1"><MapPin size={12} />{ubicacionConPais(listing.location, listing.country)}</span>
           </div>
           {isAuthed ? (
-            <p className="text-lg font-extrabold text-primary mt-2">{formatPrecioAviso(listing.price, listing.currency)}</p>
+            /* Igual que en la tarjeta: sin importe, el peso del "Ver detalle"
+               de la linea de abajo. Aqui se dice entero ("Precio a convenir")
+               porque en el listado hay ancho de sobra. */
+            <p
+              className={
+                esAConvenir(listing.price)
+                  ? "text-sm font-semibold text-muted-foreground mt-2"
+                  : "text-lg font-extrabold text-primary mt-2"
+              }
+            >
+              {formatPrecioAviso(listing.price, listing.currency)}
+            </p>
           ) : (
             <p className="text-sm text-secondary font-semibold mt-2 group-hover:underline">Ver detalle</p>
           )}

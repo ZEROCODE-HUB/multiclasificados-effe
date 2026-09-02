@@ -23,7 +23,7 @@ import type { ReactNode } from "react";
 import { MapPin, ShieldCheck, Video } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { imgUrl, imgSrcSet } from "@/lib/imageUrl";
-import { precioDeTarjeta } from "@/lib/pricing";
+import { esAConvenir, precioDeTarjeta } from "@/lib/pricing";
 import { ubicacionConPais } from "@/lib/paises";
 import { listingBadges } from "@/lib/listingBadges";
 import { marcoDeAviso } from "@/lib/estiloDeAviso";
@@ -192,7 +192,19 @@ export function CuerpoDeAviso({
           /* `truncate`: red de seguridad para importes muy largos. Antes que
              partir el precio en dos líneas —que descuadra el alto de toda la
              fila de tarjetas— es preferible recortarlo. */
-          <p className="text-base font-extrabold text-primary tracking-tight truncate">
+          /* Sin precio, el peso del CTA "Ver detalle" (text-xs semibold) en vez
+             del del importe: no es un precio y no debe leerse como uno. El
+             hueco mide lo mismo en los dos casos —min-h-6, la altura de la
+             linea de text-base— porque si no las tarjetas con precio medirian
+             unos pixeles mas que las de al lado y la fila se descuadraria, que
+             es el mismo cuidado que ya tiene el sello de verificado. */
+          <p
+            className={`truncate min-h-6 flex items-center ${
+              esAConvenir(l.price)
+                ? "text-xs font-semibold text-muted-foreground"
+                : "text-base font-extrabold text-primary tracking-tight"
+            }`}
+          >
             {precioDeTarjeta(l.price, l.currency)}
           </p>
         )}

@@ -1,0 +1,40 @@
+{
+  "name": "eFFe Multiclasificados",
+  "short_name": "eFFe",
+  "description": "Avisos clasificados en Perú: inmuebles, vehículos, empleos, servicios y más.",
+  "id": "/",
+  "start_url": "/?fuente=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "lang": "es-PE",
+  "dir": "ltr",
+  "background_color": "#ffffff",
+  "theme_color": "#192F5E",
+  "categories": ["shopping", "business"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Buscar avisos",
+      "short_name": "Buscar",
+      "url": "/buscar",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Publicar un aviso",
+      "short_name": "Publicar",
+      "url": "/dashboard/anunciante/publicar",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Mis avisos",
+      "short_name": "Mis avisos",
+      "url": "/dashboard/anunciante/avisos",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

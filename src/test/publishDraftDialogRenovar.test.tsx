@@ -18,7 +18,13 @@ vi.mock("@/lib/publish", () => ({
     faltan?: number;
   },
 }));
-vi.mock("@/lib/credits", () => ({ getCreditBalance: vi.fn().mockResolvedValue(1000) }));
+// `saldoPendiente` deja la promesa del saldo sin resolver, que es el estado
+// que el botón pintaba mal: no es un caso raro, es lo que ve TODO el mundo
+// durante el primer medio segundo del diálogo.
+let saldoPendiente = false;
+vi.mock("@/lib/credits", () => ({
+  getCreditBalance: () => (saldoPendiente ? new Promise(() => {}) : Promise.resolve(1000)),
+}));
 vi.mock("@/lib/pricingRemote", () => ({ fetchPricingSettings: () => new Promise(() => {}) }));
 vi.mock("@/lib/promotions", async (orig) => ({
   ...(await (orig() as Promise<Record<string, unknown>>)),
@@ -96,5 +102,44 @@ describe("PublishDraftDialog — modo renovar", () => {
     abrir("publicar");
     await screen.findByText(/Publicar borrador|Republicar aviso/);
     expect(renovarAviso).not.toHaveBeenCalled();
+  });
+});
+
+describe("el botón dice lo que va a pasar (punto 07)", () => {
+  it("mientras carga el saldo NO dice «Comprar saldo»", async () => {
+    // ERA EL FALLO. `enoughCredits` es `balance !== null && balance >= coste`,
+    // o sea FALSO mientras el saldo se está pidiendo. Con "sin saldo" como caso
+    // por defecto, el botón decía "Comprar saldo" durante toda la carga a
+    // cualquiera, tuviera el saldo que tuviera.
+    saldoPendiente = true;
+    abrir("renovar");
+    await screen.findByText("Renovar aviso");
+    expect(screen.getByRole("button", { name: /cargando tu saldo/i })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /comprar saldo/i })).toBeNull();
+    saldoPendiente = false;
+  });
+
+  it("al renovar, el botón dice «Renovar» y no «Publicar»", async () => {
+    // El título decía "Renovar aviso" y el botón, tres centímetros más abajo,
+    // "Publicar por S/ 30".
+    abrir("renovar");
+    await screen.findByText("Renovar aviso");
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^Renovar por/ })).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: /^Publicar por/ })).toBeNull();
+  });
+
+  it("y explica en qué se diferencia de publicar y de republicar", async () => {
+    // El cliente preguntó directamente qué hacía cada una.
+    abrir("renovar");
+    expect(await screen.findByText(/Le sumamos días al aviso sin que deje de verse/i))
+      .toBeInTheDocument();
+  });
+
+  it("en modo publicar dice «Publicar» y lo que cuesta", async () => {
+    abrir("publicar");
+    await screen.findByText("Publicar borrador");
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^Publicar por/ })).toBeInTheDocument());
   });
 });

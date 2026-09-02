@@ -7,6 +7,12 @@ import { prepararDom } from "./domPolyfills";
 // "Acerca de" era un ancla a la propia página, "Contacto" abría el gestor de
 // correo (los datos ya están en la columna de al lado) y "Planes Pro" mandaba al
 // login. Los dos enlaces legales, además, abrían el mismo diálogo (IT3-010).
+//
+// "Acerca de nosotros" VOLVIÓ (punto 03), pero ya no es un ancla: lleva a
+// /acerca-de, que es una página de verdad con texto que edita el administrador.
+// Lo que este archivo vigila no es que el enlace no exista, es que ningún
+// enlace del pie lleve a la nada — que era el problema entonces y lo sigue
+// siendo.
 
 beforeEach(() => {
   prepararDom();
@@ -35,10 +41,17 @@ import Index from "@/pages/Index";
 const renderHome = () => render(<MemoryRouter><Index /></MemoryRouter>);
 
 describe("Footer de la portada", () => {
-  it("ya no ofrece Planes Pro ni Acerca de", () => {
+  it("ya no ofrece Planes Pro", () => {
     renderHome();
     expect(screen.queryByRole("link", { name: /Planes Pro/i })).toBeNull();
-    expect(screen.queryByRole("link", { name: /Acerca de/i })).toBeNull();
+  });
+
+  it('"Acerca de nosotros" existe y lleva a una página, no a un ancla', () => {
+    // El de antes era un ancla a la propia portada: se pulsaba y no pasaba
+    // nada. Ese fue el motivo de retirarlo en IT3-010.
+    renderHome();
+    const enlace = screen.getByRole("link", { name: /Acerca de nosotros/i });
+    expect(enlace.getAttribute("href")).toBe("/acerca-de");
   });
 
   it('"Contacto" solo queda como título de columna, sin enlace de correo', () => {

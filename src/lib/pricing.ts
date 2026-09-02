@@ -260,6 +260,20 @@ export function formatPrecioAviso(price: number, currency: string): string {
  * la del buscador también se quedaba sin sitio— deja de partir igualmente.
  * La ficha del aviso sigue diciéndolo entero: allí sobra el ancho.
  */
+/**
+ * ¿Este aviso sale "a convenir" en vez de con un importe?
+ *
+ * Es lo que decide el TAMAÑO del texto, no solo su contenido. Un importe es el
+ * dato que el comprador busca y se pinta grande y en negrita; "a convenir" no
+ * es un precio, es la ausencia de uno, y pintarlo con el mismo peso le daba una
+ * prominencia que no le corresponde —lo pidió el cliente— además de ser el
+ * texto más largo de la tarjeta justo en su línea más estrecha.
+ */
+export function esAConvenir(price: number): boolean {
+  const n = Number.isFinite(price) ? price : 0;
+  return n <= 0;
+}
+
 export function precioDeTarjeta(price: number, currency: string): string {
   const n = Number.isFinite(price) ? price : 0;
   if (n <= 0) return "A convenir";

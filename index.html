@@ -20,6 +20,19 @@
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <meta name="theme-color" content="#192F5E" />
+    <!-- Manifiesto de la PWA: es lo que hace que el navegador ofrezca instalar
+         la web como una aplicación, con su nombre, su icono y sin barra de
+         direcciones. El service worker que la completa se registra desde
+         src/lib/pwa.ts (y está muy limitado a propósito: ver public/sw.js). -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- iOS ignora el manifiesto: para "Añadir a pantalla de inicio" necesita
+         sus propias etiquetas. `black-translucent` deja que el contenido llegue
+         hasta el notch, que es lo que ya esperan las variables --nav-top de la
+         hoja de estilos. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="eFFe" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <!-- Solo tema claro. Va en el <head> para que el navegador lo sepa antes de
          pintar: si espera al CSS, los controles nativos parpadean en oscuro. -->
     <meta name="color-scheme" content="light" />

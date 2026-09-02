@@ -28,6 +28,7 @@
 // Mientras los secretos de APNs no estén puestos, los iPhone se saltan sin
 // ruido y Android sigue funcionando igual.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { cuerpoDeNotificacion, rutaDeNotificacion } from "../_shared/textoDeNotificacion.ts";
 import {
   apnsConfigurado, crearProveedorDeJwt, urlDeApns, cabecerasDeApns,
   cuerpoDeApns, interpretarApns, type ConfigApns,
@@ -49,46 +50,39 @@ const APNS: Partial<ConfigApns> = {
 // 20 minutos, y una tanda de avisos puede tocar muchos dispositivos seguidos.
 const jwtDeApns = apnsConfigurado(APNS) ? crearProveedorDeJwt(APNS) : null;
 
-// Texto legible según el tipo de evento (igual que en el frontend).
-function bodyFor(type: string, payload: Record<string, unknown>): string {
-  const p = payload || {};
-  switch (type) {
-    case "admin_message":
-      return p.body ? `${p.body}` : "Tienes un nuevo mensaje del equipo";
-    case "new_message":
-      return p.preview ? `${p.preview}` : "Tienes un nuevo mensaje";
-    case "saved_search_match":
-      return `${p.count ?? ""} nuevos avisos para "${p.name ?? "tu búsqueda"}"`;
-    case "application_status":
-      return `Tu postulación cambió de estado`;
-    case "new_review":
-      return `Recibiste una nueva reseña`;
-    default:
-      return "Tienes una nueva notificación";
-  }
+/**
+ * Texto y destino del push. Los dos salen de `_shared/textoDeNotificacion.ts`,
+ * el mismo módulo del correo y copia exacta del de la campana.
+ *
+ * ERA EL CANAL PEOR TRATADO DE LOS TRES. Conocía cinco tipos; los otros diez
+ * llegaban al teléfono como "Tienes una nueva notificación", que no dice nada y
+ * enseña al usuario a descartarlas sin leer. Entre esos diez estaba el aviso de
+ * vencimiento, que es el único que le puede costar dinero al anunciante.
+ *
+ * Y el destino era todavía peor: por defecto abría `/aviso/{id}`, la ficha
+ * PÚBLICA. Esa ficha sale de `listing_cards`, que solo trae los avisos activos.
+ * O sea que el push de "tu aviso está por vencer", en cuanto el aviso vencía,
+ * llevaba a una pantalla de "este aviso ya no está disponible". El correo lo
+ * había corregido por su cuenta hace tiempo; aquí nadie se enteró.
+ */
+function bodyFor(type: string, payload: Record<string, unknown>, titulo?: string | null): string {
+  return cuerpoDeNotificacion(type, payload || {}, titulo);
 }
 
-// Ruta interna a la que debe llevar el toque de la notificación. La app la lee
-// en `data.route` (push.ts) y navega ahí; sin ella se abría siempre el inicio y
-// el usuario tenía que buscar a mano el chat o el aviso del aviso recibido.
-// `roles` solo se consulta para los mensajes (ver más abajo): el chat vive en
-// dos rutas distintas según el panel del destinatario.
+/**
+ * Ruta interna a la que lleva el toque. La app la lee en `data.route`
+ * (push.ts) y navega ahí; sin ella se abría siempre el inicio y el usuario
+ * tenía que buscar a mano el chat o el aviso del que le acababan de hablar.
+ *
+ * `roles` decide la rama del panel: el chat y el personal viven en rutas
+ * distintas según quién reciba el aviso.
+ */
 function routeFor(record: Record<string, unknown>, roles: string[]): string | null {
-  const p = (record.payload ?? {}) as Record<string, unknown>;
-  const listingRoute = p.listing_id ? `/aviso/${p.listing_id}` : null;
-
-  switch (record.type) {
-    case "new_message":
-      return roles.includes("anunciante")
-        ? "/dashboard/anunciante/mensajes"
-        : "/dashboard/buscador/mensajes";
-    case "saved_search_match":
-      return "/dashboard/buscador/busquedas";
-    case "application_status":
-      return "/dashboard/buscador/postulaciones";
-    default:
-      return listingRoute;
-  }
+  const rol = roles.includes("superadmin") ? "superadmin"
+    : roles.includes("admin") ? "admin"
+    : roles.includes("anunciante") ? "anunciante"
+    : "buscador";
+  return rutaDeNotificacion(String(record.type ?? ""), (record.payload ?? {}) as Record<string, unknown>, rol) || null;
 }
 
 // --- OAuth2: obtiene un access token a partir de la cuenta de servicio ---
@@ -165,9 +159,14 @@ Deno.serve(async (req) => {
     const hayAndroid = tokens.some((t) => t.platform !== "ios");
     const accessToken = hayAndroid ? await getAccessToken() : "";
     const title = record.title || "eFFe Clasificados";
-    const body = bodyFor(record.type, record.payload || {});
+    const body = bodyFor(record.type, record.payload || {}, record.title);
+    // Los roles hacen falta en más sitios que en el chat: un reclamo o una
+    // postulación de trabajo van a la rama del panel de quien los recibe
+    // (/dashboard/admin o /dashboard/superadmin), y un admin que entra por la
+    // rama que no es se queda fuera. Antes solo se pedían para `new_message` y
+    // esos dos avisos acababan sin destino.
     let roles: string[] = [];
-    if (record.type === "new_message") {
+    if (["new_message", "complaint_new", "career_new"].includes(String(record.type))) {
       const { data } = await admin.from("user_roles").select("role").eq("user_id", record.user_id);
       roles = (data ?? []).map((r: { role: string }) => r.role);
     }

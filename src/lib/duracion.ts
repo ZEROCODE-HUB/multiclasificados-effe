@@ -16,23 +16,8 @@ export function enPalabras(horas: number | null | undefined): string {
   return resto === 0 ? parteDias : `${parteDias} y ${resto} ${resto === 1 ? "hora" : "horas"}`;
 }
 
-/**
- * La frase completa del vencimiento a partir de lo que trae la notificación.
- * Devuelve "" si el aviso es de los antiguos y no lleva las horas: entonces
- * quien la use se queda con su texto de siempre, en vez de escribir una frase
- * a medias.
- */
-export function tiempoDelAviso(
-  transcurridas: unknown,
-  restantes: unknown,
-): string {
-  // `Number(null)` y `Number("")` valen CERO, no NaN, así que comprobar solo
-  // que sea finito dejaba pasar la ausencia de dato: la alerta acababa
-  // diciendo "le quedan menos de una hora" a un aviso recién publicado.
-  const cifra = (v: unknown) =>
-    v === null || v === undefined || v === "" ? Number.NaN : Number(v);
-  const t = cifra(transcurridas);
-  const r = cifra(restantes);
-  if (!Number.isFinite(t) || !Number.isFinite(r)) return "";
-  return `Lleva ${enPalabras(t)} publicado y le ${r === 1 ? "queda" : "quedan"} ${enPalabras(r)}.`;
-}
+// `tiempoDelAviso` vivía aquí y decía "Lleva N publicado y le quedan M.".
+// Se retiró al unificar los textos de las notificaciones: la frase entera se
+// arma ahora en `src/lib/textoDeNotificacion.ts`, que es el único sitio donde
+// se decide qué dice cada aviso en la campana, el correo y el push. Quedaba sin
+// usar, y una función así se vuelve a llamar por error años después.

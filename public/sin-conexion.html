@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Sin conexión · eFFe Multiclasificados</title>
+    <!--
+      Página de respaldo del service worker: la ÚNICA que se guarda en caché.
+      Se enseña solo cuando el teléfono no tiene red al abrir la aplicación
+      instalada; con red, esta página no se llega a ver nunca.
+
+      Va sin JavaScript y con los estilos dentro a propósito: si hiciera falta
+      descargar cualquier cosa para pintarla, no serviría justo cuando hace falta.
+    -->
+    <style>
+      *{box-sizing:border-box}
+      body{margin:0;min-height:100dvh;display:flex;align-items:center;justify-content:center;
+           padding:24px;background:#fff;color:#1e3a5f;
+           font-family:Montserrat,system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
+      .caja{max-width:380px;text-align:center}
+      .marca{font-weight:800;font-size:24px;letter-spacing:1px;margin-bottom:28px}
+      .marca b{color:#f97316}
+      h1{font-size:19px;font-weight:700;margin:0 0 10px}
+      p{font-size:14px;line-height:1.65;color:#64748b;margin:0 0 24px}
+      a{display:inline-block;background:#f97316;color:#fff;text-decoration:none;
+        font-weight:700;font-size:14px;padding:12px 26px}
+      .nube{width:52px;height:52px;margin:0 auto 20px;color:#cbd5e1}
+    </style>
+  </head>
+  <body>
+    <div class="caja">
+      <div class="marca">eFFe <b>Multiclasificados</b></div>
+      <svg class="nube" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M17.5 19a4.5 4.5 0 0 0 .5-8.97A6 6 0 0 0 6.3 8.6 4.5 4.5 0 0 0 6.5 19" />
+        <path d="m2 2 20 20" />
+      </svg>
+      <h1>No hay conexión</h1>
+      <p>
+        No pudimos conectar con eFFe. Revisa tus datos móviles o el wifi y vuelve a
+        intentarlo: tus avisos y tus mensajes siguen ahí.
+      </p>
+      <a href="/">Reintentar</a>
+    </div>
+  </body>
+</html>

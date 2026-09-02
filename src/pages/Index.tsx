@@ -4,6 +4,7 @@ import { BrandMark } from "@/components/BrandMark";
 import { HeroSearch } from "@/components/HeroSearch";
 import { CategoryGrid } from "@/components/CategoryGrid";
 import { RedesSocialesPie } from "@/components/RedesSocialesPie";
+import { AcercaDeNosotros } from "@/components/AcercaDeNosotros";
 import { ListingCard } from "@/components/ListingCard";
 import { CountUp } from "@/components/CountUp";
 import { LibroReclamaciones } from "@/components/LibroReclamaciones";
@@ -748,6 +749,16 @@ const Index = () => {
       <div className="hidden md:block">
         <LibroReclamaciones />
       </div>
+
+      {/* ACERCA DE NOSOTROS. Al final y antes del pie, que es donde lo pidió el
+          cliente y donde se espera: quien llega hasta aquí ya vio los avisos y
+          es cuando puede querer saber con quién está tratando.
+
+          A DIFERENCIA DEL PIE, ESTA SÍ SE VE EN MÓVIL. El pie está oculto en
+          móvil a propósito (`hidden md:block`, para que se parezca a una app), y
+          si la sección viviera dentro de él más de la mitad de las visitas no la
+          verían nunca. El texto lo edita el administrador (migración 0141). */}
+      <AcercaDeNosotros className="py-14 md:py-20 border-t border-border" />
       </main>
 
       {/* Footer (oculto en móvil para un look más app) */}
@@ -779,6 +790,10 @@ const Index = () => {
               <ul className="space-y-3 text-sm text-primary-foreground/70">
                 {/* B-18. Va con dirección propia y no en un modal: una oferta de
                     empleo se comparte, y un diálogo no se puede enlazar. */}
+                {/* "Acerca de" vuelve al pie, pero llevando a una página de
+                    verdad. El de antes era un ancla a esta misma portada y no
+                    llevaba a ningún contenido; por eso se retiró en IT3-010. */}
+                <li><Link to="/acerca-de" className="hover:text-secondary transition-colors">Acerca de nosotros</Link></li>
                 <li><Link to="/trabaje-con-nosotros" className="hover:text-secondary transition-colors">Trabaje con nosotros</Link></li>
                 <li><button type="button" onClick={() => setTermsOpen(true)} className="hover:text-secondary transition-colors text-left">Términos y condiciones</button></li>
               </ul>

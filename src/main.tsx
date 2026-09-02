@@ -8,6 +8,7 @@ import { BootErrorBoundary } from "@/components/BootErrorBoundary";
 import { ConnectionGate } from "@/components/ConnectionGate";
 import { vigilarPrecargas, limpiarMarcaDeRecarga } from "@/lib/cargaDiferida";
 import { cargarImagenPorDefecto } from "@/lib/imagenPorDefecto";
+import { registrarPWA } from "@/lib/pwa";
 
 // Promueve el preload de la fuente Montserrat a stylesheet. Antes esto se hacía
 // con un `onload` inline en el <link> del index.html, pero un manejador en línea
@@ -37,6 +38,12 @@ limpiarMarcaDeRecarga();
 // imagen de marca por otra, no un hueco vacío, y no compensa retrasar el
 // arranque de toda la app por eso.
 void cargarImagenPorDefecto();
+
+// Hace INSTALABLE la web (el navegador ofrece "Instalar aplicación" y queda con
+// su icono en el escritorio o en el teléfono). Va aquí y no dentro de React
+// porque no pinta nada: registra el service worker de public/sw.js y se aparta.
+// Dentro del APK y del iPhone no hace nada — allí la aplicación ya es nativa.
+registrarPWA();
 
 const root = createRoot(document.getElementById("root")!);
 

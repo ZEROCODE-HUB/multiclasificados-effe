@@ -25,14 +25,22 @@ import { PlusCircle, ClipboardList, Eye, MessageSquare, TrendingUp, Search, Slid
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
 import { useValidacion, MensajeDeError } from "@/hooks/useValidacion";
-import { expiryInfo } from "@/lib/listings";
+import { duracionDelPlan, expiryInfo } from "@/lib/listings";
 import { enfocarCampo } from "@/lib/validacion";
 
 // ¿Ya consumió el aviso el 85 % de lo que se contrató? Es cuando ofrecer
 // renovar ayuda; antes solo sería ruido — y con un plan de 3 días el botón
 // "Renovar" aparecía a los veinte segundos de publicar.
-const porVencer = (expiresAt?: string | null, duracionDias?: number | null): boolean => {
-  const info = expiryInfo(expiresAt ?? null, duracionDias);
+const porVencer = (aviso: MyListing): boolean => {
+  const info = expiryInfo(
+    aviso.expiresAt ?? null,
+    // La MISMA cuenta que hace la base de datos al mandar la campanita: sin
+    // plan guardado, la vigencia va de published_at a expires_at. Con la cuenta
+    // vieja, un aviso de 60 o 90 dias recibia el aviso del 85 % y aqui seguia
+    // saliendo "normal" — llegaba la notificacion, se resaltaba la fila y no
+    // habia ningun boton para renovar. Es el punto 08 del cliente.
+    duracionDelPlan(aviso.planDurationDays, aviso.publishedAt ?? aviso.date, aviso.expiresAt),
+  );
   return !!info && info.tone !== "normal";
 };
 import type { Listing } from "@/data/mockData";
@@ -372,7 +380,7 @@ const AdvertiserListings = () => {
                   // caen en esta pestaña pero no deben republicarse aquí.
                   ? { onRepublish: () => setToPublish(listing) }
                   : {})}
-                {...(listing.status === "active" && porVencer(listing.expiresAt, listing.planDurationDays)
+                {...(listing.status === "active" && porVencer(listing)
                   // Renovar aparece cuando ya urge (85 % del plan consumido): es
                   // el mismo dato que la fila ya está pintando en "vence en X
                   // días". Sin fecha de vencimiento no hay nada que renovar.

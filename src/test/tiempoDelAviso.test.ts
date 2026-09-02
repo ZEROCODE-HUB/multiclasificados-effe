@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { enPalabras, tiempoDelAviso } from "@/lib/duracion";
+import { enPalabras } from "@/lib/duracion";
 import { notificationText } from "@/lib/notifications";
 
 /**
@@ -34,33 +34,19 @@ describe("las horas, en palabras", () => {
   });
 });
 
-describe("la frase completa", () => {
-  it("dice cuánto lleva y cuánto le queda", () => {
-    expect(tiempoDelAviso(62, 10)).toBe("Lleva 2 días y 14 horas publicado y le quedan 10 horas.");
-  });
-
-  it("concuerda en singular", () => {
-    expect(tiempoDelAviso(71, 1)).toBe("Lleva 2 días y 23 horas publicado y le queda 1 hora.");
-  });
-
-  it("sin las cifras no escribe una frase a medias", () => {
-    // Los avisos guardados antes de la 0133 no las traen: quien la use se queda
-    // con su texto de siempre en vez de soltar un "Lleva undefined publicado".
-    expect(tiempoDelAviso(undefined, undefined)).toBe("");
-    expect(tiempoDelAviso(62, null)).toBe("");
-    expect(tiempoDelAviso("no", "va")).toBe("");
-  });
-});
-
 describe("la notificación que le llega al anunciante", () => {
   const aviso = (payload: Record<string, unknown>) =>
     notificationText({ type: "listing_expiring", payload } as never);
 
   it("lleva las dos cifras", () => {
+    // El orden cambió al unificar los tres canales (punto 04): primero lo que
+    // urge, después el contexto y al final qué hacer. En la notificación de un
+    // móvil se leen las primeras palabras y poco más, así que "vence en 10
+    // horas" tiene que ir delante de "lleva 2 días publicado".
     const t = aviso({ listing_title: "Postres en Huanchaco", horas_transcurridas: 62, horas_restantes: 10 });
     expect(t).toContain("Postres en Huanchaco");
+    expect(t).toContain("vence en 10 horas");
     expect(t).toContain("Lleva 2 días y 14 horas publicado");
-    expect(t).toContain("le quedan 10 horas");
   });
 
   it("un aviso viejo, con solo `dias`, se sigue leyendo", () => {
@@ -76,14 +62,20 @@ describe("la notificación que le llega al anunciante", () => {
 /**
  * EL CORREO USA UNA COPIA, NO UN IMPORT.
  *
- * `send-email` corre en Deno dentro de Supabase y no ve el código del front, así
- * que la función está escrita dos veces. Es la clase de duplicado que se separa
- * en silencio: alguien afina el texto en un lado y el correo se queda con el
- * viejo durante meses sin que nadie lo note.
+ * `send-email` y `send-push` corren en Deno dentro de Supabase y no ven el
+ * código del front, así que `enPalabras` está escrita dos veces. Es la clase de
+ * duplicado que se separa en silencio: alguien afina el texto en un lado y el
+ * correo se queda con el viejo durante meses sin que nadie lo note.
+ *
+ * La copia ya NO vive dentro de `send-email`: al unificar los textos de las
+ * notificaciones pasó a `_shared/textoDeNotificacion.ts`, del que tiran las dos
+ * Edge Functions. Que el resto de esos textos no se separen lo comprueba
+ * `textosDeNotificacion.test.ts`, comparando los dos archivos enteros; aquí
+ * solo queda `enPalabras`, que es lo que este archivo siempre vigiló.
  */
 describe("el correo dice lo mismo que la notificación", () => {
   const edge = fs.readFileSync(
-    path.resolve(__dirname, "../../supabase/functions/send-email/index.ts"), "utf8");
+    path.resolve(__dirname, "../../supabase/functions/_shared/textoDeNotificacion.ts"), "utf8");
   const front = fs.readFileSync(
     path.resolve(__dirname, "../lib/duracion.ts"), "utf8");
 
@@ -102,15 +94,6 @@ describe("el correo dice lo mismo que la notificación", () => {
   };
 
   it("`enPalabras` es la misma función en los dos sitios", () => {
-    // El front acepta null/undefined y el correo ya recibe un número, así que
-    // solo se comparan las líneas que deciden el TEXTO.
-    const soloElTexto = (cuerpo: string) =>
-      cuerpo.slice(cuerpo.indexOf("if (h < 1)"));
-    expect(soloElTexto(cuerpoDe(edge, "enPalabras")))
-      .toBe(soloElTexto(cuerpoDe(front, "enPalabras")));
-  });
-
-  it("y `tiempoDelAviso`, también", () => {
-    expect(cuerpoDe(edge, "tiempoDelAviso")).toBe(cuerpoDe(front, "tiempoDelAviso"));
+    expect(cuerpoDe(edge, "enPalabras")).toBe(cuerpoDe(front, "enPalabras"));
   });
 });

@@ -31,6 +31,7 @@ import ListingDetail from "./pages/ListingDetail.tsx";
 // src/lib/cargaDiferida.ts.
 const LegalPage = cargaDiferida(() => import("./pages/LegalPage.tsx"));
 const TrabajeConNosotros = cargaDiferida(() => import("./pages/TrabajeConNosotros.tsx"));
+const AcercaDe = cargaDiferida(() => import("./pages/AcercaDe.tsx"));
 const AdminPricing = cargaDiferida(() => import("./pages/admin/AdminPricing.tsx"));
 const AdvertiserInvoices = cargaDiferida(() => import("./pages/advertiser/AdvertiserInvoices.tsx"));
 const AdvertiserDashboard = cargaDiferida(() => import("./pages/AdvertiserDashboard.tsx"));
@@ -119,6 +120,12 @@ const App = () => (
               propia porque una oferta de empleo se comparte por WhatsApp, y
               un modal no se puede enlazar. */}
           <Route path="/trabaje-con-nosotros" element={<TrabajeConNosotros />} />
+
+          {/* "Acerca de Nosotros". Con dirección propia y no solo como bloque de
+              la portada: esto se enlaza —se pega en un correo o en una ficha de
+              proveedor— y un ancla a mitad de la portada no sirve para eso. El
+              texto lo edita el administrador (migración 0141). */}
+          <Route path="/acerca-de" element={<AcercaDe />} />
 
 
           {/* Paneles de usuario (anunciante/buscador): exigen sesión REAL de

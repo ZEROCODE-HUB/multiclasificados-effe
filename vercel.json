@@ -6,11 +6,18 @@
       "destination": "/api/og-aviso?id=:id"
     },
     {
-      "source": "/((?!assets/|api/).*)",
+      "source": "/((?!assets/|api/|sw\\.js|manifest\\.webmanifest|sin-conexion\\.html).*)",
       "destination": "/index.html"
     }
   ],
   "headers": [
+    {
+      "source": "/sw.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" },
+        { "key": "Service-Worker-Allowed", "value": "/" }
+      ]
+    },
     {
       "source": "/(.*)",
       "headers": [

@@ -26,6 +26,7 @@ import { fetchActivePromotions, bestPromoForCategory, applyDiscount, type Promot
 import { contarAdjuntosDelAviso, type MyListing } from "@/lib/listings";
 import { adicionalesQueFaltan, resumenDeFaltantes } from "@/lib/adicionalesCompletos";
 import { faltaEnElAviso } from "@/lib/avisoCompleto";
+import { mensajeDeError } from "@/lib/errores";
 
 const DURATIONS: DurationDays[] = [3, 7, 15, 30, 60, 90];
 
@@ -71,6 +72,23 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
   // Y desde la 0113 también RENUEVA uno vivo: mismo precio, misma duración,
   // pero sumando días al aviso que ya existe en vez de crear vigencia nueva.
   const esRenovar = modo === "renovar";
+  /**
+   * CÓMO SE LLAMA LO QUE ESTÁ A PUNTO DE PASAR, en un solo sitio.
+   *
+   * Las tres acciones se decidían por separado en el título, en el botón y en
+   * el "…ando", y no coincidían: al renovar, el título decía "Renovar aviso" y
+   * el botón "Publicar por S/ 30". Son tres palabras distintas porque son tres
+   * cosas distintas (ver el pie de "Mis avisos"), así que conviene que cada una
+   * se diga igual en toda la pantalla.
+   */
+  const ACCION = esRenovar
+    ? { titulo: "Renovar aviso", verbo: "Renovar", gerundio: "Renovando",
+        nota: "Le sumamos días al aviso sin que deje de verse. Conserva sus visitas, sus favoritos y su enlace." }
+    : isRepublish
+      ? { titulo: "Republicar aviso", verbo: "Republicar", gerundio: "Republicando",
+          nota: "Tu aviso venció. Vuelve a ponerse en circulación con el mismo enlace y sus visitas." }
+      : { titulo: "Publicar borrador", verbo: "Publicar", gerundio: "Publicando",
+          nota: "Se cobra el plan y el aviso sale a la calle." };
   const [settings, setSettings] = useState<PricingSettings>(() => loadSettings());
   const [promos, setPromos] = useState<Promotion[]>([]);
   const [balance, setBalance] = useState<number | null>(null);
@@ -155,6 +173,7 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
         });
         return;
       }
+      // Aquí no se llega renovando: esa rama sale arriba con su propio aviso.
       toast({
         title: isRepublish ? "¡Aviso republicado!" : "¡Aviso publicado!",
         description: `Ya está activo por ${duration} días.`,
@@ -179,8 +198,12 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
         return;
       }
       toast({
-        title: esRenovar ? "No se pudo renovar" : "No se pudo publicar",
-        description: err instanceof Error ? err.message : "Inténtalo de nuevo.",
+        title: `No se pudo ${ACCION.verbo.toLowerCase()}`,
+        // `mensajeDeError` y no `instanceof Error`: un error de Supabase es un
+        // objeto plano, no un Error, así que la comprobación era siempre falsa
+        // y el motivo real —"saldo insuficiente", "aviso no renovable"— se
+        // perdía detrás de un "Inténtalo de nuevo".
+        description: mensajeDeError(err, "Inténtalo de nuevo."),
         variant: "destructive",
       });
     } finally {
@@ -252,11 +275,15 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
       <Dialog open={open && !verifyOpen && !buyOpen} onOpenChange={(o) => { if (!o) onClose(); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{esRenovar ? "Renovar aviso" : isRepublish ? "Republicar aviso" : "Publicar borrador"}</DialogTitle>
+            <DialogTitle>{ACCION.titulo}</DialogTitle>
             <DialogDescription>{draft?.title}</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
+            {/* Qué hace ESTA acción y no las otras dos. Renovar, Republicar y
+                Publicar se parecían tanto en pantalla que el cliente preguntó
+                en qué se diferenciaban. */}
+            <p className="text-xs text-muted-foreground leading-relaxed">{ACCION.nota}</p>
             <div>
               <Label className="text-xs">Duración</Label>
               <Select value={String(duration)} onValueChange={(v) => setDuration(Number(v) as DurationDays)}>
@@ -301,12 +328,21 @@ export function PublishDraftDialog({ draft, email, fallbackName, onClose, onPubl
 
           <DialogFooter className="gap-2">
             <Button variant="ghost" onClick={onClose} disabled={publishing}>Cancelar</Button>
+            {/* EL ORDEN DE ESTAS RAMAS IMPORTA, y era la causa del fallo.
+                `enoughCredits` es `balance !== null && balance >= coste`, o sea
+                FALSO mientras el saldo se está pidiendo. Con "sin saldo" como
+                caso por defecto, el botón decía "Comprar saldo" durante toda la
+                carga a cualquiera, tuviera el saldo que tuviera — y en el
+                diálogo de renovar decía además "Publicar". Ahora "cargando" es
+                su propio caso y se comprueba ANTES de decidir nada. */}
             <Button onClick={onPublishClick} disabled={publishing || balance === null} className="gap-2">
               {publishing
-                ? <><Loader2 size={14} className="animate-spin" /> {isRepublish ? "Republicando…" : "Publicando…"}</>
-                : enoughCredits
-                  ? <><ShieldCheck size={14} /> {isRepublish ? "Republicar" : "Publicar"} por {formatCredits(totalCredits)}</>
-                  : <>Comprar saldo</>}
+                ? <><Loader2 size={14} className="animate-spin" /> {ACCION.gerundio}…</>
+                : balance === null
+                  ? <><Loader2 size={14} className="animate-spin" /> Cargando tu saldo…</>
+                  : enoughCredits
+                    ? <><ShieldCheck size={14} /> {ACCION.verbo} por {formatCredits(totalCredits)}</>
+                    : <>Comprar saldo</>}
             </Button>
           </DialogFooter>
         </DialogContent>

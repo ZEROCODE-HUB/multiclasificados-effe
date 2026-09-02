@@ -8,6 +8,7 @@
 //   - RESEND_API_KEY            (tu API key de https://resend.com)
 //   - EMAIL_FROM                (remitente verificado, p.ej. "eFFe <no-reply@tudominio.com>")
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { cuerpoDeNotificacion, rutaDeNotificacion } from "../_shared/textoDeNotificacion.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -19,144 +20,58 @@ const SITE_URL = (Deno.env.get("PUBLIC_SITE_URL") || "https://www.coleffe.com").
 /**
  * Cuerpo legible del correo.
  *
- * Hasta la 0121 el canal de correo estaba apagado de fábrica y casi nadie lo
- * encendía, así que todo lo que no fuera un mensaje del equipo caía en un
- * "Tienes una nueva notificación" sin decir de qué ni adónde ir. Ahora el
- * correo llega por defecto, y un correo sin contexto ni enlace es peor que no
- * mandarlo: se marca como spam y arrastra al resto. Cada evento dice qué pasó y
- * lleva su enlace, que es lo que pidió el cliente para los avisos por vencer.
+ * Ya no decide QUÉ se dice: eso está en `_shared/textoDeNotificacion.ts`, el
+ * mismo módulo del que tira el push y copia exacta del que usa la campana. Aquí
+ * solo se le añade lo propio del correo, que es el enlace escrito —en un texto
+ * no hay dónde pulsar— y alguna coletilla suelta.
+ *
+ * Antes esto era un `switch` de nueve tipos, y los seis que faltaban (reclamos,
+ * advertencias de moderación, boletas anuladas, pagos por Yape confirmados o
+ * rechazados y cuentas suspendidas) caían en un "Tienes una notificación nueva"
+ * sin decir de qué ni adónde ir. Un correo así se marca como spam y arrastra al
+ * resto consigo.
  */
-// Horas en palabras. Es una COPIA de src/lib/duracion.ts y no un import: una
-// Edge Function corre en Deno y no ve el código del front. Si se toca una, hay
-// que tocar la otra — los tests comprueban que dicen lo mismo.
-function enPalabras(horas: number): string {
-  const h = Math.max(0, Math.round(horas));
-  if (h < 1) return "menos de una hora";
-  if (h < 24) return `${h} ${h === 1 ? "hora" : "horas"}`;
-  const dias = Math.floor(h / 24);
-  const resto = h % 24;
-  const parteDias = `${dias} ${dias === 1 ? "día" : "días"}`;
-  return resto === 0 ? parteDias : `${parteDias} y ${resto} ${resto === 1 ? "hora" : "horas"}`;
-}
-
-function tiempoDelAviso(transcurridas: unknown, restantes: unknown): string {
-  // `Number(null)` y `Number("")` valen CERO, no NaN, así que comprobar solo
-  // que sea finito dejaba pasar la ausencia de dato: la alerta acababa
-  // diciendo "le quedan menos de una hora" a un aviso recién publicado.
-  const cifra = (v: unknown) =>
-    v === null || v === undefined || v === "" ? Number.NaN : Number(v);
-  const t = cifra(transcurridas);
-  const r = cifra(restantes);
-  if (!Number.isFinite(t) || !Number.isFinite(r)) return "";
-  return `Lleva ${enPalabras(t)} publicado y le ${r === 1 ? "queda" : "quedan"} ${enPalabras(r)}.`;
-}
-
-function bodyFor(type: string, payload: Record<string, unknown>): string {
+function bodyFor(type: string, payload: Record<string, unknown>, titulo?: string | null): string {
   const p = payload || {};
-  const titulo = String(p.listing_title ?? "tu aviso");
-  const aviso = p.listing_id ? SITE_URL + "/aviso/" + String(p.listing_id) : null;
-  const misAvisos = SITE_URL + "/dashboard/anunciante/avisos";
-  /**
-   * "Mis avisos" con ESE aviso señalado: la pantalla se abre en su pestaña y lo
-   * resalta unos segundos (ver AdvertiserListings).
-   *
-   * Es a donde tiene que llevar el correo de "está por vencer", y no a la ficha
-   * pública. Motivo: la ficha sale de `listing_cards`, que solo trae los
-   * ACTIVOS. Basta con que el anunciante lea el correo unas horas tarde —o al
-   * día siguiente— para que el aviso ya haya caducado y el enlace no lleve a
-   * ninguna parte. Aquí, en cambio, el aviso está siempre: vencido o no, y es
-   * justo donde se renueva.
-   */
-  const avisoEnMisAvisos = p.listing_id
-    ? misAvisos + "?aviso=" + encodeURIComponent(String(p.listing_id))
-    : misAvisos;
+  const cuerpo = cuerpoDeNotificacion(type, p, titulo);
+  const ruta = rutaDeNotificacion(type, p, "anunciante");
   // Una línea en blanco entre párrafos: la plantilla respeta los saltos.
-  const parrafos = (...partes: Array<string | null>) => partes.filter(Boolean).join("\n\n");
+  const parrafos = (...partes: Array<string | null | false>) =>
+    partes.filter(Boolean).join("\n\n");
 
-  switch (type) {
-    case "admin_message":
-      return String(p.body ?? "");
+  // Cómo se invita a pulsar, según lo que hay al otro lado.
+  const LLAMADA: Record<string, string> = {
+    listing_expiring: "Renuévalo aquí",
+    new_message: "Responder",
+    new_application: "Ver las postulaciones",
+    application_status: "Ver tu postulación",
+    new_review: "Verla en el aviso",
+    saved_search_match: "Ver los avisos",
+    complaint_new: "Atenderlo",
+    career_new: "Verla",
+    invoice_voided: "Ver el comprobante",
+    manual_payment_approved: "Ver tus avisos",
+    manual_payment_rejected: "Ir a tu panel",
+    listing_disabled: "Ver tus avisos",
+    listing_enabled: "Ver tus avisos",
+    moderation_warning: "Ver tus avisos",
+  };
 
-    case "listing_expiring": {
-      // Las dos cifras que pidió el cliente. Llegan desde la 0133; los avisos
-      // anteriores solo traen `dias` y se leen como antes.
-      const dias = Number(p.dias);
-      const plazo = tiempoDelAviso(p.horas_transcurridas, p.horas_restantes)
-        || (Number.isFinite(dias) && dias > 0
-          ? `Te quedan ${dias} ${dias === 1 ? "día" : "días"} para renovarlo.`
-          : "Está a punto de caducar.");
-      // UN solo enlace, y al sitio donde se renueva. Antes iban dos —la ficha
-      // pública primero— y el primero es el que se pulsa: llevaba a un aviso
-      // que, si ya había caducado, ni siquiera se podía ver.
-      return parrafos(
-        `Tu aviso "${titulo}" está por vencer. ${plazo}`,
-        `Renuévalo aquí: ${avisoEnMisAvisos}`,
-        "Cuando vence deja de aparecer en las búsquedas.",
-      );
-    }
+  // El personal entra por su propia rama del panel; `rutaDeNotificacion` la
+  // resuelve con el rol, y desde aquí no lo sabemos. Para esos dos tipos se
+  // manda a /dashboard/admin, que existe para admin y superadmin (a este último
+  // lo redirige su propia pantalla).
+  const rutaFinal = (type === "complaint_new" || type === "career_new")
+    ? `/dashboard/admin/${type === "complaint_new" ? "reclamaciones" : "postulaciones"}`
+    : ruta;
 
-    case "new_message":
-      return parrafos(
-        String(p.preview ?? "Tienes un mensaje nuevo sobre uno de tus avisos."),
-        `Responder: ${SITE_URL}/dashboard/anunciante/mensajes`,
-      );
-
-    case "new_application":
-      return parrafos(
-        `Alguien postuló a tu aviso "${titulo}".`,
-        `Ver las postulaciones: ${SITE_URL}/dashboard/anunciante/postulaciones`,
-      );
-
-    case "application_status":
-      return parrafos(
-        `Cambió el estado de tu postulación${p.listing_title ? ` a "${titulo}"` : ""}.`,
-        `Ver: ${SITE_URL}/dashboard/buscador/postulaciones`,
-      );
-
-    case "new_review":
-      return parrafos(
-        `Recibiste una reseña${p.rating ? ` de ${String(p.rating)} estrellas` : ""}.`,
-        aviso ? `Verla en el aviso: ${aviso}` : `Ver tus avisos: ${misAvisos}`,
-      );
-
-    case "saved_search_match":
-      return parrafos(
-        "Hay avisos nuevos que coinciden con una de tus búsquedas guardadas.",
-        `Verlos: ${SITE_URL}/dashboard/buscador/busquedas`,
-      );
-
-    case "listing_disabled":
-      return parrafos(
-        `Tu aviso "${titulo}" fue deshabilitado por moderación${p.reason ? `: ${String(p.reason)}` : "."}`,
-        `Ver tus avisos: ${misAvisos}`,
-      );
-
-    case "listing_enabled":
-      return parrafos(
-        `Tu aviso "${titulo}" volvió a estar visible.`,
-        aviso ? `Verlo: ${aviso}` : `Tus avisos: ${misAvisos}`,
-      );
-
-    case "career_new": {
-      // B-18: "que llegue un correo a los usuarios Admin y SuperAdmin". Sale por
-      // esta vía y no por un envío aparte porque los tres canales nacen
-      // activados desde la 0121: la notificación YA es el correo.
-      const nombre = String(p.nombre ?? "").trim();
-      const puesto = String(p.puesto ?? "").trim();
-      const quien = nombre || "Alguien";
-      return parrafos(
-        puesto
-          ? `${quien} postuló al puesto de ${puesto}.`
-          : `${quien} envió una postulación de trabajo.`,
-        // Al panel de admin: es el que existe para los dos roles, y quien entre
-        // con superadmin será redirigido a su propia rama.
-        `Verla: ${SITE_URL}/dashboard/admin/postulaciones`,
-      );
-    }
-
-    default:
-      return String(p.body ?? p.preview ?? `Tienes una notificación nueva en eFFe Clasificados: ${SITE_URL}`);
-  }
+  return parrafos(
+    cuerpo,
+    rutaFinal ? `${LLAMADA[type] ?? "Verlo"}: ${SITE_URL}${rutaFinal}` : null,
+    // Lo que pasa si no se hace nada. Solo donde hay algo que perder.
+    type === "listing_expiring" && "Cuando vence deja de aparecer en las búsquedas.",
+    type === "complaint_new" && "El plazo legal para responder es de 30 días.",
+  );
 }
 
 
@@ -164,11 +79,26 @@ function bodyFor(type: string, payload: Record<string, unknown>): string {
 function htmlEmail(title: string, body: string): string {
   const safe = (s: string) =>
     s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  /**
+   * El enlace, pulsable.
+   *
+   * Iba como texto suelto dentro de un <div>: en Gmail se ve subrayado porque
+   * él lo detecta solo, pero en Outlook y en varios clientes de escritorio se
+   * queda como texto plano y hay que copiarlo a mano. El correo decía
+   * "Renuévalo aquí: https://…" y no había dónde pulsar.
+   *
+   * Se hace DESPUÉS de escapar, sobre el texto ya seguro: así lo que se mete en
+   * el href no puede traer comillas ni etiquetas. El paréntesis y el punto
+   * finales se dejan fuera del enlace, que si no se los come.
+   */
+  const conEnlaces = (s: string) =>
+    s.replace(/https?:\/\/[^\s<]+[^\s<.,)]/g,
+      (u) => `<a href="${u}" style="color:#f97316;font-weight:600">${u}</a>`);
   return `<!doctype html><html><body style="margin:0;background:#f4f4f5;font-family:system-ui,Segoe UI,Arial,sans-serif;color:#18181b">
   <div style="max-width:560px;margin:0 auto;padding:24px">
     <div style="background:#ffffff;border-radius:12px;padding:28px">
       <h1 style="font-size:18px;margin:0 0 12px">${safe(title)}</h1>
-      <div style="font-size:14px;line-height:1.6;white-space:pre-wrap">${safe(body)}</div>
+      <div style="font-size:14px;line-height:1.6;white-space:pre-wrap">${conEnlaces(safe(body))}</div>
     </div>
     <p style="font-size:11px;color:#71717a;text-align:center;margin-top:16px">
       eFFe Clasificados · Este es un mensaje del equipo. No respondas a este correo.
@@ -201,7 +131,7 @@ Deno.serve(async (req) => {
     if (!to) return new Response("sin email", { status: 200 });
 
     const title = record.title || "eFFe Clasificados";
-    const body = bodyFor(record.type, record.payload || {});
+    const body = bodyFor(record.type, record.payload || {}, record.title);
 
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
