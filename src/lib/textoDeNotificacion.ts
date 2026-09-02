@@ -40,10 +40,21 @@ import { enPalabras } from "@/lib/duracion";
 export type Rol = string;
 
 /**
- * Las dos ramas del panel de administración. Un aviso dirigido al personal solo
- * tiene destino si quien lo mira entra por una de ellas.
+ * Por qué rama del panel de administración entra cada rol de personal.
+ *
+ * Hay DOS ramas —`/dashboard/admin/...` y `/dashboard/superadmin/...`— y CUATRO
+ * roles de personal. No es uno por rol: `/dashboard/moderador/reclamaciones` no
+ * existe, así que componer la ruta con el nombre del rol dejaba a moderador y a
+ * soporte sin destino, aunque los dos SÍ pueden abrir la rama de admin (su
+ * guarda pide `min="soporte"`). Lo que ven dentro lo recorta la Matriz de
+ * permisos, no la ruta.
+ *
+ * Devuelve null para quien no es personal: ese aviso no es para él.
  */
-const esRamaDePanel = (role: Rol) => role === "admin" || role === "superadmin";
+const ramaDePanel = (role: Rol): "admin" | "superadmin" | null =>
+  role === "superadmin" ? "superadmin"
+  : role === "admin" || role === "moderador" || role === "soporte" ? "admin"
+  : null;
 
 /**
  * Los cuatro roles de personal, TAL COMO LOS DEFINE `useSession`.
@@ -326,10 +337,10 @@ function destinoDeNotificacion(
       return misAvisos;
 
     case "complaint_new":
-      return esRamaDePanel(role) ? `/dashboard/${role}/reclamaciones` : "";
+      return ramaDePanel(role) ? `/dashboard/${ramaDePanel(role)}/reclamaciones` : "";
 
     case "career_new":
-      return esRamaDePanel(role) ? `/dashboard/${role}/postulaciones` : "";
+      return ramaDePanel(role) ? `/dashboard/${ramaDePanel(role)}/postulaciones` : "";
 
     case "invoice_voided":
       // Allí ve el comprobante marcado como anulado y su motivo.

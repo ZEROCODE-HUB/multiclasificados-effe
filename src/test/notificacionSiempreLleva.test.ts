@@ -201,6 +201,15 @@ describe("al personal no se le ofrece un panel de usuario", () => {
     expect(rutaDeNotificacion("career_new", {}, "superadmin")).toBe("/dashboard/superadmin/postulaciones");
   });
 
+  it("moderador y soporte van a la rama de admin, que es la que existe", () => {
+    // NO hay `/dashboard/moderador/...`. Componiendo la ruta con el nombre del
+    // rol —que es lo que se hacía— estos dos se quedaban sin destino, aunque
+    // los dos SÍ pueden abrir la rama de admin: su guarda pide `min="soporte"`.
+    // Lo que ven dentro lo recorta la Matriz de permisos, no la ruta.
+    expect(rutaDeNotificacion("complaint_new", {}, "moderador")).toBe("/dashboard/admin/reclamaciones");
+    expect(rutaDeNotificacion("career_new", {}, "soporte")).toBe("/dashboard/admin/postulaciones");
+  });
+
   it("y la ficha pública de un aviso, que no es un panel", () => {
     // Una reseña nueva lleva al aviso, y eso lo puede abrir cualquiera.
     expect(rutaDeNotificacion("new_review", { listing_id: AVISO }, "admin")).toBe(`/aviso/${AVISO}`);

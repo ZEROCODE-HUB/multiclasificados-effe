@@ -171,3 +171,49 @@ describe("el reclamo y la postulación llevan a la rama del panel de quien mira"
     expect(rutaDeNotificacion("complaint_new", {}, "anunciante")).toBe("");
   });
 });
+
+describe("el correo y el push saben a QUIÉN le escriben", () => {
+  /**
+   * Los dos componían el enlace dando por hecho un usuario normal: el correo con
+   * el rol clavado a "anunciante" y el push sin pedir los roles salvo para tres
+   * tipos. A una cuenta del equipo eso le mandaba un enlace a un panel de
+   * usuario, que `RequireRole` le niega — o sea, a "Acceso denegado".
+   *
+   * Se comprueba sobre el código porque son Deno y no se pueden ejecutar aquí.
+   */
+  it("el correo pide el rol del destinatario y no lo da por hecho", () => {
+    expect(CORREO).toContain("user_roles");
+    expect(CORREO).not.toContain('rutaDeNotificacion(type, p, "anunciante")');
+  });
+
+  it("y ya no manda al personal a /dashboard/admin a mano", () => {
+    // Era un apaño de cuando no se sabía el rol: un superadmin acababa en la
+    // rama de admin. Ahora `rutaDeNotificacion` resuelve la suya.
+    expect(CORREO).not.toContain("`/dashboard/admin/${type === \"complaint_new\"");
+  });
+
+  it("el push pide los roles SIEMPRE, no solo para tres tipos", () => {
+    // Con la lista de tipos, un `listing_expiring` a una cuenta del equipo se
+    // resolvía como si fuera un usuario normal.
+    expect(PUSH).not.toMatch(/\["new_message", "complaint_new", "career_new"\]\.includes/);
+    expect(PUSH).toContain("user_roles");
+  });
+
+
+  it("y usan la MISMA prioridad de roles que la aplicación", () => {
+    // Si divergieran, el enlace del correo llevaría a una rama del panel
+    // distinta de la que abre la campana para la misma persona.
+    const AUTH = leer("src/lib/auth.ts");
+    const orden = '"superadmin", "admin", "moderador", "soporte", "anunciante", "buscador"';
+    expect(AUTH).toContain(orden);
+    expect(CORREO).toContain(orden);
+    expect(PUSH).toContain(orden);
+  });
+  it("y los dos cuentan a moderador y soporte como personal", () => {
+    // Faltaban en las listas de prioridad y caían en "buscador".
+    for (const fuente of [CORREO, PUSH]) {
+      expect(fuente).toContain('"moderador"');
+      expect(fuente).toContain('"soporte"');
+    }
+  });
+});

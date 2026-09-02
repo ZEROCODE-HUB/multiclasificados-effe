@@ -31,10 +31,31 @@ const SITE_URL = (Deno.env.get("PUBLIC_SITE_URL") || "https://www.coleffe.com").
  * sin decir de qué ni adónde ir. Un correo así se marca como spam y arrastra al
  * resto consigo.
  */
-function bodyFor(type: string, payload: Record<string, unknown>, titulo?: string | null): string {
+function bodyFor(
+  type: string,
+  payload: Record<string, unknown>,
+  titulo?: string | null,
+  /**
+   * El rol de QUIEN RECIBE el correo, no uno fijo.
+   *
+   * Estaba clavado a "anunciante", y eso mandaba a las cuentas del equipo a un
+   * panel de usuario. `RequireRole` se lo niega a propósito —"las cuentas de
+   * administración no pueden usar los paneles de usuario"—, así que el enlace
+   * del correo no llevaba a la sección: llevaba a "Acceso denegado".
+   *
+   * Comprobado en producción el 2026-09-02: hay cuentas de personal con
+   * notificaciones de `new_application`, `application_status` y `new_message`.
+   * Las tres salían por correo con ese enlace.
+   *
+   * Con el rol de verdad, `rutaDeNotificacion` devuelve "" para esos casos y el
+   * correo sale SIN enlace — que es lo correcto: el texto se basta solo y un
+   * enlace a una puerta cerrada es peor que ninguno.
+   */
+  rol = "buscador",
+): string {
   const p = payload || {};
   const cuerpo = cuerpoDeNotificacion(type, p, titulo);
-  const ruta = rutaDeNotificacion(type, p, "anunciante");
+  const ruta = rutaDeNotificacion(type, p, rol);
   // Una línea en blanco entre párrafos: la plantilla respeta los saltos.
   const parrafos = (...partes: Array<string | null | false>) =>
     partes.filter(Boolean).join("\n\n");
@@ -57,17 +78,13 @@ function bodyFor(type: string, payload: Record<string, unknown>, titulo?: string
     moderation_warning: "Ver tus avisos",
   };
 
-  // El personal entra por su propia rama del panel; `rutaDeNotificacion` la
-  // resuelve con el rol, y desde aquí no lo sabemos. Para esos dos tipos se
-  // manda a /dashboard/admin, que existe para admin y superadmin (a este último
-  // lo redirige su propia pantalla).
-  const rutaFinal = (type === "complaint_new" || type === "career_new")
-    ? `/dashboard/admin/${type === "complaint_new" ? "reclamaciones" : "postulaciones"}`
-    : ruta;
-
+  // Antes había aquí un apaño: los avisos del personal se mandaban a
+  // /dashboard/admin a mano, porque desde el correo no se sabía el rol. Ya se
+  // sabe, así que `rutaDeNotificacion` resuelve la rama correcta —un superadmin
+  // va a la suya— y el apaño sobra.
   return parrafos(
     cuerpo,
-    rutaFinal ? `${LLAMADA[type] ?? "Verlo"}: ${SITE_URL}${rutaFinal}` : null,
+    ruta ? `${LLAMADA[type] ?? "Verlo"}: ${SITE_URL}${ruta}` : null,
     // Lo que pasa si no se hace nada. Solo donde hay algo que perder.
     type === "listing_expiring" && "Cuando vence deja de aparecer en las búsquedas. Podrás volver a publicarlo con el botón «Republicar», que copia el aviso entero para que solo cambies lo que quieras.",
     type === "complaint_new" && "El plazo legal para responder es de 30 días.",
@@ -130,8 +147,40 @@ Deno.serve(async (req) => {
     const to = profile?.email;
     if (!to) return new Response("sin email", { status: 200 });
 
+    /**
+     * El rol de quien recibe, para no enviarle a una puerta cerrada.
+     *
+     * Se pide siempre y no solo para algunos tipos: la comprobación de "esto es
+     * un panel de usuario" aplica a casi todos, y es una consulta por id sobre
+     * una tabla pequeña. Si falla, se sigue con "anunciante", que es como se
+     * comportaba antes: un correo sin enlace útil es mejor que un correo que no
+     * sale.
+     */
+    // MISMA lista y MISMO respaldo que `ROLE_PRIORITY` en src/lib/auth.ts, que
+    // es como la aplicación decide el rol de la sesión. Si divergieran, el
+    // enlace del correo llevaría a una rama del panel distinta de la que abre la
+    // campana para la misma persona.
+    //
+    // Ojo al respaldo: es "buscador" y no "anunciante". Hoy NADIE tiene el rol
+    // `anunciante` guardado en `user_roles` (comprobado en producción: 99
+    // buscador, 19 de personal, cero anunciantes), así que la aplicación
+    // resuelve a "buscador" para todo usuario normal. El correo iba clavado a
+    // "anunciante" y por eso mandaba a una rama del panel a la que la campana
+    // no lleva a nadie.
+    let rol = "buscador";
+    try {
+      const { data: roles } = await admin
+        .from("user_roles").select("role").eq("user_id", record.user_id);
+      const suyos = (roles ?? []).map((r: { role: string }) => r.role);
+      // El de más rango manda: una cuenta puede tener varias filas.
+      rol = ["superadmin", "admin", "moderador", "soporte", "anunciante", "buscador"]
+        .find((r) => suyos.includes(r)) ?? "buscador";
+    } catch {
+      // Sin roles, un usuario normal: es el caso de la inmensa mayoría.
+    }
+
     const title = record.title || "eFFe Clasificados";
-    const body = bodyFor(record.type, record.payload || {}, record.title);
+    const body = bodyFor(record.type, record.payload || {}, record.title, rol);
 
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",

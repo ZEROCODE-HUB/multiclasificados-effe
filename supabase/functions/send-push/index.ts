@@ -78,10 +78,12 @@ function bodyFor(type: string, payload: Record<string, unknown>, titulo?: string
  * distintas según quién reciba el aviso.
  */
 function routeFor(record: Record<string, unknown>, roles: string[]): string | null {
-  const rol = roles.includes("superadmin") ? "superadmin"
-    : roles.includes("admin") ? "admin"
-    : roles.includes("anunciante") ? "anunciante"
-    : "buscador";
+  // MODERADOR Y SOPORTE TAMBIÉN CUENTAN. Faltaban en esta lista y caían en
+  // "buscador", así que se les trataba como usuarios normales: se les ofrecía
+  // un panel de usuario que `RequireRole` les niega igual que a un admin.
+  // El de más rango manda: una cuenta puede tener varias filas de rol.
+  const rol = ["superadmin", "admin", "moderador", "soporte", "anunciante", "buscador"]
+    .find((r) => roles.includes(r)) ?? "buscador";
   return rutaDeNotificacion(String(record.type ?? ""), (record.payload ?? {}) as Record<string, unknown>, rol) || null;
 }
 
@@ -160,13 +162,17 @@ Deno.serve(async (req) => {
     const accessToken = hayAndroid ? await getAccessToken() : "";
     const title = record.title || "eFFe Clasificados";
     const body = bodyFor(record.type, record.payload || {}, record.title);
-    // Los roles hacen falta en más sitios que en el chat: un reclamo o una
-    // postulación de trabajo van a la rama del panel de quien los recibe
-    // (/dashboard/admin o /dashboard/superadmin), y un admin que entra por la
-    // rama que no es se queda fuera. Antes solo se pedían para `new_message` y
-    // esos dos avisos acababan sin destino.
+    // Los roles hacen falta SIEMPRE, no solo en algunos tipos.
+    //
+    // Dos motivos. Uno: un reclamo o una postulación de trabajo van a la rama
+    // del panel de quien los recibe, y quien entra por la que no es se queda
+    // fuera. Y dos, el que de verdad obliga: si el destinatario es del equipo,
+    // NINGÚN aviso puede llevarle a un panel de usuario —`RequireRole` se los
+    // niega—, así que sin saber su rol el toque del push acababa en "Acceso
+    // denegado". Sin roles, `rutaDeNotificacion` daría por hecho que es un
+    // usuario normal.
     let roles: string[] = [];
-    if (["new_message", "complaint_new", "career_new"].includes(String(record.type))) {
+    {
       const { data } = await admin.from("user_roles").select("role").eq("user_id", record.user_id);
       roles = (data ?? []).map((r: { role: string }) => r.role);
     }
