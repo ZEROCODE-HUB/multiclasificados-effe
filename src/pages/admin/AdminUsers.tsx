@@ -14,7 +14,10 @@ import { Search, UserCheck, Ban, BadgeCheck, KeyRound, Trash2, ChevronLeft, Chev
 import { PrefsNotificacionDialog } from "@/components/PrefsNotificacionDialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { fetchAdminUsers, setUserStatus, verifyUser, deleteUser, reactivarUsuario, setUserRole, ajustarSaldo, saldoDeUsuario, type AdminUser } from "@/lib/admin";
+import {
+  fetchAdminUsers, setUserStatus, verifyUser, deleteUser, reactivarUsuario, setUserRole,
+  ajustarSaldo, saldoDeUsuario, MEDIOS_DE_COBRO, type MedioDeCobro, type AdminUser,
+} from "@/lib/admin";
 import { usePermissions } from "@/hooks/usePermissions";
 import { supabase } from "@/lib/supabase";
 import { formatCredits } from "@/lib/pricing";
@@ -66,6 +69,21 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
   const [grantModo, setGrantModo] = useState<"otorgar" | "quitar">("otorgar");
   const [grantMotivo, setGrantMotivo] = useState("");
   const [grantSaldo, setGrantSaldo] = useState<number | null>(null);
+  /**
+   * ¿Este movimiento fue dinero de verdad? (migración 0143)
+   *
+   * Es lo que decide si suma en "Ingresos". Se pregunta y no se adivina porque
+   * "otorgar saldo" se usa para dos cosas que no se parecen: registrar un cobro
+   * por fuera —una transferencia, efectivo— y regalar crédito a un cliente o
+   * hacer una prueba. Contarlo todo llevaría la cifra de S/ 24.732 a más de
+   * S/ 226.000, casi todo regalos y pruebas de agosto.
+   *
+   * Empieza APAGADO: lo excepcional es el cobro por fuera, y marcar por defecto
+   * algo que infla los ingresos es la clase de valor por defecto que nadie
+   * revisa.
+   */
+  const [grantEsCobro, setGrantEsCobro] = useState(false);
+  const [grantMedio, setGrantMedio] = useState<MedioDeCobro>("transferencia");
   // Diálogo "Enlace de restablecimiento": usuario, enlace generado y estado.
   const [resetFor, setResetFor] = useState<AdminUser | null>(null);
   const [resetLink, setResetLink] = useState<string | null>(null);
@@ -145,6 +163,7 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
   const delta = grantModo === "quitar" ? -Number(grantAmount) : Number(grantAmount);
   const saldoResultante = grantSaldo === null ? null : Math.round((grantSaldo + delta) * 100) / 100;
   const puedeAjustar = montoValido && grantMotivo.trim().length > 0 && (saldoResultante === null || saldoResultante >= 0);
+  const quitando = grantModo === "quitar";
 
   const doGrant = () => {
     if (!grantFor || !puedeAjustar) return;
@@ -152,11 +171,12 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
     const monto = Number(grantAmount);
     const motivo = grantMotivo.trim();
     const quita = grantModo === "quitar";
+    const medio = grantEsCobro ? grantMedio : null;
     setGrantFor(null);
     run(
       quita ? `Se devolvió ${formatCredits(monto)} de saldo` : `Se otorgó ${formatCredits(monto)} de saldo`,
       u,
-      () => ajustarSaldo(u.id, quita ? -monto : monto, motivo).then(() => undefined),
+      () => ajustarSaldo(u.id, quita ? -monto : monto, motivo, medio).then(() => undefined),
     );
   };
 
@@ -555,7 +575,17 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
       </Card>
 
       {/* Diálogo: saldo del usuario — otorgar o devolver */}
-      <AlertDialog open={!!grantFor} onOpenChange={(o) => { if (!o) setGrantFor(null); }}>
+      <AlertDialog
+        open={!!grantFor}
+        onOpenChange={(o) => {
+          if (!o) {
+            setGrantFor(null);
+            // La casilla se apaga al cerrar: si se quedara puesta, el siguiente
+            // regalo entraría en "Ingresos" sin que nadie lo mirara.
+            setGrantEsCobro(false);
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
@@ -618,6 +648,48 @@ const AdminUsers = ({ role }: { role: AdminRole }) => {
                 onChange={(e) => setGrantMotivo(e.target.value)}
                 className="mt-1 min-h-[64px]"
               />
+            </div>
+
+            {/* ¿Hubo dinero? Es lo único que separa un cobro de un regalo, y de
+                ello depende la cifra de "Ingresos" del panel. */}
+            <div className="border p-3 space-y-3">
+              <label className="flex items-start gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={grantEsCobro}
+                  onChange={(e) => setGrantEsCobro(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-[hsl(var(--secondary))]"
+                />
+                <span className="text-sm leading-snug">
+                  <span className="font-semibold">
+                    {quitando ? "Le devolví dinero por este saldo" : "Entró dinero por este saldo"}
+                  </span>
+                  <span className="block text-xs text-muted-foreground mt-0.5">
+                    {quitando
+                      ? "Se descontará de los Ingresos del panel."
+                      : "Un cobro por fuera de la plataforma. Sumará a los Ingresos del panel."}
+                  </span>
+                </span>
+              </label>
+
+              {grantEsCobro ? (
+                <div>
+                  <Label className="text-xs">¿Por qué medio?</Label>
+                  <Select value={grantMedio} onValueChange={(v) => setGrantMedio(v as MedioDeCobro)}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {MEDIOS_DE_COBRO.map((m) => (
+                        <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Sin marcar, esto es un regalo, una prueba o una compensación:{" "}
+                  <span className="font-medium text-foreground">no toca los Ingresos</span>.
+                </p>
+              )}
             </div>
 
             {montoValido && saldoResultante !== null && (

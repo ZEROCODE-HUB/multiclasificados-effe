@@ -22,6 +22,16 @@ vi.mock("@/lib/admin", () => ({
   setUserStatus: vi.fn(), verifyUser: vi.fn(), deleteUser: vi.fn(), setUserRole: vi.fn(),
   ajustarSaldo: (...a: unknown[]) => ajustarSaldo(...a),
   saldoDeUsuario: (...a: unknown[]) => saldoDeUsuario(...a),
+  // La lista real, no una inventada: si se añade un medio en `admin.ts` y aquí
+  // no, la prueba seguiría en verde con un desplegable que no existe.
+  MEDIOS_DE_COBRO: [
+    { value: "transferencia", label: "Transferencia bancaria" },
+    { value: "deposito", label: "Depósito en cuenta" },
+    { value: "yape", label: "Yape" },
+    { value: "plin", label: "Plin" },
+    { value: "efectivo", label: "Efectivo" },
+    { value: "otro", label: "Otro" },
+  ],
 }));
 
 vi.mock("@/hooks/usePermissions", () => ({ usePermissions: () => ({ can: () => true }) }));
@@ -74,8 +84,10 @@ describe("AdminUsers — cuadro de saldo", () => {
     await screen.findByText(/Quedará en S\/ 70.00/);
 
     fireEvent.click(screen.getByRole("button", { name: /^Quitar S\// }));
+    // El cuarto argumento es el medio de cobro: `null` porque no se marcó que
+    // hubiera dinero, así que esto NO cuenta como ingreso (migración 0143).
     await waitFor(() => expect(ajustarSaldo).toHaveBeenCalledWith(
-      "24d479cf-52ce-40f4-b634-886eae34a7d0", -30, "devolucion acordada",
+      "24d479cf-52ce-40f4-b634-886eae34a7d0", -30, "devolucion acordada", null,
     ));
   });
 
@@ -99,7 +111,64 @@ describe("AdminUsers — cuadro de saldo", () => {
     escribir(/Devolución acordada/, "bono de bienvenida");
     fireEvent.click(screen.getByRole("button", { name: /^Otorgar S\// }));
     await waitFor(() => expect(ajustarSaldo).toHaveBeenCalledWith(
-      "24d479cf-52ce-40f4-b634-886eae34a7d0", 50, "bono de bienvenida",
+      "24d479cf-52ce-40f4-b634-886eae34a7d0", 50, "bono de bienvenida", null,
     ));
+  });
+});
+
+describe("AdminUsers — marcar que hubo dinero (punto de Ingresos)", () => {
+  /**
+   * LO QUE REPORTÓ EL CLIENTE: "acabo de otorgar saldo a un usuario, y no se
+   * aumentó el monto del gráfico".
+   *
+   * Detrás hay algo real —el equipo usa "otorgar saldo" para registrar cobros
+   * por fuera— pero no se pueden contar todos: en producción hay 188.911
+   * créditos otorgados en agosto con motivos como "Prueba de QA". Contarlos
+   * llevaría "Ingresos" de S/ 24.732 a más de S/ 226.000.
+   *
+   * Por eso se pregunta. Y por eso el valor por defecto importa.
+   */
+  it("empieza APAGADO: lo excepcional es el cobro por fuera", async () => {
+    // Un valor por defecto que infla los ingresos es de los que nadie revisa.
+    await abrirSaldo();
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+    expect(screen.getByText(/no toca los Ingresos/i)).toBeInTheDocument();
+  });
+
+  it("sin marcar manda `null` y no cuenta como ingreso", async () => {
+    await abrirSaldo();
+    escribir("Ej. 100", "300");
+    escribir(/Devolución acordada/, "cortesía");
+    fireEvent.click(screen.getByRole("button", { name: /^Otorgar S\// }));
+    await waitFor(() => expect(ajustarSaldo).toHaveBeenCalledWith(
+      expect.any(String), 300, "cortesía", null,
+    ));
+  });
+
+  it("marcándolo manda el medio, y ESO es lo que suma", async () => {
+    await abrirSaldo();
+    escribir("Ej. 100", "300");
+    escribir(/Devolución acordada/, "transferencia del cliente");
+    fireEvent.click(screen.getByRole("checkbox"));
+
+    fireEvent.click(screen.getByRole("button", { name: /^Otorgar S\// }));
+    await waitFor(() => expect(ajustarSaldo).toHaveBeenCalledWith(
+      expect.any(String), 300, "transferencia del cliente", "transferencia",
+    ));
+  });
+
+  it("al quitar saldo, el texto habla de devolver y no de cobrar", async () => {
+    // Quitar saldo marcado RESTA de los ingresos. Decir "entró dinero" ahí
+    // sería justo lo contrario de lo que pasa.
+    await abrirSaldo();
+    fireEvent.click(screen.getByRole("button", { name: "Quitar" }));
+    expect(screen.getByText(/Le devolví dinero por este saldo/i)).toBeInTheDocument();
+  });
+
+  it("el desplegable de medio solo sale cuando se marca", async () => {
+    await abrirSaldo();
+    expect(screen.queryByText(/¿Por qué medio\?/)).toBeNull();
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(screen.getByText(/¿Por qué medio\?/)).toBeInTheDocument();
   });
 });

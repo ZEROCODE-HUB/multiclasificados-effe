@@ -1158,17 +1158,43 @@ export interface AjusteDeSaldo {
   saldo_anterior: number;
   saldo: number;
   delta: number;
+  cobroMedio: MedioDeCobro | null;
 }
+
+/**
+ * Los medios por los que puede entrar (o salir) dinero POR FUERA de la
+ * plataforma. Tienen que coincidir con el CHECK de `credit_transactions`
+ * (migración 0143): un valor que no esté en la lista lo rechaza el servidor.
+ */
+export const MEDIOS_DE_COBRO = [
+  { value: "transferencia", label: "Transferencia bancaria" },
+  { value: "deposito", label: "Depósito en cuenta" },
+  { value: "yape", label: "Yape" },
+  { value: "plin", label: "Plin" },
+  { value: "efectivo", label: "Efectivo" },
+  { value: "otro", label: "Otro" },
+] as const;
+
+export type MedioDeCobro = (typeof MEDIOS_DE_COBRO)[number]["value"];
 
 /**
  * Mueve el saldo de un usuario en cualquier sentido (0108).
  *
  * `delta` positivo otorga y negativo devuelve. El motivo es obligatorio: es
  * dinero y tiene que quedar explicado en el historial y en la auditoría.
+ *
+ * `cobroMedio` es lo que decide si esto cuenta como INGRESO (migración 0143).
+ * Con valor, entró o salió dinero de verdad y suma —o resta— en el panel; sin
+ * él es un regalo, una prueba o una compensación y no toca la cifra. No se
+ * adivina a propósito: "otorgar saldo" se usa para las dos cosas, y contarlas
+ * todas llevaría "Ingresos" de S/ 24.732 a más de S/ 226.000, casi todo
+ * regalos y pruebas de agosto.
  */
-export async function ajustarSaldo(userId: string, delta: number, motivo: string): Promise<AjusteDeSaldo> {
+export async function ajustarSaldo(
+  userId: string, delta: number, motivo: string, cobroMedio?: MedioDeCobro | null,
+): Promise<AjusteDeSaldo> {
   const { data, error } = await supabase.rpc("admin_ajustar_saldo", {
-    p_user: userId, p_delta: delta, p_motivo: motivo,
+    p_user: userId, p_delta: delta, p_motivo: motivo, p_cobro_medio: cobroMedio ?? null,
   });
   if (error) throw error;
   const r = (data ?? {}) as Record<string, unknown>;
@@ -1176,6 +1202,7 @@ export async function ajustarSaldo(userId: string, delta: number, motivo: string
     saldo_anterior: Number(r.saldo_anterior) || 0,
     saldo: Number(r.saldo) || 0,
     delta: Number(r.delta) || 0,
+    cobroMedio: (r.cobro_medio as MedioDeCobro | null) ?? null,
   };
 }
 
