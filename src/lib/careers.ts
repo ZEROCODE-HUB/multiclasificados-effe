@@ -133,22 +133,27 @@ export class YaPostulaste extends Error {}
  * mañana la postulación entra por otra vía.
  */
 export async function submitCareer(input: CareerInput): Promise<{ code: number | null; createdAt: string }> {
-  const { data, error } = await supabase
-    .from("careers")
-    .insert({
-      apellido_paterno: input.apellidoPaterno.trim(),
-      apellido_materno: input.apellidoMaterno.trim(),
-      nombres: input.nombres.trim(),
-      doc_type: input.docType,
-      doc_number: input.docNumber.trim(),
-      email: input.email.trim().toLowerCase(),
-      phone: input.phone?.trim() || null,
-      grado: input.grado,
-      puesto: input.puesto.trim(),
-      descripcion: input.descripcion.trim(),
-    })
-    .select("code, created_at")
-    .single();
+  // Por RPC y no con un insert directo, y no es un capricho: la tabla guarda
+  // documento, correo y teléfono de terceros, así que NADIE salvo el personal
+  // puede leerla. Un `insert(...).select(...)` es un INSERT ... RETURNING, que
+  // para devolver la fila necesita poder leerla — y por eso el formulario
+  // público estuvo devolviendo "new row violates row-level security policy"
+  // (con sesión) o "permission denied" (sin ella). Ver la migración 0145.
+  //
+  // La función devuelve SOLO el número y la fecha, que es lo único que quien
+  // postula necesita ver.
+  const { data, error } = await supabase.rpc("postular_a_la_empresa", {
+    p_apellido_paterno: input.apellidoPaterno.trim(),
+    p_apellido_materno: input.apellidoMaterno.trim(),
+    p_nombres: input.nombres.trim(),
+    p_doc_type: input.docType,
+    p_doc_number: input.docNumber.trim(),
+    p_email: input.email.trim().toLowerCase(),
+    p_phone: input.phone?.trim() || null,
+    p_grado: input.grado,
+    p_puesto: input.puesto.trim(),
+    p_descripcion: input.descripcion.trim(),
+  });
 
   if (error) {
     // El freno de la 0135 llega como violación de CHECK con un mensaje ya
