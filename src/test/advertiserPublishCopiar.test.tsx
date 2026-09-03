@@ -107,7 +107,9 @@ describe("AdvertiserPublish — publicar uno igual", () => {
 
     await screen.findByDisplayValue("Casa en Miraflores");
     expect(cargarAvisoParaCopiar).toHaveBeenCalledWith("abc-123");
-    expect(screen.getByDisplayValue("Bonita casa")).toBeTruthy();
+    // La descripción dejó de ser un <textarea> al pasar a tener negrita y
+    // color (0146): ahora se comprueba por su contenido.
+    expect(screen.getByRole("textbox", { name: /descripción/i })).toHaveTextContent("Bonita casa");
     expect(screen.getByDisplayValue("250000")).toBeTruthy();
   });
 

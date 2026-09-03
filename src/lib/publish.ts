@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { compressImage } from "@/lib/compressImage";
 import { fetchListingDocumentUrl } from "@/lib/listings";
 import type { AdjuntoSubido } from "@/lib/subidaAnticipada";
+import { tieneFormato, validar, desdeTextoPlano, type TextoConFormato } from "@/lib/textoConFormato";
 
 export interface PublishPhoto {
   file: File;
@@ -45,6 +46,14 @@ export interface ListingForm {
   category: string;
   title: string;
   description: string;
+  /**
+   * La descripción con negrita y color (migración 0146).
+   *
+   * `description` sigue siendo el texto plano y es lo que se busca; esto es solo
+   * el formato. No hace falta mandarlas coherentes: un trigger DERIVA
+   * `description` de aquí cuando esto viene, así que no pueden discrepar.
+   */
+  descriptionRich?: TextoConFormato | null;
   price: string;
   currency: string;
   /** Código de departamento del INEI. Es por lo que se filtra en el buscador. */
@@ -117,6 +126,11 @@ const listingRow = (input: DraftInput) => ({
   category_id: input.form.category,
   title: input.form.title,
   description: input.form.description,
+  // `null` y no `undefined` cuando no hay formato: al editar un aviso que SÍ lo
+  // tenía, omitir la clave dejaría el formato viejo pegado al texto nuevo.
+  description_rich: tieneFormato(input.form.descriptionRich)
+    ? input.form.descriptionRich
+    : null,
   // Nunca negativo: el campo es un <input type=number> y el navegador deja
   // teclear "-5" aunque tenga min=0. La base lo remata con un CHECK.
   price: Math.max(0, Number(input.form.price) || 0),
@@ -464,7 +478,7 @@ async function comoArchivo(url: string, nombre: string, tipo?: string): Promise<
 export async function cargarAvisoParaCopiar(listingId: string): Promise<AvisoCopiado> {
   const { data, error } = await supabase
     .from("listings")
-    .select("title, description, price, currency, condition, category_id, department, location, lat, lng, " +
+    .select("title, description, description_rich, price, currency, condition, category_id, department, location, lat, lng, " +
             "country, plan_duration_days, plan_quantity, plan_extras, document_url, " +
             // `listing_videos` FALTABA, y por eso republicar un aviso con vídeos
             // pedía subirlos otra vez: llegaba el paquete contratado ("3 videos")
@@ -510,6 +524,10 @@ export async function cargarAvisoParaCopiar(listingId: string): Promise<AvisoCop
       category: String(r.category_id ?? ""),
       title: String(r.title ?? ""),
       description: String(r.description ?? ""),
+      // El formato viaja con la copia: republicar un aviso trabajado y perder
+      // sus negritas sería exactamente lo que no se espera.
+      descriptionRich: validar(r.description_rich)
+        ?? desdeTextoPlano(String(r.description ?? "")),
       price: r.price != null ? String(r.price) : "",
       currency: r.currency === "USD" ? "USD" : "PEN",
       department: String(r.department ?? ""),
@@ -586,7 +604,7 @@ export async function cargarAvisoParaContinuar(
 ): Promise<AvisoParaContinuar> {
   const { data, error } = await supabase
     .from("listings")
-    .select("status, title, description, price, currency, condition, category_id, department, location, lat, lng, " +
+    .select("status, title, description, description_rich, price, currency, condition, category_id, department, location, lat, lng, " +
             "country, plan_duration_days, plan_quantity, plan_extras, document_url, " +
             "listing_images(url, storage_path, sort_order), listing_videos(url, storage_path, sort_order)")
     .eq("id", listingId)
@@ -642,6 +660,10 @@ export async function cargarAvisoParaContinuar(
       category: String(r.category_id ?? ""),
       title: String(r.title ?? ""),
       description: String(r.description ?? ""),
+      // El formato viaja con la copia: republicar un aviso trabajado y perder
+      // sus negritas sería exactamente lo que no se espera.
+      descriptionRich: validar(r.description_rich)
+        ?? desdeTextoPlano(String(r.description ?? "")),
       price: r.price != null ? String(r.price) : "",
       currency: r.currency === "USD" ? "USD" : "PEN",
       department: String(r.department ?? ""),

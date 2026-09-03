@@ -52,6 +52,7 @@ import { useSession } from "@/hooks/useSession";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 import { ListingLocationMap } from "@/components/ListingLocationMap";
+import { TextoConFormato } from "@/components/TextoConFormato";
 import { VideoDialog } from "@/components/VideoDialog";
 import { fetchSellerInfo, fetchReviews, fetchAdvertiserStats, type AdvertiserStats } from "@/lib/reviews";
 import { applyToListing, fetchMyApplication, STATUS_LABEL, type ApplicationStatus } from "@/lib/applications";
@@ -1033,7 +1034,7 @@ export default function ListingDetail() {
                 descAbierta ? "" : "line-clamp-[7] md:line-clamp-6"
               }`}
             >
-              {listing.description}
+              <TextoConFormato formato={listing.descriptionRich} texto={listing.description} />
             </p>
             {descRecortada && (
               <button

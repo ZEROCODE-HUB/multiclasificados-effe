@@ -90,7 +90,8 @@ describe("AdvertiserPublish — el campo que falta se marca y se enfoca", () => 
   it("sin título: marca el campo, baja hasta él y NO publica", async () => {
     seedDraft({ title: "" });
     render(<AdvertiserPublish />);
-    await screen.findByDisplayValue("Descripción larga");
+    // Se espera al editor de la descripción (0146), que ya no es un <textarea>.
+    await screen.findByText("Descripción larga");
 
     publicar();
 

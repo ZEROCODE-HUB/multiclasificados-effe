@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { EditorDeTexto } from "@/components/EditorDeTexto";
+import { aTextoPlano, desdeTextoPlano, tieneFormato } from "@/lib/textoConFormato";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription,
@@ -81,6 +83,8 @@ interface EditState {
   id: string;
   title: string;
   description: string;
+  /** El formato de la descripción. `null` = texto plano (migración 0146). */
+  descriptionRich: import("@/lib/textoConFormato").TextoConFormato | null;
   price: string;
   currency: string;
   /** Código de departamento del INEI: por lo que se filtra en el buscador. */
@@ -177,6 +181,7 @@ const AdvertiserListings = () => {
       id: l.id,
       title: l.title,
       description: l.description ?? "",
+      descriptionRich: l.descriptionRich ?? null,
       price: String(l.price ?? ""),
       currency: l.currency || "PEN",
       department: l.department ?? "",
@@ -233,6 +238,9 @@ const AdvertiserListings = () => {
       await updateListing(edit.id, {
         title: edit.title.trim(),
         description: edit.description.trim(),
+        // `null` explícito y no omitirlo: quitar todo el formato a un aviso que
+        // lo tenía debe BORRARLO, no dejar el viejo pegado al texto nuevo.
+        description_rich: tieneFormato(edit.descriptionRich) ? edit.descriptionRich : null,
         price: Math.max(0, Number(edit.price) || 0),
         currency: edit.currency,
         department: edit.department || null,
@@ -574,11 +582,17 @@ const AdvertiserListings = () => {
               </div>
               <div data-campo="descripcion">
                 <Label>Descripción</Label>
-                <Textarea
-                  value={edit.description}
+                {/* El mismo editor que al publicar. Si aquí quedara un textarea,
+                    editar un aviso con formato se lo llevaría por delante. */}
+                <EditorDeTexto
+                  className="mt-1"
+                  valor={edit.descriptionRich ?? desdeTextoPlano(edit.description)}
+                  onChange={(v) => setEdit({
+                    ...edit,
+                    description: aTextoPlano(v),
+                    descriptionRich: tieneFormato(v) ? v : null,
+                  })}
                   maxLength={2000}
-                  onChange={(e) => setEdit({ ...edit, description: e.target.value })}
-                  className="mt-1 min-h-[120px]"
                 />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

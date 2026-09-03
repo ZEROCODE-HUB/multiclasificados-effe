@@ -5,6 +5,7 @@
 import { supabase } from "@/lib/supabase";
 import { compressImage } from "@/lib/compressImage";
 import type { Listing } from "@/data/mockData";
+import { validar, type TextoConFormato } from "@/lib/textoConFormato";
 
 // La imagen de reserva vive en @/lib/imagenPorDefecto (donde está también la
 // configurable que la puede sustituir). Se reexporta desde aquí porque es donde
@@ -21,6 +22,7 @@ interface CardRow {
   id: string;
   title: string;
   description: string | null;
+  description_rich?: unknown;
   price: number | string;
   currency: string;
   condition: string | null;
@@ -48,6 +50,9 @@ export function mapCard(r: CardRow): Listing {
     id: r.id,
     title: r.title,
     description: r.description ?? "",
+        // `validar` y no un cast: la fila puede venir de una versión
+        // anterior o de la API. Ante la duda, texto plano.
+        descriptionRich: validar(r.description_rich),
     price: Number(r.price) || 0,
     currency: r.currency || "PEN",
     condition: (r.condition ?? "na") as ListingCondition,
@@ -513,7 +518,7 @@ export async function fetchMyListings(): Promise<MyListing[]> {
     const { data, error } = await supabase
       .from("listings")
       .select(
-        "id, title, description, price, currency, category_id, condition, location, lat, lng, featured, urgent, confidential, views, status, rejection_reason, published_at, expires_at, created_at, plan_duration_days, plan_quantity, plan_extras, listing_images(url, sort_order)"
+        "id, title, description, description_rich, price, currency, category_id, condition, location, lat, lng, featured, urgent, confidential, views, status, rejection_reason, published_at, expires_at, created_at, plan_duration_days, plan_quantity, plan_extras, listing_images(url, sort_order)"
       )
       .eq("owner_id", user.id)
       .order("created_at", { ascending: false });
@@ -523,7 +528,7 @@ export async function fetchMyListings(): Promise<MyListing[]> {
     // escrito qué columnas se piden.
     interface FilaImagen { url: string; sort_order?: number | null }
     interface FilaAviso {
-      id: string; title: string; description?: string | null;
+      id: string; title: string; description?: string | null; description_rich?: unknown;
       price?: number | string | null; currency?: string | null; category_id: string;
       condition?: string | null; location?: string | null;
       lat?: number | string | null; lng?: number | string | null;
@@ -542,6 +547,9 @@ export async function fetchMyListings(): Promise<MyListing[]> {
         id: r.id,
         title: r.title,
         description: r.description ?? "",
+        // `validar` y no un cast: la fila puede venir de una versión
+        // anterior o de la API. Ante la duda, texto plano.
+        descriptionRich: validar(r.description_rich),
         price: Number(r.price) || 0,
         currency: r.currency || "PEN",
         category: r.category_id,
@@ -575,6 +583,13 @@ export async function fetchMyListings(): Promise<MyListing[]> {
 export interface ListingPatch {
   title?: string;
   description?: string;
+  /**
+   * El formato de la descripción (migración 0146).
+   *
+   * No hace falta mandarlo coherente con `description`: un trigger la deriva de
+   * aquí, así que lo que se busca es siempre lo que se ve.
+   */
+  description_rich?: TextoConFormato | null;
   price?: number;
   currency?: string;
   department?: string | null;

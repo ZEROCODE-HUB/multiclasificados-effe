@@ -112,7 +112,8 @@ describe("abre el aviso para editarlo", () => {
     conUrl("?editar=abc-123");
     render(<AdvertiserPublish />);
     expect(await screen.findByDisplayValue("Casa en Miraflores")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Bonita casa")).toBeInTheDocument();
+    // La descripción es ahora el editor con formato (0146), no un <textarea>.
+    expect(screen.getByRole("textbox", { name: /descripción/i })).toHaveTextContent("Bonita casa");
   });
 
   it("si el aviso no se puede editar, lo dice y no rompe la pantalla", async () => {

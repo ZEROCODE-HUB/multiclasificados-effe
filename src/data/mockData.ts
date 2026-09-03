@@ -5,6 +5,8 @@ export interface Listing {
   id: string;
   title: string;
   description: string;
+  /** La descripción con negrita y color. `null` = sin formato (migración 0146). */
+  descriptionRich?: import("@/lib/textoConFormato").TextoConFormato | null;
   price: number;
   currency: string;
   // Estado del artículo: "nuevo" | "usado" | "na" (No aplica).

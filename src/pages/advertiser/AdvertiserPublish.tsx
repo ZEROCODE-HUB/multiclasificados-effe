@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { EditorDeTexto } from "@/components/EditorDeTexto";
+import { aTextoPlano, desdeTextoPlano, tieneFormato } from "@/lib/textoConFormato";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -28,7 +30,7 @@ import {
   type DurationDays, type PricingSettings, type ExtraPrices,
 } from "@/lib/pricing";
 import { mensajeDeError } from "@/lib/errores";
-import { cargarAvisoParaCopiar, cargarAvisoParaContinuar, createAndPublishListing, finalizeListingPublication, guardarCambiosDeAviso, saveListingDraft, SaldoInsuficiente } from "@/lib/publish";
+import { cargarAvisoParaCopiar, cargarAvisoParaContinuar, createAndPublishListing, finalizeListingPublication, guardarCambiosDeAviso, saveListingDraft, SaldoInsuficiente, type ListingForm } from "@/lib/publish";
 import { urgenteAllowedFor, URGENTE_MAX_DAYS } from "@/lib/listingBadges";
 import { ListingCard } from "@/components/ListingCard";
 import { InfoHint } from "@/components/InfoHint";
@@ -187,10 +189,11 @@ const AdvertiserPublish = () => {
   const pdfFileRef = useRef<HTMLInputElement>(null);
   const videoFileRef = useRef<HTMLInputElement>(null);
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<ListingForm & { country: string }>({
     category: "",
     title: "",
     description: "",
+    descriptionRich: null,
     price: "",
     currency: "PEN",
     department: "",
@@ -536,7 +539,8 @@ const AdvertiserPublish = () => {
   // convenir"). En cualquier otra categoría sigue siendo el precio obligatorio.
   const isEmpleo = /empleo/i.test(selectedCategory?.name ?? "");
 
-  const updateForm = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const updateForm = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
+    setForm((f) => ({ ...f, [k]: v }));
 
   /**
    * Arranca la subida de un archivo y va contando su estado en el propio hueco.
@@ -1592,11 +1596,17 @@ const AdvertiserPublish = () => {
                 </div>
               </CardHeader>
               <CardContent className="pt-5" {...val.props("descripcion")}>
-                <Textarea
-                  value={form.description}
-                  onChange={(e) => updateForm("description", e.target.value)}
+                {/* El contador sigue contando TEXTO, no marcado: el formato vive
+                    aparte y no le come caracteres a nadie (migración 0146). */}
+                <EditorDeTexto
+                  valor={form.descriptionRich ?? desdeTextoPlano(form.description)}
+                  onChange={(v) => {
+                    // Se guardan las dos: el texto plano es lo que se busca y lo
+                    // que ve WhatsApp; el formato, solo la ficha.
+                    updateForm("description", aTextoPlano(v));
+                    updateForm("descriptionRich", tieneFormato(v) ? v : null);
+                  }}
                   placeholder="Describe tu producto o servicio…"
-                  className="min-h-[160px]"
                   maxLength={2000}
                 />
                 <p className="text-[11px] text-muted-foreground mt-1">{form.description.length}/2000</p>
