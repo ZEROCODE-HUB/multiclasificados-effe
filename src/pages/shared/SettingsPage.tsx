@@ -15,7 +15,7 @@ import {
   fetchNotificationPrefs, saveNotificationPref, prefOrDefault, eventsForRole, type NotifPref,
 } from "@/lib/notificationPrefs";
 import { normalizeDocNumber } from "@/lib/verifyDoc";
-import { deleteMyAccount } from "@/lib/account";
+import { deleteMyAccount, miCuentaTieneRastro } from "@/lib/account";
 import { TermsDialog } from "@/components/LegalTerms";
 import { appVersionLabel } from "@/lib/version";
 import { supabase } from "@/lib/supabase";
@@ -65,6 +65,9 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleting, setDeleting] = useState(false);
+  // null = todavía no se sabe (o falló la consulta): se enseña el texto
+  // genérico en vez de prometer algo que no se ha comprobado.
+  const [tieneRastro, setTieneRastro] = useState<boolean | null>(null);
   const [profile, setProfile] = useState<MyProfile | null>(null);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -229,14 +232,23 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
     setSaving(false);
   };
 
-  // Borra la cuenta de forma definitiva (RPC delete_my_account). Solo procede si
-  // el usuario escribió exactamente la palabra de confirmación.
+  // Cierra la cuenta (RPC delete_my_account). Solo procede si el usuario
+  // escribió exactamente la palabra de confirmación.
+  //
+  // El RPC decide si borra o da de baja según el historial comercial, así que el
+  // mensaje sale de lo que DIJO que hizo. Antes se afirmaba siempre "tu cuenta y
+  // tus datos se eliminaron", y para quien ya había contratado eso era falso.
   const confirmDeleteAccount = async () => {
     if (deleteConfirm.trim().toUpperCase() !== DELETE_CONFIRM_WORD) return;
     setDeleting(true);
     try {
-      await deleteMyAccount();
-      toast({ title: "Cuenta eliminada", description: "Tu cuenta y tus datos se eliminaron." });
+      const accion = await deleteMyAccount();
+      toast(accion === "desactivado"
+        ? {
+            title: "Cuenta cerrada",
+            description: "Ya no podrás acceder ni aparecer en la web. Tus comprobantes se conservan por obligación tributaria.",
+          }
+        : { title: "Cuenta eliminada", description: "Tu cuenta y tus datos se eliminaron." });
       setDeleteOpen(false);
       navigate("/", { replace: true });
     } catch (e) {
@@ -530,10 +542,21 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Eliminar tu cuenta borra <b>de forma permanente</b> tu perfil, tus avisos, favoritos,
-              mensajes y saldo. Esta acción no se puede deshacer.
+              Cerrar tu cuenta te quita el acceso y retira tus avisos de la web. Esta acción no se
+              puede deshacer.
             </p>
-            <Button variant="destructive" className="gap-2" onClick={() => { setDeleteConfirm(""); setDeleteOpen(true); }}>
+            <Button
+              variant="destructive"
+              className="gap-2"
+              onClick={() => {
+                setDeleteConfirm("");
+                setTieneRastro(null);
+                setDeleteOpen(true);
+                // Se pregunta al abrir y no al montar la pantalla: es una
+                // consulta que solo hace falta si alguien llega hasta aquí.
+                void miCuentaTieneRastro().then(setTieneRastro);
+              }}
+            >
               <Trash2 size={16} /> Eliminar mi cuenta
             </Button>
           </CardContent>
@@ -551,15 +574,28 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
         >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
-              <AlertTriangle size={20} /> Eliminar cuenta
+              <AlertTriangle size={20} /> {tieneRastro ? "Cerrar cuenta" : "Eliminar cuenta"}
             </DialogTitle>
             <DialogDescription>
-              Esta acción es <b>irreversible</b>. Se eliminarán tu cuenta y todos tus datos.
+              {tieneRastro === true ? (
+                <>
+                  Esta acción es <b>irreversible</b>. Perderás el acceso y tus avisos dejarán de
+                  publicarse. Tus boletas y facturas <b>se conservan</b>: ya están declaradas ante
+                  SUNAT y estamos obligados a guardarlas.
+                </>
+              ) : tieneRastro === false ? (
+                <>
+                  Esta acción es <b>irreversible</b>. Se eliminarán tu cuenta y todos tus datos.
+                </>
+              ) : (
+                <>Esta acción es <b>irreversible</b>.</>
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5">
             <Label htmlFor="delete-confirm" className="text-sm">
-              Escribe <b className="text-destructive">{DELETE_CONFIRM_WORD}</b> para eliminar la cuenta
+              Escribe <b className="text-destructive">{DELETE_CONFIRM_WORD}</b> para{" "}
+              {tieneRastro ? "cerrar" : "eliminar"} la cuenta
             </Label>
             <Input
               id="delete-confirm"
@@ -582,7 +618,9 @@ const SettingsPage = ({ role }: { role: "anunciante" | "buscador" }) => {
               onClick={confirmDeleteAccount}
               disabled={deleting || deleteConfirm.trim().toUpperCase() !== DELETE_CONFIRM_WORD}
             >
-              {deleting ? <><Loader2 size={16} className="animate-spin" /> Eliminando…</> : <><Trash2 size={16} /> Eliminar definitivamente</>}
+              {deleting
+                ? <><Loader2 size={16} className="animate-spin" /> {tieneRastro ? "Cerrando…" : "Eliminando…"}</>
+                : <><Trash2 size={16} /> {tieneRastro ? "Cerrar definitivamente" : "Eliminar definitivamente"}</>}
             </Button>
           </DialogFooter>
         </DialogContent>
