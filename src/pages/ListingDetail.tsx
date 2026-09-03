@@ -648,9 +648,14 @@ export default function ListingDetail() {
             {vencido && mio
               // Es el caso que llega desde el correo de "tu aviso está por
               // vencer": el dueño abre el enlace cuando ya caducó.
-              ? "Renuévalo desde «Mis avisos» y vuelve a aparecer en las búsquedas."
+              //
+              // Dice "Republícalo" y no "Renuévalo": Renovar está oculto desde
+              // el 2026-09-02 y el botón que hay en «Mis avisos» se llama
+              // Republicar. Mandar a alguien a pulsar un botón que ya no existe
+              // es peor que no decirle nada.
+              ? "Republícalo desde «Mis avisos» y volverá a aparecer en las búsquedas."
               : vencido
-                ? "El anunciante puede renovarlo y volverá a aparecer en las búsquedas."
+                ? "El anunciante puede volver a publicarlo y aparecerá de nuevo en las búsquedas."
                 : "Puede que se haya retirado o que el enlace ya no sea válido."}
           </p>
           <div className="mt-6 flex flex-wrap gap-2 justify-center">

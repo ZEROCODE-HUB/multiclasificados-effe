@@ -82,11 +82,17 @@ describe("el CORREO va al mismo sitio que la campana", () => {
       .not.toContain("/aviso/");
   });
 
-  it("la ficha pública sigue usándose donde el aviso SÍ está activo", () => {
-    // Una reseña nueva: ahí el enlace directo es lo correcto. El aviso está
-    // publicado, que es la condición para que alguien lo haya podido reseñar.
-    expect(rutaDeNotificacion("new_review", { listing_id: AVISO }, "anunciante"))
-      .toBe(`/aviso/${AVISO}`);
+  it("y ya NINGUNA notificación enlaza a la ficha pública", () => {
+    // Esto lo comprobaba con `new_review`, que era la última que iba a
+    // `/aviso/:id`. Desde el 2026-09-02 tampoco: las reseñas están ocultas en
+    // la ficha desde julio, así que llevaba a una pantalla donde no está lo que
+    // anuncia. Ya no queda ningún tipo que use la ficha pública, y el que la
+    // recupere tendrá que comprobar primero que ahí se ve lo que promete.
+    for (const tipo of ["new_review", "listing_expiring", "listing_disabled",
+                        "listing_enabled", "moderation_warning", "admin_message"]) {
+      expect(rutaDeNotificacion(tipo, { listing_id: AVISO }, "anunciante"))
+        .not.toContain("/aviso/");
+    }
   });
 
   it("el correo pide la ruta al módulo compartido y no se la inventa", () => {

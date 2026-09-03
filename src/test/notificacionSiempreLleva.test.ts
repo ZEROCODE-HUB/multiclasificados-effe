@@ -21,7 +21,7 @@ const AVISO = "11111111-1111-4111-8111-111111111111";
 const CHAT = "22222222-2222-4222-8222-222222222222";
 
 /** Los tipos que emite `notify_user`, con un payload realista.
- * Sin las dos excepciones declaradas (ver abajo). */
+ * Sin las TRES excepciones declaradas (ver abajo). */
 const TIPOS: Array<{ tipo: string; payload: Record<string, unknown>; rol: string }> = [
   { tipo: "listing_expiring", payload: { listing_id: AVISO, listing_title: "Depa", horas_restantes: 20, horas_transcurridas: 120 }, rol: "anunciante" },
   { tipo: "listing_disabled", payload: { listing_id: AVISO, listing_title: "Depa", reason: "Fotos repetidas" }, rol: "anunciante" },
@@ -29,7 +29,6 @@ const TIPOS: Array<{ tipo: string; payload: Record<string, unknown>; rol: string
   { tipo: "new_message", payload: { conversation_id: CHAT, preview: "Hola" }, rol: "anunciante" },
   { tipo: "new_application", payload: { listing_title: "Cajero" }, rol: "anunciante" },
   { tipo: "application_status", payload: { status: "accepted" }, rol: "buscador" },
-  { tipo: "new_review", payload: { listing_id: AVISO, rating: 5 }, rol: "anunciante" },
   { tipo: "saved_search_match", payload: { count: 3, name: "Autos en Lima" }, rol: "buscador" },
   { tipo: "complaint_new", payload: { resumen: "Reclamo R-0012 de Ana Pérez" }, rol: "admin" },
   { tipo: "career_new", payload: { nombre: "Ana", puesto: "contadora" }, rol: "admin" },
@@ -51,13 +50,13 @@ describe("todos los tipos dicen algo", () => {
 });
 
 describe("todos los tipos llevan a alguna parte", () => {
-  // Las dos excepciones van en su propia prueba, abajo, y NO en esta lista:
+  // Las tres excepciones van en su propia prueba, abajo, y NO en esta lista:
   // así quitarlas de la excepción es una decisión y no un descuido.
   it.each(TIPOS)("$tipo tiene destino", ({ tipo, payload, rol }) => {
     expect(rutaDeNotificacion(tipo, payload, rol)).not.toBe("");
   });
 
-  it("las dos excepciones son a propósito, y por motivos distintos", () => {
+  it("las tres excepciones son a propósito, y por motivos distintos", () => {
     // Una cuenta suspendida no tiene pantalla adonde ir: la cuenta está
     // suspendida.
     expect(rutaDeNotificacion("account_suspended", { reason: "x" }, "anunciante")).toBe("");
@@ -65,6 +64,12 @@ describe("todos los tipos llevan a alguna parte", () => {
     // ausencia de destino y abre el texto completo en un modal. Darle un
     // destino haría que se navegara al panel y el mensaje no se leyera nunca.
     expect(rutaDeNotificacion("admin_message", { body: "Mantenimiento" }, "buscador")).toBe("");
+    // Una reseña llevaba a la ficha del aviso, pero las reseñas están ocultas
+    // ahí desde julio (`ListingReviews` no se monta en ninguna parte). Llevaba
+    // a una pantalla donde no está lo que la notificación anuncia. Tampoco se
+    // pueden crear nuevas, así que esto solo afecta a las que quedan en la
+    // campana: sin destino, se abren como informativas y dicen la puntuación.
+    expect(rutaDeNotificacion("new_review", { listing_id: AVISO, rating: 5 }, "anunciante")).toBe("");
   });
 });
 
@@ -210,9 +215,11 @@ describe("al personal no se le ofrece un panel de usuario", () => {
     expect(rutaDeNotificacion("career_new", {}, "soporte")).toBe("/dashboard/admin/postulaciones");
   });
 
-  it("y la ficha pública de un aviso, que no es un panel", () => {
-    // Una reseña nueva lleva al aviso, y eso lo puede abrir cualquiera.
-    expect(rutaDeNotificacion("new_review", { listing_id: AVISO }, "admin")).toBe(`/aviso/${AVISO}`);
+  it("y a una reseña tampoco, que ya no lleva a ninguna parte", () => {
+    // Da igual el rol: desde que las reseñas están ocultas en la ficha, este
+    // tipo no tiene destino para nadie.
+    expect(rutaDeNotificacion("new_review", { listing_id: AVISO }, "admin")).toBe("");
+    expect(rutaDeNotificacion("new_review", { listing_id: AVISO }, "anunciante")).toBe("");
   });
 
   it("a un usuario normal no le cambia nada", () => {

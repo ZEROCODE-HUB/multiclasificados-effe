@@ -296,7 +296,6 @@ function destinoDeNotificacion(
   const misAvisos = p.listing_id
     ? `/dashboard/anunciante/avisos?aviso=${String(p.listing_id)}`
     : "/dashboard/anunciante/avisos";
-  const fichaPublica = p.listing_id ? `/aviso/${String(p.listing_id)}` : "";
 
   switch (type) {
     case "saved_search_match":
@@ -321,8 +320,19 @@ function destinoDeNotificacion(
         : "/dashboard/buscador/postulaciones";
 
     case "new_review":
-      // Aquí sí la ficha pública: la reseña se lee ahí y el aviso está activo.
-      return fichaPublica || misAvisos;
+      // SIN DESTINO, Y ES A PROPÓSITO. Llevaba a la ficha pública porque la
+      // reseña se leía ahí, pero `ListingReviews` dejó de montarse en julio: la
+      // ficha ya no las enseña, así que pulsar acababa en una pantalla donde no
+      // está lo que la notificación anuncia.
+      //
+      // Como no se pueden crear reseñas nuevas, esto solo afecta a las 8
+      // antiguas que siguen en la campana. Sin destino, la campana lo trata
+      // como informativo y abre el texto en un modal (ver NotificationsBell),
+      // que al menos dice la puntuación. Es la misma decisión que `admin_message`.
+      //
+      // Si algún día se vuelven a mostrar las reseñas en la ficha, esto vuelve
+      // a ser la ficha del aviso.
+      return "";
 
     case "new_application":
       // `?postulacion=` señala la que acaba de llegar. El `application_id` venía

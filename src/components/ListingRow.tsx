@@ -86,6 +86,15 @@ const expiryStyles: Record<string, string> = {
 
 export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEdit, onDelete, onTogglePause, onPublish, onRepublish, onRenew, onDuplicate, rejectionReason, pagoEnEspera }: ListingRowProps) {
   const hasActions = !!(onView || onEdit || onDelete || onTogglePause || onPublish || onRepublish || onRenew || onDuplicate);
+  // "Ver" abre la ficha PÚBLICA, y esa solo existe mientras el aviso está
+  // activo: `listing_cards` no trae ninguna otra cosa (comprobado en
+  // producción: de 436 avisos, los 134 activos son los 134 visibles).
+  //
+  // En un vencido, un pausado o un borrador el botón llevaba a una pantalla que
+  // dice "Este aviso ya venció" y ofrece "Ir a mis avisos" — de vuelta a la
+  // misma lista desde la que se pulsó. Un viaje de ida y vuelta para no ver
+  // nada, y hoy eso le pasa a 249 avisos vencidos y 50 borradores.
+  const sePuedeVer = status === "Activo";
   // El menu ⋮ ya solo lleva las acciones secundarias. Sin ninguna de las tres
   // quedaba un boton que abria un desplegable vacio.
   const hasMenu = !!(onTogglePause || onDelete);
@@ -278,21 +287,26 @@ export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEd
                 <Button variant="outline" size="sm" className="h-8 px-3 text-xs gap-1" onClick={() => onEdit?.(listing)}>
                   <Edit size={13} /> Editar
                 </Button>
-                <Button
-                  variant="default"
-                  size="sm"
-                  className="h-8 px-3 text-xs bg-primary hover:bg-primary/90"
-                  onClick={() => onView?.(listing)}
-                >
-                  Ver
-                </Button>
+                {sePuedeVer && (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="h-8 px-3 text-xs bg-primary hover:bg-primary/90"
+                    title="Abre el aviso tal y como lo ve cualquiera."
+                    onClick={() => onView?.(listing)}
+                  >
+                    Ver
+                  </Button>
+                )}
               </>
             ) : (
               <>
                 <Button variant="outline" size="sm" className="h-8 px-3 text-xs">Editar</Button>
-                <Button variant="default" size="sm" className="h-8 px-3 text-xs bg-primary hover:bg-primary/90">
-                  Ver
-                </Button>
+                {sePuedeVer && (
+                  <Button variant="default" size="sm" className="h-8 px-3 text-xs bg-primary hover:bg-primary/90">
+                    Ver
+                  </Button>
+                )}
               </>
             )}
           </div>

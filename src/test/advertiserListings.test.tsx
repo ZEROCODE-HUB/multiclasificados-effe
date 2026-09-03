@@ -163,11 +163,16 @@ describe("AdvertiserListings — editar / eliminar / ver", () => {
     expect(replaceMainListingPhoto).not.toHaveBeenCalled();
   });
 
-  it("VER: navega al detalle del aviso", async () => {
+  it("VER: en un aviso VENCIDO no se ofrece", async () => {
+    // "Ver" abre la ficha pública, y esa solo existe mientras el aviso está
+    // activo. En un vencido llevaba a una pantalla que dice "Este aviso ya
+    // venció" y ofrece "Ir a mis avisos": de vuelta a la lista desde la que se
+    // pulsó. En producción son 249 avisos vencidos y 50 borradores.
     render(<AdvertiserListings />);
     await abrirVencidos();
-    fireEvent.click(screen.getByRole("button", { name: /^ver$/i }));
-    expect(navigate).toHaveBeenCalledWith("/aviso/abc-123");
+    expect(screen.queryByRole("button", { name: /^ver$/i })).toBeNull();
+    // Y lo que SÍ sirve sigue estando.
+    expect(screen.getAllByRole("button", { name: /editar/i }).length).toBeGreaterThan(0);
   });
 
   it("ELIMINAR: pide confirmación y borra el aviso", async () => {

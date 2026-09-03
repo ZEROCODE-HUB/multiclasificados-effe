@@ -185,3 +185,49 @@ describe("«a convenir» no se pinta como un precio (punto 02)", () => {
     expect(formatPrecioAviso(0, "PEN")).toBe("Precio a convenir");
   });
 });
+
+// ─────────────────────────────────────────────── "Ver" en un aviso no visible
+describe("«Ver» solo cuando hay algo que ver", () => {
+  /**
+   * LO QUE REPORTÓ EL CLIENTE: "cuando un anuncio está vencido, creo que no
+   * tiene sentido que el botón Ver exista, ya que le llevará a una pantalla que
+   * dice que el anuncio está vencido".
+   *
+   * Y lleva a algo peor que eso: esa pantalla ofrece "Ir a mis avisos", o sea
+   * de vuelta a la lista desde la que se pulsó. Un viaje de ida y vuelta para
+   * no ver nada.
+   *
+   * La causa es que "Ver" abre la ficha PÚBLICA, y `listing_cards` solo trae
+   * los activos: en producción, de 436 avisos solo los 134 activos son
+   * visibles. Los 249 vencidos y los 50 borradores caían todos ahí.
+   */
+  const conEstado = (estado: "Activo" | "Vencido" | "Pausado" | "Borrador") =>
+    pintar({ status: estado, onView: vi.fn(), onEdit: vi.fn() });
+
+  it("en un aviso ACTIVO sí sale", () => {
+    conEstado("Activo");
+    expect(screen.getByRole("button", { name: /^ver$/i })).toBeInTheDocument();
+  });
+
+  it("y llama a onView con el aviso", () => {
+    const onView = vi.fn();
+    pintar({ status: "Activo", onView });
+    fireEvent.click(screen.getByRole("button", { name: /^ver$/i }));
+    expect(onView).toHaveBeenCalledWith(AVISO);
+  });
+
+  it.each(["Vencido", "Pausado", "Borrador"] as const)("en uno %s no sale", (estado) => {
+    // Ninguno de los tres está en `listing_cards`, así que los tres acababan en
+    // la misma pantalla de "ya no está disponible".
+    conEstado(estado);
+    expect(screen.queryByRole("button", { name: /^ver$/i })).toBeNull();
+  });
+
+  it("pero lo que SÍ sirve en un vencido sigue estando", () => {
+    // Quitar "Ver" no puede dejar la fila sin salida: Republicar es lo que se
+    // espera hacer con un vencido.
+    pintar({ status: "Vencido", onView: vi.fn(), onEdit: vi.fn(), onDuplicate: vi.fn() });
+    expect(screen.getByRole("button", { name: /republicar/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /editar/i })).toBeInTheDocument();
+  });
+});

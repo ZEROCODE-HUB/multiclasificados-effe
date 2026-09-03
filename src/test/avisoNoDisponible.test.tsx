@@ -116,10 +116,14 @@ describe("mi aviso vencido, abierto desde el correo", () => {
     expect(await screen.findByText(/este aviso ya venció/i)).toBeInTheDocument();
   });
 
-  it("y da la salida: renovarlo desde Mis avisos", async () => {
+  it("y da la salida: REPUBLICARLO desde Mis avisos", async () => {
+    // Decía "Renuévalo", y Renovar está oculto desde el 2026-09-02: el botón
+    // que hay en «Mis avisos» se llama Republicar. Mandar a alguien a pulsar un
+    // botón que ya no existe es peor que no decirle nada.
     pintar();
     expect(await screen.findByRole("link", { name: /mis avisos/i })).toBeInTheDocument();
-    expect(screen.getByText(/renuévalo/i)).toBeInTheDocument();
+    expect(screen.getByText(/republícalo/i)).toBeInTheDocument();
+    expect(screen.queryByText(/renuévalo/i)).toBeNull();
   });
 
   it("recuerda de qué aviso se trata", async () => {
