@@ -76,7 +76,7 @@ const PARAM_RECARGA = "_r";
  * Con un parámetro distinto en la URL, el navegador no tiene ninguna copia que
  * reutilizar y se ve obligado a pedirlo.
  */
-function recargarSaltandoCache(): void {
+export function recargarSaltandoCache(): void {
   try {
     const url = new URL(window.location.href);
     url.searchParams.set(PARAM_RECARGA, Date.now().toString(36));

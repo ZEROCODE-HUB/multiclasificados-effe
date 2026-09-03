@@ -14,6 +14,7 @@ import { StaffHomeRedirect } from "@/components/StaffHomeRedirect";
 import { IrArriba } from "@/components/IrArriba";
 import { IosSwipeBack } from "@/components/IosSwipeBack";
 import { AvisoInstalar } from "@/components/AvisoInstalar";
+import { AvisoActualizar } from "@/components/AvisoActualizar";
 import { ReconciliadorDePagos } from "@/components/ReconciliadorDePagos";
 import { AdminShell } from "@/components/AdminLayout";
 import { cargaDiferida } from "@/lib/cargaDiferida";
@@ -94,6 +95,9 @@ const App = () => (
         {/* Ofrece instalar la web. En el iPhone solo puede explicar cómo se
             hace: Safari no permite instalar desde la página (ver instalable.ts). */}
         <AvisoInstalar />
+        {/* Avisa si la pestaña lleva abierta desde antes del último despliegue:
+            sin esto sigue ejecutando el código viejo para siempre. */}
+        <AvisoActualizar />
         {/* Dentro del router: necesita la ruta para dejar pasar /auth/staff. */}
         <MaintenanceGate>
         <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><div className="w-9 h-9 rounded-full border-[3px] border-muted border-t-secondary animate-spin" /></div>}>

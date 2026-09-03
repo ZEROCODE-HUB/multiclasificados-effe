@@ -11,8 +11,9 @@
  * En esta aplicación eso sería especialmente grave, porque hay dos mecanismos
  * que dependen de recibir siempre el HTML fresco:
  *
- *   · UpdateGate      compara la versión desplegada con la que corre y obliga a
- *                     recargar cuando hay una nueva.
+ *   · AvisoActualizar compara el build desplegado con el que corre y ofrece
+ *                     recargar cuando hay uno nuevo. (UpdateGate NO: ese solo
+ *                     actúa en el APK y en el iPhone.)
  *   · boot-watchdog   avisa si el bundle no llega a ejecutarse.
  *
  * Un HTML cacheado los deja a los dos ciegos. Así que aquí:

@@ -1,7 +1,38 @@
-import { defineConfig } from "vite";
+import { defineConfig, type PluginOption } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
+import fs from "fs";
+
+/**
+ * Identificador único de cada build.
+ *
+ * Se mete DENTRO del bundle (`__BUILD_ID__`) y ADEMÁS se escribe en
+ * `version.json`, para que la aplicación que ya está corriendo pueda preguntar
+ * si lo que hay desplegado sigue siendo ella misma. Ver `AvisoActualizar`.
+ *
+ * Es la marca de tiempo del build y no `APP_VERSION` a propósito: si alguien
+ * olvida subir la versión, esto cambia igual. Un aviso de actualización que
+ * depende de que nadie se despiste no sirve para nada.
+ */
+const BUILD_ID = String(Date.now());
+
+/** Escribe `version.json` junto al resto del build. */
+const publicarVersion = (): PluginOption => ({
+  name: "effe-version-json",
+  apply: "build",
+  closeBundle() {
+    // La versión legible sale de la MISMA fuente que usa la app, leída como
+    // texto: importar un .ts desde la configuración de Vite obligaría a
+    // compilarlo aparte.
+    const src = fs.readFileSync(path.resolve(__dirname, "src/lib/version.ts"), "utf8");
+    const version = /APP_VERSION\s*=\s*"([^"]+)"/.exec(src)?.[1] ?? "";
+    fs.writeFileSync(
+      path.resolve(__dirname, "dist/version.json"),
+      `${JSON.stringify({ version, buildId: BUILD_ID })}\n`,
+    );
+  },
+});
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -12,7 +43,10 @@ export default defineConfig(({ mode }) => ({
       overlay: false,
     },
   },
-  plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
+  plugins: [react(), publicarVersion(), mode === "development" && componentTagger()].filter(Boolean),
+  define: {
+    __BUILD_ID__: JSON.stringify(BUILD_ID),
+  },
   build: {
     rollupOptions: {
       output: {
