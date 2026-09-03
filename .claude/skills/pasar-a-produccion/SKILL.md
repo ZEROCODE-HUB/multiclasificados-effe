@@ -18,6 +18,27 @@ conviene no mezclarlas:
 
 ---
 
+## Estado a 2026-09-03 (comprobado contra producción)
+
+Lo que falta para poder dar el salto, y lo que ya no.
+
+| | Estado |
+|---|---|
+| Llave de Google Maps restringida (H-03) | ✅ hecho — conviene reconfirmar dominio y Map ID |
+| La serie fiscal real B001 puede empezar en 1 | ✅ comprobado: nunca se aceptó nada con ella |
+| Factiliza dio de alta el RUC `20616009061` | ❓ **preguntar** — sin esto la emisión real falla |
+| Token y URL de PRODUCCIÓN de Factiliza | ❓ **preguntar** |
+| Credenciales de PRODUCCIÓN de Izipay | ❓ **preguntar** |
+| URL del IPN cambiada en el Back Office de Izipay | ❓ **preguntar** |
+| Vaciar los datos y el Storage | ⬜ paso 1 |
+| Conmutar los interruptores | ⬜ paso 2 |
+| APK/IPA en la tienda, y sólo después el OTA | ⬜ **va el último** |
+
+La foto de la base ahora mismo: 436 avisos, 156 órdenes, 135 comprobantes,
+112 usuarios, 896 ficheros en Storage y `app_produccion = false`.
+
+---
+
 ## Antes de nada: comprobar que se puede
 
 No sigas si falta alguna de estas. Preguntar es más barato que arreglar.
@@ -29,6 +50,12 @@ No sigas si falta alguna de estas. Preguntar es más barato que arreglar.
 | Tenemos la URL de producción de Factiliza | Preguntar. La de QA es `apife-qa…`; la real es `apife.factiliza.com` |
 | Izipay tiene credenciales de PRODUCCIÓN | La clave pública de producción NO contiene `testpublickey_` |
 | Hay copia de seguridad reciente | Supabase → Database → Backups |
+
+> **La única vuelta atrás es la copia diaria.** El PITR (volver a un minuto
+> concreto) está DESACTIVADO en este proyecto, y las copias son de los últimos
+> 7 días. Además se restauran ENTERAS: no se puede recuperar sólo una tabla. Si
+> algo del borrado sale mal, la alternativa es levantar un proyecto aparte con la
+> copia y extraer de ahí lo que haga falta.
 
 Comprobar en qué modo está Izipay ahora mismo (no hace falta cobrar nada):
 
@@ -73,8 +100,10 @@ delete from public.reviews;
 delete from public.reports;
 delete from public.saved_searches;
 delete from public.notifications;
+delete from public.notification_preferences;
 delete from public.communications;
 delete from public.device_tokens;         -- tokens de push
+delete from public.doc_lookups;           -- DNI/RUC consultados a Factiliza
 
 -- Comercio: bitácora → comprobantes → órdenes → saldo
 delete from public.invoice_emission_attempts;
@@ -87,10 +116,16 @@ delete from public.user_credits;
 -- Avisos y sus ficheros
 delete from public.listing_documents;
 delete from public.listing_images;
+delete from public.listing_videos;
 delete from public.listings;
 
 -- Libro de reclamaciones
 delete from public.complaints;
+
+-- "Trabaje con nosotros" (0135). NO cuelga de ningún aviso ni de ningún
+-- usuario, así que no cae por cascada: si no se borra aquí, se queda.
+-- Sus CV están en el bucket `cvs` y hay que vaciarlo aparte.
+delete from public.careers;
 
 -- Bitácora del panel: opcional. Es el registro de quién hizo qué en el admin.
 -- Preguntar al usuario si quiere conservarla.
@@ -104,10 +139,24 @@ commit;
 `system_settings`, `role_permissions`, `invoice_series` (sus contadores se
 ajustan aparte, más abajo).
 
-**Los ficheros de Storage no se borran con SQL.** Hay que vaciar los buckets de
-avisos aparte (Supabase → Storage), o quedarán huérfanos ocupando espacio.
-Dejar intactos `site-assets` y las imágenes de categoría: son configuración, no
-datos de prueba.
+**Los ficheros de Storage no se borran con SQL.** Hay que vaciarlos aparte
+(Supabase → Storage) o quedarán huérfanos ocupando espacio. Son OCHO buckets y
+no todos se tratan igual:
+
+| Bucket | Qué hacer | Por qué |
+|---|---|---|
+| `listing-images` | **Vaciar** | Fotos de los avisos de prueba |
+| `listing-videos` | **Vaciar** | Vídeos de los avisos |
+| `listing-docs` | **Vaciar** | PDF adjuntos (privado) |
+| `avatars` | **Vaciar** | Fotos de perfil de las cuentas de prueba |
+| `cvs` | **Vaciar** | CV de «Trabaje con nosotros». Son datos personales de terceros |
+| `site-assets` | **Dejar** | Configuración: logo, imagen por defecto |
+| `category-images` | **Dejar** | Configuración: las 16 categorías |
+| `ota` | **Ver abajo** | Paquetes de actualización del móvil, no datos de prueba |
+
+`avatars` y `cvs` no estaban en la versión anterior de esta receta, y los dos
+guardan datos personales: dejarlos es justo lo que no se quiere al abrir al
+público.
 
 ### Los usuarios: preguntar antes
 
@@ -126,13 +175,34 @@ delete from auth.users;
 
 ### Reiniciar los contadores de comprobantes
 
-Con la base vacía, la numeración fiscal empieza de cero. **Confirmar con el
-usuario el número de arranque**: si ya emitió comprobantes por otro medio, la
-serie tiene que continuar donde iba, no volver a 1.
+Con la base vacía, la numeración fiscal empieza de cero. La pregunta de siempre
+es si la serie real puede volver a 1 o tiene que continuar donde iba.
+
+**Aquí ya está respondido, y con datos** (comprobado el 2026-09-03): la serie
+real **B001 NUNCA llegó a SUNAT**. De los 67 comprobantes emitidos con ella, 60
+quedaron en `omitido` —nunca se enviaron—, 6 en `rechazado` y 1 en `vencido`.
+**Ninguno aceptado.** Lo único que SUNAT aceptó son los 66 de las series de
+prueba B066/F066, que van contra el entorno de homologación de Factiliza y no
+existen para la administración.
+
+Así que **B001 puede arrancar en 1** sin dejar huecos declarados. Lo mismo para
+F001, que está en 0 y nunca se usó.
 
 ```sql
-update public.invoice_series set correlativo = 0, correlativo_pruebas = 0;
+-- Comprobar ANTES, y enseñárselo al usuario. Si aquí apareciera alguna B001/F001
+-- en 'aceptado', PARAR: esa serie ya está quemada y no puede volver a 1.
+select serie, sunat_status, count(*), min(number), max(number)
+  from public.invoices where es_prueba is not true
+ group by serie, sunat_status order by serie;
+
+update public.invoice_series
+   set correlativo = 0, correlativo_pruebas = 0,
+       correlativo_nota = 0, correlativo_nota_pruebas = 0;
 ```
+
+Los contadores de NOTAS de crédito (`correlativo_nota`) faltaban en la versión
+anterior: sin reiniciarlos, la primera nota real saldría con el número que dejó
+la última de prueba.
 
 ---
 
@@ -188,15 +258,61 @@ el formulario de pago del navegador seguirá apuntando a pruebas.
 ### 2.4 · Volver a desplegar las funciones
 
 ```bash
-supabase functions deploy emit-invoice --no-verify-jwt --project-ref prhbgniwymaaevnisyov
-supabase functions deploy create-payment --project-ref prhbgniwymaaevnisyov
+supabase functions deploy emit-invoice    --no-verify-jwt --project-ref prhbgniwymaaevnisyov
+supabase functions deploy create-payment                  --project-ref prhbgniwymaaevnisyov
 supabase functions deploy payment-webhook --no-verify-jwt --project-ref prhbgniwymaaevnisyov
+supabase functions deploy verify-payment  --no-verify-jwt --project-ref prhbgniwymaaevnisyov
 ```
 
-### 2.5 · Subir la versión
+`verify-payment` no estaba y también lee las credenciales de Izipay: es la que
+rescata los pagos cuyo webhook se perdió. Si se queda con las de pruebas,
+consultará el entorno equivocado y dará por no pagado un cobro real.
+
+**Conservar el `--no-verify-jwt` de cada una tal cual.** Un webhook o un correo
+que de pronto exija sesión deja de funcionar en silencio.
+
+### 2.5 · Lo demás que hay que mirar
+
+Nada de esto estaba en la primera versión de la receta y todo puede morder.
+
+**La llave de Google Maps (era el punto H-03 de la auditoría).** Viaja dentro del
+paquete de la web, así que cualquiera puede leerla: sin restringir, la factura de
+Maps es de quien la encuentre. Tiene que estar limitada por dominio (`coleffe.com`
+y `*.coleffe.com`) y, para el APK/IPA, por nombre de paquete y huella. Comprobar
+también que el Map ID sigue asociado.
+
+**El correo (Resend).** Que el dominio esté verificado y que el remitente sea el
+que se quiere ver: el buzón bueno es `avisos@coleffe.com`. `soporte@coleffe.com`
+NO existe, y `coleffec@coleffe.com` es la cuenta del hosting, no un buzón.
+
+**Los topes de la 0124.** El freno de publicación vive en triggers, no en las
+Edge Functions. Un tope en 0 lo DESACTIVA, así que conviene mirar que los valores
+de producción son los que se quieren y no los que se dejaron para poder probar.
+
+```sql
+select key, value from public.system_settings where key ilike '%limit%' or key ilike '%tope%';
+```
+
+**La aplicación móvil, y el OTA.** Esto es lo más fácil de estropear:
+
+> El APK/IPA publicado sigue en la versión 2.6. Si se enciende la actualización
+> por aire (OTA) apuntando a un paquete viejo, **un teléfono recién actualizado
+> se DEGRADA al arrancar**. No tocar el OTA hasta que la tienda tenga la versión
+> nueva, y sólo entonces subir `app_latest_build`, `app_version_name`,
+> `app_download_url` y `app_update_notes`.
+
+El bucket `ota` NO se vacía como los demás: no son datos de prueba, son los
+paquetes de actualización.
+
+### 2.6 · Subir la versión
 
 `src/lib/version.ts` — `APP_VERSION` y `APP_VERSION_DATE`. Se ve en Ajustes y en
 el pie del panel, y es lo que permite saber qué build está en producción.
+
+Y en Vercel, revisar las variables del build antes de redesplegar:
+`VITE_IZIPAY_PUBLIC_KEY` (la de producción, sin `test`), la llave de Google Maps
+y `VITE_PWA` — que debe estar SIN valor o distinto de `off`, o la web deja de ser
+instalable y además se desinstala en quien ya la tuviera.
 
 ---
 
@@ -216,6 +332,19 @@ select id, serie, correlativo, serie_pruebas, correlativo_pruebas
 
 -- No debe quedar NADA marcado como prueba
 select count(*) as comprobantes_de_prueba from public.invoices where es_prueba;
+
+-- Y NADA de los datos de prueba. Si alguna de estas no da 0, se saltó una tabla:
+-- las que más se olvidan son `careers` y `doc_lookups`, porque no cuelgan de
+-- ningún aviso y no caen por cascada.
+select
+  (select count(*) from public.listings)     as avisos,
+  (select count(*) from public.orders)       as ordenes,
+  (select count(*) from public.careers)      as postulaciones_a_la_empresa,
+  (select count(*) from public.doc_lookups)  as consultas_de_documento,
+  (select count(*) from public.complaints)   as reclamos,
+  (select count(*) from storage.objects
+    where bucket_id in ('listing-images','listing-videos','listing-docs','avatars','cvs'))
+                                             as ficheros_sueltos;
 
 -- El barrido de comprobantes tiene que seguir programado
 select jobname, schedule from cron.job order by jobname;
