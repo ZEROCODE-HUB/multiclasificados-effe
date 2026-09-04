@@ -6,6 +6,7 @@ import { compressImage } from "@/lib/compressImage";
 import { fetchListingDocumentUrl } from "@/lib/listings";
 import type { AdjuntoSubido } from "@/lib/subidaAnticipada";
 import { tieneFormato, validar, desdeTextoPlano, type TextoConFormato } from "@/lib/textoConFormato";
+import type { DocKind } from "@/lib/identity";
 
 export interface PublishPhoto {
   file: File;
@@ -108,7 +109,17 @@ export interface PublishInput extends DraftInput {
   receiptType: "boleta" | "factura";
   email: string;
   advertiserName: string;
-  docType?: "dni" | "ruc";
+  /**
+   * Documento de identidad, con SU tipo real.
+   *
+   * Aquí no se emite ningún comprobante —eso lo hace `settle_paid_order`, en el
+   * camino de pago—, pero lo que llegue se guarda en el perfil, y de ahí lo lee
+   * la siguiente compra. Cuando el tipo estaba limitado a `dni | ruc`, publicar
+   * con saldo REESCRIBÍA el pasaporte de un extranjero como si fuera un DNI:
+   * el número se conservaba, pero el tipo se perdía, y la próxima vez el modal
+   * le pedía un DNI de 8 dígitos que esa persona no tiene.
+   */
+  docType?: DocKind;
   docNumber?: string;
 }
 
@@ -693,7 +704,17 @@ export interface FinalizeInput {
   receiptType: "boleta" | "factura";
   email: string;
   advertiserName: string;
-  docType?: "dni" | "ruc";
+  /**
+   * Documento de identidad, con SU tipo real.
+   *
+   * Aquí no se emite ningún comprobante —eso lo hace `settle_paid_order`, en el
+   * camino de pago—, pero lo que llegue se guarda en el perfil, y de ahí lo lee
+   * la siguiente compra. Cuando el tipo estaba limitado a `dni | ruc`, publicar
+   * con saldo REESCRIBÍA el pasaporte de un extranjero como si fuera un DNI:
+   * el número se conservaba, pero el tipo se perdía, y la próxima vez el modal
+   * le pedía un DNI de 8 dígitos que esa persona no tiene.
+   */
+  docType?: DocKind;
   docNumber?: string;
 }
 

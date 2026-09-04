@@ -37,6 +37,7 @@ import { InfoHint } from "@/components/InfoHint";
 import { imagenPorDefecto } from "@/lib/imagenPorDefecto";
 import type { Listing } from "@/data/mockData";
 import { type PersonType } from "@/components/VerifyIdentityDialog";
+import type { DocKind } from "@/lib/identity";
 import { fetchMyIdentity } from "@/lib/identity";
 import { getCreditBalance } from "@/lib/credits";
 import { fetchActivePromotions, bestPromoForCategory, applyDiscount, type Promotion } from "@/lib/promotions";
@@ -151,6 +152,10 @@ const AdvertiserPublish = () => {
   const [docNumber, setDocNumber] = useState("");
   const [docVerified, setDocVerified] = useState(false);
   const [verifiedName, setVerifiedName] = useState("");
+  // El tipo de documento TAL CUAL lo tiene el perfil. `personType` no sirve para
+  // esto: solo distingue natural de jurídica, así que un pasaporte y un carné de
+  // extranjería se aplastan los dos contra "natural" y de ahí contra "dni".
+  const [docTypeReal, setDocTypeReal] = useState<DocKind | null>(null);
 
   // Precarga la identidad verificada del perfil para el comprobante (sin modal).
   useEffect(() => {
@@ -158,7 +163,10 @@ const AdvertiserPublish = () => {
     fetchMyIdentity().then((id) => {
       if (!active || !id) return;
       if (id.docNumber) setDocNumber(id.docNumber);
-      if (id.docType) setPersonType(id.docType === "ruc" ? "juridica" : "natural");
+      if (id.docType) {
+        setPersonType(id.docType === "ruc" ? "juridica" : "natural");
+        setDocTypeReal(id.docType);
+      }
       if (id.name) setVerifiedName(id.name);
       setDocVerified(id.docVerified);
     });
@@ -1164,7 +1172,12 @@ const AdvertiserPublish = () => {
       return;
     }
     const email = userEmail || "anunciante@effe.pe";
-    const tipoDoc = personType === "juridica" ? "ruc" : "dni";
+    // Se respeta el documento que ya tenía el perfil. Publicar con saldo NO emite
+    // comprobante (eso es cosa de `settle_paid_order`, al pagar), pero sí reescribe
+    // el documento del perfil — y deducirlo de `personType` convertía el pasaporte
+    // de un extranjero en un DNI, dejándole el perfil inservible para la siguiente
+    // compra. Solo se deduce cuando el perfil todavía no tiene ninguno.
+    const tipoDoc: DocKind = docTypeReal ?? (personType === "juridica" ? "ruc" : "dni");
     publishingRef.current = true;
     setPublishing(true);
     try {
@@ -1184,7 +1197,7 @@ const AdvertiserPublish = () => {
         receiptType: "boleta" as const,
         email,
         advertiserName: verifiedName || session?.name || "Anunciante",
-        docType: tipoDoc as "dni" | "ruc",
+        docType: tipoDoc,
         docNumber: docNumber || undefined,
       };
       if (draftListingId.current && adjuntosAlDia.current) {
