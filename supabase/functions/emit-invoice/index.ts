@@ -422,6 +422,43 @@ async function consultarEnFactiliza(
 }
 
 /**
+ * Descarga la CONSTANCIA (el CDR) de un comprobante ya declarado, en base64.
+ *
+ * `/invoice/cdr` no devuelve JSON: devuelve el **ZIP** que firma SUNAT, con el
+ * fichero `R-<ruc>-<tipo>-<serie>-<correlativo>.xml` dentro. Por eso se lee como
+ * binario — con `.text()` se corrompe.
+ *
+ * Se usa cuando Factiliza contesta «ya se encuentra declarado»: ese cuerpo no
+ * trae el CDR, y sin él tendríamos un comprobante marcado como aceptado pero sin
+ * la prueba de que lo está. Nunca lanza: si no se puede bajar, el desenlace no
+ * cambia (SUNAT ya lo aceptó), solo nos quedamos sin el adjunto.
+ */
+async function descargarCdr(
+  emisorRuc: string, tipo: "boleta" | "factura",
+  serie: string, correlativo: number | string,
+): Promise<string | null> {
+  try {
+    const res = await fetch(urlDeFactiliza("cdr"), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${FACTILIZA_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(consultaDeComprobante(emisorRuc, tipo, serie, correlativo)),
+    });
+    if (!res.ok) return null;
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    // Un ZIP empieza por "PK". Si no, lo que volvió es un JSON de error.
+    if (bytes.length < 4 || bytes[0] !== 0x50 || bytes[1] !== 0x4b) return null;
+    let bin = "";
+    for (const b of bytes) bin += String.fromCharCode(b);
+    return btoa(bin);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Emite el comprobante ante SUNAT a través de Factiliza.
  *
  * Nunca lanza y nunca bloquea nada: si no se puede emitir, el comprobante queda
@@ -555,6 +592,18 @@ async function emitirEnSunat(invoiceId: string): Promise<string | null> {
   }
 
   const r = leerRespuesta(httpStatus, respuesta);
+
+  // «Ya se encuentra declarado»: es un aceptado, pero llega sin la constancia.
+  // Se va a buscar para no cerrar el comprobante sin prueba de que SUNAT lo
+  // recibió. Si no se puede bajar, sigue siendo aceptado.
+  if (r.yaDeclarado && !r.cdrZip) {
+    r.cdrZip = await descargarCdr(
+      emisorRuc,
+      inv.o_type === "factura" ? "factura" : "boleta",
+      String(inv.o_serie),
+      Number(inv.o_correlativo),
+    );
+  }
 
   await admin.rpc("log_invoice_attempt", {
     p_invoice_id: id, p_step: "sunat", p_attempt: intento,

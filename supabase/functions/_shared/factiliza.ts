@@ -452,6 +452,15 @@ export interface Resultado {
    * daríamos por vencido un comprobante que iba a emitirse solo.
    */
   esperando?: boolean;
+  /**
+   * Factiliza contesta que el documento **ya está declarado en SUNAT**. Es un
+   * ACEPTADO, aunque llegue como `success:false` con HTTP 400.
+   *
+   * Se marca aparte porque en esa respuesta no viene el CDR (`data` es null), y
+   * el CDR es la prueba: quien reciba esto tiene que ir a buscarlo con
+   * `/invoice/cdr` en vez de dar el comprobante por cerrado sin constancia.
+   */
+  yaDeclarado?: boolean;
 }
 
 /**
@@ -531,6 +540,35 @@ export function leerRespuesta(httpStatus: number, cuerpo: unknown): Resultado {
         ...base, desenlace: "error", reintentable: true, esperando: true,
         hash: hashPrevio, codigo: codigoSunat,
         mensaje: "Factiliza aún no lo ha enviado a SUNAT (en su cola). Se reintentará.",
+      };
+    }
+
+    // «Ya se encuentra declarado en la SUNAT»: esto es un ACEPTADO disfrazado de
+    // error, y darlo por rechazo es el peor desenlace posible de los cuatro.
+    //
+    // ── CÓMO SE DESCUBRIÓ ────────────────────────────────────────────────────
+    //
+    // Le pasó a `B001-1`, la PRIMERA boleta real de la plataforma (2026-09-04).
+    // La secuencia fue: el primer envío falló por un problema del certificado de
+    // Factiliza; cuando lo arreglaron, su cola la mandó a SUNAT y **SUNAT la
+    // aceptó** (CDR con `ResponseCode 0`, «La Boleta numero B001-1, ha sido
+    // aceptada»). Pero nuestro reproceso siguiente se cruzó con eso y recibió:
+    //
+    //     HTTP 400 · success:false
+    //     "Este documento ya se encuentra declarado en la SUNAT"
+    //
+    // Sin esta rama, el 400 caía en `esDeDatos` y el comprobante quedaba como
+    // **rechazado** y marcado para revisión: un documento válido, declarado y
+    // con constancia, presentado al administrador como si SUNAT lo hubiera
+    // tumbado. Y como un rechazo NO se reintenta, se quedaba así para siempre.
+    //
+    // La carrera no es rara: pasa siempre que su cola emite entre dos reintentos
+    // nuestros, y los nuestros van cada 10 minutos.
+    if (/ya se encuentra declarad[oa]/i.test(mensaje) || /ya se encuentra declarad[oa]/i.test(detalle)) {
+      return {
+        ...base, desenlace: "aceptado", reintentable: false, yaDeclarado: true,
+        hash: hashPrevio, codigo: codigoSunat,
+        mensaje: mensaje || detalle,
       };
     }
 

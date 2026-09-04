@@ -469,6 +469,55 @@ describe("interpretar lo que contesta Factiliza", () => {
       expect(r.mensaje).toMatch(/cola|no lo ha enviado/i);
     });
 
+    it("🔴 «ya se encuentra declarado en la SUNAT» es ACEPTADO, no rechazo", () => {
+      // Le pasó a B001-1, la PRIMERA boleta real de la plataforma (04-sep-2026).
+      // Su cola la emitió entre dos reintentos nuestros: SUNAT la aceptó (CDR con
+      // ResponseCode 0, «La Boleta numero B001-1, ha sido aceptada») y el
+      // reproceso siguiente se encontró esto.
+      //
+      // Sin la rama, el 400 caía en `esDeDatos` → **rechazado** + needs_review:
+      // un documento declarado y válido presentado como tumbado por SUNAT. Y
+      // como un rechazo no se reintenta, se quedaba así para siempre.
+      const r = leerRespuesta(400, {
+        status: 400, success: false, data: null,
+        message: "Este documento ya se encuentra declarado en la SUNAT",
+      });
+      expect(r.desenlace).toBe("aceptado");
+      expect(r.reintentable).toBe(false);
+      // La bandera es lo que hace que quien envía vaya a buscar la constancia:
+      // este cuerpo no la trae (`data` es null) y sin ella el comprobante se
+      // cerraría sin prueba de que SUNAT lo recibió.
+      expect(r.yaDeclarado).toBe(true);
+    });
+
+    it("y lo reconoce venga como venga (400 o 200, en message o en el detalle)", () => {
+      for (const http of [200, 400]) {
+        expect(
+          leerRespuesta(http, {
+            status: http, success: false,
+            message: "DEMO - Este documento ya se encuentra declarado en la SUNAT",
+          }).desenlace,
+          `HTTP ${http} en message`,
+        ).toBe("aceptado");
+      }
+      // También si lo mandan dentro de `data.error`, como hacen con otros avisos.
+      expect(
+        leerRespuesta(400, {
+          status: 400, success: false, message: "Error",
+          data: { hash: "h", error: { code: "400", message: "Ya se encuentra declarado en la SUNAT" } },
+        }).desenlace,
+      ).toBe("aceptado");
+    });
+
+    it("pero NO confunde «declarado» con un rechazo que mencione SUNAT", () => {
+      // El guardarraíl: la rama nueva no puede tragarse un rechazo de verdad.
+      const r = leerRespuesta(400, {
+        status: 400, success: false, message: "El documento fue rechazado por la SUNAT",
+        data: { hash: "h", error: { code: "2335", message: "El dato ingresado no cumple con el formato" } },
+      });
+      expect(r.desenlace).toBe("rechazado");
+    });
+
     it("«ya existe» se reintenta contra resend, en vez de darse por perdido", () => {
       const r = leerRespuesta(200, {
         status: 400, success: false, message: "Error al registrar",

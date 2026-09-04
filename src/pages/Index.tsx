@@ -256,8 +256,10 @@ const Index = () => {
     [platform, activeListingsStr],
   );
 
+  // Sin `pb` en el contenedor: lo reserva el pie, que es el último elemento de la
+  // página y el único que puede quedar debajo de la barra inferior del móvil.
   return (
-    <div className={`min-h-screen bg-background ${hasBottomNav ? "pb-[calc(var(--nav-bottom)+2rem)] lg:pb-0" : ""}`}>
+    <div className="min-h-screen bg-background">
       {/* Header — distinct white bar above hero */}
       <Navbar />
 
@@ -761,8 +763,20 @@ const Index = () => {
       <AcercaDeNosotros className="py-14 md:py-20 border-t border-border" />
       </main>
 
-      {/* Footer (oculto en móvil para un look más app) */}
-      <footer className="hidden md:block bg-primary text-primary-foreground py-16 md:py-24">
+      {/* El pie SÍ sale en móvil (antes era `hidden md:block`, por el "look app").
+          El `pb` de la barra inferior se reserva AQUÍ y no en el contenedor de
+          la página: puesto fuera, el hueco quedaba del color del fondo y entre
+          el pie oscuro y la barra oscura aparecía una franja blanca de 2rem.
+          Dentro, el fondo del pie corre por debajo de la barra y no se ve nada.
+          `--nav-bottom` ya vale solo el inset a partir de lg, pero ahí manda el
+          `lg:pb-24` para no perder el respiro del escritorio. */}
+      <footer
+        className={`bg-primary text-primary-foreground pt-14 md:pt-24 ${
+          hasBottomNav
+            ? "pb-[calc(var(--nav-bottom)+2.5rem)] lg:pb-24"
+            : "pb-14 md:pb-24"
+        }`}
+      >
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 md:gap-10 mb-12">
             <div className="md:col-span-1">
