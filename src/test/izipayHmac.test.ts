@@ -2,6 +2,7 @@
 import { describe, it, expect } from "vitest";
 import {
   hmacSha256Hex, verifyHash, basicAuthHeader, buildCreatePaymentBody, readAnswer,
+  preferencia3DSValida, PREFERENCIA_3DS,
 } from "../../supabase/functions/_shared/izipay.ts";
 
 /**
@@ -128,5 +129,69 @@ describe("helpers de la API", () => {
     });
     expect(r).toEqual({ orderId: "ord-1", paid: true, transactionUuid: "txn-uuid-123" });
     expect(readAnswer({ orderStatus: "UNPAID", orderDetails: { orderId: "x" }, transactions: [] }).paid).toBe(false);
+  });
+});
+
+describe("la preferencia 3-D Secure", () => {
+  /**
+   * POR QUÉ SE MANDA ESTE CAMPO.
+   *
+   * El 04/09/2026 todos los pagos empezaron a fallar con «227 : Autenticación
+   * imposible», con la misma tarjeta de prueba y las mismas claves con las que
+   * se habían aprobado los 139 anteriores. Le habían activado a la tienda la
+   * preferencia «Data Only» y, al no poder completarse esa consulta, la
+   * transacción se rechazaba.
+   *
+   * Izipay documenta que este campo GANA a la configuración de la tienda, así
+   * que la decisión deja de depender de lo que toquen en su panel.
+   */
+  const base = {
+    amountCents: 2066, currency: "PEN", orderId: "abc", email: "a@b.pe",
+  };
+
+  it("sin preferencia, el campo NO viaja", () => {
+    // Es el comportamiento de siempre, y al que se vuelve dejando el ajuste
+    // vacío: sin el campo, decide la tienda.
+    expect(buildCreatePaymentBody(base)).not.toHaveProperty("strongAuthentication");
+    expect(buildCreatePaymentBody({ ...base, strongAuthentication: null }))
+      .not.toHaveProperty("strongAuthentication");
+  });
+
+  it("con preferencia, viaja en la raíz del cuerpo", () => {
+    // En la raíz y no dentro de `customer`: es donde lo espera
+    // Charge/CreatePayment.
+    const b = buildCreatePaymentBody({ ...base, strongAuthentication: "NO_PREFERENCE" });
+    expect(b.strongAuthentication).toBe("NO_PREFERENCE");
+  });
+
+  it("un valor inventado se DESCARTA en vez de mandarse", () => {
+    // Izipay rechaza el cobro entero si el valor no es de los suyos, y eso se
+    // traduce en «no se pudo iniciar el pago» para el comprador. Ante un ajuste
+    // mal escrito, mejor el comportamiento de siempre que ningún cobro.
+    const b = buildCreatePaymentBody({
+      ...base, strongAuthentication: "SIN_3DS" as never,
+    });
+    expect(b).not.toHaveProperty("strongAuthentication");
+  });
+
+  it("los valores admitidos son los de la documentación de Izipay", () => {
+    for (const v of ["NO_PREFERENCE", "AUTO", "DISABLED", "CHALLENGE_REQUESTED",
+                     "CHALLENGE_MANDATE", "DATA_SHARE_ONLY"]) {
+      expect(preferencia3DSValida(v), `falta ${v}`).toBe(true);
+    }
+    expect(PREFERENCIA_3DS).toHaveLength(6);
+    expect(preferencia3DSValida("")).toBe(false);
+    expect(preferencia3DSValida(null)).toBe(false);
+  });
+
+  it("y no toca nada de lo que ya viajaba", () => {
+    // El importe, la moneda y los datos de facturación son lo que lleva meses
+    // funcionando: añadir un campo no puede moverlos.
+    const sin = buildCreatePaymentBody({ ...base, firstName: "ANA" });
+    const con = buildCreatePaymentBody({
+      ...base, firstName: "ANA", strongAuthentication: "DISABLED",
+    });
+    expect({ ...con, strongAuthentication: undefined })
+      .toEqual({ ...sin, strongAuthentication: undefined });
   });
 });

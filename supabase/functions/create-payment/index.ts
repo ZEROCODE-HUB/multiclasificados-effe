@@ -58,7 +58,7 @@ import {
   type ExtrasSelection, type DurationDays,
 } from "../_shared/pricing.ts";
 import {
-  DEFAULT_API_HOST, basicAuthHeader, buildCreatePaymentBody,
+  DEFAULT_API_HOST, basicAuthHeader, buildCreatePaymentBody, preferencia3DSValida, type Preferencia3DS,
 } from "../_shared/izipay.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -480,6 +480,28 @@ Deno.serve(async (req) => {
     // rechaza («Invalid billing identityType») y la compra no llegaba a
     // empezar. El detalle, en construirBillingDetails().
     const esEmpresa = receiptType === "factura" || docType === "ruc";
+
+    // ── Preferencia 3-D Secure ──
+    //
+    // Sale de `system_settings` y NO de una variable de entorno a propósito: se
+    // cambia con un UPDATE y surte efecto en el siguiente cobro, sin desplegar
+    // nada. Hace falta esa agilidad porque el valor bueno depende de cómo tenga
+    // Izipay configurada la tienda, y eso lo tocan ellos.
+    //
+    // Vacío o ausente = no se manda el campo y decide la tienda, que es como
+    // funcionó hasta el 04/09. Ver `PREFERENCIA_3DS` en _shared/izipay.ts.
+    let pref3ds: Preferencia3DS | null = null;
+    try {
+      const { data } = await admin
+        .from("system_settings").select("value").eq("key", "izipay_3ds").maybeSingle();
+      const bruto = (data as { value?: unknown } | null)?.value;
+      const txt = typeof bruto === "string" ? bruto : String(bruto ?? "");
+      if (preferencia3DSValida(txt)) pref3ds = txt;
+    } catch {
+      // Un fallo leyendo el ajuste NO puede impedir un cobro: se sigue sin
+      // preferencia, que es el comportamiento de siempre.
+    }
+
     const payload = buildCreatePaymentBody({
       amountCents: Math.round(total * 100),
       currency: "PEN",
@@ -495,6 +517,7 @@ Deno.serve(async (req) => {
         ? undefined
         : docType === "dni" ? "DNI" : "CE",
       identityCode: esEmpresa ? undefined : docNumber || undefined,
+      strongAuthentication: pref3ds,
     });
 
     const resp = await fetch(`${API_HOST}/api-payment/V4/Charge/CreatePayment`, {

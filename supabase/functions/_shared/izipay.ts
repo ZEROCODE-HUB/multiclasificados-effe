@@ -64,6 +64,52 @@ export async function verifyHash(input: VerifyHashInput): Promise<boolean> {
   return false;
 }
 
+/**
+ * ── PREFERENCIA 3-D SECURE ───────────────────────────────────────────
+ *
+ * POR QUÉ EXISTE ESTO. El 04/09/2026 todos los pagos empezaron a fallar con
+ * «227 : Autenticación imposible». Los 139 anteriores, con la MISMA tarjeta de
+ * prueba y las mismas claves, se habían aprobado. La diferencia está en el
+ * detalle de la transacción en el Back Office:
+ *
+ *   · antes (02/09):  «Estado final de la autenticación: 3D Secure desactivado»
+ *                     → autorización «0 : Transaction Approved»
+ *   · después (04/09): «3D Secure desactivado EN LA CONSULTA» + «Rango de la
+ *                     tarjeta presente en el cache 3DS2 Visa» → rechazo
+ *
+ * Es decir: a la tienda le activaron la preferencia «Análisis de riesgo
+ * solicitado al DS (Data Only)» y, cuando esa consulta no se puede completar,
+ * la transacción se rechaza. No cambió nada de nuestro lado.
+ *
+ * La documentación de Izipay dice que este campo GANA a la configuración de la
+ * tienda: «El valor transmitido en la solicitud de pago es prioritario ante las
+ * reglas que el vendedor puede haber definido en su Back Office Vendedor».
+ * Así que se manda desde aquí y deja de depender de lo que toquen allí.
+ */
+export const PREFERENCIA_3DS = [
+  // Decide el emisor. El pago SIGUE GARANTIZADO si resuelve sin interacción.
+  "NO_PREFERENCE",
+  // Igual que el anterior; Izipay documenta los dos.
+  "AUTO",
+  // Pide una EXENCIÓN de autenticación fuerte: es lo más parecido a como estaba
+  // la tienda antes del 04/09. OJO: sin autenticación no hay transferencia de
+  // responsabilidad, así que un contracargo lo asume el comercio.
+  "DISABLED",
+  // Fuerza la ventana del banco.
+  "CHALLENGE_REQUESTED",
+  "CHALLENGE_MANDATE",
+  // Solo América Latina: sin autenticación, pero compartiendo los datos con el
+  // emisor por 3DS. Es lo que la tienda tiene puesto hoy y lo que falla.
+  "DATA_SHARE_ONLY",
+] as const;
+
+export type Preferencia3DS = (typeof PREFERENCIA_3DS)[number];
+
+/** ¿Es un valor que Izipay admite? Lo que no, se descarta y no se manda. */
+export function preferencia3DSValida(v: unknown): v is Preferencia3DS {
+  return typeof v === "string" && (PREFERENCIA_3DS as readonly string[]).includes(v);
+}
+
 export interface CreatePaymentInput {
   amountCents: number;   // monto en céntimos (soles × 100), entero
   currency: string;      // "PEN"
@@ -83,6 +129,12 @@ export interface CreatePaymentInput {
    */
   identityType?: "DNI" | "CE";
   identityCode?: string;
+  /**
+   * Preferencia 3-D Secure. NULO = no se manda y manda la configuración de la
+   * tienda; ver `PREFERENCIA_3DS` más abajo.
+   */
+  strongAuthentication?: Preferencia3DS | null;
+
   /** true cuando el comprobante es factura: el pagador es una empresa. */
   esEmpresa?: boolean;
   /** Razón social, solo si `esEmpresa`. */
@@ -138,7 +190,7 @@ export function construirBillingDetails(input: CreatePaymentInput): Record<strin
 
 // Payload para POST /api-payment/V4/Charge/CreatePayment.
 export function buildCreatePaymentBody(input: CreatePaymentInput): Record<string, unknown> {
-  return {
+  const body: Record<string, unknown> = {
     amount: input.amountCents,
     currency: input.currency,
     orderId: input.orderId,
@@ -147,6 +199,12 @@ export function buildCreatePaymentBody(input: CreatePaymentInput): Record<string
       billingDetails: construirBillingDetails(input),
     },
   };
+  // Solo se manda si hay preferencia. Sin el campo, decide la tienda — que es
+  // como estuvo hasta hoy y a lo que se vuelve poniendo el ajuste a "".
+  if (preferencia3DSValida(input.strongAuthentication)) {
+    body.strongAuthentication = input.strongAuthentication;
+  }
+  return body;
 }
 
 // Extrae del kr-answer (ya parseado) el orderId y si el pago fue aceptado.
