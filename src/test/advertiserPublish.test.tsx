@@ -236,8 +236,15 @@ describe("AdvertiserPublish — secuencia del flujo de publicación con crédito
     seedDraft(); // categoría "inmuebles"
     render(<AdvertiserPublish />);
     await screen.findByDisplayValue("Casa bonita");
-    // Espera a que la promo esté cargada y reflejada en el resumen.
-    await screen.findByText(/Día de la Madre/i);
+    // La promo tiene que salir en LOS DOS resúmenes de precio de la pantalla.
+    //
+    // El de arriba no la desglosaba: enseñaba "6,92 + 0,00" y debajo un total
+    // de "0,69", tres cifras que no cuadran, mientras el de abajo sí restaba el
+    // descuento. Dos resúmenes del mismo importe contradiciéndose justo antes
+    // de pagar es la forma más rápida de que alguien desconfíe del precio.
+    await waitFor(() => {
+      expect(screen.getAllByText(/Día de la Madre/i)).toHaveLength(2);
+    });
 
     uploadMainPhoto();
     await clickPublish();

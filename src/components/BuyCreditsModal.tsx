@@ -11,7 +11,7 @@ import { Wallet, User, Building2, Globe, Check, CheckCircle2, AlertCircle, Loade
 import { toast } from "@/hooks/use-toast";
 import {
   loadSettings, priceForDuration, extrasTotal, formatSoles, formatCredits, solesToCredits,
-  type DurationDays, type ExtrasSelection, type PricingSettings, type ExtraPrices,
+  type DurationDays, type ExtrasSelection, type PricingSettings, type ExtraPrices, MIN_COBRO_SOLES,
 } from "@/lib/pricing";
 import { fetchPricingSettings } from "@/lib/pricingRemote";
 import { paisPreferido } from "@/lib/paises";
@@ -36,10 +36,8 @@ import {
 // Correo válido para el comprobante.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// Piso de cobro de la pasarela. Debe coincidir con MIN_CHARGE_PEN de la Edge
-// Function create-payment: si aquí se enseña un importe y allí se cobra otro,
-// el usuario ve una cifra en el resumen y otra en el formulario de la tarjeta.
-const MIN_COBRO = 1;
+// El piso de cobro vive en `pricing.ts`; ver allí por qué.
+const MIN_COBRO = MIN_COBRO_SOLES;
 
 // Aviso que se quiere publicar pagando en el acto lo que falta.
 export interface PublishTarget {

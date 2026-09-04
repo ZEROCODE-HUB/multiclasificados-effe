@@ -95,6 +95,7 @@ export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEd
   // misma lista desde la que se pulsó. Un viaje de ida y vuelta para no ver
   // nada, y hoy eso le pasa a 249 avisos vencidos y 50 borradores.
   const sePuedeVer = status === "Activo";
+  const esBorrador = status === "Borrador";
   // El menu ⋮ ya solo lleva las acciones secundarias. Sin ninguna de las tres
   // quedaba un boton que abria un desplegable vacio.
   const hasMenu = !!(onTogglePause || onDelete);
@@ -284,8 +285,19 @@ export function ListingRow({ listing, status = "Activo", expiresAt, onView, onEd
                   </Button>
                 )}
                 */}
-                <Button variant="outline" size="sm" className="h-8 px-3 text-xs gap-1" onClick={() => onEdit?.(listing)}>
-                  <Edit size={13} /> Editar
+                {/* En un BORRADOR el botón dice a dónde lleva de verdad: al
+                    formulario, a terminarlo y pagarlo. Antes había además un
+                    "Publicar" que abría un modal aparte, y entre los dos no se
+                    entendía cuál era cuál. */}
+                <Button
+                  variant={esBorrador ? "default" : "outline"}
+                  size="sm" className="h-8 px-3 text-xs gap-1"
+                  title={esBorrador
+                    ? "Abre el aviso para terminarlo y publicarlo."
+                    : undefined}
+                  onClick={() => onEdit?.(listing)}
+                >
+                  <Edit size={13} /> {esBorrador ? "Editar y publicar" : "Editar"}
                 </Button>
                 {sePuedeVer && (
                   <Button

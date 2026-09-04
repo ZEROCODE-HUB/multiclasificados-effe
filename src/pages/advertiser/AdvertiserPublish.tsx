@@ -27,7 +27,7 @@ import { MAX_SEGUNDOS, MAX_VIDEOS, validarVideo } from "@/lib/video";
 import { paisPreferido, guardarPais, esPeru } from "@/lib/paises";
 import {
   loadSettings, priceForDuration, extrasTotal, formatSoles, formatCredits, avisosBreakdown, solesToCredits,
-  type DurationDays, type PricingSettings, type ExtraPrices,
+  type DurationDays, type PricingSettings, type ExtraPrices, MIN_COBRO_SOLES,
 } from "@/lib/pricing";
 import { mensajeDeError } from "@/lib/errores";
 import { cargarAvisoParaCopiar, cargarAvisoParaContinuar, createAndPublishListing, finalizeListingPublication, guardarCambiosDeAviso, saveListingDraft, SaldoInsuficiente, type ListingForm } from "@/lib/publish";
@@ -1791,6 +1791,21 @@ const AdvertiserPublish = () => {
                         <span className="text-muted-foreground">Adicionales ({duration} días)</span>
                         <span className="font-bold">{formatCredits(solesToCredits(extrasSum))}</span>
                       </div>
+                      {/* LA PROMOCIÓN TAMBIÉN VA AQUÍ.
+
+                          Sin esta línea el recuadro enseñaba "6,92 + 0,00" y
+                          debajo "Total 0,69": tres cifras que no cuadran y que
+                          hacen dudar del precio justo antes de pagar. El otro
+                          resumen de esta misma pantalla sí la desglosaba, así
+                          que además se contradecían entre ellos. */}
+                      {promoPct > 0 && (
+                        <div className="flex justify-between text-sm text-success">
+                          <span className="flex items-center gap-1">
+                            <Percent size={12} /> Promo {activePromo?.name} (−{promoPct}%)
+                          </span>
+                          <span className="font-bold">−{formatCredits(baseCredits - totalCredits)}</span>
+                        </div>
+                      )}
                       <div className="border-t pt-2 flex items-baseline justify-between">
                         <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Total a pagar</span>
                         <span className="text-2xl font-extrabold text-primary">{formatCredits(totalCredits)}</span>
@@ -1872,6 +1887,9 @@ const AdvertiserPublish = () => {
                 {durationChosen && !creditLoading && balanceCredits < totalCredits && (
                   <p className="text-[11px] text-destructive">
                     Falta {formatCredits(totalCredits - balanceCredits)}. Cómpralo al publicar.
+                    {totalCredits - balanceCredits < MIN_COBRO_SOLES && (
+                      <> Se cobrará el mínimo de {formatSoles(MIN_COBRO_SOLES)} y el resto te queda como saldo.</>
+                    )}
                   </p>
                 )}
                 {/* El desglose completo (una línea por duración) ocupaba media
@@ -2107,7 +2125,13 @@ const AdvertiserPublish = () => {
                 saldo sin decirle cuánto le faltaba. */}
             {creditBalance !== null && creditBalance < totalCredits && (
               <p className="text-xs text-destructive font-medium">
+                {/* Se dice AQUÍ el importe que va a aparecer en la tarjeta. Antes
+                    esta línea prometía lo que falta y el formulario de pago pedía
+                    otra cifra: la sorpresa llegaba con la tarjeta ya en la mano. */}
                 Te faltan {formatCredits(Math.round((totalCredits - creditBalance) * 100) / 100)} — se cobrarán ahora con tarjeta.
+                {totalCredits - creditBalance < MIN_COBRO_SOLES && (
+                  <> Se cobrará el mínimo de {formatSoles(MIN_COBRO_SOLES)}; la diferencia te queda como saldo.</>
+                )}
               </p>
             )}
             <p className="text-xs text-muted-foreground">

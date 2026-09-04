@@ -191,3 +191,68 @@ describe("AdvertiserListings — editar / eliminar / ver", () => {
     await waitFor(() => expect(deleteListing).toHaveBeenCalledWith("abc-123"));
   });
 });
+
+describe("el buscador de Mis avisos", () => {
+  /**
+   * Solo miraba el TÍTULO, y solo existía en escritorio (`hidden lg:flex`).
+   * Buscar una palabra de la descripción, o pegar el código que un comprador
+   * dicta por teléfono, no devolvía nada — y desde el móvil no había buscador
+   * en absoluto. Parecía roto y en la práctica lo estaba.
+   */
+  const buscar = async (texto: string) => {
+    const caja = await screen.findByPlaceholderText(/buscar por t[íi]tulo/i);
+    fireEvent.change(caja, { target: { value: texto } });
+    return caja;
+  };
+
+  it("encuentra por título", async () => {
+    render(<AdvertiserListings />);
+    await screen.findByText("Original title");
+    await buscar("original");
+    expect(screen.getByText("Original title")).toBeInTheDocument();
+  });
+
+  it("y también por DESCRIPCIÓN", async () => {
+    render(<AdvertiserListings />);
+    await screen.findByText("Original title");
+    await buscar("desc");
+    expect(screen.getByText("Original title")).toBeInTheDocument();
+  });
+
+  it("y por el CÓDIGO del aviso, que es el que se dicta por teléfono", async () => {
+    render(<AdvertiserListings />);
+    await screen.findByText("Original title");
+    // `abc-123` → EFFE-ABC123 (ver codigoDeAviso).
+    await buscar("EFFE-ABC123");
+    expect(screen.getByText("Original title")).toBeInTheDocument();
+  });
+
+  it("las tildes dan igual en los DOS lados", async () => {
+    // Nadie pone tildes en un buscador, y quien las pone no debe salir peor
+    // parado. Se normalizan la consulta y el texto del aviso, así que
+    // "camion" encuentra "Camión" y "Camión" encuentra "camion".
+    render(<AdvertiserListings />);
+    await screen.findByText("Original title");
+    await buscar("ORIGÍNAL");
+    expect(screen.getByText("Original title")).toBeInTheDocument();
+  });
+
+  it("lo que no coincide, desaparece", async () => {
+    render(<AdvertiserListings />);
+    await screen.findByText("Original title");
+    await buscar("zzzzz");
+    await waitFor(() => {
+      expect(screen.queryByText("Original title")).not.toBeInTheDocument();
+    });
+  });
+});
+
+describe("el botón «Filtros»", () => {
+  it("ya no está: no hacía absolutamente nada", async () => {
+    // No tenía `onClick` desde que se pintó. Un control muerto al lado de uno
+    // que sí funciona enseña a desconfiar de los dos.
+    render(<AdvertiserListings />);
+    await screen.findByText("Original title");
+    expect(screen.queryByRole("button", { name: /filtros/i })).not.toBeInTheDocument();
+  });
+});

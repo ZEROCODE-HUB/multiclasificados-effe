@@ -154,6 +154,23 @@ export function totalPrice(n: number, dias: DurationDays, sel: ExtrasSelection, 
 // no como una moneda aparte. Se conservan los dos decimales del precio (base
 // 16.14) para que el saldo cuadre al céntimo con la boleta; las columnas de la
 // BD son numeric(12,2).
+/**
+ * Piso de cobro por tarjeta, en soles.
+ *
+ * Un cargo de S/ 0.14 es rechazo casi seguro del emisor —y con la comisión de
+ * la pasarela, cobrarlo cuesta más de lo que entra—. Cuando falta menos que
+ * esto se cobra el mínimo y la DIFERENCIA NO SE PIERDE: se acredita entera como
+ * saldo (`settle_paid_order` acredita lo cobrado, no lo que costaba el aviso).
+ *
+ * VIVE AQUÍ Y NO EN CADA PANTALLA a propósito. Estaba duplicado en el navegador
+ * y en la Edge Function, con un comentario pidiendo que no se separaran: si una
+ * copia cambia y la otra no, el usuario ve un importe en el resumen y otro en el
+ * formulario de la tarjeta. La copia del servidor (`MIN_CHARGE_PEN` en
+ * create-payment) es la que manda porque es la que cobra; esta es la que se
+ * ENSEÑA, y una prueba comprueba que digan lo mismo.
+ */
+export const MIN_COBRO_SOLES = 1;
+
 export const CREDIT_MULTIPLIER = 1;
 
 // IGV de Perú (18%). En el Excel los precios ya vienen "con IGV"; esta constante

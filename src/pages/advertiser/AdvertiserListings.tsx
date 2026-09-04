@@ -21,9 +21,10 @@ import { ListingRow } from "@/components/ListingRow";
 import { misPagosEnEspera, NOMBRE_MEDIO } from "@/lib/pagoManual";
 import { PublishDraftDialog } from "@/components/PublishDraftDialog";
 import { LocationPicker } from "@/components/LocationPicker";
+import { codigoDeAviso } from "@/lib/listingCode";
 import { useSession } from "@/hooks/useSession";
 import { supabase } from "@/lib/supabase";
-import { PlusCircle, ClipboardList, Eye, MessageSquare, TrendingUp, Search, SlidersHorizontal, ImagePlus, Loader2 } from "lucide-react";
+import { PlusCircle, ClipboardList, Eye, MessageSquare, TrendingUp, Search, ImagePlus, Loader2 } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
 import { useValidacion, MensajeDeError } from "@/hooks/useValidacion";
@@ -295,9 +296,26 @@ const AdvertiserListings = () => {
     }
   };
 
+  /**
+   * El buscador de "Mis avisos".
+   *
+   * Antes solo miraba el TÍTULO, así que buscar una palabra que estaba en la
+   * descripción —o pegar el código que le dicta un comprador por teléfono— no
+   * devolvía nada y parecía roto.
+   *
+   * Y sin tildes en los dos lados: quien escribe "camion" tiene que encontrar
+   * su "Camión". Es el mismo NFD que usa `slugify`.
+   */
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return q ? listings.filter((l) => l.title.toLowerCase().includes(q)) : listings;
+    const sinTildes = (t: string) =>
+      t.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+    const q = sinTildes(query.trim());
+    if (!q) return listings;
+    return listings.filter((l) =>
+      sinTildes(l.title).includes(q)
+      || sinTildes(l.description ?? "").includes(q)
+      || sinTildes(codigoDeAviso(l.id)).includes(q),
+    );
   }, [listings, query]);
 
   const byTab = (tab: TabKey) => filtered.filter((l) => TAB_OF[l.status] === tab);
@@ -374,11 +392,18 @@ const AdvertiserListings = () => {
                   : {})}
                 onView={(l) => navigate(`/aviso/${l.id}`)}
                 {...(listing.status === "draft"
-                  // En un BORRADOR, "Editar" es seguir haciendo el aviso: se
-                  // abre el formulario entero, con sus fotos, vídeos, PDF y
-                  // adicionales. El modal de aquí solo tiene texto y precio, y
-                  // un borrador al que le falta un vídeo contratado no se podía
-                  // arreglar ahí — quedaba imposible de publicar y de completar.
+                  // UN SOLO BOTÓN EN LOS BORRADORES: "Editar y publicar".
+                  //
+                  // Había dos. "Publicar" abría un modal con la duración y el
+                  // cobro; "Editar" llevaba al formulario. Hacían casi lo mismo
+                  // y enseñaban DOS resúmenes de precio distintos, así que no se
+                  // entendía cuál era cuál.
+                  //
+                  // Se quedó el formulario, que es el que abre el aviso entero
+                  // —fotos, vídeos, PDF y adicionales— y cobra al final. El modal
+                  // solo tenía texto y precio: un borrador al que le faltaba un
+                  // vídeo contratado no se podía arreglar ahí, quedaba imposible
+                  // de publicar Y de completar.
                   ? { onEdit: () => navigate(`/dashboard/anunciante/publicar?continuar=${listing.id}`) }
                   : listing.status === "active" || listing.status === "paused"
                     // Un aviso PUBLICADO también se edita en el formulario, pero
@@ -392,11 +417,6 @@ const AdvertiserListings = () => {
                     : { onEdit: () => openEdit(listing) })}
                 onDelete={() => setToDelete(listing)}
                 onTogglePause={tab === "activos" || tab === "pausados" ? togglePause : undefined}
-                {...(tab === "borradores" && listing.status === "draft"
-                  // `pending` también cae en esta pestaña, pero está en revisión:
-                  // publicarlo lo saltaría la moderación.
-                  ? { onPublish: () => setToPublish(listing) }
-                  : {})}
                 {...(listing.status !== "draft"
                   // ───────────────────────────────────────────────────────────
                   // REPUBLICAR. Lleva al formulario con el aviso copiado entero
@@ -479,21 +499,22 @@ const AdvertiserListings = () => {
               </TabsList>
             </div>
 
-            {/* Toolbar — desktop only */}
-            <div className="hidden lg:flex items-center gap-2">
-              <div className="flex items-center bg-muted/50 border border-border h-9 w-64">
+            {/* El buscador también en el MÓVIL: estaba en `hidden lg:flex`, así
+                que en un teléfono no existía. Al lado había un botón "Filtros"
+                que no tenía `onClick` — no hacía nada desde que se pintó — y se
+                retiró: un control muerto enseña a desconfiar de los que sí
+                funcionan. */}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center bg-muted/50 border border-border h-9 w-full lg:w-64">
                 <Search size={14} className="ml-3 text-muted-foreground" />
                 <input
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Buscar en mis avisos…"
-                  className="flex-1 bg-transparent px-2 text-xs outline-none"
+                  placeholder="Buscar por título, descripción o código…"
+                  className="flex-1 bg-transparent px-2 text-base lg:text-xs outline-none"
                 />
               </div>
-              <Button variant="outline" size="sm" className="gap-1.5 h-9">
-                <SlidersHorizontal size={14} /> Filtros
-              </Button>
             </div>
           </div>
 
