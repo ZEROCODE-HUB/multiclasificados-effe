@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Bold, Ban } from "lucide-react";
-import { COLORES, type TextoConFormato } from "@/lib/textoConFormato";
-import { leerDelDom, escribirEnDom, seleccionDentro } from "@/lib/editorDom";
+import { Bold, Ban, Palette } from "lucide-react";
+import {
+  COLORES, COLOR_NORMAL, normalizarColor, hexDeColor, type TextoConFormato,
+} from "@/lib/textoConFormato";
+import {
+  leerDelDom, escribirEnDom, seleccionDentro, guardarSeleccion, restaurarSeleccion,
+} from "@/lib/editorDom";
 
 /**
  * El campo de descripción, con negrita y color.
@@ -41,6 +45,10 @@ export function EditorDeTexto({
   // Lo que este componente escribió por última vez. Sirve para distinguir un
   // cambio que viene de fuera (cargar un aviso para editarlo) de uno propio.
   const ultimo = useRef<string>("");
+  // Dónde estaba la selección antes de abrir el selector de color. Ver
+  // `guardarSeleccion` en editorDom: el `<input type="color">` se lleva el foco
+  // y no se le puede impedir sin impedir también que se abra.
+  const seleccion = useRef<Range | null>(null);
 
   /** Lee el contenido y avisa al formulario. */
   const publicar = useCallback(() => {
@@ -71,11 +79,9 @@ export function EditorDeTexto({
     if (!el || !seleccionDentro(el)) return;
     try {
       const b = document.queryCommandState("bold");
-      const bruto = document.queryCommandValue("foreColor") || "";
-      const encontrado = COLORES.find(
-        (c) => c.valor && (bruto.toLowerCase() === c.hex.toLowerCase() || bruto.replace(/\s/g, "") === hexRgbSinEspacios(c.hex)),
-      );
-      setMarcas({ b, c: encontrado?.valor ?? null });
+      // El navegador contesta unas veces en `#rrggbb` y otras en `rgb(...)`.
+      const bruto = normalizarColor(document.queryCommandValue("foreColor"));
+      setMarcas({ b, c: bruto && bruto !== COLOR_NORMAL ? bruto : null });
     } catch {
       // Un navegador que no responda a la consulta no puede dejar el editor
       // inservible: los botones simplemente no se ven pulsados.
@@ -105,6 +111,21 @@ export function EditorDeTexto({
     try { document.execCommand("styleWithCSS", false, "true"); } catch { /* da igual */ }
     document.execCommand("foreColor", false, hex);
   });
+
+  /**
+   * El color que sale del selector libre.
+   *
+   * Igual que `ponerColor`, pero devolviendo antes la selección que el propio
+   * selector se llevó al abrirse. Si ya no se puede devolver —porque el
+   * contenido cambió mientras estaba abierto— no se hace nada: teñir un trozo
+   * que la persona no eligió es peor que no teñir ninguno.
+   */
+  const ponerColorSuelto = (hex: string) => {
+    const el = ref.current;
+    if (!el) return;
+    if (!seleccionDentro(el) && !restaurarSeleccion(el, seleccion.current)) return;
+    ponerColor(hex);
+  };
 
   /**
    * Pegar entra siempre como TEXTO PLANO.
@@ -154,6 +175,26 @@ export function EditorDeTexto({
     "flex h-9 min-w-9 items-center justify-center rounded-md px-2.5 text-sm transition-colors " +
     "hover:bg-muted disabled:opacity-40";
 
+  /** El botón redondo de cada color. 36 px: el mínimo que se acierta con el pulgar. */
+  const circulo = (activo: boolean) =>
+    "flex h-9 w-9 items-center justify-center rounded-md transition-colors hover:bg-muted " +
+    (activo ? "bg-background shadow-sm ring-1 ring-border" : "");
+
+  /**
+   * La muestra de color de dentro.
+   *
+   * Lo elegido se marca con un ANILLO y no con un icono al lado: un icono que
+   * aparece y desaparece ensancha el botón, y la barra entera da un salto cada
+   * vez que se cambia de color.
+   */
+  const muestra = (activo: boolean) =>
+    "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border " +
+    (activo ? "border-foreground/70 ring-2 ring-foreground/25" : "border-black/20");
+
+  /** ¿El color de ahora es uno suelto, y no de los atajos? */
+  const esPersonalizado =
+    marcas.c !== null && !COLORES.some((c) => c.hex === marcas.c);
+
   return (
     <div className={className}>
       {/* La barra va ARRIBA del campo: abajo quedaría tapada por el teclado del
@@ -180,44 +221,87 @@ export function EditorDeTexto({
 
         <span className="mx-1 h-5 w-px bg-border" aria-hidden />
 
-        {/* El rótulo importa: sin él son cinco círculos sueltos y nadie sabe
-            que son colores del texto ni que el primero es para quitarlo. */}
+        {/* El rótulo importa: sin él son unos círculos sueltos y nadie sabe que
+            son colores del texto. */}
         <span className="mr-0.5 text-xs text-muted-foreground">Color:</span>
 
-        {COLORES.map((c) => {
-          const activo = marcas.c === c.valor;
-          return (
-            <button
-              key={c.nombre}
-              type="button"
-              // 36 px de lado: es el mínimo que se acierta con el pulgar.
-              className={
-                "flex h-9 w-9 items-center justify-center rounded-md transition-colors hover:bg-muted " +
-                (activo ? "bg-background shadow-sm ring-1 ring-border" : "")
-              }
-              aria-label={c.valor ? `Color ${c.nombre}` : "Quitar el color"}
-              aria-pressed={activo}
-              title={c.valor ? c.nombre : "Sin color"}
-              onPointerDown={(e) => { e.preventDefault(); ponerColor(c.hex); }}
-            >
-              {/* El indicador es un ANILLO alrededor del círculo y no un icono
-                  al lado: un icono que aparece y desaparece ensancha el botón y
-                  la barra entera da un salto cada vez que se elige un color. */}
-              <span
-                className={
-                  "flex h-5 w-5 items-center justify-center rounded-full border " +
-                  (activo ? "border-foreground/70 ring-2 ring-foreground/25" : "border-black/20")
-                }
-                style={{ backgroundColor: c.valor ? c.hex : "transparent" }}
-                aria-hidden
-              >
-                {/* «Sin color» se dibuja hueco y tachado: un círculo relleno de
-                    gris se confunde con un color más de la paleta. */}
-                {!c.valor && <Ban size={13} className="text-muted-foreground" />}
-              </span>
-            </button>
-          );
-        })}
+        {/* Quitar el color: hueco y tachado, para que no se lea como un color
+            más. Va primero porque es lo que se busca cuando uno se arrepiente. */}
+        <button
+          type="button"
+          className={circulo(marcas.c === null)}
+          aria-label="Quitar el color"
+          aria-pressed={marcas.c === null}
+          title="Sin color"
+          onPointerDown={(e) => { e.preventDefault(); ponerColor(COLOR_NORMAL); }}
+        >
+          <span className={muestra(marcas.c === null)} aria-hidden>
+            <Ban size={13} className="text-muted-foreground" />
+          </span>
+        </button>
+
+        {/* Los cuatro de la casa, como ATAJO. El azul de la marca es imposible
+            de acertar con una rueda de color, y son los que se van a usar casi
+            siempre. */}
+        {COLORES.map((c) => (
+          <button
+            key={c.nombre}
+            type="button"
+            className={circulo(marcas.c === c.hex)}
+            aria-label={`Color ${c.nombre}`}
+            aria-pressed={marcas.c === c.hex}
+            title={c.nombre}
+            onPointerDown={(e) => { e.preventDefault(); ponerColor(c.hex); }}
+          >
+            <span
+              className={muestra(marcas.c === c.hex)}
+              style={{ backgroundColor: c.hex }}
+              aria-hidden
+            />
+          </button>
+        ))}
+
+        {/* ── CUALQUIER OTRO COLOR ──
+
+            Es un `<input type="color">` del navegador, no una rueda propia: en el
+            móvil abre el selector nativo del sistema —con su cuentagotas y sus
+            colores recientes— y en el escritorio el del navegador. Cualquier cosa
+            que se pintara aquí sería peor y además habría que mantenerla.
+
+            El `<label>` es lo que se ve; el `<input>` va escondido detrás porque
+            su aspecto por defecto (un recuadro con borde grueso) no se puede
+            cambiar y desentona con el resto de la barra. */}
+        <label
+          className={
+            "relative flex h-9 cursor-pointer items-center gap-1.5 rounded-md px-2 text-sm " +
+            "transition-colors hover:bg-muted " +
+            (esPersonalizado ? "bg-background shadow-sm ring-1 ring-border" : "")
+          }
+          title="Elegir otro color"
+        >
+          <span
+            className={muestra(esPersonalizado)}
+            style={{ backgroundColor: esPersonalizado ? marcas.c! : "transparent" }}
+            aria-hidden
+          >
+            {!esPersonalizado && <Palette size={13} className="text-muted-foreground" />}
+          </span>
+          <span className="hidden sm:inline">Otro…</span>
+          <input
+            type="color"
+            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+            aria-label="Elegir cualquier color"
+            value={hexDeColor(marcas.c)}
+            // AQUÍ NO SE PUEDE HACER `preventDefault`: se lo tragaría el gesto y
+            // el selector no llegaría a abrirse. Así que se le deja robar el
+            // foco —y con él la selección— y se guarda antes para devolverla.
+            onPointerDown={() => { seleccion.current = guardarSeleccion(ref.current!); }}
+            // `onChange` de React escucha el evento `input`, que en el
+            // escritorio salta MIENTRAS se mueve la rueda: el texto se va
+            // tiñendo en vivo, que es de lo que se trataba.
+            onChange={(e) => ponerColorSuelto(e.target.value)}
+          />
+        </label>
       </div>
 
       <div className="relative">
@@ -254,12 +338,6 @@ export function EditorDeTexto({
       </div>
     </div>
   );
-}
-
-/** `#162950` → `rgb(22,41,80)` sin espacios, para comparar lo que devuelve el navegador. */
-function hexRgbSinEspacios(hex: string): string {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgb(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255})`;
 }
 
 export default EditorDeTexto;

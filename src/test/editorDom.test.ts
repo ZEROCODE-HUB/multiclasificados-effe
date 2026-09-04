@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { leerDelDom, escribirEnDom, largoDelDom } from "@/lib/editorDom";
+import {
+  leerDelDom, escribirEnDom, largoDelDom, guardarSeleccion, restaurarSeleccion,
+} from "@/lib/editorDom";
 import { aTextoPlano, type TextoConFormato } from "@/lib/textoConFormato";
 
 /**
@@ -54,33 +56,43 @@ describe("las formas en que llega la negrita", () => {
 describe("las formas en que llega el color", () => {
   it("como estilo en línea", () => {
     expect(conHtml('<span style="color: #dc2626">Urgente</span>')).toEqual([
-      { t: "Urgente", c: "rojo" },
+      { t: "Urgente", c: "#dc2626" },
     ]);
   });
 
   it("como `rgb(...)`, que es como lo devuelve el navegador al leerlo", () => {
     expect(conHtml('<span style="color: rgb(5, 150, 105)">Nuevo</span>')).toEqual([
-      { t: "Nuevo", c: "verde" },
+      { t: "Nuevo", c: "#059669" },
     ]);
   });
 
   it("y como <font color>, que es lo que sigue produciendo Safari", () => {
     expect(conHtml('<font color="#bd4e05">Rebaja</font>')).toEqual([
-      { t: "Rebaja", c: "naranja" },
+      { t: "Rebaja", c: "#bd4e05" },
     ]);
   });
 
-  it("un color que NO es de la paleta se descarta", () => {
-    // Pasa al pegar de otra web. Antes que colar un tono que la base rechazaría
-    // —y que nadie eligió—, se queda en el color normal.
-    expect(conHtml('<span style="color: #ff00ff">Pegado</span>')).toEqual([
-      { t: "Pegado" },
+  it("un color que no es de los atajos se conserva igual", () => {
+    // Desde que se admite cualquier tono, esto ya NO se descarta: es
+    // exactamente lo que produce el selector libre.
+    expect(conHtml('<span style="color: #ff00ff">Suelto</span>')).toEqual([
+      { t: "Suelto", c: "#ff00ff" },
     ]);
+  });
+
+  it("y llega normalizado, venga como venga", () => {
+    // Un mismo color escrito de tres formas tiene que producir UN solo valor:
+    // si no, dos trozos del mismo color no se fusionarían y el tope de 300
+    // fragmentos se agotaría antes de tiempo.
+    expect(conHtml('<span style="color: #FF00FF">x</span>')[0].c).toBe("#ff00ff");
+    expect(conHtml('<span style="color: rgb(255, 0, 255)">x</span>')[0].c).toBe("#ff00ff");
+    expect(conHtml('<font color="#f0f">x</font>')[0].c).toBe("#ff00ff");
   });
 
   it("el color normal no se guarda como color", () => {
-    // Elegir «Normal» pinta el tono del texto de siempre; guardarlo sería
-    // decir «este trozo tiene color» cuando no lo tiene.
+    // Es lo que hace que «sin color» funcione: pinta el tono que el texto
+    // tendría igualmente, y al leerlo se descarta. Guardarlo sería decir
+    // «este trozo tiene color» cuando no lo tiene.
     expect(conHtml('<span style="color: #29303d">Texto</span>')).toEqual([
       { t: "Texto" },
     ]);
@@ -91,13 +103,13 @@ describe("negrita y color a la vez", () => {
   it("da igual cómo estén anidados", () => {
     const a = conHtml('<b><span style="color: #dc2626">Ya</span></b>');
     const b = conHtml('<span style="color: #dc2626"><b>Ya</b></span>');
-    expect(a).toEqual([{ t: "Ya", b: true, c: "rojo" }]);
+    expect(a).toEqual([{ t: "Ya", b: true, c: "#dc2626" }]);
     expect(a).toEqual(b);
   });
 
   it("las marcas se heredan hacia dentro", () => {
     expect(conHtml('<b>uno <span style="color: #dc2626">dos</span></b>')).toEqual([
-      { t: "uno ", b: true }, { t: "dos", b: true, c: "rojo" },
+      { t: "uno ", b: true }, { t: "dos", b: true, c: "#dc2626" },
     ]);
   });
 });
@@ -137,7 +149,7 @@ describe("el texto sobrevive intacto", () => {
 
 describe("volcar el modelo en el editor", () => {
   it("pinta el formato de vuelta", () => {
-    const f: TextoConFormato = [{ t: "Depa " }, { t: "amoblado", b: true, c: "rojo" }];
+    const f: TextoConFormato = [{ t: "Depa " }, { t: "amoblado", b: true, c: "#dc2626" }];
     escribirEnDom(raiz, f);
     expect(raiz.textContent).toBe("Depa amoblado");
     // Y lo que se pinta se vuelve a leer igual: es la garantía de que editar un
@@ -169,8 +181,9 @@ describe("volcar el modelo en el editor", () => {
 
 describe("lo que se pega de fuera", () => {
   it("una tabla entera de Word se queda solo en su texto", () => {
-    // El editor pega como texto plano, pero si algo se colara igual, leerlo no
-    // puede producir marcas que no existen en la paleta.
+    // El editor pega como texto plano, pero si algo se colara igual, leerlo
+    // solo puede producir las DOS marcas del modelo: un tamaño de letra, una
+    // tipografía o un fondo no existen y se pierden por el camino.
     const r = conHtml('<table><tr><td style="font-size:40px">Precio</td></tr></table>');
     expect(r).toEqual([{ t: "Precio" }]);
   });
@@ -178,5 +191,72 @@ describe("lo que se pega de fuera", () => {
   it("y un script pegado no es más que texto", () => {
     const r = conHtml("<span>hola</span>");
     expect(r).toEqual([{ t: "hola" }]);
+  });
+});
+
+describe("guardar y devolver la selección", () => {
+  /**
+   * DE ESTO DEPENDE EL SELECTOR DE COLOR LIBRE.
+   *
+   * Los botones de la barra conservan la selección con `preventDefault` en el
+   * `pointerdown`, pero a un `<input type="color">` no se le puede hacer eso: si
+   * se le impide el gesto, no se abre la rueda. Se le deja llevarse el foco y la
+   * selección se recupera con estas dos funciones. Sin ellas, elegir un color
+   * no tiñe nada.
+   */
+  const seleccionar = (nodo: Node, desde: number, hasta: number) => {
+    const r = document.createRange();
+    r.setStart(nodo, desde);
+    r.setEnd(nodo, hasta);
+    const sel = window.getSelection()!;
+    sel.removeAllRanges();
+    sel.addRange(r);
+  };
+
+  it("devuelve la selección después de perder el foco", () => {
+    raiz.textContent = "Depa amoblado";
+    seleccionar(raiz.firstChild!, 5, 13);
+    const guardado = guardarSeleccion(raiz);
+
+    // Lo que hace el navegador al abrirse el selector de color.
+    window.getSelection()!.removeAllRanges();
+    expect(window.getSelection()!.rangeCount).toBe(0);
+
+    expect(restaurarSeleccion(raiz, guardado)).toBe(true);
+    expect(window.getSelection()!.toString()).toBe("amoblado");
+  });
+
+  it("no guarda nada si la selección estaba FUERA del editor", () => {
+    // Si no, pulsar el selector con el cursor en el título teñiría la
+    // descripción de alguien que no estaba mirándola.
+    const otro = document.createElement("div");
+    otro.textContent = "otro campo";
+    document.body.appendChild(otro);
+    seleccionar(otro.firstChild!, 0, 4);
+    expect(guardarSeleccion(raiz)).toBeNull();
+  });
+
+  it("sin nada guardado, no hace nada", () => {
+    expect(restaurarSeleccion(raiz, null)).toBe(false);
+  });
+
+  it("si el contenido cambió mientras tanto, NO se tiñe texto ajeno", () => {
+    // Lo comprobado, no lo supuesto: al borrarse los nodos, el navegador NO
+    // invalida el rango — lo recoloca al principio del editor y lo deja
+    // colapsado. Se apuntó aquí porque la primera versión de esta prueba daba
+    // por hecho lo contrario.
+    //
+    // Y colapsado es justo el desenlace bueno: un color sobre un cursor no
+    // repinta nada, solo tiñe lo que se escriba después. Lo que no puede pasar
+    // —y es lo que se fija aquí— es que se lleve por delante un texto que la
+    // persona no había seleccionado.
+    raiz.textContent = "Depa amoblado";
+    seleccionar(raiz.firstChild!, 0, 4);
+    const guardado = guardarSeleccion(raiz);
+
+    escribirEnDom(raiz, [{ t: "otra cosa" }]);
+    restaurarSeleccion(raiz, guardado);
+
+    expect(window.getSelection()!.toString()).toBe("");
   });
 });

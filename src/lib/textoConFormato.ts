@@ -4,7 +4,7 @@
  * EL MODELO. Una lista de fragmentos de texto, cada uno con dos marcas
  * opcionales. Nada más:
  *
- *     [{ t: "Depa " }, { t: "amoblado", b: true }, { t: " en Lima", c: "rojo" }]
+ *     [{ t: "Depa " }, { t: "amoblado", b: true }, { t: " en Lima", c: "#dc2626" }]
  *
  * NO se guarda HTML, y es la decisión de diseño más importante de este módulo.
  * Guardar HTML de usuarios obliga a sanearlo, y un solo fallo en el saneado es
@@ -17,40 +17,87 @@
  */
 
 /**
- * Los colores que se ofrecen. `null` es el color normal del texto.
+ * EL COLOR SE GUARDA COMO EL TONO, NO COMO UN NOMBRE.
  *
- * El `hex` no es decorativo: el editor pinta con color en línea —es lo que
- * produce el navegador al dar formato— y al guardar se traduce de vuelta a este
- * nombre. Por eso tiene que ser EXACTAMENTE el mismo tono que la clase, o lo que
- * se escribe se vería distinto de lo que se publica.
+ * Antes solo se admitían cuatro colores y `c` guardaba su nombre («rojo»). El
+ * cliente pidió poder elegir CUALQUIERA, así que ahora `c` guarda el tono
+ * directamente, en `#rrggbb` y en minúsculas.
  *
- * Los dos primeros salen de la marca (`--primary` y `--secondary` de index.css);
- * los otros dos son los semáforos de siempre. Cuatro más el normal: suficiente
- * para destacar sin convertir el listado en un semáforo.
+ * Que sea SIEMPRE esa forma no es cosmético, es la frontera de seguridad. Este
+ * valor acaba en un `style` de la ficha que abre cualquier visitante, así que
+ * antes de pintarlo se comprueba contra la expresión de abajo y lo que no encaja
+ * se descarta. Nunca se copia tal cual lo que venga en el dato: eso permitiría
+ * cerrar la propiedad y añadir otras.
  */
-export const COLORES = [
-  { valor: null, nombre: "Normal", clase: "text-foreground/85", hex: "#29303d" },
-  { valor: "azul", nombre: "Azul", clase: "text-primary", hex: "#162950" },
-  { valor: "naranja", nombre: "Naranja", clase: "text-secondary", hex: "#bd4e05" },
-  { valor: "verde", nombre: "Verde", clase: "text-emerald-600", hex: "#059669" },
-  { valor: "rojo", nombre: "Rojo", clase: "text-red-600", hex: "#dc2626" },
-] as const;
+export type Color = string;
 
-export type Color = "azul" | "naranja" | "verde" | "rojo";
+/** Seis dígitos hexadecimales en minúsculas. Nada más pasa. */
+const RE_COLOR = /^#[0-9a-f]{6}$/;
 
-/** El tono exacto con el que el editor pinta cada color. */
-export function hexDeColor(c: Color | null | undefined): string {
-  return COLORES.find((x) => x.valor === (c ?? null))?.hex ?? COLORES[0].hex;
+/** ¿Es un tono que se puede pintar sin miedo? */
+export function esColorValido(c: unknown): c is Color {
+  return typeof c === "string" && RE_COLOR.test(c);
 }
 
-/** Los valores admitidos, para validar sin repetir la lista a mano. */
-const VALIDOS = new Set<string>(
-  COLORES.map((c) => c.valor).filter((v): v is Color => v !== null),
-);
+/**
+ * El color del texto cuando no se ha elegido ninguno (`--foreground`).
+ *
+ * Hace de «sin color»: elegirlo en el editor equivale a quitar el color, porque
+ * es exactamente el tono que el texto tendría sin marca. Quien elija justo este
+ * tono a mano obtiene lo mismo que ve, así que no hay sorpresa posible.
+ */
+export const COLOR_NORMAL = "#29303d";
 
-/** La clase de Tailwind de cada color. El renderizador no decide colores. */
-export function claseDeColor(c: Color | null | undefined): string {
-  return COLORES.find((x) => x.valor === (c ?? null))?.clase ?? COLORES[0].clase;
+/**
+ * Atajos a los colores de la casa. NO son un límite: al lado va el selector
+ * libre. Están porque acertar el azul de la marca con una rueda de color es
+ * imposible, y porque son los que se van a usar el 90 % de las veces.
+ *
+ * Los dos primeros salen de `--primary` y `--secondary` de index.css; los otros
+ * dos son los semáforos de siempre.
+ */
+export const COLORES = [
+  { nombre: "Azul", hex: "#162950" },
+  { nombre: "Naranja", hex: "#bd4e05" },
+  { nombre: "Verde", hex: "#059669" },
+  { nombre: "Rojo", hex: "#dc2626" },
+] as const;
+
+/**
+ * Traduce a `#rrggbb` lo que devuelva el navegador.
+ *
+ * Hace falta porque cada uno contesta a su manera: al leer un estilo dan
+ * `rgb(22, 41, 80)`, un `<font color>` pegado de otra web puede traer `#abc`, y
+ * `queryCommandValue` devuelve unas veces una cosa y otras la otra.
+ *
+ * Lo que no reconoce devuelve `null` —y entonces el trozo se queda sin color—
+ * en vez de inventarse un tono.
+ */
+export function normalizarColor(valor: string | null | undefined): Color | null {
+  if (!valor) return null;
+  const v = valor.trim().toLowerCase();
+
+  if (RE_COLOR.test(v)) return v;
+
+  // La forma corta: `#abc` es `#aabbcc`.
+  const corto = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/.exec(v);
+  if (corto) return `#${corto[1]}${corto[1]}${corto[2]}${corto[2]}${corto[3]}${corto[3]}`;
+
+  // `rgb(...)` y `rgba(...)`, con espacios o sin ellos. La transparencia se
+  // ignora: el modelo no la guarda y un texto medio transparente no se lee.
+  const rgb = /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,[^)]*)?\)$/.exec(v);
+  if (rgb) {
+    const n = [1, 2, 3].map((i) => Number(rgb[i]));
+    if (n.some((x) => x > 255)) return null;
+    return `#${n.map((x) => x.toString(16).padStart(2, "0")).join("")}`;
+  }
+
+  return null;
+}
+
+/** El tono con el que se pinta un color. Ante la duda, el normal. */
+export function hexDeColor(c: Color | null | undefined): string {
+  return esColorValido(c) ? c : COLOR_NORMAL;
 }
 
 /** Un trozo de texto con sus marcas. */
@@ -128,10 +175,10 @@ export function validar(dato: unknown): TextoConFormato | null {
     for (const k of Object.keys(e)) if (k !== "t" && k !== "b" && k !== "c") return null;
     if (typeof e.t !== "string") return null;
     if ("b" in e && e.b !== true) return null;
-    if ("c" in e && (typeof e.c !== "string" || !VALIDOS.has(e.c))) return null;
+    if ("c" in e && !esColorValido(e.c)) return null;
     const f: Fragmento = { t: e.t };
     if (e.b === true) f.b = true;
-    if (typeof e.c === "string") f.c = e.c as Color;
+    if (esColorValido(e.c)) f.c = e.c;
     out.push(f);
   }
   const limpio = normalizar(out);

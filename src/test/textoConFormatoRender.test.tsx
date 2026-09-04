@@ -37,14 +37,26 @@ describe("seguridad: un anunciante no puede inyectar nada", () => {
     expect(screen.getByText("<b>no soy negrita</b>")).toBeInTheDocument();
   });
 
-  it("un color inventado NO acaba en el atributo de estilo", () => {
-    // Aunque la base y `validar` lo rechazan antes, el renderizador es la última
-    // barrera: traduce por tabla, nunca copia lo que venga en el dato.
-    const { container } = render(
-      <TextoConFormato texto="" formato={[{ t: "x", c: "red; background: url(javascript:1)" as never }]} />,
-    );
-    expect(container.innerHTML).not.toContain("javascript");
-    expect(container.innerHTML).not.toContain("background");
+  it("un color con forma rara NO acaba en el atributo de estilo", () => {
+    // LA PRUEBA MÁS IMPORTANTE DEL ARCHIVO desde que el color es libre. Ya no
+    // se traduce por una tabla de cuatro: el tono va directo a un `style`, así
+    // que el renderizador comprueba la FORMA (`#rrggbb`) y descarta el resto.
+    for (const malo of [
+      "red; background: url(javascript:1)",
+      "#ff0000; position: fixed; inset: 0",
+      "expression(alert(1))",
+      "var(--primary)",
+      "rojo",
+    ]) {
+      const { container } = render(
+        <TextoConFormato texto="" formato={[{ t: "x", c: malo }]} />,
+      );
+      expect(container.innerHTML, malo).not.toContain("javascript");
+      expect(container.innerHTML, malo).not.toContain("background");
+      expect(container.innerHTML, malo).not.toContain("position");
+      // Y el texto NO se pierde por el camino: se degrada el color, no el aviso.
+      expect(container.textContent).toBe("x");
+    }
   });
 });
 
@@ -56,19 +68,30 @@ describe("lo que sí se ve", () => {
     expect(container.querySelector(".font-bold")?.textContent).toBe("amoblado");
   });
 
-  it("cada color usa su clase", () => {
+  it("el color se pinta con el tono que se guardó", () => {
     const { container } = render(
-      <TextoConFormato texto="" formato={[{ t: "Urgente", c: "rojo" }]} />,
+      <TextoConFormato texto="" formato={[{ t: "Urgente", c: "#dc2626" }]} />,
     );
-    expect(container.querySelector(".text-red-600")?.textContent).toBe("Urgente");
+    const span = container.querySelector("span span") as HTMLElement;
+    expect(span.textContent).toBe("Urgente");
+    expect(span.style.color).toBe("rgb(220, 38, 38)");
+  });
+
+  it("y vale CUALQUIER tono, no solo los cuatro de la casa", () => {
+    // Es lo que pidió el cliente.
+    const { container } = render(
+      <TextoConFormato texto="" formato={[{ t: "Suelto", c: "#7c3aed" }]} />,
+    );
+    expect((container.querySelector("span span") as HTMLElement).style.color)
+      .toBe("rgb(124, 58, 237)");
   });
 
   it("negrita y color a la vez", () => {
     const { container } = render(
-      <TextoConFormato texto="" formato={[{ t: "Ya", b: true, c: "verde" }]} />,
+      <TextoConFormato texto="" formato={[{ t: "Ya", b: true, c: "#059669" }]} />,
     );
-    const span = container.querySelector(".font-bold");
-    expect(span?.className).toContain("text-emerald-600");
+    const span = container.querySelector(".font-bold") as HTMLElement;
+    expect(span.style.color).toBe("rgb(5, 150, 105)");
   });
 
   it("el texto se conserva entero, con sus saltos de línea", () => {

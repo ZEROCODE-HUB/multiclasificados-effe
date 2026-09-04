@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   normalizar, aplicarMarca, marcasDelRango, aTextoPlano, tieneFormato,
-  desdeTextoPlano, validar, MAX_FRAGMENTOS, claseDeColor, hexDeColor, COLORES,
+  desdeTextoPlano, validar, MAX_FRAGMENTOS, hexDeColor, esColorValido,
+  normalizarColor, COLORES, COLOR_NORMAL,
   type TextoConFormato,
 } from "@/lib/textoConFormato";
 
@@ -68,12 +69,12 @@ describe("aplicar negrita", () => {
 
   it("una selección que cruza varios fragmentos los marca todos", () => {
     const mezcla: TextoConFormato = [
-      { t: "uno " }, { t: "dos", c: "rojo" }, { t: " tres" },
+      { t: "uno " }, { t: "dos", c: "#dc2626" }, { t: " tres" },
     ];
     const r = aplicarMarca(mezcla, { desde: 0, hasta: 12 }, { b: true });
     expect(r.every((p) => p.b)).toBe(true);
     // Y el color de en medio se respeta: negrita y color son independientes.
-    expect(r.find((p) => p.t === "dos")?.c).toBe("rojo");
+    expect(r.find((p) => p.t === "dos")?.c).toBe("#dc2626");
   });
 
   it("sin selección no cambia nada", () => {
@@ -82,7 +83,7 @@ describe("aplicar negrita", () => {
 
   it("el texto NUNCA cambia al dar formato", () => {
     // Es lo que garantiza que el buscador siga encontrando lo mismo.
-    const r = aplicarMarca(base, { desde: 3, hasta: 9 }, { c: "verde" });
+    const r = aplicarMarca(base, { desde: 3, hasta: 9 }, { c: "#059669" });
     expect(texto(r)).toBe(texto(base));
   });
 });
@@ -91,26 +92,26 @@ describe("aplicar color", () => {
   const base = desdeTextoPlano("Oferta especial");
 
   it("marca el trozo con el color elegido", () => {
-    const r = aplicarMarca(base, { desde: 0, hasta: 6 }, { c: "rojo" });
-    expect(r[0]).toEqual({ t: "Oferta", c: "rojo" });
+    const r = aplicarMarca(base, { desde: 0, hasta: 6 }, { c: "#dc2626" });
+    expect(r[0]).toEqual({ t: "Oferta", c: "#dc2626" });
   });
 
   it("elegir «normal» lo quita", () => {
-    const con = aplicarMarca(base, { desde: 0, hasta: 6 }, { c: "rojo" });
+    const con = aplicarMarca(base, { desde: 0, hasta: 6 }, { c: "#dc2626" });
     const sin = aplicarMarca(con, { desde: 0, hasta: 6 }, { c: null });
     expect(sin).toEqual([{ t: "Oferta especial" }]);
   });
 
   it("un color sustituye al anterior en vez de acumularse", () => {
-    const rojo = aplicarMarca(base, { desde: 0, hasta: 6 }, { c: "rojo" });
-    const verde = aplicarMarca(rojo, { desde: 0, hasta: 6 }, { c: "verde" });
-    expect(verde[0].c).toBe("verde");
+    const rojo = aplicarMarca(base, { desde: 0, hasta: 6 }, { c: "#dc2626" });
+    const verde = aplicarMarca(rojo, { desde: 0, hasta: 6 }, { c: "#059669" });
+    expect(verde[0].c).toBe("#059669");
   });
 });
 
 describe("qué marcas tiene lo seleccionado", () => {
   const f: TextoConFormato = [
-    { t: "uno ", b: true }, { t: "dos", b: true, c: "rojo" }, { t: " tres" },
+    { t: "uno ", b: true }, { t: "dos", b: true, c: "#dc2626" }, { t: " tres" },
   ];
 
   it("con TODO en negrita, el botón sale pulsado", () => {
@@ -123,7 +124,7 @@ describe("qué marcas tiene lo seleccionado", () => {
   });
 
   it("el color solo se muestra si es el mismo en todo", () => {
-    expect(marcasDelRango(f, { desde: 4, hasta: 7 }).c).toBe("rojo");
+    expect(marcasDelRango(f, { desde: 4, hasta: 7 }).c).toBe("#dc2626");
     expect(marcasDelRango(f, { desde: 0, hasta: 10 }).c).toBeNull();
   });
 });
@@ -132,7 +133,7 @@ describe("validar lo que llega de fuera", () => {
   // Se usa al leer de la base: una fila puede venir de una versión anterior o de
   // alguien escribiendo por la API. Ante la duda, texto plano.
   it("acepta lo bueno", () => {
-    expect(validar([{ t: "a", b: true, c: "rojo" }])).toEqual([{ t: "a", b: true, c: "rojo" }]);
+    expect(validar([{ t: "a", b: true, c: "#dc2626" }])).toEqual([{ t: "a", b: true, c: "#dc2626" }]);
   });
 
   it("rechaza un color que no es de la paleta", () => {
@@ -185,18 +186,61 @@ describe("texto plano y formato", () => {
   });
 });
 
-describe("la paleta", () => {
-  it("cada color tiene su clase y su tono, y coinciden entre sí", () => {
-    // El editor pinta con el tono y la ficha con la clase. Si se separan, lo que
-    // se escribe se vería distinto de lo que se publica.
-    for (const c of COLORES) {
-      expect(claseDeColor(c.valor)).toBe(c.clase);
-      expect(hexDeColor(c.valor)).toBe(c.hex);
-      expect(c.hex).toMatch(/^#[0-9a-f]{6}$/);
+describe("el color, que ahora puede ser cualquiera", () => {
+  it("acepta un tono libre en `#rrggbb`", () => {
+    // Es lo que pidió el cliente: no una lista de cuatro.
+    expect(validar([{ t: "x", c: "#7c3aed" }])).toEqual([{ t: "x", c: "#7c3aed" }]);
+  });
+
+  it("pero SOLO con esa forma", () => {
+    // Este valor acaba en un `style` de la ficha que abre cualquier visitante.
+    // Lo que no sean seis dígitos hexadecimales en minúsculas no entra.
+    for (const malo of [
+      "rojo", "#FFF", "#ffffff ", "red", "#12345", "#1234567",
+      "#ff0000; background: url(x)", "rgb(255,0,0)", "#GGGGGG", "",
+    ]) {
+      expect(validar([{ t: "x", c: malo }]), `coló ${malo}`).toBeNull();
+      expect(esColorValido(malo), `coló ${malo}`).toBe(false);
     }
   });
 
-  it("un color inventado cae en el normal, no rompe nada", () => {
-    expect(claseDeColor("fucsia" as never)).toBe(COLORES[0].clase);
+  it("las mayúsculas se rechazan en vez de arreglarse solas", () => {
+    // Si se admitieran las dos formas, "#FF0000" y "#ff0000" serían el mismo
+    // color con dos valores, y dos fragmentos vecinos idénticos dejarían de
+    // fusionarse. Una sola forma, y se normaliza al leer del navegador.
+    expect(validar([{ t: "x", c: "#FF0000" }])).toBeNull();
+  });
+
+  it("los atajos de la casa son tonos de verdad", () => {
+    for (const c of COLORES) {
+      expect(esColorValido(c.hex), `${c.nombre} no es un tono válido`).toBe(true);
+      expect(hexDeColor(c.hex)).toBe(c.hex);
+    }
+  });
+
+  it("sin color se pinta con el tono normal del texto", () => {
+    expect(hexDeColor(null)).toBe(COLOR_NORMAL);
+    expect(hexDeColor("no es un color")).toBe(COLOR_NORMAL);
+  });
+});
+
+describe("traducir lo que devuelve el navegador", () => {
+  // Cada navegador contesta a su manera y todas significan lo mismo.
+  it("entiende las formas que llegan", () => {
+    expect(normalizarColor("#7C3AED")).toBe("#7c3aed");
+    expect(normalizarColor("rgb(124, 58, 237)")).toBe("#7c3aed");
+    expect(normalizarColor("rgb(124,58,237)")).toBe("#7c3aed");
+    expect(normalizarColor("rgba(124, 58, 237, 0.5)")).toBe("#7c3aed");
+    // La forma corta, que aparece al pegar de otra web.
+    expect(normalizarColor("#abc")).toBe("#aabbcc");
+    // Y rellena los ceros: sin esto "#010203" saldría como "#123".
+    expect(normalizarColor("rgb(1, 2, 3)")).toBe("#010203");
+  });
+
+  it("y lo que no entiende NO se lo inventa", () => {
+    // Antes que colar un tono que nadie eligió, el trozo se queda sin color.
+    for (const malo of ["", null, undefined, "azulado", "rgb(300, 0, 0)", "transparent"]) {
+      expect(normalizarColor(malo)).toBeNull();
+    }
   });
 });

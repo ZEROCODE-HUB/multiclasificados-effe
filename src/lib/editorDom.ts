@@ -1,5 +1,6 @@
 import {
-  COLORES, normalizar, type Color, type Fragmento, type TextoConFormato,
+  COLOR_NORMAL, hexDeColor, normalizarColor, normalizar,
+  type Color, type Fragmento, type TextoConFormato,
 } from "@/lib/textoConFormato";
 
 /**
@@ -19,32 +20,18 @@ import {
  * y hay que entender todas esas formas. De eso va `leerDelDom`.
  */
 
-/** `#162950` → `rgb(22, 41, 80)`, que es como el navegador devuelve un color. */
-function hexARgb(hex: string): string {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
-}
-
-/** Todas las formas en que puede llegar cada color de la paleta. */
-const PORCOLOR = new Map<string, Color | null>();
-for (const c of COLORES) {
-  PORCOLOR.set(c.hex.toLowerCase(), c.valor);
-  PORCOLOR.set(hexARgb(c.hex), c.valor);
-  // Sin espacios: algunos navegadores devuelven `rgb(22,41,80)`.
-  PORCOLOR.set(hexARgb(c.hex).replace(/\s/g, ""), c.valor);
-}
-
 /**
- * Traduce un color del navegador a uno de la paleta.
+ * Traduce a color del modelo lo que diga el navegador.
  *
- * Lo que no reconoce se descarta: si alguien pega texto de otra web con su
- * propio color, se queda con el color normal en vez de colarse un tono que la
- * base rechazaría y que además nadie eligió.
+ * Se admite CUALQUIER tono, así que aquí ya no se filtra por una paleta: solo se
+ * normaliza la forma. Lo único que se descarta a propósito es el color normal
+ * del texto, porque marcar un trozo con el tono que ya tendría sin marca sería
+ * decir «este trozo tiene color» cuando no lo tiene, y ensuciaría el modelo cada
+ * vez que alguien pulsa «sin color».
  */
-function colorDePaleta(valor: string | null | undefined): Color | null {
-  if (!valor) return null;
-  const v = valor.trim().toLowerCase();
-  return PORCOLOR.get(v) ?? PORCOLOR.get(v.replace(/\s/g, "")) ?? null;
+function colorDelValor(valor: string | null | undefined): Color | null {
+  const c = normalizarColor(valor);
+  return c && c !== COLOR_NORMAL ? c : null;
 }
 
 /** ¿Este elemento pone el texto en negrita? */
@@ -59,7 +46,7 @@ function esNegrita(el: HTMLElement): boolean {
 function colorDe(el: HTMLElement): Color | null {
   // `style.color` cubre `styleWithCSS`; el atributo `color` cubre el `<font>`
   // que todavía produce Safari.
-  return colorDePaleta(el.style.color) ?? colorDePaleta(el.getAttribute("color"));
+  return colorDelValor(el.style.color) ?? colorDelValor(el.getAttribute("color"));
 }
 
 /**
@@ -129,7 +116,7 @@ export function escribirEnDom(raiz: HTMLElement, formato: TextoConFormato): void
       if (!p.b && !p.c) { raiz.appendChild(texto); return; }
       const span = document.createElement("span");
       if (p.b) span.style.fontWeight = "700";
-      if (p.c) span.style.color = COLORES.find((c) => c.valor === p.c)?.hex ?? "";
+      if (p.c) span.style.color = hexDeColor(p.c);
       span.appendChild(texto);
       raiz.appendChild(span);
     });
@@ -146,6 +133,34 @@ export function seleccionDentro(raiz: HTMLElement): boolean {
   const sel = window.getSelection();
   if (!sel || sel.rangeCount === 0) return false;
   return raiz.contains(sel.getRangeAt(0).commonAncestorContainer);
+}
+
+/**
+ * Guarda dónde estaba la selección para poder devolverla después.
+ *
+ * HACE FALTA POR EL SELECTOR DE COLOR NATIVO. Los botones de la barra evitan el
+ * problema con `preventDefault` en `pointerdown`, pero a un `<input type=color>`
+ * no se le puede hacer eso: si se le impide el gesto, no se abre la rueda. Se le
+ * deja llevarse el foco —y con él la selección— y se recupera aquí.
+ */
+export function guardarSeleccion(raiz: HTMLElement): Range | null {
+  if (!seleccionDentro(raiz)) return null;
+  // Una COPIA: el rango vivo se colapsa en cuanto el foco se va a otro sitio.
+  return window.getSelection()!.getRangeAt(0).cloneRange();
+}
+
+/** Devuelve la selección a donde estaba. `false` si ya no se puede. */
+export function restaurarSeleccion(raiz: HTMLElement, rango: Range | null): boolean {
+  if (!rango) return false;
+  // El contenido pudo cambiar mientras el selector estaba abierto: un rango que
+  // apunte a nodos que ya no están reventaría al aplicarlo.
+  if (!raiz.contains(rango.commonAncestorContainer)) return false;
+  const sel = window.getSelection();
+  if (!sel) return false;
+  raiz.focus();
+  sel.removeAllRanges();
+  sel.addRange(rango);
+  return true;
 }
 
 /** Longitud del texto, que es lo que cuenta para el límite de caracteres. */

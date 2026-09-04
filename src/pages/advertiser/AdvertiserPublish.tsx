@@ -1595,15 +1595,14 @@ const AdvertiserPublish = () => {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="pt-5" {...val.props("descripcion")}>
-                {/* La etiqueta no es decorativa: sin ella la barra de formato
-                    arrancaba pegada al borde de la cabecera y el campo no se
-                    leía como los demás del formulario, que todos la llevan. */}
-                <Label>Descripción del aviso *</Label>
+              {/* `pt-6` y no `pt-5` como los demás pasos: aquí lo primero que
+                  hay es la barra de formato, que es una caja con borde, y con
+                  el hueco de los otros quedaba pegada a la cabecera. No lleva
+                  etiqueta propia porque la cabecera ya dice «Descripción». */}
+              <CardContent className="pt-6" {...val.props("descripcion")}>
                 {/* El contador sigue contando TEXTO, no marcado: el formato vive
                     aparte y no le come caracteres a nadie (migración 0146). */}
                 <EditorDeTexto
-                  className="mt-1.5"
                   valor={form.descriptionRich ?? desdeTextoPlano(form.description)}
                   onChange={(v) => {
                     // Se guardan las dos: el texto plano es lo que se busca y lo
