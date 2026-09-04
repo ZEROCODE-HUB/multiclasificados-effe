@@ -197,10 +197,51 @@ export function EditorDeTexto({
 
   return (
     <div className={className}>
-      {/* La barra va ARRIBA del campo: abajo quedaría tapada por el teclado del
-          móvil justo cuando hace falta. */}
+      <div className="relative">
+        <div
+          id={id}
+          ref={ref}
+          contentEditable
+          role="textbox"
+          aria-multiline="true"
+          aria-label="Descripción del aviso"
+          suppressContentEditableWarning
+          onInput={() => publicar()}
+          onBeforeInput={alEscribir}
+          onPaste={alPegar}
+          onKeyUp={mirarMarcas}
+          onMouseUp={mirarMarcas}
+          onFocus={onFocus}
+          // `text-base` = 16px: por debajo, iOS hace zoom solo al enfocar el
+          // campo y descuadra la pantalla (corregido en la v8.7; no repetirlo).
+          className={
+            "min-h-[8rem] w-full whitespace-pre-wrap rounded-t-md border border-input " +
+            "bg-background px-3 py-2 text-base leading-[1.7] outline-none " +
+            "focus-visible:ring-2 focus-visible:ring-ring"
+          }
+        />
+        {vacio && placeholder && (
+          // El marcador de posición se pinta encima: un `contenteditable` no
+          // tiene `placeholder` propio. `pointer-events-none` para que tocarlo
+          // ponga el cursor en el campo, no en este texto.
+          <p className="pointer-events-none absolute left-3 top-2 text-base text-muted-foreground">
+            {placeholder}
+          </p>
+        )}
+      </div>
+      {/* ── LA BARRA VA DEBAJO DEL CAMPO ──
+
+          Y no encima, que es lo natural. El motivo es el menú de selección del
+          móvil: al marcar una palabra, Android e iOS sacan su «Cortar / Copiar /
+          Pegar» JUSTO ENCIMA de lo seleccionado, y ahí tapaba entera la barra de
+          formato — precisamente en el único momento en que hace falta, que es con
+          algo seleccionado. Debajo, ese menú ya no la alcanza.
+
+          Lo que se pierde a cambio: con el teclado abierto puede quedar más justa
+          de sitio. Pesa menos, porque al seleccionar texto el navegador ya trae el
+          campo a la vista y la barra viene pegada a él. */}
       <div
-        className="flex flex-wrap items-center gap-x-1 gap-y-1.5 rounded-t-md border border-b-0 border-input bg-muted/40 px-2 py-1.5"
+        className="flex flex-wrap items-center gap-x-1 gap-y-1.5 rounded-b-md border border-t-0 border-input bg-muted/40 px-2 py-1.5"
         role="toolbar"
         aria-label="Formato del texto"
       >
@@ -302,39 +343,6 @@ export function EditorDeTexto({
             onChange={(e) => ponerColorSuelto(e.target.value)}
           />
         </label>
-      </div>
-
-      <div className="relative">
-        <div
-          id={id}
-          ref={ref}
-          contentEditable
-          role="textbox"
-          aria-multiline="true"
-          aria-label="Descripción del aviso"
-          suppressContentEditableWarning
-          onInput={() => publicar()}
-          onBeforeInput={alEscribir}
-          onPaste={alPegar}
-          onKeyUp={mirarMarcas}
-          onMouseUp={mirarMarcas}
-          onFocus={onFocus}
-          // `text-base` = 16px: por debajo, iOS hace zoom solo al enfocar el
-          // campo y descuadra la pantalla (corregido en la v8.7; no repetirlo).
-          className={
-            "min-h-[8rem] w-full whitespace-pre-wrap rounded-b-md border border-input " +
-            "bg-background px-3 py-2 text-base leading-[1.7] outline-none " +
-            "focus-visible:ring-2 focus-visible:ring-ring"
-          }
-        />
-        {vacio && placeholder && (
-          // El marcador de posición se pinta encima: un `contenteditable` no
-          // tiene `placeholder` propio. `pointer-events-none` para que tocarlo
-          // ponga el cursor en el campo, no en este texto.
-          <p className="pointer-events-none absolute left-3 top-2 text-base text-muted-foreground">
-            {placeholder}
-          </p>
-        )}
       </div>
     </div>
   );

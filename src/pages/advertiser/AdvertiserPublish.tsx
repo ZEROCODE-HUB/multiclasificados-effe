@@ -1595,11 +1595,14 @@ const AdvertiserPublish = () => {
                   </div>
                 </div>
               </CardHeader>
-              {/* `pt-6` y no `pt-5` como los demás pasos: aquí lo primero que
-                  hay es la barra de formato, que es una caja con borde, y con
-                  el hueco de los otros quedaba pegada a la cabecera. No lleva
-                  etiqueta propia porque la cabecera ya dice «Descripción». */}
-              <CardContent className="pt-6" {...val.props("descripcion")}>
+              {/* `pt-8`, más que los demás pasos, y a propósito.
+
+                  Este campo no empieza con una etiqueta suelta —la cabecera ya
+                  dice «Descripción»— sino con una CAJA CON BORDE, y una caja
+                  pegada a la línea de la cabecera se lee como si estuviera
+                  encajada en ella. Con el hueco de los otros pasos seguía
+                  viéndose apretado. */}
+              <CardContent className="pt-8" {...val.props("descripcion")}>
                 {/* El contador sigue contando TEXTO, no marcado: el formato vive
                     aparte y no le come caracteres a nadie (migración 0146). */}
                 <EditorDeTexto
