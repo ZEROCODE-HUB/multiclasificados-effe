@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Bold, Check } from "lucide-react";
+import { Bold, Ban } from "lucide-react";
 import { COLORES, type TextoConFormato } from "@/lib/textoConFormato";
 import { leerDelDom, escribirEnDom, seleccionDentro } from "@/lib/editorDom";
 
@@ -151,7 +151,7 @@ export function EditorDeTexto({
   };
 
   const boton =
-    "flex h-9 min-w-9 items-center justify-center rounded-md px-2 text-sm transition-colors " +
+    "flex h-9 min-w-9 items-center justify-center rounded-md px-2.5 text-sm transition-colors " +
     "hover:bg-muted disabled:opacity-40";
 
   return (
@@ -159,13 +159,13 @@ export function EditorDeTexto({
       {/* La barra va ARRIBA del campo: abajo quedaría tapada por el teclado del
           móvil justo cuando hace falta. */}
       <div
-        className="flex flex-wrap items-center gap-1 rounded-t-md border border-b-0 border-input bg-muted/40 px-1.5 py-1"
+        className="flex flex-wrap items-center gap-x-1 gap-y-1.5 rounded-t-md border border-b-0 border-input bg-muted/40 px-2 py-1.5"
         role="toolbar"
         aria-label="Formato del texto"
       >
         <button
           type="button"
-          className={`${boton} ${marcas.b ? "bg-muted font-bold" : ""}`}
+          className={`${boton} gap-1.5 ${marcas.b ? "bg-background shadow-sm ring-1 ring-border" : ""}`}
           aria-label="Negrita"
           aria-pressed={marcas.b}
           title="Negrita"
@@ -175,28 +175,49 @@ export function EditorDeTexto({
           onPointerDown={(e) => { e.preventDefault(); alternarNegrita(); }}
         >
           <Bold size={15} />
+          <span className="hidden sm:inline">Negrita</span>
         </button>
 
-        <span className="mx-0.5 h-5 w-px bg-border" aria-hidden />
+        <span className="mx-1 h-5 w-px bg-border" aria-hidden />
 
-        {COLORES.map((c) => (
-          <button
-            key={c.nombre}
-            type="button"
-            className={`${boton} gap-1`}
-            aria-label={`Color ${c.nombre}`}
-            aria-pressed={marcas.c === c.valor}
-            title={c.nombre}
-            onPointerDown={(e) => { e.preventDefault(); ponerColor(c.hex); }}
-          >
-            <span
-              className="h-4 w-4 rounded-full border border-black/10"
-              style={{ backgroundColor: c.hex }}
-              aria-hidden
-            />
-            {marcas.c === c.valor && <Check size={12} aria-hidden />}
-          </button>
-        ))}
+        {/* El rótulo importa: sin él son cinco círculos sueltos y nadie sabe
+            que son colores del texto ni que el primero es para quitarlo. */}
+        <span className="mr-0.5 text-xs text-muted-foreground">Color:</span>
+
+        {COLORES.map((c) => {
+          const activo = marcas.c === c.valor;
+          return (
+            <button
+              key={c.nombre}
+              type="button"
+              // 36 px de lado: es el mínimo que se acierta con el pulgar.
+              className={
+                "flex h-9 w-9 items-center justify-center rounded-md transition-colors hover:bg-muted " +
+                (activo ? "bg-background shadow-sm ring-1 ring-border" : "")
+              }
+              aria-label={c.valor ? `Color ${c.nombre}` : "Quitar el color"}
+              aria-pressed={activo}
+              title={c.valor ? c.nombre : "Sin color"}
+              onPointerDown={(e) => { e.preventDefault(); ponerColor(c.hex); }}
+            >
+              {/* El indicador es un ANILLO alrededor del círculo y no un icono
+                  al lado: un icono que aparece y desaparece ensancha el botón y
+                  la barra entera da un salto cada vez que se elige un color. */}
+              <span
+                className={
+                  "flex h-5 w-5 items-center justify-center rounded-full border " +
+                  (activo ? "border-foreground/70 ring-2 ring-foreground/25" : "border-black/20")
+                }
+                style={{ backgroundColor: c.valor ? c.hex : "transparent" }}
+                aria-hidden
+              >
+                {/* «Sin color» se dibuja hueco y tachado: un círculo relleno de
+                    gris se confunde con un color más de la paleta. */}
+                {!c.valor && <Ban size={13} className="text-muted-foreground" />}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       <div className="relative">

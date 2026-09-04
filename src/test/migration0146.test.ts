@@ -20,10 +20,12 @@ import path from "node:path";
  * Por eso el formato vive en otra columna y `description` se DERIVA de él: lo
  * que se busca es siempre, por construcción, lo que se ve.
  */
-const MIG = fs.readFileSync(
-  path.resolve(__dirname, "../../supabase/migrations", "0146_descripcion_con_formato.sql"),
-  "utf8",
-);
+const lee = (f: string) =>
+  fs.readFileSync(path.resolve(__dirname, "../../supabase/migrations", f), "utf8");
+
+const MIG = lee("0146_descripcion_con_formato.sql");
+/** La 0147 es la que reparte los permisos que la 0146 se dejó. */
+const PERMISOS = lee("0147_las_funciones_de_la_descripcion_nacen_cerradas.sql");
 
 const DUENO = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
@@ -47,6 +49,7 @@ async function guardar(rich: string | null, plano = "sin formato") {
 beforeAll(async () => {
   db = new PGlite();
   await db.exec("create role anon; create role authenticated;");
+
   await db.exec(`
     create type listing_status as enum ('draft','pending','active','paused','expired','sold','rejected');
     create table public.profiles (
@@ -91,6 +94,25 @@ beforeAll(async () => {
     grant select on public.listing_cards to anon, authenticated;
   `);
   await db.exec(MIG);
+
+  // ── SE REPRODUCE A PROPÓSITO EL MUNDO DE LA 0104 ──
+  //
+  // En Supabase, desde la 0104, una función nueva de `public` NACE SIN
+  // EXECUTE: se le revocó a PUBLIC el permiso por defecto. PGlite es un
+  // Postgres limpio y las crea abiertas, así que sin esta línea la prueba
+  // de permisos daría verde AUNQUE FALTARAN LOS GRANTS — que es justo el
+  // fallo que llegó a producción.
+  //
+  // Se revoca a mano y no con `alter default privileges`, porque eso
+  // último PGlite lo acepta y NO lo aplica: se comprobó, y dejaba la
+  // prueba en verde con la 0147 desactivada.
+  await db.exec("revoke execute on all functions in schema public from public;");
+
+  // Y ahora la migración que reparte los permisos que faltaban.
+  await db.exec(PERMISOS);
+  // La RLS decide QUIÉN escribe; aquí se prueba otra cosa, así que el rol
+  // necesita el privilegio de tabla para llegar siquiera al CHECK.
+  await db.exec("grant select, insert, update on public.listings to authenticated;");
 });
 
 beforeEach(() => db.exec("delete from public.listings"));
@@ -237,5 +259,66 @@ describe("nada de lo que ya funcionaba se entera", () => {
       "select description_rich as rich from public.listing_cards",
     );
     expect(r.rich).toEqual([{ t: "x", b: true }]);
+  });
+});
+
+describe("y el que escribe puede EJECUTAR lo que valida", () => {
+  /**
+   * LA PRUEBA QUE FALTABA, Y QUE COSTÓ UNA CAÍDA EN PRODUCCIÓN.
+   *
+   * La 0146 creó sus funciones sin `grant execute`. Como en esta base una
+   * función nueva nace cerrada (0104), el resultado fue:
+   *
+   *     ERROR: 42501: permission denied for function texto_con_formato_valido
+   *
+   * Y no falló «guardar una descripción con negrita»: falló TODO lo que toca un
+   * aviso. Porque quien llama a la función no es el formulario sino la
+   * restricción, y un CHECK se evalúa en CADA insert y en CADA update de la
+   * fila, mire la columna que mire.
+   */
+  const comoAnunciante = async (sql: string) => {
+    await db.exec("set role authenticated");
+    try {
+      await db.exec(sql);
+    } finally {
+      await db.exec("reset role");
+    }
+  };
+
+  it("puede crear un aviso SIN formato", async () => {
+    // El caso más común de todos, y también fallaba: el CHECK corre igual
+    // aunque la columna venga a null.
+    await expect(comoAnunciante(`
+      insert into public.listings (owner_id, title, description, status)
+      values ('${DUENO}', 'Depa', 'texto plano', 'draft');
+    `)).resolves.not.toThrow();
+  });
+
+  it("puede crear un aviso CON formato", async () => {
+    await expect(comoAnunciante(`
+      insert into public.listings (owner_id, title, description, description_rich, status)
+      values ('${DUENO}', 'Depa', 'x', '[{"t":"Depa ","b":true}]'::jsonb, 'draft');
+    `)).resolves.not.toThrow();
+  });
+
+  it("y puede PAUSAR uno que ya existe, que no tiene nada que ver con el formato", async () => {
+    // Este es el que enseña el tamaño real del fallo: pausar, reactivar,
+    // adjuntar el PDF o moderar desde el panel no tocan la descripción y
+    // fallaban todos igual.
+    await guardar(null, "sin formato");
+    await expect(comoAnunciante(
+      "update public.listings set status = 'paused';",
+    )).resolves.not.toThrow();
+  });
+
+  it("la 0147 reparte el permiso a los dos roles del cliente", async () => {
+    for (const rol of ["anon", "authenticated"]) {
+      for (const fn of ["texto_con_formato_valido(jsonb)", "texto_plano_del_formato(jsonb)"]) {
+        const [{ ok }] = await q<{ ok: boolean }>(
+          `select has_function_privilege('${rol}', 'public.${fn}', 'execute') as ok`,
+        );
+        expect(ok, `${rol} no puede ejecutar ${fn}`).toBe(true);
+      }
+    }
   });
 });
