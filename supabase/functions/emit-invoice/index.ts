@@ -206,6 +206,21 @@ async function descargarDeFactiliza(
  * versiones es de las cosas que más peso tienen para acabar en la bandeja de
  * entrada en vez de en spam.
  */
+/**
+ * Dirección de «Mis comprobantes» SEÑALANDO uno concreto.
+ *
+ * Sin el `?comprobante=`, el botón del correo deja al usuario en la lista y le
+ * pide que busque cuál era. Con varias compras y nombres de facturación
+ * distintos en cada una, eso pasó de incómodo a confuso de verdad: un tester
+ * creyó estar viendo comprobantes ajenos cuando los tres eran suyos, emitidos a
+ * nombre de una persona y de su empresa.
+ *
+ * Es el mismo mecanismo que ya usaba la campana para señalar un aviso
+ * (`?aviso=<id>`), aquí con el número del comprobante.
+ */
+const urlDeMisComprobantes = (numero: string) =>
+  `${SITE_URL}/dashboard/anunciante/boletas?comprobante=${encodeURIComponent(numero)}`;
+
 function textoCorreo(inv: Record<string, unknown>, declarado: boolean, esPrueba: boolean): string {
   const total = money(Number(inv.o_amount), "PEN");
   const lineas = [
@@ -228,7 +243,7 @@ function textoCorreo(inv: Record<string, unknown>, declarado: boolean, esPrueba:
     lineas.push("Este documento es un comprobante interno y no constituye documento tributario.", "");
   }
   lineas.push(
-    `Puedes ver todos tus comprobantes en ${SITE_URL}/dashboard/anunciante/boletas`,
+    `Puedes ver este comprobante en ${urlDeMisComprobantes(String(inv.o_number ?? ""))}`,
     "",
     "eFFe Multiclasificados",
   );
@@ -269,7 +284,7 @@ function htmlCorreo(inv: Record<string, unknown>, declarado: boolean, esPrueba: 
                Este documento es un comprobante interno de tu compra y no constituye
                documento tributario.</p>`}
         <p style="margin:24px 0 0">
-          <a href="${SITE_URL}/dashboard/anunciante/boletas"
+          <a href="${urlDeMisComprobantes(String(inv.o_number ?? ""))}"
              style="display:inline-block;background:#f97316;color:#fff;text-decoration:none;
                     padding:12px 20px;border-radius:8px;font-weight:700;font-size:14px">
             Ver mis comprobantes
@@ -325,7 +340,7 @@ function textoAnulacion(n: Record<string, unknown>, esPrueba: boolean, conAdjunt
   lineas.push(
     `Si tienes dudas sobre la devolución del importe, escríbenos a ${SOPORTE_EMAIL}.`,
     "",
-    `Puedes ver todos tus comprobantes en ${SITE_URL}/dashboard/anunciante/boletas`,
+    `Puedes ver este comprobante en ${urlDeMisComprobantes(String(n.o_number ?? ""))}`,
     "",
     "eFFe Multiclasificados",
   );
@@ -372,7 +387,7 @@ function htmlAnulacion(n: Record<string, unknown>, esPrueba: boolean, conAdjunto
           <a href="mailto:${esc(SOPORTE_EMAIL)}" style="color:#5b6270">${esc(SOPORTE_EMAIL)}</a>.
         </p>
         <p style="margin:24px 0 0">
-          <a href="${SITE_URL}/dashboard/anunciante/boletas"
+          <a href="${urlDeMisComprobantes(String(n.o_number ?? ""))}"
              style="display:inline-block;background:#f97316;color:#fff;text-decoration:none;
                     padding:12px 20px;border-radius:8px;font-weight:700;font-size:14px">
             Ver mis comprobantes

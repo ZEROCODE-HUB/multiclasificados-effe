@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { useFilaSenalada } from "@/hooks/useFilaSenalada";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -62,6 +64,34 @@ const AdvertiserInvoices = () => {
   const [pagina, setPagina] = useState(1);
   const [total, setTotal] = useState(0);
   const totalPaginas = Math.max(1, Math.ceil(total / MIS_COMPROBANTES_POR_PAGINA));
+
+  // ── LLEGAR DESDE EL CORREO A UN COMPROBANTE CONCRETO ──────────────────────
+  //
+  // El botón «Ver mis comprobantes» trae `?comprobante=B001-000002`. Dejaba al
+  // usuario en la lista entera y a buscar cuál era; con varias compras hechas a
+  // nombres de facturación distintos eso llegó a confundir de verdad (un tester
+  // creyó estar viendo comprobantes ajenos, siendo los tres suyos).
+  //
+  // POR QUÉ SE RELLENA EL BUSCADOR y no basta con resaltar la fila: esta lista
+  // va PAGINADA de diez en diez. Resaltar solo funciona si la fila está en la
+  // página cargada, y el enlace de un correo se abre meses después, cuando ese
+  // comprobante ya está tres páginas atrás. Buscando por su número aparece
+  // siempre, sea de cuando sea.
+  //
+  // Y queda a la vista: el número se ve escrito en el buscador, así que se
+  // entiende por qué la lista está filtrada y se puede vaciar para ver el resto.
+  const [searchParams] = useSearchParams();
+  const senalado = searchParams.get("comprobante") ?? "";
+
+  // Se sincroniza con el PARÁMETRO, no con cada render: así, si el usuario borra
+  // el buscador para ver los demás, no se lo volvemos a rellenar. Solo cambia si
+  // llega otro enlace con otro comprobante.
+  useEffect(() => { if (senalado) setBusqueda(senalado); }, [senalado]);
+
+  // El resaltado se apaga solo (mismo mecanismo que la campana con los avisos).
+  // No se pide el salto porque, con el buscador puesto, la fila es la única que
+  // hay: no hay a dónde bajar.
+  const { clasesDeResaltado } = useFilaSenalada("comprobante", !loading);
 
   useEffect(() => { setPagina(1); }, [busqueda]);
 
@@ -139,7 +169,7 @@ const AdvertiserInvoices = () => {
                   </TableHeader>
                   <TableBody>
                     {invoices.map((inv) => (
-                      <TableRow key={inv.number}>
+                      <TableRow key={inv.number} className={clasesDeResaltado(inv.number)}>
                         <TableCell className="font-mono text-xs">{inv.number}</TableCell>
                         <TableCell className="text-xs capitalize">{inv.type}</TableCell>
                         <TableCell className="text-xs">{new Date(inv.date).toLocaleDateString("es-PE")}</TableCell>
@@ -163,7 +193,10 @@ const AdvertiserInvoices = () => {
               {/* Móvil: tarjetas apiladas (sin scroll horizontal) */}
               <div className="md:hidden space-y-3">
                 {invoices.map((inv) => (
-                  <div key={inv.number} className="border rounded-xl p-4 bg-card">
+                  <div
+                    key={inv.number}
+                    className={`border rounded-xl p-4 bg-card transition-colors duration-500 ${clasesDeResaltado(inv.number)}`}
+                  >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="font-mono text-xs text-muted-foreground">{inv.number}</p>
